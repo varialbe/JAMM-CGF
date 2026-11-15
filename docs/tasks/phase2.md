@@ -4,6 +4,30 @@ Read `AGENTS.md`, `docs/patch-format.md` and `docs/legacy-version.md` first. Wor
 `experimental` branch. Inputs are Phase 1 patch files (`*.cgfmm-patch.json`); compute missing patches
 with the Phase 1 diff code.
 
+## Step 0 — fix Phase 1 review findings first (independent review of commit 84f35df)
+Verify each against the code before fixing; skip with a note if it is not real. Bump the patch
+`formatVersion` if the format changes (old cached patches must then be recomputed, not misread).
+1. Patch filtering relies on Phase 0 fingerprints that miss fields for sounds, fonts, objects, backgrounds →
+   fingerprint these from the same field snapshot used for the patch; never emit no-op changes
+   (e.g. scripts with base == mod and no fields).
+2. `functions`: changed definitions are ignored; added strings/variables/functions have empty `fields`;
+   `FieldDiff.Compare(null, x)` emits one `""` path instead of leaf paths → fix, `--show` must work for additions.
+3. `AssetFields.Sprite` dereferences `frame.Texture` without a null check; texture page keys sort as strings
+   ("10" < "2") → null-safe, numeric ordering.
+4. Cache reuse with a different `--name` keeps the old name → compare against the effective name.
+5. **Collision events** (event type 4): the subtype is the other object's *index* → key and store by the
+   other object's *name*; handle duplicate (type, subtype) without throwing.
+6. **Arrays diffed by position** (room layers, timeline moments, font glyphs, instances) → key them semantically
+   (layer name, moment step, glyph character, instance key) so appends by two mods don't collide by index.
+7. **Room tiles** (GM 1.4 stores tiles in `room.Tiles`) are only stored as count + hash → store keyed tiles
+   (background, x, y, source rect, depth) like instances.
+8. Texture page items: record geometry (source/target rects, bounding size) for sprites/fonts/backgrounds;
+   new texture pages are content-addressed additions, not "page N"; sounds store the audio group *name*;
+   keep the original asset order of additions (needed to insert in the right order in Phase 3).
+9. `LineDiff` allocates a full array per edit step (O((N+M)·D) memory) → linear-space or bounded variant.
+   Never line-diff/merge GML against disassembly fallback text: report it as a separate, clear condition.
+10. `--verbose` must be accepted by `diff`.
+
 ## Command
 ```
 cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--verbose]
