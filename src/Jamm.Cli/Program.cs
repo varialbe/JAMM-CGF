@@ -31,15 +31,17 @@ int Run(string[] arguments)
     if (arguments.Length == 0 || arguments[0] is "--help" or "-h" or "help")
     {
         Console.WriteLine("""
-            JAMM-CGF — Phase 0 feasibility check
+            JAMM-CGF — inspection and semantic patches
+            cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
             cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]
-            Exit codes: 0 = completed, 1 = input/output or usage failure, 2 = inspect only: no supported VM bytecode.
+            Exit codes: 0 = completed, 1 = input/output or usage failure, 2 = inspect/diff: no comparable VM bytecode.
             """);
         return 0;
     }
     string command = arguments[0];
+    if (command == "diff") return DiffCommand.Run(arguments[1..]);
     List<string> positional = [];
     Dictionary<string, string> options = new(StringComparer.Ordinal);
     var allowed = command switch

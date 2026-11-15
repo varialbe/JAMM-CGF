@@ -5,7 +5,7 @@
 
 Cat Goes Fishing mods usually replace the entire `data.win`, so only one can run at a
 time. JAMM-CGF aims to compare each mod against the original, identify conflicts and
-build one merged `data.win`. Phase 0 provides read-only inspection and content comparisons.
+build one merged `data.win`. Phase 1 provides read-only inspection, content comparisons and reusable semantic JSON patches.
 
 > **Important: you need the legacy bytecode version.** The inspected August 2024 Steam
 > build is YYC and contains no bytecode. Known mods target GameMaker 1.4 bytecode 16 and
@@ -18,7 +18,7 @@ build one merged `data.win`. Phase 0 provides read-only inspection and content c
 | Stage | Status | Scope |
 | --- | --- | --- |
 | Phase 0 | Done | Inspect files, fingerprint assets, compare bases and report feasibility |
-| Phase 1 | Planned | Asset diffing against the legacy base |
+| Phase 1 | Done | GML/asset diffs, cached JSON patches and unified diffs |
 | Phase 2 | Planned | Conflict detection |
 | Phase 3 | Planned | Build a merged `data.win` |
 | Phase 4 | Planned | Install with backups and launch |
@@ -66,6 +66,30 @@ dotnet run --project src/Jamm.Cli -- compare \
   --json out/comparison.json
 ```
 
+Diff a mod against the legacy base, save a reusable patch, and inspect one changed asset:
+
+```sh
+dotnet run --project src/Jamm.Cli -- diff \
+  "$HOME/Games/CatGoesFishing-legacy/data.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  --name "The Abyss" --out /tmp/cgfmm-patches/the-abyss-beta.cgfmm-patch.json
+
+# Repeat the command to reuse its matching cache; --force recomputes.
+# Choose an asset name from the patch's changes.code.changed array:
+dotnet run --project src/Jamm.Cli -- diff \
+  "$HOME/Games/CatGoesFishing-legacy/data.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  --out /tmp/cgfmm-patches/the-abyss-beta.cgfmm-patch.json --show "<asset name>"
+```
+
+The default output is `<mod stem>.cgfmm-patch.json` in the current directory.
+`--json-summary` emits machine-readable counts and timings; progress goes to stderr.
+Code is compared as decompiled GML, with warned disassembly fallback for failures.
+GameMaker/bytecode version mismatches are rejected. Patches contain game code and
+string values: **keep them local and never commit or redistribute them**. Binary
+payloads are content hashes referencing the mod archive. See [patch format](docs/patch-format.md)
+for field meanings, identities, caching and future merge/build requirements.
+
 Run inspection and comparisons together and write a Markdown report:
 
 ```sh
@@ -76,7 +100,7 @@ dotnet run --project src/Jamm.Cli -- phase0 \
 ```
 
 `--mods` accepts a single file or a directory of `.win` files. The default report path is
-`docs/reports/phase0.md`. Reports and JSON contain file names, metadata, counts and hashes;
+`docs/reports/phase0.md`. Phase 0 reports and comparison JSON contain file names, metadata, counts and hashes;
 input paths and extracted game content are omitted. Inputs are opened read-only and
 cannot be selected as output destinations. Reports cannot use a `.win` destination.
 
@@ -93,7 +117,7 @@ of the remaining readable mods.
 | --- | --- |
 | 0 | Analysis completed, including different-base or YYC results from `compare` / `phase0` |
 | 1 | Read, analysis, output or usage failure |
-| 2 | `inspect` only: YYC / empty CODE or unsupported VM bytecode |
+| 2 | `inspect`: YYC / empty CODE or unsupported VM bytecode; `diff`: YYC / empty CODE |
 
 Comparison matches named assets by ordinal name; strings use value hashes and texture
 pages use indices. The overall unchanged percentage covers code, scripts, sprites, objects,
@@ -113,7 +137,7 @@ Synthetic tests run without game files. Opt into the read-only real-file test by
 both environment variables:
 
 ```sh
-JAMM_ORIGINAL="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Cat Goes Fishing/data.win" \
+JAMM_ORIGINAL="$HOME/Games/CatGoesFishing-legacy/2023-08-16_manifest-9039707068725406600/data.win" \
 JAMM_MODS_DIR="$HOME/Cat-Goes-Fishing-Mods" \
 dotnet test
 ```
@@ -124,7 +148,7 @@ Never commit game archives, extracted game content or personal absolute paths.
 
 | Path | Purpose |
 | --- | --- |
-| `src/Jamm.Core/` | Read-only loader, metadata, fingerprints and comparison; no console output |
+| `src/Jamm.Core/` | Read-only loader, fingerprints, semantic patches and line diffs; no console output |
 | `src/Jamm.Cli/` | `cgfmm` commands and text/JSON reports |
 | `tests/Jamm.Core.Tests/` | Synthetic regressions and opt-in real-file checks |
 | `external/UndertaleModTool/` | Pinned dependency; do not edit |

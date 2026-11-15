@@ -20,7 +20,7 @@ public class FingerprintTests
         data.Code.Add(code);
         var first = new ContentFingerprints().Snapshot(data);
         var second = new ContentFingerprints().Snapshot(data);
-        Assert.Equal(12, first.Count);
+        Assert.Equal(14, first.Count);
         foreach (var type in first.Keys) Assert.Equal(first[type], second[type]);
         code.Instructions[0].ValueShort = 8;
         Assert.NotEqual(first[AssetKind.Code][0].Fingerprint, new ContentFingerprints().Snapshot(data)[AssetKind.Code][0].Fingerprint);

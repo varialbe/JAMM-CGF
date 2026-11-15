@@ -114,7 +114,7 @@ public class RealFileTests
             var mod = GameFileAnalyzer.Analyze(path);
             Assert.Null(mod.Error);
             var comparison = AssetComparer.Compare(original, mod);
-            Assert.Equal(original.Inspection!.IsYyc || mod.Inspection!.IsYyc ? 8 : 12, comparison.AssetTypes.Count);
+            Assert.Equal(original.Inspection!.IsYyc || mod.Inspection!.IsYyc ? 10 : 14, comparison.AssetTypes.Count);
             Assert.Equal(!original.Inspection!.IsYyc && !mod.Inspection!.IsYyc
                 && original.Inspection.BytecodeSupported && mod.Inspection.BytecodeSupported,
                 comparison.HasComparableBytecode);

@@ -1,19 +1,21 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Jamm.Core.Patching;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
 
 namespace Jamm.Core;
 
-/// <summary>Phase 0 semantic fingerprints; never decompiles or writes game assets.</summary>
+/// <summary>Semantic fingerprints for comparison and patch candidate filtering; never writes game assets.</summary>
 public sealed class ContentFingerprints
 {
     // Keep at most one decoded atlas; region hashes are small and safe to retain.
     private UndertaleEmbeddedTexture? decodedPage;
     private GMImage? decodedPixels;
     private readonly Dictionary<UndertaleTexturePageItem, string> regions = [];
+    private readonly Dictionary<UndertaleTexturePageItem, string> pixels = [];
     private readonly Action<string>? warning;
 
     /// <summary>Optionally receives notices about incomplete texture regions.</summary>
@@ -45,7 +47,7 @@ public sealed class ContentFingerprints
             text.Append('\n');
             address += instruction.CalculateInstructionSize();
         }
-        return Of(new { code.Offset, code.ArgumentsCount, Stream = text.ToString() });
+        return Of(new { code.Offset, code.LocalsCount, code.ArgumentsCount, code.WeirdLocalFlag, Parent = Name(code.ParentEntry), Children = code.ChildEntries.Select(Name).Order(StringComparer.Ordinal).ToArray(), Stream = text.ToString() });
     }
 
     /// <summary>Hashes a decoded BGRA region and placement geometry, or returns an unsupported marker.</summary>
@@ -64,6 +66,13 @@ public sealed class ContentFingerprints
         }
         regions.Add(item, result);
         return result;
+    }
+
+    /// <summary>Hashes only decoded frame pixels; geometry has a separate region hash.</summary>
+    public string FramePixels(UndertaleTexturePageItem? item)
+    {
+        string region = Region(item);
+        return item is not null && pixels.TryGetValue(item, out string? hash) ? hash : region;
     }
 
     private string Unsupported(string reason, string? asset)
@@ -96,9 +105,10 @@ public sealed class ContentFingerprints
         var bytes = image.GetRawImageData();
         for (int y = item.SourceY; y < item.SourceY + item.SourceHeight; y++)
             hash.AppendData(bytes.Slice(checked((y * image.Width + item.SourceX) * 4), item.SourceWidth * 4));
+        pixels[item] = Convert.ToHexStringLower(hash.GetHashAndReset());
         return Of(new { item.SourceWidth, item.SourceHeight, item.TargetX, item.TargetY,
             item.TargetWidth, item.TargetHeight, item.BoundingWidth, item.BoundingHeight,
-            Pixels = Convert.ToHexStringLower(hash.GetHashAndReset()) });
+            Pixels = pixels[item] });
     }
 
     /// <summary>Dimensions, origin, flags, collision masks and an ordered hash of each frame region.</summary>
@@ -116,7 +126,7 @@ public sealed class ContentFingerprints
             return marker;
         return Of(new { sprite.Width, sprite.Height, sprite.OriginX, sprite.OriginY,
             sprite.MarginLeft, sprite.MarginRight, sprite.MarginTop, sprite.MarginBottom,
-            sprite.Transparent, sprite.Smooth, sprite.Preload, sprite.BBoxMode, sprite.SepMasks,
+            sprite.Transparent, sprite.Smooth, sprite.Preload, sprite.BBoxMode, sprite.SepMasks, sprite.IsSpecialType, sprite.SSpriteType,
             sprite.GMS2PlaybackSpeed, sprite.GMS2PlaybackSpeedType,
             FrameCount = sprite.Textures.Count, Frames = frames,
             Masks = sprite.CollisionMasks.Select(x => Hash(x.Data)).ToArray() });
@@ -128,6 +138,8 @@ public sealed class ContentFingerprints
         decodedPage = null;
         decodedPixels = null;
         regions.Clear();
+        pixels.Clear();
+        var fields = new AssetFields(warning ?? (_ => { }));
         skipBytecode |= data.IsYYC() || data.Code is null || data.Code.Count == 0 || data.UnsupportedBytecodeVersion;
         string Checked(AssetKind kind, string name, Func<string> fingerprint)
         {
@@ -168,6 +180,8 @@ public sealed class ContentFingerprints
             // not the definition. Duplicate names are retained and compared as multisets.
             return new Dictionary<AssetKind, IReadOnlyList<AssetFingerprint>>
             {
+                [AssetKind.Paths] = Named(AssetKind.Paths, data.Paths, x => Of(fields.Snapshot(x))),
+                [AssetKind.Timelines] = Named(AssetKind.Timelines, data.Timelines, x => Of(fields.Snapshot(x))),
                 [AssetKind.Code] = Named(AssetKind.Code, data.Code, x => codeHashes[x]),
                 [AssetKind.Scripts] = Named(AssetKind.Scripts, data.Scripts, x => Of(new { Code = Name(x.Code), x.IsConstructor, Hash = CodeHash(x.Code) })),
                 [AssetKind.Sprites] = Named(AssetKind.Sprites, data.Sprites, Sprite),
@@ -206,17 +220,18 @@ public sealed class ContentFingerprints
             decodedPage = null;
             decodedPixels = null;
             regions.Clear();
+            pixels.Clear();
         }
     }
 
-    private static object Instance(UndertaleRoom.GameObject i) => new
+    internal static object Instance(UndertaleRoom.GameObject i) => new
     {
         Object = Name(i.ObjectDefinition), i.X, i.Y, i.ScaleX, i.ScaleY, i.Rotation,
         i.Color, i.ImageIndex, i.ImageSpeed,
         CreationCode = Name(i.CreationCode), PreCreate = Name(i.PreCreateCode)
     };
 
-    private static object Tile(UndertaleRoom.Tile t) => new
+    internal static object Tile(UndertaleRoom.Tile t) => new
     {
         Resource = Name(t.ObjectDefinition), t.spriteMode, t.X, t.Y, t.SourceX, t.SourceY,
         t.Width, t.Height, t.TileDepth, t.ScaleX, t.ScaleY, t.Color
@@ -228,11 +243,11 @@ public sealed class ContentFingerprints
         s.AnimationSpeed, s.AnimationSpeedType, s.FrameIndex, s.Rotation
     };
 
-    private static object? LayerElements(UndertaleRoom.Layer.LayerData? data) => data switch
+    internal static object? LayerElements(UndertaleRoom.Layer.LayerData? data) => data switch
     {
         UndertaleRoom.Layer.LayerInstancesData instances => new
         {
-            Instances = instances.Instances.Select(Instance).ToArray()
+            Instances = AssetFields.Instances(instances.Instances)
         },
         UndertaleRoom.Layer.LayerTilesData tiles => new
         {
@@ -253,18 +268,7 @@ public sealed class ContentFingerprints
         _ => null
     };
 
-    private static string Room(UndertaleRoom room) => Of(new
-    {
-        room.Width, room.Height, room.Speed, room.Persistent, room.Flags,
-        room.BackgroundColor, room.DrawBackgroundColor, CreationCode = Name(room.CreationCodeId),
-        Instances = room.GameObjects.Select(Instance).ToArray(),
-        Tiles = room.Tiles.Select(Tile).ToArray(),
-        Layers = room.Layers.Select(l => new
-        {
-            Name = l.LayerName?.Content, l.LayerType, l.LayerDepth, l.XOffset, l.YOffset,
-            l.HSpeed, l.VSpeed, l.IsVisible, Elements = LayerElements(l.Data)
-        }).ToArray()
-    });
+    private static string Room(UndertaleRoom room) => Of(AssetFields.Room(room));
 
     private string Page(UndertaleEmbeddedTexture page, bool modernHeader)
     {
