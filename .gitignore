@@ -1,0 +1,16 @@
+# .NET build and editor output
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+*.trx
+*.coverage*
+
+# Local game data and generated scratch output
+*.win
+*.zip
+/out/
+/.orchestrator/

@@ -1,0 +1,127 @@
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Jamm.Cli;
+using Jamm.Core;
+
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+bool verbose = args.Contains("--verbose", StringComparer.Ordinal);
+try
+{
+    return Run(args.Where(x => x != "--verbose").ToArray());
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"cgfmm: {ex.Message}");
+    Console.Error.WriteLine("Check the paths and command options. Use 'cgfmm --help' for usage.");
+    if (verbose) Console.Error.WriteLine(ex);
+    return 1;
+}
+
+int Run(string[] arguments)
+{
+    if (arguments.Length == 0 || arguments[0] is "--help" or "-h" or "help")
+    {
+        Console.WriteLine("""
+            JAMM-CGF — Phase 0 feasibility check
+            cgfmm inspect <data.win> [--verbose]
+            cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
+            cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]
+            Exit codes: 0 = completed, 1 = input/output or usage failure, 2 = no supported VM bytecode.
+            """);
+        return 0;
+    }
+    string command = arguments[0];
+    List<string> positional = [];
+    Dictionary<string, string> options = new(StringComparer.Ordinal);
+    var allowed = command switch
+    {
+        "inspect" => Array.Empty<string>(),
+        "compare" => new[] { "--json" },
+        "phase0" => new[] { "--original", "--mods", "--out" },
+        _ => throw new ArgumentException($"Unknown command '{command}'.")
+    };
+    for (int i = 1; i < arguments.Length; i++)
+    {
+        if (!arguments[i].StartsWith("--", StringComparison.Ordinal)) positional.Add(arguments[i]);
+        else
+        {
+            string option = arguments[i];
+            if (!allowed.Contains(option, StringComparer.Ordinal)) throw new ArgumentException($"Unknown option '{option}'.");
+            if (++i == arguments.Length || arguments[i].StartsWith("--", StringComparison.Ordinal))
+                throw new ArgumentException($"Option '{option}' needs a path.");
+            if (!options.TryAdd(option, arguments[i])) throw new ArgumentException($"Option '{option}' was given twice.");
+        }
+    }
+    if (command == "inspect")
+    {
+        if (positional.Count != 1) throw new ArgumentException("inspect needs exactly one input file.");
+        var file = Load(positional[0], includeAssets: false);
+        Console.Write(TextReport.Inspection(file));
+        return ExitCode([file]);
+    }
+    string originalPath;
+    string[] modPaths;
+    if (command == "compare")
+    {
+        if (positional.Count < 2) throw new ArgumentException("compare needs an original and at least one mod file.");
+        originalPath = positional[0];
+        modPaths = positional.Skip(1).ToArray();
+    }
+    else
+    {
+        if (positional.Count != 0 || !options.TryGetValue("--original", out string? original)
+            || !options.TryGetValue("--mods", out string? mods))
+            throw new ArgumentException("phase0 needs --original <data.win> and --mods <file or dir>.");
+        originalPath = original;
+        modPaths = Directory.Exists(mods)
+            ? Directory.EnumerateFiles(mods).Where(x => string.Equals(Path.GetExtension(x), ".win", StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.Ordinal).ToArray()
+            : [mods];
+        if (modPaths.Length == 0) throw new ArgumentException($"No .win mod files found in '{mods}'. Add mod files or select a mod file directly.");
+    }
+    string[] inputs = [originalPath, .. modPaths];
+    string? output = command == "phase0" ? options.GetValueOrDefault("--out", "docs/reports/phase0.md")
+        : options.GetValueOrDefault("--json");
+    if (output is not null) OutputFile.Validate(output, inputs);
+    List<FileAnalysis> files = [Load(originalPath)];
+    List<ModComparison> comparisons = [];
+    foreach (string path in modPaths)
+    {
+        var mod = Load(path);
+        files.Add(mod);
+        if (files[0].Error is null && mod.Error is null)
+            comparisons.Add(AssetComparer.Compare(files[0], mod));
+    }
+    var result = new Phase0Result(files, comparisons);
+    if (command == "compare")
+    {
+        foreach (var file in files.Where(x => x.Error is not null)) Console.WriteLine(file.Error);
+        foreach (var comparison in comparisons) Console.Write(TextReport.Comparison(comparison));
+        foreach (var file in files.Where(x => x.Warnings.Count > 0))
+            Console.WriteLine($"{file.Path}: {file.Warnings.Count} warning(s); see JSON for details.");
+        if (output is not null)
+        {
+            var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+            jsonOptions.Converters.Add(new JsonStringEnumConverter());
+            OutputFile.Write(output, JsonSerializer.Serialize(result, jsonOptions), inputs);
+            Console.WriteLine($"JSON: {output}");
+        }
+    }
+    else
+    {
+        OutputFile.Write(output!, TextReport.Markdown(result), inputs);
+        Console.Write(TextReport.Summary(result, output!));
+    }
+    return ExitCode(files);
+}
+
+FileAnalysis Load(string path, bool includeAssets = true)
+{
+    var file = GameFileAnalyzer.Analyze(path, includeAssets, message => Console.Error.WriteLine(message));
+    if (verbose && file.Diagnostic is not null) Console.Error.WriteLine(file.Diagnostic);
+    return file;
+}
+
+static int ExitCode(IEnumerable<FileAnalysis> files) => files.Any(x => x.Error is not null) ? 1
+    : files.Any(x => x.Inspection is { IsYyc: true } or { BytecodeSupported: false }) ? 2 : 0;
