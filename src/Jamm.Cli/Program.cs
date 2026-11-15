@@ -12,7 +12,15 @@ try
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"cgfmm: {ex.Message}");
+    string message = ex.Message;
+    foreach (string argument in args.Where(x => !x.StartsWith('-') && x.IndexOfAny(['/', '\\']) >= 0))
+    {
+        string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(argument));
+        try { message = message.Replace(Path.GetFullPath(argument), name, StringComparison.Ordinal); }
+        catch (ArgumentException) { /* Preserve the original usage error for invalid paths. */ }
+        message = message.Replace(argument, name, StringComparison.Ordinal);
+    }
+    Console.Error.WriteLine($"cgfmm: {message}");
     Console.Error.WriteLine("Check the paths and command options. Use 'cgfmm --help' for usage.");
     if (verbose) Console.Error.WriteLine(ex);
     return 1;
@@ -27,7 +35,7 @@ int Run(string[] arguments)
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
             cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]
-            Exit codes: 0 = completed, 1 = input/output or usage failure, 2 = no supported VM bytecode.
+            Exit codes: 0 = completed, 1 = input/output or usage failure, 2 = inspect only: no supported VM bytecode.
             """);
         return 0;
     }
@@ -58,7 +66,7 @@ int Run(string[] arguments)
         if (positional.Count != 1) throw new ArgumentException("inspect needs exactly one input file.");
         var file = Load(positional[0], includeAssets: false);
         Console.Write(TextReport.Inspection(file));
-        return ExitCode([file]);
+        return CommandExitCodes.ForFiles([file], inspecting: true);
     }
     string originalPath;
     string[] modPaths;
@@ -78,7 +86,7 @@ int Run(string[] arguments)
             ? Directory.EnumerateFiles(mods).Where(x => string.Equals(Path.GetExtension(x), ".win", StringComparison.OrdinalIgnoreCase))
                 .Order(StringComparer.Ordinal).ToArray()
             : [mods];
-        if (modPaths.Length == 0) throw new ArgumentException($"No .win mod files found in '{mods}'. Add mod files or select a mod file directly.");
+        if (modPaths.Length == 0) throw new ArgumentException($"No .win mod files found in '{Path.GetFileName(Path.TrimEndingDirectorySeparator(mods))}'. Add mod files or select a mod file directly.");
     }
     string[] inputs = [originalPath, .. modPaths];
     string? output = command == "phase0" ? options.GetValueOrDefault("--out", "docs/reports/phase0.md")
@@ -99,13 +107,13 @@ int Run(string[] arguments)
         foreach (var file in files.Where(x => x.Error is not null)) Console.WriteLine(file.Error);
         foreach (var comparison in comparisons) Console.Write(TextReport.Comparison(comparison));
         foreach (var file in files.Where(x => x.Warnings.Count > 0))
-            Console.WriteLine($"{file.Path}: {file.Warnings.Count} warning(s); see JSON for details.");
+            Console.WriteLine($"{file.FileName}: {file.Warnings.Count} warning(s); see JSON for details.");
         if (output is not null)
         {
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
             jsonOptions.Converters.Add(new JsonStringEnumConverter());
             OutputFile.Write(output, JsonSerializer.Serialize(result, jsonOptions), inputs);
-            Console.WriteLine($"JSON: {output}");
+            Console.WriteLine($"JSON: {Path.GetFileName(output)}");
         }
     }
     else
@@ -113,7 +121,7 @@ int Run(string[] arguments)
         OutputFile.Write(output!, TextReport.Markdown(result), inputs);
         Console.Write(TextReport.Summary(result, output!));
     }
-    return ExitCode(files);
+    return CommandExitCodes.ForFiles(files);
 }
 
 FileAnalysis Load(string path, bool includeAssets = true)
@@ -122,6 +130,3 @@ FileAnalysis Load(string path, bool includeAssets = true)
     if (verbose && file.Diagnostic is not null) Console.Error.WriteLine(file.Diagnostic);
     return file;
 }
-
-static int ExitCode(IEnumerable<FileAnalysis> files) => files.Any(x => x.Error is not null) ? 1
-    : files.Any(x => x.Inspection is { IsYyc: true } or { BytecodeSupported: false }) ? 2 : 0;

@@ -2,11 +2,19 @@
 
 Inputs were opened read-only. This report contains metadata, counts and hashes, with no extracted game code, dialogue, images or audio. A base verdict estimates similarity; it does not establish that a conflict-free merge is possible.
 
+## Conclusion
+
+data.win is YYC (no bytecode), detected GameMaker 2023.6.0.0, built 2024-08-05 UTC. It cannot supply code for merging.
+
+The inspected mods use legacy GameMaker 1.4 bytecode 16. They need a matching legacy data.win and Cat Goes Fishing.exe runner. See [Getting the bytecode version](../legacy-version.md).
+
+Mod code is approximately 93% identical between mods (directional range 92.28–93.91%). **Follow-up (legacy base found):** the 16 Aug 2023 build (depot 343782, manifest `9039707068725406600`) is the base of The Abyss and Cave Expansion (identical GEN8 timestamp) and matches every mod at 98.85–99.45 % identical code. See [phase0-legacy.md](phase0-legacy.md) and [Getting the bytecode version](../legacy-version.md).
+
 ## Inspection
 
 ### data.win
 
-Path: /home/varialbe/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Cat Goes Fishing/data.win
+File: data.win
 
 | Field | Value |
 | --- | --- |
@@ -46,7 +54,7 @@ Warnings (UTML and fingerprint notices): 0.
 
 ### cave-expansion.win
 
-Path: /home/varialbe/Cat-Goes-Fishing-Mods/cave-expansion.win
+File: cave-expansion.win
 
 | Field | Value |
 | --- | --- |
@@ -83,13 +91,13 @@ Path: /home/varialbe/Cat-Goes-Fishing-Mods/cave-expansion.win
 
 Warnings (UTML and fingerprint notices): 3.
 
-- Fingerprint: texture item 'PageItem 1267' has source rectangle 440,455 600x280 outside its 1024x2048 texture page 'Texture 34'; hashed available pixels with transparent padding and an invalid-region marker.
-- Fingerprint: texture item 'PageItem 1278' has source rectangle 10,2600 4100x1500 outside its 4096x8192 texture page 'Texture 36'; hashed available pixels with transparent padding and an invalid-region marker.
-- Fingerprint: texture item 'PageItem 1281' has source rectangle 3666,351 475x475 outside its 4096x8192 texture page 'Texture 36'; hashed available pixels with transparent padding and an invalid-region marker.
+- Fingerprint: 'PageItem 1267' is unsupported (out-of-range region); content was not compared.
+- Fingerprint: 'PageItem 1278' is unsupported (out-of-range region); content was not compared.
+- Fingerprint: 'PageItem 1281' is unsupported (out-of-range region); content was not compared.
 
 ### colour-expansion.win
 
-Path: /home/varialbe/Cat-Goes-Fishing-Mods/colour-expansion.win
+File: colour-expansion.win
 
 | Field | Value |
 | --- | --- |
@@ -129,7 +137,7 @@ Warnings (UTML and fingerprint notices): 0.
 
 ### the-abyss-beta.win
 
-Path: /home/varialbe/Cat-Goes-Fishing-Mods/the-abyss-beta.win
+File: the-abyss-beta.win
 
 | Field | Value |
 | --- | --- |
@@ -166,9 +174,9 @@ Path: /home/varialbe/Cat-Goes-Fishing-Mods/the-abyss-beta.win
 
 Warnings (UTML and fingerprint notices): 3.
 
-- Fingerprint: texture item 'PageItem 1315' has source rectangle 0,0 1331x409 outside its 1330x409 texture page 'Texture 84'; hashed available pixels with transparent padding and an invalid-region marker.
-- Fingerprint: texture item 'PageItem 1328' has source rectangle 0,0 7159x3131 outside its 7059x3131 texture page 'Texture 97'; hashed available pixels with transparent padding and an invalid-region marker.
-- Fingerprint: texture item 'PageItem 1334' has source rectangle 0,0 306x216 outside its 306x213 texture page 'Texture 103'; hashed available pixels with transparent padding and an invalid-region marker.
+- Fingerprint: 'PageItem 1315' is unsupported (out-of-range region); content was not compared.
+- Fingerprint: 'PageItem 1328' is unsupported (out-of-range region); content was not compared.
+- Fingerprint: 'PageItem 1334' is unsupported (out-of-range region); content was not compared.
 
 ## Comparison with original
 
@@ -178,20 +186,16 @@ Same GameMaker version (stored and detected): **NO**; same bytecode: **NO**; sam
 
 | Asset type | Identical | Changed | Added | Removed |
 | --- | ---: | ---: | ---: | ---: |
-| code | 0 | 0 | 1926 | 0 |
-| scripts | 0 | 167 | 1 | 341 |
 | sprites | 0 | 483 | 103 | 26 |
 | objects | 0 | 637 | 101 | 32 |
 | rooms | 0 | 4 | 0 | 0 |
 | sounds | 0 | 44 | 0 | 3 |
 | texture pages | 0 | 45 | 54 | 0 |
 | strings | 1650 | 0 | 5246 | 587 |
-| variables | 0 | 0 | 3787 | 0 |
-| functions | 0 | 0 | 364 | 0 |
 | fonts | 0 | 10 | 0 | 0 |
 | backgrounds | 0 | 0 | 2 | 0 |
 
-**MERGING IMPOSSIBLE (no bytecode in YYC file): code N/A (original has 0 code entries); original assets unchanged 1650/4029 (40.95%).**
+**NOT COMPARABLE: data.win is YYC (no bytecode)**
 
 ### colour-expansion.win
 
@@ -199,20 +203,16 @@ Same GameMaker version (stored and detected): **NO**; same bytecode: **NO**; sam
 
 | Asset type | Identical | Changed | Added | Removed |
 | --- | ---: | ---: | ---: | ---: |
-| code | 0 | 0 | 1942 | 0 |
-| scripts | 0 | 167 | 2 | 341 |
 | sprites | 0 | 484 | 55 | 25 |
 | objects | 0 | 642 | 52 | 27 |
 | rooms | 0 | 4 | 0 | 0 |
 | sounds | 0 | 44 | 0 | 3 |
 | texture pages | 0 | 45 | 33 | 0 |
 | strings | 1656 | 0 | 5230 | 581 |
-| variables | 0 | 0 | 3847 | 0 |
-| functions | 0 | 0 | 367 | 0 |
 | fonts | 0 | 10 | 0 | 0 |
 | backgrounds | 0 | 0 | 2 | 0 |
 
-**MERGING IMPOSSIBLE (no bytecode in YYC file): code N/A (original has 0 code entries); original assets unchanged 1656/4029 (41.10%).**
+**NOT COMPARABLE: data.win is YYC (no bytecode)**
 
 ### the-abyss-beta.win
 
@@ -220,25 +220,21 @@ Same GameMaker version (stored and detected): **NO**; same bytecode: **NO**; sam
 
 | Asset type | Identical | Changed | Added | Removed |
 | --- | ---: | ---: | ---: | ---: |
-| code | 0 | 0 | 1921 | 0 |
-| scripts | 0 | 167 | 1 | 341 |
 | sprites | 0 | 483 | 113 | 26 |
 | objects | 0 | 641 | 104 | 28 |
 | rooms | 0 | 4 | 0 | 0 |
 | sounds | 0 | 44 | 0 | 3 |
 | texture pages | 0 | 45 | 143 | 0 |
 | strings | 1654 | 0 | 5329 | 583 |
-| variables | 0 | 0 | 3781 | 0 |
-| functions | 0 | 0 | 364 | 0 |
 | fonts | 0 | 10 | 0 | 0 |
 | backgrounds | 0 | 0 | 2 | 0 |
 
-**MERGING IMPOSSIBLE (no bytecode in YYC file): code N/A (original has 0 code entries); original assets unchanged 1654/4029 (41.05%).**
+**NOT COMPARABLE: data.win is YYC (no bytecode)**
 
 ## Method and limits
 
-Assets match by ordinal name, strings by value (SHA-256 identifiers in JSON), texture pages by index. Duplicate names/values retain multiplicity; exact fingerprints pair first. Overall unchanged percentage is identical/original across the twelve compared families, including strings; additions do not enter the denominator. The verdict uses only original code entries: at least 80% identical = LIKELY SAME BASE; 40% to below 80% = POSSIBLY DIFFERENT VERSION; below 40% = DIFFERENT BASE. YYC, empty CODE or unsupported bytecode cannot establish a mergeable base.
+Assets match by ordinal name, strings by value (SHA-256 identifiers in JSON), texture pages by index. Duplicate names/values retain multiplicity; exact fingerprints pair first. Overall unchanged percentage is identical/original over named assets only (code, scripts, sprites, objects, rooms, sounds, fonts and backgrounds); strings and texture pages are reported separately and additions do not enter the denominator. The verdict uses only original code entries: at least 80% identical = LIKELY SAME BASE; 40% to below 80% = POSSIBLY DIFFERENT VERSION; below 40% = DIFFERENT BASE. YYC, empty CODE or unsupported bytecode cannot establish a mergeable base: code, scripts, variables and functions are skipped if either input lacks supported bytecode, and no unchanged percentage or base verdict is emitted.
 
-Fingerprints use SHA-256: code hashes UTML instruction disassembly with relative jumps and entry offset/argument count, without decompilation; sprites hash dimensions, origin, frame count, ordered decoded BGRA frame rectangles, placement geometry, masks and flags; objects hash sprite/parent/mask names, flags/physics and event types/subtypes/code names; rooms hash size, flags and ordered instance object names, positions/transforms and creation-code names; sounds hash flags, playback metadata and embedded audio bytes; texture pages hash embedded encoded texture data; scripts hash referenced code name/content and constructor flag; variables hash instance type; functions hash classification; fonts hash glyph metrics/kerning and texture region; backgrounds hash flags, texture region and tileset metadata. Variables/functions omit table IDs and usage chains. Atlas repacking may change texture-page results while leaving sprite regions identical.
+Fingerprints use SHA-256: code hashes UTML instruction disassembly with relative jumps and entry offset/argument count, without decompilation; sprites hash dimensions, origin, frame count, ordered decoded BGRA frame rectangles, placement geometry, masks and flags; objects hash sprite/parent/mask names, flags/physics and event types/subtypes/code names; rooms hash size, flags, ordered instances/transforms/creation-code names, legacy tiles and GMS2 layer metadata with instance, tile and background elements (plus legacy tiles and sprites in asset layers); sounds hash flags, playback metadata and embedded audio bytes; texture pages hash embedded encoded texture data; scripts hash referenced code name/content and constructor flag; variables hash instance type; functions hash classification; fonts hash glyph metrics/kerning and texture region; backgrounds hash flags, texture region and tileset metadata. Variables/functions omit table IDs and usage chains. Atlas repacking may change texture-page results while leaving sprite regions identical.
 
-This is a feasibility fingerprint, not an exhaustive serialized diff. Room layers/tiles, event action parameters, external audio files/groups and non-bitmap sprite formats are outside Phase 0's content model. External textures and non-bitmap sprite fingerprints fail explicitly. Out-of-bounds texture regions produce warnings and hash available pixels with transparent padding plus an invalid-region marker; those sprite matches have limited confidence. UTML's detected version is a format lower bound. Version/name mismatches are reported separately from the code similarity verdict.
+This is a feasibility fingerprint, not an exhaustive serialized diff. Event action parameters, sequences, particles, text/effect layers and external audio files/groups are outside Phase 0's content model. External textures, Spine/SWF sprites and out-of-range texture regions produce warnings and deterministic unsupported:&lt;reason&gt; fingerprints without aborting the file. Equal unsupported markers do not establish equal content. Scripts referencing code absent from the CODE table use a stable missing-code marker and a warning. Only one decoded texture page is cached at a time. UTML's detected version is a format lower bound. Version/name mismatches are reported separately from the code similarity verdict.

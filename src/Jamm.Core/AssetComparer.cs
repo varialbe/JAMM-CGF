@@ -4,7 +4,7 @@ namespace Jamm.Core;
 public static class AssetComparer
 {
     /// <summary>Classifies a multiset of assets; identical duplicates are paired before changed ones.</summary>
-    public static AssetComparison CompareAssets(string assetType,
+    public static AssetComparison CompareAssets(AssetKind assetType,
         IEnumerable<AssetFingerprint> original, IEnumerable<AssetFingerprint> mod)
     {
         var left = original.GroupBy(x => x.Name, StringComparer.Ordinal)
@@ -57,20 +57,24 @@ public static class AssetComparer
     {
         var a = original.Inspection ?? throw new ArgumentException("The original could not be read.", nameof(original));
         var b = mod.Inspection ?? throw new ArgumentException("The mod could not be read.", nameof(mod));
-        var types = !a.BytecodeSupported || !b.BytecodeSupported ? [] : original.Assets.Keys.Union(mod.Assets.Keys, StringComparer.Ordinal)
+        bool comparable = !a.IsYyc && !b.IsYyc && a.BytecodeSupported && b.BytecodeSupported;
+        var types = original.Assets.Keys.Union(mod.Assets.Keys)
+            .Where(type => comparable || !type.RequiresBytecode())
             .Select(type => CompareAssets(type, original.Assets.GetValueOrDefault(type) ?? [],
                 mod.Assets.GetValueOrDefault(type) ?? [])).ToArray();
-        var code = types.FirstOrDefault(x => x.AssetType == "code");
-        int total = types.Sum(x => x.OriginalCount);
-        bool comparable = !a.IsYyc && !b.IsYyc && a.BytecodeSupported && b.BytecodeSupported;
-        return new(a.Path, b.Path,
+        var code = types.FirstOrDefault(x => x.AssetType == AssetKind.Code);
+        var named = types.Where(x => x.AssetType.IsNamedAsset()).ToArray();
+        int total = named.Sum(x => x.OriginalCount);
+        string[] yycFiles = new[] { a, b }.Where(x => x.IsYyc)
+            .Select(x => $"{x.FileName} is YYC (no bytecode)").Distinct(StringComparer.Ordinal).ToArray();
+        return new(a.FileName, b.FileName,
             a.GameMakerVersion == b.GameMakerVersion && a.DetectedGameMakerVersion == b.DetectedGameMakerVersion
                 && a.DetectedBranch == b.DetectedBranch,
             a.BytecodeVersion == b.BytecodeVersion, a.GameName == b.GameName, comparable,
-            total == 0 ? 0 : 100.0 * types.Sum(x => x.Identical) / total,
-            code is null || code.OriginalCount == 0 ? 0 : 100.0 * code.Identical / code.OriginalCount,
-            !comparable ? a.IsYyc || b.IsYyc ? "MERGING IMPOSSIBLE (no bytecode in YYC file)"
-                    : "MERGING IMPOSSIBLE (unsupported bytecode)"
+            !comparable || total == 0 ? null : 100.0 * named.Sum(x => x.Identical) / total,
+            !comparable || code is null || code.OriginalCount == 0 ? null : 100.0 * code.Identical / code.OriginalCount,
+            !comparable ? yycFiles.Length > 0 ? $"NOT COMPARABLE: {string.Join("; ", yycFiles)}"
+                    : "NOT COMPARABLE: unsupported bytecode"
                 : GetVerdict(code?.Identical ?? 0, code?.OriginalCount ?? 0), types);
     }
 }

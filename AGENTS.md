@@ -35,7 +35,9 @@ docs/                 design notes, phase reports, task specs (docs/tasks/)
 7. Do not run `git push`, create releases, or change GitHub settings — the orchestrator does that.
 
 ## Real test files (local only, never commit)
-- Original (Steam, legal copy): `~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Cat Goes Fishing/data.win`
+- Original / merge base: the legacy 2023 build (see docs/legacy-version.md), stored outside the repo, e.g.
+  `~/Games/CatGoesFishing-legacy/2023-08-16_manifest-9039707068725406600/data.win`
+- Current Steam build (YYC, only useful as a negative test): `<Steam>/steamapps/common/Cat Goes Fishing/data.win`
 - Mods: `~/Cat-Goes-Fishing-Mods/the-abyss-beta.win`, `cave-expansion.win`, `colour-expansion.win`
 Real-file tests read the env var `JAMM_ORIGINAL` / `JAMM_MODS_DIR` and are skipped when unset.
 

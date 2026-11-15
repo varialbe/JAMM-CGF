@@ -2,15 +2,16 @@ namespace Jamm.Cli;
 
 internal static class OutputFile
 {
-    internal static void Validate(string path, IEnumerable<string> inputs)
+    internal static void Validate(string path, IEnumerable<string> inputs, bool allowNewWin = false)
     {
         string destination = Path.GetFullPath(path);
         string resolved = Resolve(destination);
-        if (string.Equals(Path.GetExtension(destination), ".win", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetExtension(resolved), ".win", StringComparison.OrdinalIgnoreCase)
+        if ((!allowNewWin && (string.Equals(Path.GetExtension(destination), ".win", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Path.GetExtension(resolved), ".win", StringComparison.OrdinalIgnoreCase)))
+            || (allowNewWin && (File.Exists(destination) || Directory.Exists(destination) || new FileInfo(destination).LinkTarget is not null))
             || inputs.Any(x => string.Equals(Resolve(Path.GetFullPath(x)), resolved,
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
-            throw new ArgumentException($"Refusing to write '{path}': reports must use a separate path from game inputs and cannot be .win files.");
+            throw new ArgumentException($"Refusing to write '{Path.GetFileName(path)}': use a separate path from game inputs; reports cannot be .win files and build outputs must be new files.");
     }
 
     // Resolve parent-directory links too, so an aliased input path cannot become a report target.

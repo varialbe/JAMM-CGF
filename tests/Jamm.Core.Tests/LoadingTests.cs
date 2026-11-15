@@ -11,7 +11,9 @@ public class LoadingTests
     {
         string missing = Path.Combine(Path.GetTempPath(), $"jamm-missing-{Guid.NewGuid():N}.win");
         var result = GameFileAnalyzer.Analyze(missing);
-        Assert.Contains($"could not read {missing}:", result.Error);
+        Assert.Contains($"could not read {Path.GetFileName(missing)}:", result.Error);
+        Assert.DoesNotContain(Path.GetDirectoryName(missing)!, System.Text.Json.JsonSerializer.Serialize(result));
+        Assert.Contains("could not read", GameFileAnalyzer.Analyze("bad\0path.win").Error);
         Assert.Contains("readable", result.Error);
         string truncated = Path.GetTempFileName();
         try
@@ -37,7 +39,7 @@ public class LoadingTests
             Assert.Null(result.Error);
             Assert.NotNull(result.Inspection);
             Assert.True(result.Inspection.IsYyc);
-            Assert.Empty(result.Assets["code"]);
+            Assert.DoesNotContain(result.Assets.Keys, x => x.RequiresBytecode());
             Assert.Equal(before, System.IO.File.ReadAllBytes(path));
         }
         finally { System.IO.File.Delete(path); }
@@ -67,8 +69,19 @@ public class LoadingTests
             Assert.Null(second.Error);
             Assert.False(first.Inspection!.IsYyc);
             Assert.Equal("1.0.0.1773", first.Inspection.GameMakerVersion);
+            Assert.Equal(Path.GetFileName(path), first.FileName);
             Assert.Equal(first.Inspection.Sha256, second.Inspection!.Sha256);
             Assert.Equal(100, AssetComparer.Compare(first, second).OriginalAssetsUnchangedPercent);
+            using var loaded = GameFileLoader.Load(path);
+            Assert.NotEmpty(loaded.Data.Code);
+            Assert.Null(GameFileAnalyzer.Fingerprint(loaded).Error);
+            Assert.NotEmpty(loaded.Data.Code); // Fingerprinting does not dispose the caller's model.
+            loaded.Data.Sprites.Add(new() { Name = new("broken"), CollisionMasks = null! });
+            var failure = GameFileAnalyzer.Fingerprint(loaded);
+            loaded.Data.Sprites[0].CollisionMasks = []; // Restore validity for UTML disposal.
+            Assert.StartsWith($"could not analyse sprites 'broken' in {Path.GetFileName(path)}:", failure.Error);
+            Assert.NotNull(failure.Inspection);
+            Assert.DoesNotContain("could not read", failure.Error);
         }
         finally { System.IO.File.Delete(path); }
     }
@@ -101,7 +114,7 @@ public class RealFileTests
             var mod = GameFileAnalyzer.Analyze(path);
             Assert.Null(mod.Error);
             var comparison = AssetComparer.Compare(original, mod);
-            Assert.Equal(12, comparison.AssetTypes.Count);
+            Assert.Equal(original.Inspection!.IsYyc || mod.Inspection!.IsYyc ? 8 : 12, comparison.AssetTypes.Count);
             Assert.Equal(!original.Inspection!.IsYyc && !mod.Inspection!.IsYyc
                 && original.Inspection.BytecodeSupported && mod.Inspection.BytecodeSupported,
                 comparison.HasComparableBytecode);
