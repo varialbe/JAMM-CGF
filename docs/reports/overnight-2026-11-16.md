@@ -17,6 +17,7 @@ This file is updated regularly during the night; the pipeline's own status lines
     2026-11-16 02:56:31  pipeline finished: all phases done. In-game test of the merged data.win on the desktop is still required.
     2026-11-16 02:56:51  pipeline started (phases 3b 5)
     2026-11-16 02:56:52  phase 3b: implementation started
+    2026-11-16 03:45:45  phase 3b: agy unavailable -> review by a second Codex instance
 
 ## Orchestrator notes
 - 00:20 Took over; Phase 2 implementation running.
@@ -25,3 +26,4 @@ This file is updated regularly during the night; the pipeline's own status lines
 - 01:49 Phase 3 implementation passed the gate (112 tests with real files). Review by Gemini (agy now logged in): 13 findings incl. load-order/resolve edge cases in BuildPlan, action metadata order, room instance order, symlink resolution. Codex is fixing.
 - 02:22 Phase 3 reviewed on real files. Safety OK: backup created once and SHA-verified, reinstall over own build accepted, foreign data.win refused, restore returns the original hash; game files unchanged. BLOCKER found: numeric asset indices in GML (e.g. catalog object[2,58] = 641) are not remapped. Cave removes 3 base objects and all mods append at the same indices, so 573-677 object indices per input name a different object in the merged A,C,L build (641 = Overbite in Abyss, Shados in merged). The archive loads and passes verify but references the wrong assets. Fix task phase3b (index stability + remap + semantic verification) runs after Phase 4, before the GUI.
 - 03:01 Phase 4 reviewed: quick start walkthrough with temp data dir and temp game folder works end to end (config, add x3 with base compatibility, list, profile, apply --yes in 68 s, restore to original hash, no leftover builds). Minor: keep-both cannot be applied to an entry that also has an overlapping hunk (F4.1). Started pipeline for 3b (blocker fix) then 5 (GUI).
+- 03:46 Phase 3b implementation passed the gate: 160 tests with real files, 2,133 semantic code checks pass in both orders, 4 base objects retained. agy review failed (prompt > 128 KB argv limit), Codex fallback reviewing.
