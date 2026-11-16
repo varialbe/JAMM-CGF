@@ -44,7 +44,7 @@ public static class GameFolderSearch
                 string archive = Path.Combine(entry.Path, "data.win");
                 if (File.Exists(archive) && File.Exists(Path.Combine(entry.Path, "Cat Goes Fishing.exe")))
                 {
-                    try { found.Add(SteamGameDetection.Inspect(archive, deadline.Token)); }
+                    try { found.Add(SteamGameDetection.Inspect(archive, deadline.Token, progress: progress)); }
                     catch (OperationCanceledException) when (!token.IsCancellationRequested) { break; }
                     continue; // Do not search an existing modded copy nested in a game.
                 }
@@ -61,7 +61,7 @@ public static class GameFolderSearch
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
         progress?.Report("Search finished (bounded to 25 seconds and 30,000 folders). Choose folder if your game is not listed.");
-        return found.ToArray();
+        return found.DistinctBy(g => g.Archive).OrderBy(g => g.Suitability).ToArray();
     }
 
     /// <summary>Chooses an installed Proton and Steam runner, preferring Flatpak on Linux.</summary>

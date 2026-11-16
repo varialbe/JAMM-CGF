@@ -49,7 +49,7 @@ public sealed class Phase9cTests
         await vm.InitializeAsync();
         string mod = files.Mod("Local", "x = 1;\n");
         await vm.AddAsync([mod]); Assert.True(vm.SetupOpen); Assert.Empty(vm.Mods);
-        vm.CancelSetup(); await vm.UseDetectedGameAsync(); Assert.Empty(vm.Mods);
+        vm.CancelSetup(); vm.DetectedLegacy = vm.DetectedGames.Single(); await vm.UseDetectedGameAsync(); Assert.Empty(vm.Mods);
         Assert.Equal(folder + "-modded", files.Store.Config().GameDir);
         Assert.Equal("default", vm.SelectedProfile);
         Assert.Equal(hash, BuildFiles.Hash(original));
@@ -81,7 +81,8 @@ public sealed class Phase9cTests
         string other = Game(files, "other-legacy");
         string preferred = Game(files, "2023-08-16_manifest-9039707068725406600");
         var vm = new MainViewModel(files.Store, gameSearch: (_, _) => [SteamGameDetection.Inspect(Path.Combine(other, "data.win")), SteamGameDetection.Inspect(Path.Combine(preferred, "data.win"))]);
-        await vm.InitializeAsync(); Assert.True(vm.NeedsSetup); Assert.Equal(preferred + "-modded", vm.ModdedDirectory);
+        await vm.InitializeAsync(); Assert.True(vm.NeedsSetup); Assert.Null(vm.DetectedLegacy);
+        vm.DetectedLegacy = vm.DetectedGames.Single(g => g.Archive.StartsWith(preferred, StringComparison.Ordinal));
         await vm.AddAsync([files.Mod("Local", "x = 1;\n")]); Assert.Empty(vm.Mods);
         await vm.UseDetectedGameAsync(); Assert.Single(vm.Mods); Assert.False(vm.NeedsSetup);
         vm.Browse.Dispose();
@@ -129,6 +130,7 @@ public sealed class Phase9cTests
         Assert.True(vm.Browse.CanDownload);
         await vm.Browse.DownloadAsync(false, _ => throw new Exception("No install"));
         Assert.Empty(vm.Mods); Assert.True(vm.SetupOpen);
+        vm.DetectedLegacy = vm.DetectedGames.Single();
         await vm.UseDetectedGameAsync();
         Assert.Single(vm.Mods); Assert.Single(new ProfileLibrary(files.Store).Get("default").EnabledMods);
         vm.Browse.Dispose();

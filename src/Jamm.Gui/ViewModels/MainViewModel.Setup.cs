@@ -28,6 +28,8 @@ public sealed partial class MainViewModel
     public bool SetupOpen { get => setupOpen; set => SetProperty(ref setupOpen, value); }
     /// <summary>Read-only classified search results.</summary>
     public ObservableCollection<DetectedGame> DetectedGames { get; } = [];
+    /// <summary>Unusable results displayed in a collapsed group.</summary>
+    public ObservableCollection<DetectedGame> OtherGames { get; } = [];
     private DetectedGame? detectedLegacy;
     /// <summary>Selected game, preferring the recommended legacy manifest.</summary>
     public DetectedGame? DetectedLegacy { get => detectedLegacy; set { SetProperty(ref detectedLegacy, value); if (value is not null) ModdedDirectory = Path.GetDirectoryName(value.Archive)! + "-modded"; OnPropertyChanged(nameof(HasDetectedLegacy)); } }
@@ -53,9 +55,10 @@ public sealed partial class MainViewModel
         DetectedGame[] found;
         try { found = await Task.Run(() => searchGames(token, setupProgress), token); }
         finally { searching = false; }
-        DetectedGames.Clear();
-        foreach (var game in found) DetectedGames.Add(game);
-        DetectedLegacy = found.OrderByDescending(g => g.Usable).ThenByDescending(g => g.Archive.Contains("9039707068725406600", StringComparison.Ordinal)).FirstOrDefault();
+        DetectedGames.Clear(); OtherGames.Clear();
+        foreach (var game in found.OrderBy(g => g.Suitability).ThenBy(g => g.Archive, StringComparer.Ordinal))
+            if (game.Usable) DetectedGames.Add(game); else OtherGames.Add(game);
+        DetectedLegacy = DetectedGames.FirstOrDefault(g => g.Suitability == GameSuitability.SupportedOriginal);
         SetupMessage = found.Any(g => g.Usable) ? "Select a legacy game and press Use this. JAMM creates a separate modded copy." : "No usable legacy game found. In Steam open steam://open/console, run the command below, then choose the downloaded folder or Check again. Current Steam builds cannot load these mods.";
         if (pendingAction is not null) SetupMessage += " Your requested mod action will continue after Use this.";
     }
@@ -66,8 +69,14 @@ public sealed partial class MainViewModel
         string archive = Path.Combine(folder, "data.win");
         if (!File.Exists(Path.Combine(folder, "Cat Goes Fishing.exe"))) throw new IOException($"'{folder}' has no Cat Goes Fishing.exe. Choose the complete legacy game folder.");
         var game = await Task.Run(() => SteamGameDetection.Inspect(archive, token), token);
-        if (!DetectedGames.Any(g => g.Archive == game.Archive)) DetectedGames.Add(game);
-        DetectedLegacy = game;
+        var results = game.Usable ? DetectedGames : OtherGames;
+        if (!results.Any(g => g.Archive == game.Archive))
+        {
+            results.Add(game);
+            var sorted = results.OrderBy(g => g.Suitability).ThenBy(g => g.Archive, StringComparer.Ordinal).ToArray();
+            results.Clear(); foreach (var result in sorted) results.Add(result);
+        }
+        DetectedLegacy = game.Usable ? game : null;
         SetupMessage = game.Reason;
         if (!game.Usable) throw new IOException($"Cannot use '{folder}': {game.Reason} Choose the legacy depot folder instead.");
     });

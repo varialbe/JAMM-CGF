@@ -146,8 +146,11 @@
             <TextBlock Text="Set up your legacy game" FontWeight="Bold"/>
             <TextBlock Text="{Binding SetupMessage}" TextWrapping="Wrap"/>
             <ListBox ItemsSource="{Binding DetectedGames}" SelectedItem="{Binding DetectedLegacy, Mode=TwoWay}" MaxHeight="140" IsEnabled="{Binding CanEdit}">
-              <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Display}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" Classes="muted"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+              <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" Classes="muted"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
             </ListBox>
+            <Expander Header="Other folders found (not usable)">
+              <ItemsControl ItemsSource="{Binding OtherGames}"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="4"><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            </Expander>
             <TextBlock Text="Separate modded copy:"/>
             <TextBlock Text="{Binding ModdedDirectory}" TextWrapping="Wrap"/>
             <TextBox IsVisible="{Binding AdvancedMode}" Text="{Binding ModdedDirectory}" Watermark="Modded folder destination"/>
