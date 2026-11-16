@@ -52,7 +52,29 @@ public sealed partial class MainWindow : Window
             await Model.InitializeAsync();
             await Model.OpenSettingsAsync(() => new SettingsWindow(Model).ShowDialog(this), onlyWhenUnconfigured: true);
         };
+        MainTabs.SelectionChanged += async (_, e) =>
+        {
+            if (e.Source == MainTabs && MainTabs.SelectedIndex == 1 && Model is { } vm && vm.Browse.Mods.Count == 0 && !vm.Browse.IsLoading) await vm.Browse.RefreshAsync();
+        };
+        Closed += (_, _) => Model?.Browse.Dispose();
         Closing += (_, e) => { if (Model?.IsBusy == true) { e.Cancel = true; Model.Cancel(); } };
+    }
+    private async void BrowseRefreshClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.Browse.RefreshAsync(); }
+    private async void BrowseSelectionChanged(object? sender, SelectionChangedEventArgs e) { if (Model is { } vm && e.Source == BrowseList && e.AddedItems.Count > 0) await vm.Browse.SelectAsync(); }
+    private async void BrowseResolveClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm) await vm.Browse.SelectAsync(); }
+    private async void BrowseAddClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.Browse.DownloadAsync(false, ConfirmAsync); }
+    private async void BrowseInstallClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is not { } vm) return;
+        await vm.Browse.DownloadAsync(true, ConfirmAsync);
+        if (vm.Conflicts.Any(c => c.Severity == "CONFLICT")) MainTabs.SelectedIndex = 0;
+    }
+    private async void BrowseSourceClick(object? sender, RoutedEventArgs e) { if (Model?.Browse.Selected?.Mod is { } mod) await OpenPublicPageAsync(mod.FileUrl ?? mod.SourcePage); }
+    private async void BrowseCatalogClick(object? sender, RoutedEventArgs e) { if (Model?.Browse.Selected?.Mod is { } mod) await OpenPublicPageAsync(mod.SourcePage); }
+    private async Task OpenPublicPageAsync(string url)
+    {
+        try { await Launcher.LaunchUriAsync(Jamm.Core.Browsing.ModHttp.PublicUri(url)); }
+        catch (Exception ex) { await ConfirmAsync("Could not open source page: " + ex.Message); }
     }
     private async void SettingsClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.OpenSettingsAsync(() => new SettingsWindow(vm).ShowDialog(this)); }
     private async void AddClick(object? sender, RoutedEventArgs e)

@@ -48,7 +48,14 @@ public sealed record SteamSettings
 
 /// <summary>Installed library metadata, including the exact patch ancestor and source build.</summary>
 public sealed record ManagedMod(string Id, string Name, string SourceFileName, string Sha256,
-    DateTimeOffset AddedUtc, string BaseSha256, ulong Gen8Timestamp, string GmVersion, byte Bytecode);
+    DateTimeOffset AddedUtc, string BaseSha256, ulong Gen8Timestamp, string GmVersion, byte Bytecode)
+{
+    /// <summary>Exact-byte online provenance; absent in older/manual imports. Hashes identify bytes, not trusted authorship.</summary>
+    public ModOrigin[] Origins { get; init; } = [];
+}
+
+/// <summary>Public source identity recorded only after successful local import/hash deduplication.</summary>
+public sealed record ModOrigin(string Catalog, string ModId, string SourcePage, string Provider, string FileId, string? ReleaseId, string? Version);
 
 /// <summary>Ordered library IDs and reusable Phase 3 resolution choices.</summary>
 public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, string> Resolutions)

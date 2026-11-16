@@ -12,6 +12,7 @@
 
 ## What it does
 
+- Browses Litterbox, resolves public Game Jolt files, and imports downloads into your local library.
 - Keeps local copies of your `.win` and `.zip` mods in one library.
 - Saves profiles with enabled mods, load order, and explicit conflict choices.
 - Combines independent changes and explains overlapping changes before installation.
@@ -27,6 +28,28 @@
 6. Press **Play**. Use **Restore original** to return to the backed-up archive. The activity log explains errors and can be copied.
 
 The desktop window and CLI use the same data directory and settings. Pass `--data-dir <directory>` to either, or set `CGFMM_DATA_DIR`. [Storage and runner settings](docs/data-layout.md).
+
+## Browse mods
+
+Open **Browse mods** to search Litterbox by name, author or description, filter categories
+and released/preview entries, and sort by name, date or rating. Select a mod to read the
+full author description, view available images, and open its original source page.
+The catalog loads on first visit; **Retry / Refresh** retries a failed fetch. Offline
+snapshots show their last successful fetch time. Local management works without the catalog.
+
+Choose a file/release explicitly, then **Download & add**. Optionally enable it in the
+selected profile. **Download & install** also enables it, checks conflicts, and uses the
+existing build/verify/install confirmation with concrete target and backup paths.
+New overlaps return you to **Manager** to review choices and press Install. Importing
+alone never replaces the game's archive. The shared **Cancel** button cancels transfers
+and import work at safe checkpoints.
+
+Public Game Jolt project pages and direct HTTPS `.win`/`.zip` links are supported.
+Unsupported hosts, dashboard/private links, or missing downloads offer **Open source page**;
+a browser fallback is not a completed download. Previews without a release cannot download.
+Compatibility remains **unknown** until local import checks; a verified-creator badge
+is not evidence of compatibility. Archive SHA-256 identifies downloaded bytes, not authorship.
+New releases never change existing profiles automatically. [Storage, limits and provenance](docs/data-layout.md#online-catalog-and-downloads).
 
 ## Review the overlap
 
@@ -203,6 +226,7 @@ Read [AGENTS.md](AGENTS.md) before contributing. Keep game data out of Git and r
 | 3 / 3b | Done | Build, verify and link typed asset references |
 | 4 | Done | Library, profiles, installation, restore and launch |
 | 5 | Done | Desktop GUI, per-hunk choices and headless verification |
+| 9 | Done | Native Litterbox browsing, public Game Jolt downloads and guarded profile integration |
 | Next | Planned | In-game test feedback and distributable packaging |
 
 [Phase 5 verification and remaining desktop checks](docs/reports/phase5-verification.md).

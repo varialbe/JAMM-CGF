@@ -5,6 +5,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Jamm.Core.Management;
+using Jamm.Core.Browsing;
 using Jamm.Gui.ViewModels;
 
 [assembly: AvaloniaTestApplication(typeof(Jamm.Gui.Tests.HeadlessApp))]
@@ -78,6 +79,44 @@ public sealed class HeadlessTests
         while (vm.IsBusy) await Task.Delay(10);
         Assert.Equal(b.Id, vm.Order[0].Id);
         Assert.Equal(b.Id, profiles.Get("drag").Mods[0]); window.Close();
+    }
+
+    private sealed class BrowseCatalog : IModCatalogProvider
+    {
+        public Task<CatalogSnapshot> LoadAsync(CancellationToken token) => Task.FromResult(new CatalogSnapshot([
+            new("demo", "Example Ocean Expansion", "Example creator", "A neutral catalog demonstration. Adds imaginary fish and a new area. Author notice: back up your saves before trying a new mod.", "https://example.com/data.win", false, ["New Fish", "Areas"], null, 4),
+            new("preview", "Example Boat Preview", "Another creator", "A future project without a released download.", null, true, ["Boats"], null, null)
+        ], DateTimeOffset.Parse("2026-11-16T12:00:00Z")));
+    }
+    private sealed class BrowseResolver : IModDownloadResolver
+    {
+        public Task<ModDownloadResolution> ResolveAsync(CatalogMod mod, CancellationToken token) => Task.FromResult(new ModDownloadResolution([
+            new("https", "demo-file", "demo-release", "1.0", "data.win", "Example package", 54000000, mod.FileUrl!)
+        ]));
+        public Task<Uri> GetFileUriAsync(ModDownloadFile file, CancellationToken token) => throw new InvalidOperationException("No download in headless rendering.");
+    }
+    [AvaloniaFact]
+    public async Task BrowseTabUsesNativeControlsAndKeepsManagerNavigation()
+    {
+        using var files = new TestFiles();
+        var vm = new MainViewModel(files.Store, catalog: new BrowseCatalog(), resolver: new BrowseResolver());
+        await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
+        var window = new MainWindow(false) { DataContext = vm }; window.Show();
+        var tabs = window.FindControl<TabControl>("MainTabs")!; tabs.SelectedIndex = 1;
+        Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
+        var list = window.FindControl<ListBox>("BrowseList")!; list.SelectedIndex = 1;
+        while (vm.Browse.IsLoading) await Task.Delay(10);
+        Assert.NotNull(vm.Browse.Selected); Assert.NotEmpty(vm.Browse.Files); Assert.False(vm.Browse.CanDownload);
+        vm.Browse.SelectedFile = vm.Browse.Files[0]; Assert.True(vm.Browse.CanDownload);
+        Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+        if (Environment.GetEnvironmentVariable("JAMM_BROWSE_SCREENSHOT") is { Length: > 0 } output)
+        {
+            using var bitmap = window.CaptureRenderedFrame()!; bitmap.Save(output);
+        }
+        tabs.SelectedIndex = 0; Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
+        Assert.NotNull(window.FindControl<ListBox>("LibraryList")); Assert.True(vm.CanEdit);
+        window.Close();
     }
 
     [AvaloniaFact]

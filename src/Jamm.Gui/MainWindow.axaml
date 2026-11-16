@@ -5,7 +5,9 @@
       <StackPanel Spacing="3"><TextBlock Text="JAMM" FontSize="30" FontWeight="Bold"/><TextBlock Classes="muted" Text="Cat Goes Fishing · Your mods, together."/></StackPanel>
       <Button Grid.Column="1" Content="Settings" Click="SettingsClick" IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
     </Grid>
-    <Grid Grid.Row="1" ColumnDefinitions="285,280,*" ColumnSpacing="16">
+    <TabControl Grid.Row="1" x:Name="MainTabs">
+    <TabItem Header="Manager">
+    <Grid ColumnDefinitions="285,280,*" ColumnSpacing="16">
       <Border Classes="card"><Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
         <TextBlock Classes="title" Text="Mod library"/>
         <TextBlock Grid.Row="1" Classes="muted" Text="Drop .win or .zip files here"/>
@@ -50,6 +52,65 @@
         </StackPanel></ScrollViewer>
       </Grid></Border>
     </Grid>
+    </TabItem>
+    <TabItem Header="Browse mods">
+      <Grid DataContext="{Binding Browse}" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+          <TextBox Text="{Binding Search, Mode=TwoWay}" Watermark="Search name, author or description"/>
+          <ComboBox Grid.Column="1" ItemsSource="{Binding Categories}" SelectedItem="{Binding Category, Mode=TwoWay}" MinWidth="150"/>
+          <ComboBox Grid.Column="2" ItemsSource="{Binding Releases}" SelectedItem="{Binding Release, Mode=TwoWay}"/>
+          <ComboBox Grid.Column="3" ItemsSource="{Binding Sorts}" SelectedItem="{Binding Sort, Mode=TwoWay}"/>
+          <Button Grid.Column="4" Content="Retry / Refresh" Click="BrowseRefreshClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}"/>
+        </Grid>
+        <StackPanel Grid.Row="1" Spacing="4">
+          <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+          <TextBlock Text="{Binding EmptyMessage}" Classes="muted"/>
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="3"/>
+        </StackPanel>
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="16">
+          <ListBox x:Name="BrowseList" ItemsSource="{Binding Mods}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionChanged="BrowseSelectionChanged" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}">
+            <ListBox.ItemTemplate><DataTemplate>
+              <Grid ColumnDefinitions="64,*" ColumnSpacing="12" Margin="4,10">
+                <Image Source="{Binding Icon}" Width="56" Height="56" Stretch="Uniform"/>
+                <StackPanel Grid.Column="1" Spacing="5">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="18" TextWrapping="Wrap"/>
+                  <TextBlock Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap"/>
+                  <TextBlock Text="{Binding Excerpt}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Grid>
+            </DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+          <Border Grid.Column="1" Classes="card"><Grid RowDefinitions="*,Auto,Auto" RowSpacing="12"><ScrollViewer><StackPanel Spacing="12">
+            <TextBlock Text="{Binding Selected.Name}" Classes="title" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Selected.Summary}" Classes="muted" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Selected.Mod.Description}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Selected.Mod.Credits}" TextWrapping="Wrap" Classes="muted"/>
+            <ItemsControl ItemsSource="{Binding Images}"><ItemsControl.ItemTemplate><DataTemplate><Image Source="{Binding}" MaxHeight="220" Stretch="Uniform" Margin="0,4"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            <TextBlock Text="{Binding DetailStatus}" TextWrapping="Wrap"/>
+          </StackPanel></ScrollViewer>
+            <WrapPanel Grid.Row="1">
+              <Button Content="Retry source" Click="BrowseResolveClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" Margin="0,0,6,6"/>
+              <Button Content="Open source page" Click="BrowseSourceClick" Margin="0,0,6,6"/>
+              <Button Content="Litterbox details" Click="BrowseCatalogClick" Margin="0,0,0,6"/>
+            </WrapPanel>
+          <StackPanel Grid.Row="2" Spacing="10">
+            <ComboBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}" PlaceholderText="Choose a file / release" HorizontalAlignment="Stretch" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}">
+              <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{Binding Membership}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+            <TextBlock Text="Compatibility: unknown until local import validates the archive." Classes="muted" FontSize="12" TextWrapping="Wrap"/>
+            <ProgressBar Value="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding $parent[Window].DataContext.IsBusy}" Height="6"/>
+            <CheckBox Content="Also enable in selected profile" IsChecked="{Binding AddToProfile, Mode=TwoWay}" IsEnabled="{Binding $parent[Window].DataContext.CanEditProfile}"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Download &amp; add" Click="BrowseAddClick" IsEnabled="{Binding CanDownload}" Margin="0,0,8,8"/>
+              <Button Content="Download &amp; install" Click="BrowseInstallClick" IsEnabled="{Binding CanDownloadInstall}" Margin="0,0,0,8"/>
+            </WrapPanel>
+            <TextBlock Text="Configure a legacy base in Settings to import. Select a profile and a recognized game folder to install. Downloading or importing alone does not install a mod. Review conflicts in Manager." Classes="muted" TextWrapping="Wrap"/>
+          </StackPanel></Grid></Border>
+        </Grid>
+      </Grid>
+    </TabItem>
+    </TabControl>
     <Border Grid.Row="2" Classes="card"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
       <StackPanel Spacing="6"><TextBlock Text="{Binding GameStatus}" TextWrapping="Wrap" FontWeight="SemiBold"/><TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes="muted" MaxHeight="44"/></StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

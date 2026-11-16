@@ -1,13 +1,14 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Jamm.Core.Building;
+using Jamm.Core.Browsing;
 using Jamm.Core.Management;
 using Jamm.Core.Merging;
 
 namespace Jamm.Gui.ViewModels;
 
 /// <summary>Desktop workflow over the shared Core services. All archive operations run on worker threads.</summary>
-public sealed class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject
 {
     private readonly ManagerStore store;
     private CancellationTokenSource? cancellation;
@@ -18,7 +19,8 @@ public sealed class MainViewModel : ObservableObject
     private bool updatingConflictChoices;
     private IReadOnlyDictionary<string, string> conflictResolutions = new Dictionary<string, string>();
     /// <summary>Creates a manager model without opening game archives on the calling thread.</summary>
-    public MainViewModel(ManagerStore store) { this.store = store; }
+    public MainViewModel(ManagerStore store, ModHttp? browseHttp = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null)
+    { this.store = store; Browse = new BrowseViewModel(this, store, browseHttp, catalog, resolver); }
     /// <summary>Current library rows.</summary>
     public ObservableCollection<ModRow> Mods { get; } = [];
     /// <summary>Active profile order, including disabled mods.</summary>
@@ -28,7 +30,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Grouped findings in severity order.</summary>
     public ObservableCollection<ConflictRow> Conflicts { get; } = [];
     /// <summary>Busy state excludes every mutating operation.</summary>
-    public bool IsBusy { get => busy; private set { SetProperty(ref busy, value); NotifyButtons(); } }
+    public bool IsBusy { get => busy; private set { SetProperty(ref busy, value); NotifyButtons(); Browse?.NotifyActions(); } }
     /// <summary>Enables lightweight editing while idle.</summary>
     public bool CanEdit => !IsBusy;
     /// <summary>Enables order editing once a profile has been selected.</summary>
@@ -123,6 +125,7 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         }
         finally { loading = false; }
+        await Browse.UpdateMembershipAsync();
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
     public Task AddAsync(IEnumerable<string> paths) => RunAsync("Adding mods", async (token, progress) =>
