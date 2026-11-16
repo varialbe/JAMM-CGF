@@ -12,15 +12,25 @@ The manager targets Windows and Linux; Linux supports Wine, Proton and Flatpak
 Steam through `proton-flatpak`. The current Steam build uses YYC and cannot be
 modded with JAMM.
 
-Own the game on Steam, open `steam://open/console`, then enter:
+You must own the game on Steam. On Linux, the installer finds the legacy build or
+helps download it (`install.sh --get-game`). To open the Steam console manually:
+
+- **Windows:** Press `Win+R` and run `steam://open/console` (or start Steam with `-console`).
+- **Linux (native / apt):** `steam steam://open/console`
+- **Linux (Flatpak):** `flatpak run com.valvesoftware.Steam steam://open/console`
+- **Linux (Snap):** `snap run steam steam://open/console`
+- Or restart Steam with the `-console` flag and open the **Console** tab.
+
+Then enter in the Steam Console tab:
 
 ```text
 download_depot 343780 343782 9039707068725406600
 ```
 
-Wait for “Depot download complete”. Keep the downloaded folder as your untouched
-original and copy the **complete legacy game folder** for modded play, including
-its executable and required shared files. [Download details](docs/legacy-version.md).
+Wait for “Depot download complete” (on Linux, current Steam clients save this under
+`<Steam>/steamrt64/steamapps/content/app_343780/depot_343782/`). Keep the downloaded
+folder as your untouched original and copy the **complete legacy game folder** for
+modded play, including its executable and required shared files. [Download details](docs/legacy-version.md).
 
 ## Install
 

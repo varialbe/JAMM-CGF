@@ -198,7 +198,10 @@
             </WrapPanel>
             <TextBlock Text="Steam console command (downloads the legacy Windows build):" TextWrapping="Wrap"/>
             <TextBlock Text="download_depot 343780 343782 9039707068725406600" TextWrapping="Wrap"/>
-            <Button Content="Copy legacy download command" Click="CopyDepotClick"/>
+            <WrapPanel>
+              <Button Content="Copy legacy download command" Click="CopyDepotClick" Margin="0,0,8,4"/>
+              <Button Content="Open Steam console" Click="OpenSteamConsoleClick" IsVisible="{Binding IsLinux}" Margin="0,0,8,4"/>
+            </WrapPanel>
           </StackPanel></ScrollViewer>
         </Border>
   </Grid>

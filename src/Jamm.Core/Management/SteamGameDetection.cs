@@ -33,6 +33,7 @@ public static partial class SteamGameDetection
     /// <summary>Enumerates standard roots; explicit home/program paths make OS layouts testable.</summary>
     public static string[] Roots(string home, string? programFiles = null, string? programFilesX86 = null) => new[]
     {
+        Path.Combine(home, ".steam", "debian-installation"),
         Path.Combine(home, ".steam", "steam"), Path.Combine(home, ".steam", "root"),
         Path.Combine(home, ".local", "share", "Steam"),
         Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
@@ -42,10 +43,23 @@ public static partial class SteamGameDetection
         Path.Combine(programFilesX86 ?? "C:\\Program Files (x86)", "Steam")
     }.Distinct(StringComparer.Ordinal).ToArray();
 
+    /// <summary>Selects the Linux Steam console launch command (without a shell) matching the detected install root.</summary>
+    public static (string FileName, string[] Arguments) LinuxConsoleCommand(string home, IEnumerable<string>? steamRoots = null)
+    {
+        var existing = (steamRoots ?? Roots(home)).Where(Directory.Exists).ToArray();
+        if (existing.Any(p => p.Contains("com.valvesoftware.Steam", StringComparison.Ordinal)))
+            return ("flatpak", ["run", "com.valvesoftware.Steam", "steam://open/console"]);
+        if (existing.Any(p => p.Contains(Path.Combine("snap", "steam"), StringComparison.Ordinal)))
+            return ("snap", ["run", "steam", "steam://open/console"]);
+        return ("steam", ["steam://open/console"]);
+    }
+
     /// <summary>Finds archives through libraries, common folders and depot downloads without recursive disk scanning.</summary>
     public static string[] Candidates(IEnumerable<string> roots) => Libraries(roots).SelectMany(root => new[] {
         Path.Combine(root, "steamapps", "common", "Cat Goes Fishing", "data.win"),
-        Path.Combine(root, "steamapps", "content", "app_343780", "depot_343782", "data.win")
+        Path.Combine(root, "steamapps", "content", "app_343780", "depot_343782", "data.win"),
+        Path.Combine(root, "steamrt64", "steamapps", "content", "app_343780", "depot_343782", "data.win"),
+        Path.Combine(root, "ubuntu12_32", "steamapps", "content", "app_343780", "depot_343782", "data.win")
     }).Where(File.Exists).Select(Path.GetFullPath).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
     /// <summary>Steam roots plus VDF registered library roots.</summary>

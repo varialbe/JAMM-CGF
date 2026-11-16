@@ -79,11 +79,13 @@ public sealed class Phase9bTests
         vm.Browse.Dispose();
     }
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)] [InlineData(6)] [InlineData(7)]
+    [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)] [InlineData(6)] [InlineData(7)] [InlineData(8)]
     public void SteamLayoutsAndVdfLibrariesFindCommonAndDepotArchives(int layout)
     {
         using var files = new TestFiles();
-        string root = SteamGameDetection.Roots(files.Root, Path.Combine(files.Root, "Programs"), Path.Combine(files.Root, "Programs86"))[layout];
+        var roots = SteamGameDetection.Roots(files.Root, Path.Combine(files.Root, "Programs"), Path.Combine(files.Root, "Programs86"));
+        Assert.Equal(9, roots.Length);
+        string root = roots[layout];
         string common = Path.Combine(root, "steamapps", "common", "Cat Goes Fishing", "data.win");
         Directory.CreateDirectory(Path.GetDirectoryName(common)!); File.Copy(files.Original, common);
         string library = Path.Combine(files.Root, "Second Library");
@@ -96,5 +98,39 @@ public sealed class Phase9bTests
         SteamGameDetection.Use(files.Store, SteamGameDetection.Inspect(depot), default);
         Assert.NotEqual(depot, files.Store.Config().Base); Assert.True(File.Exists(depot));
         Assert.True(File.Exists(Path.Combine(files.Store.Config().GameDir!, "data.win")));
+    }
+    [Fact]
+    public void SteamCandidatesFindsSteamrt64AndUbuntu12_32DepotLayoutsAcrossAllRoots()
+    {
+        using var files = new TestFiles();
+        var roots = SteamGameDetection.Roots(files.Root, Path.Combine(files.Root, "Programs"), Path.Combine(files.Root, "Programs86"));
+        Assert.Contains(Path.Combine(files.Root, ".steam", "debian-installation"), roots);
+        Assert.Contains(Path.Combine(files.Root, ".local", "share", "Steam"), roots);
+        Assert.Contains(Path.Combine(files.Root, ".steam", "steam"), roots);
+        Assert.Contains(Path.Combine(files.Root, ".steam", "root"), roots);
+        Assert.Contains(Path.Combine(files.Root, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"), roots);
+        Assert.Contains(Path.Combine(files.Root, "snap", "steam", "common", ".local", "share", "Steam"), roots);
+        foreach (string root in roots)
+        {
+            string steamrt64 = Path.Combine(root, "steamrt64", "steamapps", "content", "app_343780", "depot_343782", "data.win");
+            string ubuntu12 = Path.Combine(root, "ubuntu12_32", "steamapps", "content", "app_343780", "depot_343782", "data.win");
+            string direct = Path.Combine(root, "steamapps", "content", "app_343780", "depot_343782", "data.win");
+            foreach (string path in new[] { steamrt64, ubuntu12, direct })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.Copy(files.Original, path, overwrite: true);
+            }
+            var found = SteamGameDetection.Candidates([root, root]);
+            Assert.Equal(new[] { direct, steamrt64, ubuntu12 }.Order(StringComparer.Ordinal), found);
+        }
+        string flatpakRoot = Path.Combine(files.Root, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam");
+        string snapRoot = Path.Combine(files.Root, "snap", "steam", "common", ".local", "share", "Steam");
+        string aptRoot = Path.Combine(files.Root, ".steam", "debian-installation");
+        Assert.Equal("flatpak", SteamGameDetection.LinuxConsoleCommand(files.Root, [flatpakRoot, aptRoot]).FileName);
+        Assert.Equal("snap", SteamGameDetection.LinuxConsoleCommand(files.Root, [snapRoot, aptRoot]).FileName);
+        Assert.Equal("steam", SteamGameDetection.LinuxConsoleCommand(files.Root, [aptRoot]).FileName);
+        Assert.Contains("install.sh --get-game", Jamm.Gui.ViewModels.MainViewModel.MissingLegacyMessage(true));
+        Assert.Contains("-console", Jamm.Gui.ViewModels.MainViewModel.MissingLegacyMessage(true));
+        Assert.Contains("Win+R", Jamm.Gui.ViewModels.MainViewModel.MissingLegacyMessage(false));
     }
 }

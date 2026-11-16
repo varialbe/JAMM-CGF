@@ -44,6 +44,30 @@ public sealed partial class MainViewModel
     private string setupMessage = "";
     /// <summary>First-run progress and next step.</summary>
     public string SetupMessage { get => setupMessage; private set => SetProperty(ref setupMessage, value); }
+    /// <summary>Whether the current OS is Linux for Linux-specific setup actions.</summary>
+    public bool IsLinux => OperatingSystem.IsLinux();
+    /// <summary>Builds the OS-specific guidance when no legacy depot is detected.</summary>
+    public static string MissingLegacyMessage(bool isLinux) => isLinux
+        ? "No usable legacy game found. Run 'install.sh --get-game', or open the Steam console ('steam steam://open/console', 'flatpak run com.valvesoftware.Steam steam://open/console', 'snap run steam steam://open/console', or start Steam with -console), run the command below, then choose the downloaded folder or Check again. Current Steam builds cannot load these mods."
+        : "No usable legacy game found. Press Win+R and open steam://open/console (or start Steam with -console), run the command below, then choose the downloaded folder or Check again. Current Steam builds cannot load these mods.";
+    /// <summary>Opens the Steam console on Linux using the variant-specific binary without a shell.</summary>
+    public void OpenSteamConsole()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var (fileName, args) = SteamGameDetection.LinuxConsoleCommand(home);
+        try
+        {
+            var info = new System.Diagnostics.ProcessStartInfo(fileName) { UseShellExecute = false };
+            foreach (string arg in args) info.ArgumentList.Add(arg);
+            System.Diagnostics.Process.Start(info);
+            Message($"Opened Steam console via {fileName} {string.Join(' ', args)}. Paste the legacy download command in Steam's Console tab.");
+        }
+        catch (Exception ex)
+        {
+            ReportError($"Could not open Steam console with '{fileName}': {ex.Message} Run 'install.sh --get-game' or start Steam with -console.");
+        }
+    }
     /// <summary>Searches common roots and mounted drives on a worker thread.</summary>
     public Task SearchGamesAsync() => RunAsync("Searching for legacy game", SearchGamesInternalAsync);
     private async Task SearchGamesInternalAsync(CancellationToken token, IProgress<string> progress)
@@ -59,7 +83,7 @@ public sealed partial class MainViewModel
         foreach (var game in SteamGameDetection.OrderCandidates(found))
             if (game.Usable) DetectedGames.Add(game); else OtherGames.Add(game);
         DetectedLegacy = DetectedGames.FirstOrDefault(g => g.Suitability == GameSuitability.SupportedOriginal);
-        SetupMessage = found.Any(g => g.Usable) ? "Select a legacy game and press Use this. JAMM creates a separate modded copy." : "No usable legacy game found. In Steam open steam://open/console, run the command below, then choose the downloaded folder or Check again. Current Steam builds cannot load these mods.";
+        SetupMessage = found.Any(g => g.Usable) ? "Select a legacy game and press Use this. JAMM creates a separate modded copy." : MissingLegacyMessage(OperatingSystem.IsLinux());
         if (pendingAction is not null) SetupMessage += " Your requested mod action will continue after Use this.";
     }
     /// <summary>Validates a manually chosen whole game folder using the same inspector.</summary>

@@ -47,17 +47,28 @@ copy from your normal install is fine) and **343782** holds the actual game (`Ca
 
 ## Download it (Steam console, legal for owners)
 
-1. Open the Steam console: `steam://open/console`
-   (Flatpak Steam: `flatpak run com.valvesoftware.Steam steam://open/console`).
-2. Run **one** download at a time (both go to the same folder):
+On Linux, the installer finds an existing legacy depot or helps download it
+(`install.sh --get-game`). To download it manually:
+
+1. Open the Steam console for your OS / Steam installation:
+   - **Windows:** Press `Win+R` and run `steam://open/console` (or start Steam with `-console`).
+   - **Linux (native / apt):** `steam steam://open/console`
+   - **Linux (Flatpak):** `flatpak run com.valvesoftware.Steam steam://open/console`
+   - **Linux (Snap):** `snap run steam steam://open/console`
+   - Or restart Steam with the `-console` flag and select the **Console** tab.
+2. Paste and run **one** download at a time in the Steam Console tab:
    ```text
    download_depot 343780 343782 9039707068725406600
    ```
 3. Wait for `Depot download complete`. The console prints where the files went. With the
    current Steam client on Linux this is
    `<Steam>/steamrt64/steamapps/content/app_343780/depot_343782/`
-   (older clients: `<Steam>/ubuntu12_32/steamapps/content/...`).
-   Flatpak Steam root: `~/.var/app/com.valvesoftware.Steam/.local/share/Steam`.
+   (older clients: `<Steam>/ubuntu12_32/steamapps/content/...` or `<Steam>/steamapps/content/...`).
+   Common Linux `<Steam>` roots:
+   - apt / Debian: `~/.steam/debian-installation`
+   - Native: `~/.local/share/Steam` or `~/.steam/steam` (`~/.steam/root`)
+   - Flatpak: `~/.var/app/com.valvesoftware.Steam/.local/share/Steam`
+   - Snap: `~/snap/steam/common/.local/share/Steam`
 4. Move the **whole folder** to its own place, named after the manifest, e.g.
    `~/Games/CatGoesFishing-legacy/2023-08-16_manifest-9039707068725406600/`.
    Never copy it over your Steam install.
