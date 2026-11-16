@@ -171,14 +171,20 @@ public static class PerfMode
                     }
                 }
                 """);
-        Add(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, """
+        string fontSetup = data.Fonts.ByName("fnt_babySmall") is not null ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);";
+        Add(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, $$"""
             if (current_time < jamm_perf_toast)
             {
-                draw_set_alpha(1);
+                var jamm_perf_text = "Perf mode (experimental): " + string(global.jamm_perf_mode) + " (F8: toggle)";
+                {{fontSetup}}
+                draw_set_halign(fa_left);
+                draw_set_valign(fa_top);
+                draw_set_alpha(min(1, (jamm_perf_toast - current_time) / 500));
                 draw_set_color(c_black);
-                draw_rectangle(8, 48, 490, 80, false);
+                draw_rectangle(8, 80, 20 + string_width(jamm_perf_text), 92 + string_height(jamm_perf_text), false);
                 draw_set_color(c_white);
-                draw_text(14, 54, "Perf mode (experimental): " + string(global.jamm_perf_mode) + " (F8: toggle)");
+                draw_text(14, 86, jamm_perf_text);
+                draw_set_alpha(1);
             }
             """);
         foreach (string room in new[] { "NewWorld", "room11" }) ModObjects.PlaceInstance(data, room, obj, true);

@@ -251,6 +251,115 @@ public sealed class ModSanitizerTests
         Assert.Empty(library.Patch(added.Mod).Changes["code"].Changed);
     }
 
+    [Fact]
+    public void HudStyleSanitizerRevertsBaseHudReplacementsPreservesAppendedReferencedFramesAndHonorsKeepHudSwitch()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string modReferencedPath = temp.PathFor("mod-referenced.win");
+        string modUnreferencedPath = temp.PathFor("mod-unreferenced.win");
+
+        WriteSyntheticGame(basePath, data =>
+        {
+            AddSprite(data, "spr_wallet", 40, 20, frameCount: 1);
+            AddSprite(data, "spr_upgradeicons", 50, 50, frameCount: 2);
+            AddSprite(data, "spr_lightbulb", 60, 60, frameCount: 2);
+            AddFont(data, "fnt_babySmall", 14);
+            AddCode(data, "gml_Object_UpgradeData_Create_0", "unlocks[0] = 0;\nname[0] = \"Scouting\";\n");
+            AddCode(data, "gml_Object_Girl_Create_0", "time_scalar = 0.00003;\n");
+        });
+
+        WriteSyntheticGame(modReferencedPath, data =>
+        {
+            // Replaced HUD sprite (no appended frames) -> must revert to base
+            AddSprite(data, "spr_wallet", 44, 22, frameCount: 1);
+            // HUD sprite with modified base frames AND an appended frame 2 referenced via upgrade index 1 -> keep base frames 0..1, keep frame 2
+            AddSprite(data, "spr_upgradeicons", 54, 54, frameCount: 3);
+            // Non-HUD sprite -> kept intact
+            AddSprite(data, "spr_lightbulb", 64, 64, frameCount: 3);
+            // Added new HUD sprite -> kept intact
+            AddSprite(data, "spr_boat_icon8", 32, 32, frameCount: 1);
+            // Changed HUD font -> must revert to base
+            AddFont(data, "fnt_babySmall", 18);
+            // Code references upgrade index 1 (which maps to spr_upgradeicons frame 1 + 1 = 2)
+            ReplaceCode(data, "gml_Object_UpgradeData_Create_0", "unlocks[0] = 0;\nunlocks[1] = 0;\nname[0] = \"Scouting\";\nname[1] = \"Bulbguard\";\n");
+            // Performance hack -> reverted by performance sanitizer
+            ReplaceCode(data, "gml_Object_Girl_Create_0", "time_scalar = 0.00006;\n");
+        });
+
+        WriteSyntheticGame(modUnreferencedPath, data =>
+        {
+            AddSprite(data, "spr_wallet", 40, 20, frameCount: 1);
+            // Appended frame 2 on spr_upgradeicons, but NO code references upgrade 1 or frame 2 -> entire sprite reverts to base
+            AddSprite(data, "spr_upgradeicons", 50, 50, frameCount: 3);
+            AddSprite(data, "spr_lightbulb", 60, 60, frameCount: 2);
+            AddFont(data, "fnt_babySmall", 14);
+            ReplaceCode(data, "gml_Object_UpgradeData_Create_0", "unlocks[0] = 0;\nname[0] = \"Scouting\";\n");
+            ReplaceCode(data, "gml_Object_Girl_Create_0", "time_scalar = 0.00003;\n");
+        });
+
+        using var origLoaded = GameFileLoader.Load(basePath);
+        using var modRefLoaded = GameFileLoader.Load(modReferencedPath);
+        using var modUnrefLoaded = GameFileLoader.Load(modUnreferencedPath);
+
+        var rawRefPatch = PatchBuilder.Create(origLoaded, modRefLoaded, "RefMod");
+        var sanitizedRef = ModSanitizer.Sanitize(rawRefPatch);
+
+        Assert.Equal(1, sanitizedRef.Report.RemovedPerformanceCount);
+        Assert.Equal(3, sanitizedRef.Report.RemovedHudCount);
+        Assert.Contains(sanitizedRef.Report.Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == "sprites/spr_wallet");
+        Assert.Contains(sanitizedRef.Report.Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == "sprites/spr_upgradeicons");
+        Assert.Contains(sanitizedRef.Report.Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == "fonts/fnt_babySmall");
+
+        // spr_wallet and fnt_babySmall reverted completely; spr_boat_icon8 (added) and spr_lightbulb (non-HUD) kept
+        Assert.DoesNotContain(sanitizedRef.Patch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
+        Assert.DoesNotContain(sanitizedRef.Patch.Changes["fonts"].Changed, f => f.Name == "fnt_babySmall");
+        Assert.Contains(sanitizedRef.Patch.Changes["sprites"].Added, s => s.Name == "spr_boat_icon8");
+        Assert.Contains(sanitizedRef.Patch.Changes["sprites"].Changed, s => s.Name == "spr_lightbulb");
+
+        // spr_upgradeicons keeps base width/height (50x50) and base frames 0..1, plus appended frame 2 from mod
+        var upgIcons = Assert.Single(sanitizedRef.Patch.Changes["sprites"].Changed, s => s.Name == "spr_upgradeicons");
+        Assert.Equal(50, upgIcons.Mod.GetProperty("width").GetInt32());
+        Assert.Equal(3, upgIcons.Mod.GetProperty("frameCount").GetInt32());
+        var baseFrames = upgIcons.Base!.Value.GetProperty("frames").EnumerateArray().ToArray();
+        var modFrames = upgIcons.Mod.GetProperty("frames").EnumerateArray().ToArray();
+        Assert.Equal(3, modFrames.Length);
+        Assert.True(JsonElement.DeepEquals(baseFrames[0], modFrames[0]));
+        Assert.True(JsonElement.DeepEquals(baseFrames[1], modFrames[1]));
+
+        // Unreferenced appended frame is reverted completely to base
+        var rawUnrefPatch = PatchBuilder.Create(origLoaded, modUnrefLoaded, "UnrefMod");
+        var sanitizedUnref = ModSanitizer.Sanitize(rawUnrefPatch);
+        Assert.DoesNotContain(sanitizedUnref.Patch.Changes["sprites"].Changed, s => s.Name == "spr_upgradeicons");
+        Assert.Contains(sanitizedUnref.Report.Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == "sprites/spr_upgradeicons");
+
+        // Verify independent KeepAuthorHudDesign and KeepAuthorPerformanceChanges switches in ModLibrary
+        var store = new ManagerStore(temp.PathFor("store"));
+        store.Set("base", basePath);
+        var library = new ModLibrary(store);
+        var added = library.Add(modReferencedPath, "RefMod").Mod;
+
+        // Default: both performance and HUD sanitized
+        var defaultPatch = library.Patch(added);
+        Assert.DoesNotContain(defaultPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.DoesNotContain(defaultPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
+
+        // KeepAuthorHudDesign = true, KeepAuthorPerformanceChanges = false: HUD kept, performance stripped
+        var keepHud = library.SetKeepAuthorHudDesign(added.Id, true);
+        Assert.True(keepHud.KeepAuthorHudDesign);
+        var hudKeptPatch = library.Patch(keepHud);
+        Assert.DoesNotContain(hudKeptPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.Contains(hudKeptPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
+        Assert.Contains(hudKeptPatch.Changes["fonts"].Changed, f => f.Name == "fnt_babySmall");
+
+        // KeepAuthorHudDesign = false, KeepAuthorPerformanceChanges = true: HUD stripped, performance kept
+        library.SetKeepAuthorHudDesign(added.Id, false);
+        var keepPerf = library.SetKeepAuthorPerformanceChanges(added.Id, true);
+        var perfKeptPatch = library.Patch(keepPerf);
+        Assert.Contains(perfKeptPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.DoesNotContain(perfKeptPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
+    }
+
     [RealFilesFact]
     public void RealSevenModSetSanitizesBuildsAndVerifiesWithContentIntactAndHacksRemoved()
     {
@@ -278,17 +387,28 @@ public sealed class ModSanitizerTests
         Assert.True(reports["Smooth"].IsJammMod);
         Assert.Empty(reports["Smooth"].Removed);
 
-        // Verify Abyss and Cave have 0 removed changes; Colour has 1 (FishThinner do_zoning).
-        Assert.Empty(reports["Abyss"].Removed);
+        // Verify Abyss has all 11 purple HUD sprites reverted and 0 performance removals; Cave has 0; Colour has 1 (FishThinner do_zoning).
+        string[] abyssHudSprites =
+        [
+            "spr_catalog_arrow", "spr_catalog_btn", "spr_catalog_tab", "spr_icon", "spr_iconsmall",
+            "spr_lurecard", "spr_radarbutton", "spr_rodcard", "spr_savecard_btn", "spr_sonarpanel", "spr_wallet"
+        ];
+        Assert.Equal(0, reports["Abyss"].RemovedPerformanceCount);
+        Assert.Equal(11, reports["Abyss"].RemovedHudCount);
+        foreach (string hudSpr in abyssHudSprites)
+            Assert.Contains(reports["Abyss"].Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == $"sprites/{hudSpr}");
         Assert.Empty(reports["Cave"].Removed);
         Assert.Single(reports["Colour"].Removed);
         Assert.Equal(ModSanitizer.DistanceCull, reports["Colour"].Removed[0].Category);
         Assert.Equal("gml_Object_FishThinner_Step_0", reports["Colour"].Removed[0].Entry);
 
-        // Verify OAC has all timing, tick-throttle, distance-cull, fps-adaptive, debug-overlay hacks removed and 0 unclassified.
+        // Verify OAC has all 22 timing/throttle/cull/fps/debug-overlay hacks removed + 1 hud-style base-frame revert on spr_upgradeicons, and 0 unclassified.
         var oacReport = reports["Oops! All Chaws!"];
         Assert.False(oacReport.IsJammMod);
         Assert.Empty(oacReport.Unclassified);
+        Assert.Equal(22, oacReport.RemovedPerformanceCount);
+        Assert.Equal(1, oacReport.RemovedHudCount);
+        Assert.Contains(oacReport.Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == "sprites/spr_upgradeicons");
         Assert.Contains(oacReport.Removed, r => r.Category == ModSanitizer.Timing && r.Entry == "gml_Object_Girl_Create_0");
         Assert.Contains(oacReport.Removed, r => r.Category == ModSanitizer.Timing && r.Entry == "gml_Object_Girl_Step_0");
         Assert.Contains(oacReport.Removed, r => r.Category == ModSanitizer.Timing && r.Entry == "objects/fpsController");
@@ -315,8 +435,31 @@ public sealed class ModSanitizerTests
         Assert.True(verified.DecompiledEntries > 0);
         Assert.Equal(0, Jamm.Cli.BuildCommand.Run("verify", [output]));
 
+        using var origGame = GameFileLoader.Load(basePath);
+        using var oacGame = GameFileLoader.Load(Path.Combine(store.Root, "mods", library.Find("Oops! All Chaws!").Id, "data.win"));
         using var merged = GameFileLoader.Load(output);
         CgfAssetTypes.Register(merged.Data);
+
+        // Verify all 11 Abyss HUD sprites in the merged archive match the base game's original HUD sprites:
+        foreach (string hudSpr in abyssHudSprites)
+        {
+            var baseSnap = PatchBuilder.ReadAsset(origGame, AssetKind.Sprites, hudSpr);
+            var mergedSnap = PatchBuilder.ReadAsset(merged, AssetKind.Sprites, hudSpr);
+            Assert.True(JsonElement.DeepEquals(baseSnap, mergedSnap), $"Expected HUD sprite '{hudSpr}' to match base game.");
+        }
+
+        // Verify OAC's spr_upgradeicons keeps base frames 0..18 unchanged and keeps appended Bulbguard frame 19 from OAC:
+        var baseUpgSnap = PatchBuilder.ReadAsset(origGame, AssetKind.Sprites, "spr_upgradeicons");
+        var oacUpgSnap = PatchBuilder.ReadAsset(oacGame, AssetKind.Sprites, "spr_upgradeicons");
+        var mergedUpgSnap = PatchBuilder.ReadAsset(merged, AssetKind.Sprites, "spr_upgradeicons");
+        Assert.Equal(19, baseUpgSnap.GetProperty("frameCount").GetInt32());
+        Assert.Equal(20, mergedUpgSnap.GetProperty("frameCount").GetInt32());
+        var baseUpgFrames = baseUpgSnap.GetProperty("frames").EnumerateArray().ToArray();
+        var oacUpgFrames = oacUpgSnap.GetProperty("frames").EnumerateArray().ToArray();
+        var mergedUpgFrames = mergedUpgSnap.GetProperty("frames").EnumerateArray().ToArray();
+        for (int i = 0; i < 19; i++)
+            Assert.True(JsonElement.DeepEquals(baseUpgFrames[i], mergedUpgFrames[i]), $"Expected spr_upgradeicons frame {i} to match base.");
+        Assert.True(JsonElement.DeepEquals(oacUpgFrames[19], mergedUpgFrames[19]), "Expected spr_upgradeicons frame 19 (Bulbguard) to match OAC.");
 
         // Verify hacks are gone from the compiled merged archive:
         Assert.Null(merged.Data.GameObjects.ByName("fpsController"));
@@ -379,6 +522,60 @@ public sealed class ModSanitizerTests
 
         string boat7 = PatchBuilder.ReadCode(merged, "gml_Object_Boat7_Create_0").Text;
         Assert.Contains("MAX_X = 82430;", boat7);
+
+        // Build and verify the optional Console mod from the original legacy data.win:
+        string consoleOut = temp.PathFor("jamm-console.win");
+        Assert.Equal(0, Jamm.ModMaker.Program.Main(["console", basePath, consoleOut]));
+        Assert.Equal(0, Jamm.Cli.BuildCommand.Run("verify", [consoleOut]));
+        using var consoleLoaded = GameFileLoader.Load(consoleOut);
+        var consolePatch = PatchBuilder.Create(origGame, consoleLoaded, "Console", options: options);
+        var consoleSanitized = ModSanitizer.Sanitize(consolePatch);
+        Assert.True(consoleSanitized.Report.IsJammMod);
+        Assert.Empty(consoleSanitized.Report.Removed);
+    }
+
+    private static void AddSprite(UndertaleData data, string name, uint width, uint height, int frameCount)
+    {
+        var existing = data.Sprites.ByName(name);
+        if (existing is not null) data.Sprites.Remove(existing);
+        var spr = new UndertaleSprite
+        {
+            Name = data.Strings.MakeString(name),
+            Width = width,
+            Height = height,
+            MarginRight = (int)width - 1,
+            MarginBottom = (int)height - 1
+        };
+        for (int i = 0; i < frameCount; i++)
+        {
+            var item = new UndertaleTexturePageItem
+            {
+                Name = data.Strings.MakeString($"PageItem_{name}_{i}_{width}"),
+                SourceX = (ushort)(i * 16),
+                SourceY = (ushort)width,
+                SourceWidth = (ushort)width,
+                SourceHeight = (ushort)height,
+                TargetWidth = (ushort)width,
+                TargetHeight = (ushort)height,
+                BoundingWidth = (ushort)width,
+                BoundingHeight = (ushort)height
+            };
+            data.TexturePageItems.Add(item);
+            spr.Textures.Add(new UndertaleSprite.TextureEntry { Texture = item });
+        }
+        data.Sprites.Add(spr);
+    }
+
+    private static void AddFont(UndertaleData data, string name, uint emSize)
+    {
+        var existing = data.Fonts.ByName(name);
+        if (existing is not null) data.Fonts.Remove(existing);
+        data.Fonts.Add(new UndertaleFont
+        {
+            Name = data.Strings.MakeString(name),
+            DisplayName = data.Strings.MakeString(name),
+            EmSize = emSize
+        });
     }
 
     private static void WriteSyntheticGame(string path, Action<UndertaleData> configure)

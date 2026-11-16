@@ -9,7 +9,9 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     private Avalonia.Media.IImage? icon;
     private bool baseline;
     private bool keepAuthorPerformanceChanges;
+    private bool keepAuthorHudDesign;
     private int removedPerformanceCount;
+    private int removedHudCount;
     private string sanitizedDetails = "";
     private bool isJammMod;
     /// <summary>Whether enablement differs from the saved selection.</summary>
@@ -28,19 +30,31 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     /// <summary>Catalog identity used to associate artwork without matching display names.</summary>
     public string? CatalogId { get; internal set; }
     /// <summary>Whether this mod was built by JAMM's own ModMaker (obj_jamm_*).</summary>
-    public bool IsJammMod { get => isJammMod; internal set { if (SetProperty(ref isJammMod, value)) OnPropertyChanged(nameof(CanKeepAuthorPerformanceChanges)); } }
+    public bool IsJammMod { get => isJammMod; internal set { if (SetProperty(ref isJammMod, value)) { OnPropertyChanged(nameof(CanKeepAuthorPerformanceChanges)); OnPropertyChanged(nameof(CanKeepAuthorHudDesign)); } } }
     /// <summary>Number of third-party performance changes removed by JAMM's sanitizer.</summary>
     public int RemovedPerformanceCount { get => removedPerformanceCount; internal set { if (SetProperty(ref removedPerformanceCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
-    /// <summary>True when JAMM removed at least one third-party performance change from this mod.</summary>
-    public bool HasSanitizedInfo => RemovedPerformanceCount > 0;
-    /// <summary>Short summary line for removed performance changes.</summary>
-    public string SanitizedLine => RemovedPerformanceCount <= 0 ? "" : $"JAMM removed {RemovedPerformanceCount} performance changes";
-    /// <summary>Detailed list of removed performance changes for the info flyout.</summary>
+    /// <summary>Number of third-party HUD/UI asset changes reverted by JAMM's sanitizer.</summary>
+    public int RemovedHudCount { get => removedHudCount; internal set { if (SetProperty(ref removedHudCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
+    /// <summary>True when JAMM removed at least one third-party performance or HUD change from this mod.</summary>
+    public bool HasSanitizedInfo => RemovedPerformanceCount > 0 || RemovedHudCount > 0;
+    /// <summary>Short summary line for removed performance and/or HUD changes.</summary>
+    public string SanitizedLine => (RemovedPerformanceCount, RemovedHudCount) switch
+    {
+        ( > 0, 0) => $"JAMM removed {RemovedPerformanceCount} performance changes",
+        (0, > 0) => $"JAMM removed {RemovedHudCount} HUD changes",
+        ( > 0, > 0) => $"JAMM removed {RemovedPerformanceCount} performance changes, {RemovedHudCount} HUD changes",
+        _ => ""
+    };
+    /// <summary>Detailed list of removed performance and HUD changes for the info flyout.</summary>
     public string SanitizedDetails { get => sanitizedDetails; internal set => SetProperty(ref sanitizedDetails, value); }
     /// <summary>Whether the per-mod switch to keep author performance changes is enabled.</summary>
     public bool CanKeepAuthorPerformanceChanges => !IsJammMod;
+    /// <summary>Whether the per-mod switch to keep author HUD design is enabled.</summary>
+    public bool CanKeepAuthorHudDesign => !IsJammMod;
     /// <summary>Advanced per-mod opt-out that keeps the author's performance changes instead of sanitizing.</summary>
     public bool KeepAuthorPerformanceChanges { get => keepAuthorPerformanceChanges; set => SetProperty(ref keepAuthorPerformanceChanges, value); }
+    /// <summary>Advanced per-mod opt-out that keeps the author's HUD design instead of reverting to base HUD art.</summary>
+    public bool KeepAuthorHudDesign { get => keepAuthorHudDesign; set => SetProperty(ref keepAuthorHudDesign, value); }
     /// <summary>Immutable library ID.</summary>
     public string Id { get; } = id;
     /// <summary>User-facing display name.</summary>

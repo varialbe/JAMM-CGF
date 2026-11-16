@@ -47,6 +47,93 @@ public class SmoothGeneratorTests
         Assert.Contains("frames_since_last_flip = jamm_s_flip", Code(data, "Draw_75"));
     }
 
+    [Fact]
+    public void AllJammToastsSetExplicitFontAlignmentColorAndAlphaInDrawGui()
+    {
+        using var data = Generate(false);
+        string smoothToast = Code(data, "Draw_64");
+        Assert.Contains("draw_set_font(fnt_babySmall)", smoothToast);
+        Assert.Contains("draw_set_halign(fa_left)", smoothToast);
+        Assert.Contains("draw_set_valign(fa_top)", smoothToast);
+        Assert.Contains("draw_set_color(c_black)", smoothToast);
+        Assert.Contains("draw_set_color(c_white)", smoothToast);
+
+        HdMod.Apply(data, null, false);
+        string hdToast = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{HdMod.ObjectName}_Draw_64"));
+        Assert.Contains("draw_set_font(fnt_babySmall)", hdToast);
+        Assert.Contains("draw_set_halign(fa_left)", hdToast);
+        Assert.Contains("draw_set_valign(fa_top)", hdToast);
+
+        PerfMode.Queue(data, new CompileGroup(data), false);
+        // Compile PerfMode controller onto a fresh synthetic model with fnt_babySmall
+        var perfData = UndertaleData.CreateNew();
+        perfData.GeneralInfo.Major = 1;
+        perfData.GeneralInfo.BytecodeVersion = 16;
+        perfData.Fonts.Add(new() { Name = perfData.Strings.MakeString("fnt_babySmall"), DisplayName = perfData.Strings.MakeString("Small") });
+        foreach (string room in new[] { "NewWorld", "room11" })
+            perfData.Rooms.Add(new() { Name = perfData.Strings.MakeString(room) });
+        var perfCompiler = new CompileGroup(perfData);
+        PerfMode.Queue(perfData, perfCompiler, false);
+        ModObjects.Compile(perfCompiler);
+        string perfToast = ModObjects.Decompile(perfData, perfData.Code.ByName("gml_Object_obj_jamm_perf_Draw_64"));
+        Assert.Contains("draw_set_font(fnt_babySmall)", perfToast);
+        Assert.Contains("draw_set_halign(fa_left)", perfToast);
+        Assert.Contains("draw_set_valign(fa_top)", perfToast);
+        Assert.Contains("string_width(jamm_perf_text)", perfToast);
+        Assert.Contains("string_height(jamm_perf_text)", perfToast);
+        Assert.Contains("draw_set_color(c_white)", perfToast);
+    }
+
+    [Fact]
+    public void ConsoleGeneratorBuildsInGameConsoleWithHelpAndUnlockAllAndNoHotkeyCheat()
+    {
+        var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Major = 1;
+        data.GeneralInfo.BytecodeVersion = 16;
+        data.Fonts.Add(new() { Name = data.Strings.MakeString("fnt_babySmall"), DisplayName = data.Strings.MakeString("Small") });
+        foreach (string name in new[] { "Girl", "Rod", "Handler", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons", "AmbianceController" })
+            ModObjects.Create(data, name, false);
+        foreach (string name in new[] { "NewWorld", "room11" })
+            data.Rooms.Add(new() { Name = data.Strings.MakeString(name) });
+
+        ConsoleMod.Apply(data);
+
+        var obj = data.GameObjects.ByName(ConsoleMod.ObjectName);
+        Assert.NotNull(obj);
+        Assert.True(obj.Persistent);
+        Assert.Contains(data.Rooms.ByName("NewWorld")!.GameObjects, i => i.ObjectDefinition == obj);
+        Assert.Contains(data.Rooms.ByName("room11")!.GameObjects, i => i.ObjectDefinition == obj);
+
+        string create = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Create_0"));
+        string begin = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_1"));
+        string end = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_2"));
+        string gui = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Draw_64"));
+
+        // Verify F12 / backtick toggle, keyboard_string input, Up/Down history, help, and unlockall:
+        Assert.Contains("jamm_console_history = ds_list_create()", create);
+        Assert.Contains("keyboard_check_pressed(vk_f12)", begin);
+        Assert.Contains("keyboard_check_pressed(vk_up)", begin);
+        Assert.Contains("keyboard_check_pressed(vk_down)", begin);
+        Assert.Contains("keyboard_string", begin);
+        Assert.Contains("\"help\"", begin);
+        Assert.Contains("\"unlockall\"", begin);
+        Assert.Contains("UpgradeData.unlocks", begin);
+        Assert.Contains("RodData.unlocked", begin);
+        Assert.Contains("LureData.unlocked", begin);
+        Assert.Contains("BoatData.unlocked", begin);
+        Assert.Contains("ToolData.unlocked", begin);
+        Assert.Contains("GearData.unlocked", begin);
+        Assert.Contains("Girl.nightfallUnlocked = 1", begin);
+        Assert.Contains("WARNING: The next autosave", begin);
+        Assert.DoesNotContain("dollars +=", begin);
+        Assert.DoesNotContain("CatalogData", begin);
+        Assert.Contains("LureData.unlocked[5] = 1", end);
+        Assert.Contains("AmbianceController.lockDay = 0", end);
+        Assert.Contains("draw_set_font(fnt_babySmall)", gui);
+        Assert.Contains("draw_set_halign(fa_left)", gui);
+        Assert.Contains("draw_set_valign(fa_top)", gui);
+    }
+
     private static string Code(UndertaleData data, string suffix)
         => ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{SmoothMod.ObjectName}_{suffix}"));
 
@@ -55,6 +142,7 @@ public class SmoothGeneratorTests
         var data = UndertaleData.CreateNew();
         data.GeneralInfo.Major = 1;
         data.GeneralInfo.BytecodeVersion = 16;
+        data.Fonts.Add(new() { Name = data.Strings.MakeString("fnt_babySmall"), DisplayName = data.Strings.MakeString("Small") });
         foreach (string name in new[] { "Girl", "Rod", "Lure", "Boat", "SonarPanel", "Fish", "QuestEngine" })
             ModObjects.Create(data, name, false);
         foreach (string name in new[] { "NewWorld", "room11" })

@@ -17,11 +17,17 @@ public sealed record ClassifiedHunk(string Category, int BaseStart, int BaseLeng
 public sealed record ModSanitizerReport(int SanitizerVersion, string ModSha256, string BaseSha256, bool IsJammMod,
     IReadOnlyList<SanitizedChange> Removed, IReadOnlyList<SanitizedChange> Unclassified)
 {
+    /// <summary>Count of removed third-party performance hacks (all categories except <see cref="ModSanitizer.HudStyle"/>).</summary>
+    public int RemovedPerformanceCount => Removed.Count(r => r.Category != ModSanitizer.HudStyle);
+
+    /// <summary>Count of reverted third-party HUD/UI asset changes (<see cref="ModSanitizer.HudStyle"/>).</summary>
+    public int RemovedHudCount => Removed.Count(r => r.Category == ModSanitizer.HudStyle);
+
     /// <summary>Formats a concise human-readable multi-line summary for UI flyouts and CLI output.</summary>
     public string FormatDetails()
     {
         if (IsJammMod || Removed.Count == 0 && Unclassified.Count == 0)
-            return "No third-party performance changes were removed.";
+            return "No third-party performance or HUD changes were removed.";
         StringBuilder sb = new();
         foreach (var item in Removed)
             sb.Append('[').Append(item.Category).Append("] ").Append(item.Entry).Append(": ").AppendLine(item.Summary);
@@ -35,15 +41,16 @@ public sealed record ModSanitizerReport(int SanitizerVersion, string ModSha256, 
 public sealed record ModSanitizerResult(ModPatch Patch, ModSanitizerReport Report);
 
 /// <summary>
-/// Deterministic hunk-level sanitizer over portable <see cref="ModPatch"/> documents.
+/// Deterministic hunk-level and HUD-asset sanitizer over portable <see cref="ModPatch"/> documents.
 /// Classifies code hunks into <c>timing</c>, <c>tick-throttle</c>, <c>distance-cull</c>, <c>fps-adaptive</c>,
-/// <c>debug-overlay</c>, <c>content</c>, or <c>unclassified</c>; reverts non-content performance hacks to the
-/// base version while preserving content in the same entry; and removes unreferenced helper objects/variables.
+/// <c>debug-overlay</c>, <c>content</c>, or <c>unclassified</c>; reverts non-content performance hacks and
+/// third-party HUD/UI replacements (<c>hud-style</c>) to the base version while preserving content (including
+/// code-referenced appended frames on HUD sprites such as <c>spr_upgradeicons</c>); and removes unreferenced helpers.
 /// </summary>
 public static partial class ModSanitizer
 {
     /// <summary>Current deterministic sanitizer rule revision used to invalidate cached sanitized patches and compatibility checks.</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>Category for delta/time_scalar/DELTA_INSTANT/room_speed/game_set_speed/frame-limiter edits.</summary>
     public const string Timing = "timing";
@@ -55,10 +62,62 @@ public static partial class ModSanitizer
     public const string FpsAdaptive = "fps-adaptive";
     /// <summary>Category for <c>draw_text*</c> overlays displaying FPS or camera/instance coordinates.</summary>
     public const string DebugOverlay = "debug-overlay";
+    /// <summary>Category for third-party replacements of base HUD/UI sprites, fonts, or backgrounds.</summary>
+    public const string HudStyle = "hud-style";
     /// <summary>Category for gameplay, fish, item, catalog, room, or UI content kept intact.</summary>
     public const string Content = "content";
     /// <summary>Category for ambiguous hunks kept intact without guessing.</summary>
     public const string Unclassified = "unclassified";
+
+    /// <summary>
+    /// Evidence-based set of base HUD/UI sprites drawn or assigned on HUD/UI objects:
+    /// wallet (<c>Wallet</c>), sonar panel &amp; radar (<c>SonarPanel</c>, <c>SonarPanelAdvanced</c>, <c>RadarButton</c>),
+    /// catalog &amp; hatalog UI (<c>Catalog*</c>, <c>Fishalog</c>, <c>Hatalog*</c>, <c>icon_Catalog</c>),
+    /// shop/save cards &amp; menus (<c>RodCard</c>, <c>LureCard</c>, <c>BoatCard</c>, <c>ToolCard</c>, <c>SaveCard</c>,
+    /// <c>GearCard*</c>, <c>SCB*</c>, <c>Controls</c>, <c>GM_Classic</c>, <c>GM_Realism</c>),
+    /// upgrade menu (<c>UpgradeCard</c>, <c>UpgradeSlot</c>, <c>EmblemMaster</c>),
+    /// buttons &amp; HUD icons (<c>Icons*</c>, <c>icon_*</c>), level/breath bar (<c>ExperienceBar</c>, <c>BreathBar</c>),
+    /// and HUD/UI data/controller icons (<c>SaveData</c>, <c>ToolData</c>, <c>RodData</c>, <c>LureData</c>, <c>SaveManager</c>).
+    /// </summary>
+    public static readonly IReadOnlySet<string> HudSprites = new HashSet<string>(StringComparer.Ordinal)
+    {
+        // Wallet
+        "spr_wallet",
+        // Sonar panel & radar
+        "spr_sonarpanel", "spr_sonarnoise", "spr_sonarblip", "spr_sonarhat", "spr_lureblip", "spr_radarbutton",
+        // Catalog & Hatalog UI
+        "spr_catalog_arrow", "spr_catalog_bar", "spr_catalog_btn", "spr_catalog_itembg", "spr_catalog_tab",
+        "spr_hatalog_itembg", "spr_pixel",
+        // Cards, shop/save menus, controls, game mode buttons
+        "spr_rodcard", "spr_lurecard", "spr_rowcard", "spr_blankcard", "spr_savecard_btn",
+        "spr_lock", "spr_tools", "spr_noboat", "spr_controls", "spr_gm_classic", "spr_gm_realism", "spr_button_icons",
+        // Upgrade menu & emblems
+        "spr_upgradeicon_bg", "spr_upgradeicons", "spr_emblemholder", "spr_emblems", "spr_crankbait_emblem",
+        // Buttons & HUD icons
+        "spr_icon", "spr_iconsmall", "spr_icon_labels",
+        // Level / Experience / Breath bar
+        "spr_xpbar",
+        // UI data & save controller icons
+        "spr_huddata", "spr_roddata", "spr_luredata", "spr_floppy"
+    };
+
+    /// <summary>
+    /// Evidence-based set of base HUD/UI fonts drawn by <c>Wallet</c>, <c>ExperienceBar</c>, <c>BreathBar</c>,
+    /// <c>Icons</c>, <c>Card</c>s, <c>Menu</c>s, <c>Catalog</c>, <c>Hatalog</c>, <c>Quest</c>, <c>Message*</c>, and <c>Credits*</c>.
+    /// </summary>
+    public static readonly IReadOnlySet<string> HudFonts = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "fnt_babyBig", "fnt_babyBigOld",
+        "fnt_babyMedium", "fnt_babyMediumOld",
+        "fnt_babyMoney", "fnt_babyQuest",
+        "fnt_babySmall", "fnt_babySmallOld",
+        "fnt_babyTiny", "fnt_babyVerySmall"
+    };
+
+    /// <summary>
+    /// Evidence-based set of base HUD/UI backgrounds (empty in base CGF, where <c>bg_mountains*</c> are world backgrounds).
+    /// </summary>
+    public static readonly IReadOnlySet<string> HudBackgrounds = new HashSet<string>(StringComparer.Ordinal);
 
     // Explicit GML line patterns for each category:
     // 1. timing: writes to delta, delta_fixed, delta_previous, time_scalar, time_scalar_last, DELTA_INSTANT, room_speed;
@@ -143,7 +202,7 @@ public static partial class ModSanitizer
     }
 
     /// <summary>Sanitizes a portable <see cref="ModPatch"/> deterministically without touching game archives.</summary>
-    public static ModSanitizerResult Sanitize(ModPatch patch)
+    public static ModSanitizerResult Sanitize(ModPatch patch, bool keepPerformanceChanges = false, bool keepHudDesign = false)
     {
         if (IsJammMod(patch))
         {
@@ -156,258 +215,294 @@ public static partial class ModSanitizer
         HashSet<string> removedTokens = new(StringComparer.Ordinal);
 
         var codeEntries = patch.Changes["code"];
-        var throttleVars = DiscoverThrottleVariables(
-            codeEntries.Changed.Where(c => c.BaseCode?.Format == "gml" && c.ModCode?.Format == "gml")
-                .Select(c => (c.Name, c.BaseCode!.Text, c.ModCode!.Text))
-                .Concat(codeEntries.Added.Where(a => a.ModCode?.Format == "gml")
-                    .Select(a => (a.Name, "", a.ModCode!.Text))));
-
-        // 1. Classify and sanitize changed code entries at hunk granularity.
-        List<AssetPatch> keptChangedCode = [];
-        foreach (var entry in codeEntries.Changed)
-        {
-            if (entry.BaseCode is not { Format: "gml" } baseCode || entry.ModCode is not { Format: "gml" } modCode)
-            {
-                keptChangedCode.Add(entry);
-                continue;
-            }
-            string[] baseLines = SplitLines(LineDiff.Normalize(baseCode.Text));
-            string[] modLines = SplitLines(LineDiff.Normalize(modCode.Text));
-            var hunks = ClassifyEntry(entry.Name, baseCode.Text, modCode.Text, throttleVars);
-            if (hunks.Count == 0)
-            {
-                keptChangedCode.Add(entry);
-                continue;
-            }
-
-            bool anyReverted = false;
-            List<string> rebuilt = [];
-            int baseCursor = 0;
-            foreach (var hunk in hunks)
-            {
-                int bStart = hunk.BaseStart - 1;
-                int bEnd = bStart + hunk.BaseLength;
-                rebuilt.AddRange(baseLines[baseCursor..bStart]);
-                if (hunk.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
-                {
-                    anyReverted = true;
-                    rebuilt.AddRange(SplitLines(hunk.RevertedText));
-                    removed.Add(new(hunk.Category, entry.Name, hunk.Summary, hunk.BaseStart, hunk.ModStart));
-                    foreach (string id in GmlReferences.Identifiers(hunk.ModText))
-                        removedTokens.Add(id);
-                }
-                else
-                {
-                    if (hunk.Category == Unclassified)
-                        unclassified.Add(new(Unclassified, entry.Name, hunk.Summary, hunk.BaseStart, hunk.ModStart));
-                    rebuilt.AddRange(SplitLines(hunk.ModText));
-                }
-                baseCursor = bEnd;
-            }
-            rebuilt.AddRange(baseLines[baseCursor..]);
-
-            if (!anyReverted)
-            {
-                keptChangedCode.Add(entry);
-                continue;
-            }
-
-            string newText = ReconstructText(rebuilt, baseCode.Text);
-            if (LineDiff.Normalize(newText) == LineDiff.Normalize(baseCode.Text)
-                && entry.Base is { } baseSnap
-                && baseCode.Parent == modCode.Parent
-                && baseCode.Children.SequenceEqual(modCode.Children, StringComparer.Ordinal))
-            {
-                // Entire code entry reverted to base; omit it from Changed so it causes no false conflicts.
-                continue;
-            }
-
-            var updatedModCode = modCode with { Text = newText };
-            keptChangedCode.Add(entry with { ModCode = updatedModCode });
-        }
-
-        // 2. Identify added helper objects & added helper code entries that only serve performance hacks.
-        // First classify all added code entries.
-        Dictionary<string, (string Category, string Summary)> addedCodeClassifications = new(StringComparer.Ordinal);
-        foreach (var addedCode in codeEntries.Added)
-        {
-            if (addedCode.ModCode is not { Format: "gml" } modCode) continue;
-            string trimmed = modCode.Text.Trim();
-            if (trimmed.Length == 0)
-            {
-                addedCodeClassifications[addedCode.Name] = ("empty", "empty event");
-                continue;
-            }
-            string[] lines = SplitLines(LineDiff.Normalize(modCode.Text));
-            var (cat, _, summary) = ClassifyAndRevertSlice(addedCode.Name, [], lines, throttleVars);
-            addedCodeClassifications[addedCode.Name] = (cat, summary);
-        }
-
-        // Check which added objects have ONLY non-content/empty event code entries.
         var objectChanges = patch.Changes["objects"];
-        HashSet<string> candidateHelperObjects = new(StringComparer.Ordinal);
-        Dictionary<string, (string Category, string Summary)> helperObjectInfo = new(StringComparer.Ordinal);
-        foreach (var obj in objectChanges.Added)
-        {
-            var eventCodes = ExtractObjectEventCodes(obj.Mod);
-            // Also include any gml_Object_<Name>_* in code.Added.
-            string prefix = $"gml_Object_{obj.Name}_";
-            foreach (var c in codeEntries.Added.Where(a => a.Name.StartsWith(prefix, StringComparison.Ordinal)))
-                eventCodes.Add(c.Name);
-            if (eventCodes.Count == 0) continue;
-            var cats = eventCodes
-                .Select(c => addedCodeClassifications.TryGetValue(c, out var info) ? info : (Category: Content, Summary: ""))
-                .Where(x => x.Category != "empty")
-                .ToArray();
-            if (cats.Length > 0 && cats.All(x => x.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay))
-            {
-                candidateHelperObjects.Add(obj.Name);
-                helperObjectInfo[obj.Name] = (cats[0].Category, $"object {obj.Name} ({string.Join("; ", cats.Select(c => c.Summary).Distinct())})");
-            }
-        }
-
-        // Check added code entries attached to changed base objects (e.g. CaveRock_Step_0) or helper objects.
-        HashSet<string> candidateHelperCode = new(StringComparer.Ordinal);
-        foreach (var addedCode in codeEntries.Added)
-        {
-            if (candidateHelperObjects.Any(o => addedCode.Name.StartsWith($"gml_Object_{o}_", StringComparison.Ordinal))
-                || objectChanges.Added.Where(o => candidateHelperObjects.Contains(o.Name))
-                    .SelectMany(o => ExtractObjectEventCodes(o.Mod)).Contains(addedCode.Name, StringComparer.Ordinal))
-            {
-                candidateHelperCode.Add(addedCode.Name);
-                continue;
-            }
-            if (addedCodeClassifications.TryGetValue(addedCode.Name, out var info)
-                && info.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
-            {
-                candidateHelperCode.Add(addedCode.Name);
-            }
-        }
-
-        // Verify that kept content does NOT reference candidateHelperObjects or candidateHelperCode.
-        HashSet<string> keptContentIdentifiers = CollectKeptContentIdentifiers(
-            codeEntries.Added.Where(a => !candidateHelperCode.Contains(a.Name)),
-            keptChangedCode,
-            objectChanges.Added.Where(o => !candidateHelperObjects.Contains(o.Name)));
-
-        candidateHelperObjects.RemoveWhere(keptContentIdentifiers.Contains);
-        candidateHelperCode.RemoveWhere(keptContentIdentifiers.Contains);
-        // If a helper object was retained because kept content referenced it, retain its event codes too.
-        foreach (var keptObj in objectChanges.Added.Where(o => !candidateHelperObjects.Contains(o.Name)))
-            foreach (string codeName in ExtractObjectEventCodes(keptObj.Mod))
-                candidateHelperCode.Remove(codeName);
-
-        // Remove confirmed helper code entries from code.Added.
-        List<AssetPatch> keptAddedCode = [];
-        foreach (var addedCode in codeEntries.Added)
-        {
-            if (candidateHelperCode.Contains(addedCode.Name))
-            {
-                if (addedCode.ModCode is { } mc)
-                    foreach (string id in GmlReferences.Identifiers(mc.Text))
-                        removedTokens.Add(id);
-                // Only record standalone helper code entries separately if not already covered by a removed helper object.
-                bool belongsToHelperObject = candidateHelperObjects.Any(o =>
-                    addedCode.Name.StartsWith($"gml_Object_{o}_", StringComparison.Ordinal));
-                if (!belongsToHelperObject && addedCodeClassifications.TryGetValue(addedCode.Name, out var info) && info.Category != "empty")
-                    removed.Add(new(info.Category, addedCode.Name, info.Summary, 0, 1));
-                continue;
-            }
-            keptAddedCode.Add(addedCode);
-        }
-
-        // Remove confirmed helper objects from objects.Added, and revert object event fields referencing removed helper code.
-        List<AssetPatch> keptAddedObjects = [];
-        foreach (var obj in objectChanges.Added)
-        {
-            if (candidateHelperObjects.Contains(obj.Name))
-            {
-                var info = helperObjectInfo[obj.Name];
-                removed.Add(new(info.Category, $"objects/{obj.Name}", info.Summary));
-                removedTokens.Add(obj.Name);
-                continue;
-            }
-            keptAddedObjects.Add(obj);
-        }
-
-        List<AssetPatch> keptChangedObjects = [];
-        foreach (var obj in objectChanges.Changed)
-        {
-            var filteredFields = obj.Fields.Where(f => !FieldReferencesRemovedCode(f, candidateHelperCode)).ToArray();
-            if (filteredFields.Length == obj.Fields.Count)
-            {
-                keptChangedObjects.Add(obj);
-                continue;
-            }
-            if (obj.Base is not { } baseObj || filteredFields.Length == 0)
-                continue;
-            var updatedMod = FieldMergeEngine.Apply(baseObj, filteredFields, obj.Mod);
-            var recomputedFields = FieldDiff.Compare(baseObj, updatedMod);
-            if (recomputedFields.Count > 0 && !JsonElement.DeepEquals(baseObj, updatedMod))
-                keptChangedObjects.Add(obj with { Mod = updatedMod, Fields = recomputedFields });
-        }
-
-        // 3. Sanitize rooms.Changed: revert /speed timing changes and remove instances of removed helper objects.
         var roomChanges = patch.Changes["rooms"];
-        List<AssetPatch> keptChangedRooms = [];
-        foreach (var room in roomChanges.Changed)
-        {
-            List<FieldChange> keptFields = [];
-            bool roomModifiedBySanitizer = false;
-            foreach (var field in room.Fields)
-            {
-                if (field.Path == "/speed" && field.Base is { } baseSpeed && field.Mod is { } modSpeed)
-                {
-                    removed.Add(new(Timing, $"rooms/{room.Name}", $"room speed {baseSpeed.GetRawText()} -> {modSpeed.GetRawText()} reverted to {baseSpeed.GetRawText()}"));
-                    roomModifiedBySanitizer = true;
-                    continue;
-                }
-                if (FieldReferencesRemovedObjectInstance(field, candidateHelperObjects))
-                {
-                    roomModifiedBySanitizer = true;
-                    continue;
-                }
-                keptFields.Add(field);
-            }
-            if (!roomModifiedBySanitizer)
-            {
-                keptChangedRooms.Add(room);
-                continue;
-            }
-            if (room.Base is not { } baseRoom || keptFields.Count == 0)
-                continue;
-            var updatedMod = FieldMergeEngine.Apply(baseRoom, keptFields, room.Mod);
-            var recomputedFields = FieldDiff.Compare(baseRoom, updatedMod);
-            if (recomputedFields.Count > 0 && !JsonElement.DeepEquals(baseRoom, updatedMod))
-                keptChangedRooms.Add(room with { Mod = updatedMod, Fields = recomputedFields });
-        }
-
-        // 4. Recompute identifiers still used anywhere in kept code/objects/rooms so helper variables/functions can be pruned safely.
-        var survivingIdentifiers = CollectKeptContentIdentifiers(keptAddedCode, keptChangedCode, keptAddedObjects);
         var variableChanges = patch.Changes["variables"];
-        List<AssetPatch> keptAddedVariables = [];
-        foreach (var variable in variableChanges.Added)
-        {
-            string? varName = TryParseVariableName(variable.Name);
-            if (varName is not null
-                && (removedTokens.Contains(varName) || throttleVars.Contains(varName))
-                && !survivingIdentifiers.Contains(varName))
-            {
-                continue;
-            }
-            keptAddedVariables.Add(variable);
-        }
-
         var functionChanges = patch.Changes["functions"];
-        List<AssetPatch> keptAddedFunctions = [];
-        foreach (var fn in functionChanges.Added)
+
+        List<AssetPatch> keptAddedCode = [.. codeEntries.Added];
+        List<AssetPatch> keptChangedCode = [.. codeEntries.Changed];
+        List<AssetPatch> keptAddedObjects = [.. objectChanges.Added];
+        List<AssetPatch> keptChangedObjects = [.. objectChanges.Changed];
+        List<AssetPatch> keptChangedRooms = [.. roomChanges.Changed];
+        List<AssetPatch> keptAddedVariables = [.. variableChanges.Added];
+        List<AssetPatch> keptAddedFunctions = [.. functionChanges.Added];
+        HashSet<string> candidateHelperObjects = new(StringComparer.Ordinal);
+        HashSet<string> candidateHelperCode = new(StringComparer.Ordinal);
+
+        if (!keepPerformanceChanges)
         {
-            if (removedTokens.Contains(fn.Name) && !survivingIdentifiers.Contains(fn.Name))
-                continue;
-            keptAddedFunctions.Add(fn);
+            var throttleVars = DiscoverThrottleVariables(
+                codeEntries.Changed.Where(c => c.BaseCode?.Format == "gml" && c.ModCode?.Format == "gml")
+                    .Select(c => (c.Name, c.BaseCode!.Text, c.ModCode!.Text))
+                    .Concat(codeEntries.Added.Where(a => a.ModCode?.Format == "gml")
+                        .Select(a => (a.Name, "", a.ModCode!.Text))));
+
+            // 1. Classify and sanitize changed code entries at hunk granularity.
+            keptChangedCode = [];
+            foreach (var entry in codeEntries.Changed)
+            {
+                if (entry.BaseCode is not { Format: "gml" } baseCode || entry.ModCode is not { Format: "gml" } modCode)
+                {
+                    keptChangedCode.Add(entry);
+                    continue;
+                }
+                string[] baseLines = SplitLines(LineDiff.Normalize(baseCode.Text));
+                string[] modLines = SplitLines(LineDiff.Normalize(modCode.Text));
+                var hunks = ClassifyEntry(entry.Name, baseCode.Text, modCode.Text, throttleVars);
+                if (hunks.Count == 0)
+                {
+                    keptChangedCode.Add(entry);
+                    continue;
+                }
+
+                bool anyReverted = false;
+                List<string> rebuilt = [];
+                int baseCursor = 0;
+                foreach (var hunk in hunks)
+                {
+                    int bStart = hunk.BaseStart - 1;
+                    int bEnd = bStart + hunk.BaseLength;
+                    rebuilt.AddRange(baseLines[baseCursor..bStart]);
+                    if (hunk.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
+                    {
+                        anyReverted = true;
+                        rebuilt.AddRange(SplitLines(hunk.RevertedText));
+                        removed.Add(new(hunk.Category, entry.Name, hunk.Summary, hunk.BaseStart, hunk.ModStart));
+                        foreach (string id in GmlReferences.Identifiers(hunk.ModText))
+                            removedTokens.Add(id);
+                    }
+                    else
+                    {
+                        if (hunk.Category == Unclassified)
+                            unclassified.Add(new(Unclassified, entry.Name, hunk.Summary, hunk.BaseStart, hunk.ModStart));
+                        rebuilt.AddRange(SplitLines(hunk.ModText));
+                    }
+                    baseCursor = bEnd;
+                }
+                rebuilt.AddRange(baseLines[baseCursor..]);
+
+                if (!anyReverted)
+                {
+                    keptChangedCode.Add(entry);
+                    continue;
+                }
+
+                string newText = ReconstructText(rebuilt, baseCode.Text);
+                if (LineDiff.Normalize(newText) == LineDiff.Normalize(baseCode.Text)
+                    && entry.Base is { }
+                    && baseCode.Parent == modCode.Parent
+                    && baseCode.Children.SequenceEqual(modCode.Children, StringComparer.Ordinal))
+                {
+                    // Entire code entry reverted to base; omit it from Changed so it causes no false conflicts.
+                    continue;
+                }
+
+                var updatedModCode = modCode with { Text = newText };
+                keptChangedCode.Add(entry with { ModCode = updatedModCode });
+            }
+
+            // 2. Identify added helper objects & added helper code entries that only serve performance hacks.
+            Dictionary<string, (string Category, string Summary)> addedCodeClassifications = new(StringComparer.Ordinal);
+            foreach (var addedCode in codeEntries.Added)
+            {
+                if (addedCode.ModCode is not { Format: "gml" } modCode) continue;
+                string trimmed = modCode.Text.Trim();
+                if (trimmed.Length == 0)
+                {
+                    addedCodeClassifications[addedCode.Name] = ("empty", "empty event");
+                    continue;
+                }
+                string[] lines = SplitLines(LineDiff.Normalize(modCode.Text));
+                var (cat, _, summary) = ClassifyAndRevertSlice(addedCode.Name, [], lines, throttleVars);
+                addedCodeClassifications[addedCode.Name] = (cat, summary);
+            }
+
+            Dictionary<string, (string Category, string Summary)> helperObjectInfo = new(StringComparer.Ordinal);
+            foreach (var obj in objectChanges.Added)
+            {
+                var eventCodes = ExtractObjectEventCodes(obj.Mod);
+                string prefix = $"gml_Object_{obj.Name}_";
+                foreach (var c in codeEntries.Added.Where(a => a.Name.StartsWith(prefix, StringComparison.Ordinal)))
+                    eventCodes.Add(c.Name);
+                if (eventCodes.Count == 0) continue;
+                var cats = eventCodes
+                    .Select(c => addedCodeClassifications.TryGetValue(c, out var info) ? info : (Category: Content, Summary: ""))
+                    .Where(x => x.Category != "empty")
+                    .ToArray();
+                if (cats.Length > 0 && cats.All(x => x.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay))
+                {
+                    candidateHelperObjects.Add(obj.Name);
+                    helperObjectInfo[obj.Name] = (cats[0].Category, $"object {obj.Name} ({string.Join("; ", cats.Select(c => c.Summary).Distinct())})");
+                }
+            }
+
+            foreach (var addedCode in codeEntries.Added)
+            {
+                if (candidateHelperObjects.Any(o => addedCode.Name.StartsWith($"gml_Object_{o}_", StringComparison.Ordinal))
+                    || objectChanges.Added.Where(o => candidateHelperObjects.Contains(o.Name))
+                        .SelectMany(o => ExtractObjectEventCodes(o.Mod)).Contains(addedCode.Name, StringComparer.Ordinal))
+                {
+                    candidateHelperCode.Add(addedCode.Name);
+                    continue;
+                }
+                if (addedCodeClassifications.TryGetValue(addedCode.Name, out var info)
+                    && info.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
+                {
+                    candidateHelperCode.Add(addedCode.Name);
+                }
+            }
+
+            HashSet<string> keptContentIdentifiers = CollectKeptContentIdentifiers(
+                codeEntries.Added.Where(a => !candidateHelperCode.Contains(a.Name)),
+                keptChangedCode,
+                objectChanges.Added.Where(o => !candidateHelperObjects.Contains(o.Name)));
+
+            candidateHelperObjects.RemoveWhere(keptContentIdentifiers.Contains);
+            candidateHelperCode.RemoveWhere(keptContentIdentifiers.Contains);
+            foreach (var keptObj in objectChanges.Added.Where(o => !candidateHelperObjects.Contains(o.Name)))
+                foreach (string codeName in ExtractObjectEventCodes(keptObj.Mod))
+                    candidateHelperCode.Remove(codeName);
+
+            keptAddedCode = [];
+            foreach (var addedCode in codeEntries.Added)
+            {
+                if (candidateHelperCode.Contains(addedCode.Name))
+                {
+                    if (addedCode.ModCode is { } mc)
+                        foreach (string id in GmlReferences.Identifiers(mc.Text))
+                            removedTokens.Add(id);
+                    bool belongsToHelperObject = candidateHelperObjects.Any(o =>
+                        addedCode.Name.StartsWith($"gml_Object_{o}_", StringComparison.Ordinal));
+                    if (!belongsToHelperObject && addedCodeClassifications.TryGetValue(addedCode.Name, out var info) && info.Category != "empty")
+                        removed.Add(new(info.Category, addedCode.Name, info.Summary, 0, 1));
+                    continue;
+                }
+                keptAddedCode.Add(addedCode);
+            }
+
+            keptAddedObjects = [];
+            foreach (var obj in objectChanges.Added)
+            {
+                if (candidateHelperObjects.Contains(obj.Name))
+                {
+                    var info = helperObjectInfo[obj.Name];
+                    removed.Add(new(info.Category, $"objects/{obj.Name}", info.Summary));
+                    removedTokens.Add(obj.Name);
+                    continue;
+                }
+                keptAddedObjects.Add(obj);
+            }
+
+            keptChangedObjects = [];
+            foreach (var obj in objectChanges.Changed)
+            {
+                var filteredFields = obj.Fields.Where(f => !FieldReferencesRemovedCode(f, candidateHelperCode)).ToArray();
+                if (filteredFields.Length == obj.Fields.Count)
+                {
+                    keptChangedObjects.Add(obj);
+                    continue;
+                }
+                if (obj.Base is not { } baseObj || filteredFields.Length == 0)
+                    continue;
+                var updatedMod = FieldMergeEngine.Apply(baseObj, filteredFields, obj.Mod);
+                var recomputedFields = FieldDiff.Compare(baseObj, updatedMod);
+                if (recomputedFields.Count > 0 && !JsonElement.DeepEquals(baseObj, updatedMod))
+                    keptChangedObjects.Add(obj with { Mod = updatedMod, Fields = recomputedFields });
+            }
+
+            // 3. Sanitize rooms.Changed: revert /speed timing changes and remove instances of removed helper objects.
+            keptChangedRooms = [];
+            foreach (var room in roomChanges.Changed)
+            {
+                List<FieldChange> keptFields = [];
+                bool roomModifiedBySanitizer = false;
+                foreach (var field in room.Fields)
+                {
+                    if (field.Path == "/speed" && field.Base is { } baseSpeed && field.Mod is { } modSpeed)
+                    {
+                        removed.Add(new(Timing, $"rooms/{room.Name}", $"room speed {baseSpeed.GetRawText()} -> {modSpeed.GetRawText()} reverted to {baseSpeed.GetRawText()}"));
+                        roomModifiedBySanitizer = true;
+                        continue;
+                    }
+                    if (FieldReferencesRemovedObjectInstance(field, candidateHelperObjects))
+                    {
+                        roomModifiedBySanitizer = true;
+                        continue;
+                    }
+                    keptFields.Add(field);
+                }
+                if (!roomModifiedBySanitizer)
+                {
+                    keptChangedRooms.Add(room);
+                    continue;
+                }
+                if (room.Base is not { } baseRoom || keptFields.Count == 0)
+                    continue;
+                var updatedMod = FieldMergeEngine.Apply(baseRoom, keptFields, room.Mod);
+                var recomputedFields = FieldDiff.Compare(baseRoom, updatedMod);
+                if (recomputedFields.Count > 0 && !JsonElement.DeepEquals(baseRoom, updatedMod))
+                    keptChangedRooms.Add(room with { Mod = updatedMod, Fields = recomputedFields });
+            }
+
+            // 4. Recompute identifiers still used anywhere in kept code/objects/rooms so helper variables/functions can be pruned safely.
+            var survivingIdentifiers = CollectKeptContentIdentifiers(keptAddedCode, keptChangedCode, keptAddedObjects);
+            keptAddedVariables = [];
+            foreach (var variable in variableChanges.Added)
+            {
+                string? varName = TryParseVariableName(variable.Name);
+                if (varName is not null
+                    && (removedTokens.Contains(varName) || throttleVars.Contains(varName))
+                    && !survivingIdentifiers.Contains(varName))
+                {
+                    continue;
+                }
+                keptAddedVariables.Add(variable);
+            }
+
+            keptAddedFunctions = [];
+            foreach (var fn in functionChanges.Added)
+            {
+                if (removedTokens.Contains(fn.Name) && !survivingIdentifiers.Contains(fn.Name))
+                    continue;
+                keptAddedFunctions.Add(fn);
+            }
         }
 
-        // 5. Filter References to drop removed helper objects/code.
+        // 5. Sanitize HUD/UI assets (sprites, fonts, backgrounds) unless keepHudDesign is set.
+        var spriteChanges = patch.Changes["sprites"];
+        var fontChanges = patch.Changes["fonts"];
+        var backgroundChanges = patch.Changes["backgrounds"];
+        List<AssetPatch> keptChangedSprites = [.. spriteChanges.Changed];
+        List<AssetPatch> keptChangedFonts = [.. fontChanges.Changed];
+        List<AssetPatch> keptChangedBackgrounds = [.. backgroundChanges.Changed];
+
+        if (!keepHudDesign)
+        {
+            keptChangedSprites = SanitizeHudSprites(spriteChanges.Changed, keptAddedCode, keptChangedCode, removed);
+            keptChangedFonts = [];
+            foreach (var font in fontChanges.Changed)
+            {
+                if (HudFonts.Contains(font.Name))
+                {
+                    removed.Add(new(HudStyle, $"fonts/{font.Name}", $"reverted HUD font {font.Name} to base"));
+                    continue;
+                }
+                keptChangedFonts.Add(font);
+            }
+            keptChangedBackgrounds = [];
+            foreach (var bg in backgroundChanges.Changed)
+            {
+                if (HudBackgrounds.Contains(bg.Name))
+                {
+                    removed.Add(new(HudStyle, $"backgrounds/{bg.Name}", $"reverted HUD background {bg.Name} to base"));
+                    continue;
+                }
+                keptChangedBackgrounds.Add(bg);
+            }
+        }
+
+        // 6. Filter References to drop removed helper objects/code.
         var updatedReferences = patch.References?
             .Where(r => !IsRemovedReference(r, candidateHelperObjects, candidateHelperCode))
             .ToArray();
@@ -417,6 +512,9 @@ public static partial class ModSanitizer
             ["code"] = codeEntries with { Added = keptAddedCode, Changed = keptChangedCode },
             ["objects"] = objectChanges with { Added = keptAddedObjects, Changed = keptChangedObjects },
             ["rooms"] = roomChanges with { Changed = keptChangedRooms },
+            ["sprites"] = spriteChanges with { Changed = keptChangedSprites },
+            ["fonts"] = fontChanges with { Changed = keptChangedFonts },
+            ["backgrounds"] = backgroundChanges with { Changed = keptChangedBackgrounds },
             ["variables"] = variableChanges with { Added = keptAddedVariables },
             ["functions"] = functionChanges with { Added = keptAddedFunctions }
         };
@@ -424,6 +522,151 @@ public static partial class ModSanitizer
         var sanitizedPatch = patch with { Changes = updatedChanges, References = updatedReferences };
         var report = new ModSanitizerReport(Version, patch.Mod.Sha256, patch.Base.Sha256, false, removed, unclassified);
         return new(sanitizedPatch, report);
+    }
+
+    private static List<AssetPatch> SanitizeHudSprites(
+        IReadOnlyList<AssetPatch> changedSprites,
+        IReadOnlyList<AssetPatch> keptAddedCode,
+        IReadOnlyList<AssetPatch> keptChangedCode,
+        List<SanitizedChange> removed)
+    {
+        List<AssetPatch> result = [];
+        foreach (var entry in changedSprites)
+        {
+            if (!HudSprites.Contains(entry.Name))
+            {
+                result.Add(entry);
+                continue;
+            }
+            if (entry.Base is not { ValueKind: JsonValueKind.Object } baseSnap
+                || entry.Mod.ValueKind != JsonValueKind.Object
+                || !baseSnap.TryGetProperty("frames", out var baseFramesElem)
+                || !entry.Mod.TryGetProperty("frames", out var modFramesElem)
+                || baseFramesElem.ValueKind != JsonValueKind.Array
+                || modFramesElem.ValueKind != JsonValueKind.Array)
+            {
+                removed.Add(new(HudStyle, $"sprites/{entry.Name}", $"reverted HUD sprite {entry.Name} to base"));
+                continue;
+            }
+
+            var baseFrames = baseFramesElem.EnumerateArray().ToArray();
+            var modFrames = modFramesElem.EnumerateArray().ToArray();
+            int baseCount = baseFrames.Length;
+            int modCount = modFrames.Length;
+
+            if (modCount <= baseCount)
+            {
+                removed.Add(new(HudStyle, $"sprites/{entry.Name}", $"reverted HUD sprite {entry.Name} to base"));
+                continue;
+            }
+
+            // Mod has more frames than base: check which appended frames (baseCount .. modCount - 1) are referenced by kept mod code.
+            int keptFrameCount = baseCount;
+            for (int f = baseCount; f < modCount; f++)
+            {
+                if (IsAppendedHudFrameReferencedByCode(entry.Name, f, keptAddedCode, keptChangedCode))
+                    keptFrameCount = f + 1;
+            }
+
+            if (keptFrameCount <= baseCount)
+            {
+                removed.Add(new(HudStyle, $"sprites/{entry.Name}", $"reverted HUD sprite {entry.Name} (appended frames {baseCount}..{modCount - 1} unreferenced in code) to base"));
+                continue;
+            }
+
+            // Build a hybrid snapshot: keep all base properties and base frames 0..baseCount-1 unchanged,
+            // and append only frames baseCount..keptFrameCount-1 from the mod.
+            var combinedFrames = baseFrames.Concat(modFrames[baseCount..keptFrameCount]).ToArray();
+            Dictionary<string, JsonElement> props = new(StringComparer.Ordinal);
+            foreach (var prop in baseSnap.EnumerateObject())
+                props[prop.Name] = prop.Value;
+            props["frameCount"] = JsonSerializer.SerializeToElement(keptFrameCount);
+            props["frames"] = JsonSerializer.SerializeToElement(combinedFrames);
+            JsonElement updatedMod = JsonSerializer.SerializeToElement(props);
+            var recomputedFields = FieldDiff.Compare(baseSnap, updatedMod);
+
+            int modifiedBaseFrames = 0;
+            for (int i = 0; i < baseCount; i++)
+                if (!JsonElement.DeepEquals(baseFrames[i], modFrames[i]))
+                    modifiedBaseFrames++;
+            bool hadOtherBaseEdits = entry.Fields.Any(f =>
+                f.Path != "/frameCount" && !f.Path.StartsWith("/frames/", StringComparison.Ordinal))
+                || keptFrameCount < modCount;
+
+            if (modifiedBaseFrames > 0 || hadOtherBaseEdits)
+            {
+                removed.Add(new(HudStyle, $"sprites/{entry.Name}",
+                    $"reverted {modifiedBaseFrames} base frame(s) of {entry.Name} to original HUD art; kept appended frame(s) {baseCount}..{keptFrameCount - 1}"));
+            }
+
+            if (recomputedFields.Count > 0 && !JsonElement.DeepEquals(baseSnap, updatedMod))
+                result.Add(entry with { Mod = updatedMod, Fields = recomputedFields });
+        }
+        return result;
+    }
+
+    private static bool IsAppendedHudFrameReferencedByCode(
+        string spriteName,
+        int frameIndex,
+        IReadOnlyList<AssetPatch> keptAddedCode,
+        IReadOnlyList<AssetPatch> keptChangedCode)
+    {
+        string frameToken = frameIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // UpgradeCard_Other_11 and UpgradeSlot_Other_11 index spr_upgradeicons at (1 + card_id),
+        // so frame N corresponds to upgrade index (N - 1) in UpgradeData / UpgradeMenu / UpgradeCard.
+        string? upgradeToken = spriteName == "spr_upgradeicons" && frameIndex >= 1
+            ? (frameIndex - 1).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : null;
+
+        foreach (var entry in keptAddedCode.Concat(keptChangedCode))
+        {
+            if (entry.ModCode is not { Format: "gml" } modCode) continue;
+            string addedOrChangedText = entry.BaseCode is { Format: "gml" } baseCode
+                ? ExtractAddedOrChangedLines(baseCode.Text, modCode.Text)
+                : modCode.Text;
+            if (addedOrChangedText.Length == 0) continue;
+
+            var tokens = GmlReferences.Tokens(addedOrChangedText);
+            bool mentionsSprite = tokens.Any(t => t.Kind == 'i' && t.Value == spriteName);
+            bool hasFrameNumber = tokens.Any(t => t.Kind == 'n' && t.Value == frameToken);
+            if (mentionsSprite && hasFrameNumber)
+                return true;
+
+            if (upgradeToken is not null
+                && (entry.Name.Contains("Upgrade", StringComparison.OrdinalIgnoreCase)
+                    || entry.Name.Contains("upgrade", StringComparison.OrdinalIgnoreCase)
+                    || tokens.Any(t => t.Kind == 'i' && t.Value is "UpgradeData" or "UpgradeMenu" or "UpgradeCard" or "UnlockUpgrade" or "unlocks" or "spawn_order"))
+                && tokens.Any(t => t.Kind == 'n' && (t.Value == upgradeToken || t.Value == frameToken)))
+            {
+                return true;
+            }
+
+            if (spriteName == "spr_icon_labels"
+                && tokens.Any(t => t.Kind == 'i' && t.Value == "img_label")
+                && hasFrameNumber)
+            {
+                return true;
+            }
+
+            if (spriteName == "spr_tools"
+                && (entry.Name.Contains("Tool", StringComparison.OrdinalIgnoreCase)
+                    || tokens.Any(t => t.Kind == 'i' && t.Value is "ToolData" or "UnlockTool"))
+                && hasFrameNumber)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static string ExtractAddedOrChangedLines(string baseGml, string modGml)
+    {
+        var edits = LineDiff.Compare(LineDiff.Normalize(baseGml), LineDiff.Normalize(modGml));
+        StringBuilder sb = new();
+        foreach (var edit in edits)
+            if (edit.Kind == '+')
+                sb.AppendLine(edit.Text);
+        return sb.ToString();
     }
 
     private static HashSet<string> DiscoverThrottleVariables(IEnumerable<(string Name, string BaseGml, string ModGml)> entries)

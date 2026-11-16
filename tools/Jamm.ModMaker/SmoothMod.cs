@@ -32,7 +32,7 @@ public static class SmoothMod
         Queue(compiler, data, controller, EventType.Step, (uint)EventSubtypeStep.EndStep, EndStep);
         Queue(compiler, data, controller, EventType.Alarm, 0, InputBeginReplay);
         Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.PreDraw, PreDraw(data));
-        Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, Toast);
+        Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, Toast(data));
         Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, GuiEnd(debug, data.GameObjects.ByName("Fish") is not null));
         if (debug)
         {
@@ -740,9 +740,10 @@ public static class SmoothMod
         }
         """;
 
-    private const string Toast = """
+    private static string Toast(UndertaleData data) => $$"""
         if (current_time < jamm_toast_until)
         {
+            {{(data.Fonts.ByName("fnt_babySmall") is not null ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);")}}
             draw_set_halign(fa_left);
             draw_set_valign(fa_top);
             draw_set_alpha(min(1, (jamm_toast_until - current_time) / 500));

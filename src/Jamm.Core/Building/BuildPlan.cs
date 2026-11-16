@@ -187,7 +187,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 ? ordered.Where(v => v.Asset is not null).ToList()
                 : ordered.Skip(ordered.FindLastIndex(v => v.Asset is null) + 1).ToList();
             JsonElement snapshot = last.Asset.Mod;
-            if (family is "objects" or "rooms" or "scripts" or "functions" or "paths" or "timelines" or "fonts"
+            if (family is "objects" or "rooms" or "scripts" or "functions" or "paths" or "timelines" or "fonts" or "sprites"
                 && ordered.All(v => v.Asset?.Base is not null))
             {
                 snapshot = ordered[0].Asset!.Base!.Value;

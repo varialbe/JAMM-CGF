@@ -176,11 +176,17 @@ public sealed class Phase14HeadlessTests
             Dispatcher.UIThread.RunJobs();
             window.UpdateLayout();
             var keepCheck = rowControl.FindControl<CheckBox>("KeepAuthorPerfCheck")!;
+            var keepHudCheck = rowControl.FindControl<CheckBox>("KeepAuthorHudCheck")!;
             Assert.True(keepCheck.IsEffectivelyVisible);
+            Assert.True(keepHudCheck.IsEffectivelyVisible);
             Assert.False(modRow.KeepAuthorPerformanceChanges);
+            Assert.False(modRow.KeepAuthorHudDesign);
             modRow.KeepAuthorPerformanceChanges = true;
             while (vm.IsBusy) await Task.Delay(10);
             Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorPerformanceChanges);
+            modRow.KeepAuthorHudDesign = true;
+            while (vm.IsBusy) await Task.Delay(10);
+            Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorHudDesign);
         }
         finally
         {

@@ -22,6 +22,7 @@
           <TextBlock Grid.Column="1" Text="{Binding Badge}" TextWrapping="Wrap" VerticalAlignment="Center"/>
         </Grid>
         <CheckBox x:Name="KeepAuthorPerfCheck" Content="Keep the author's performance changes" IsChecked="{Binding KeepAuthorPerformanceChanges, Mode=TwoWay}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" IsEnabled="{Binding CanKeepAuthorPerformanceChanges}"/>
+        <CheckBox x:Name="KeepAuthorHudCheck" Content="Keep the author's HUD design" IsChecked="{Binding KeepAuthorHudDesign, Mode=TwoWay}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" IsEnabled="{Binding CanKeepAuthorHudDesign}"/>
         <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
         <TextBlock Text="{Binding Metadata}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Classes="muted"/>
       </StackPanel>
