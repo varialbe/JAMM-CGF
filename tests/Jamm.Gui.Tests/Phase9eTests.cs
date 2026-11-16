@@ -22,7 +22,7 @@ public sealed class Phase9eTests
         Assert.Contains("1 game objects", row.Summary); Assert.Contains("Source:", row.Summary);
         var window = new MainWindow(false) { DataContext = vm }; window.Show();
         Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
-        var expander = window.GetVisualDescendants().OfType<Expander>().First(e => e.DataContext == row);
+        var expander = window.GetVisualDescendants().OfType<ModListRow>().First(e => e.DataContext == row);
         expander.IsExpanded = true;
         var finish = new TaskCompletionSource();
         var operation = vm.RunAsync("Preparing mods", async (_, progress) => { progress.Report("Decompiling example.win 812/1839: entry"); await finish.Task; });
