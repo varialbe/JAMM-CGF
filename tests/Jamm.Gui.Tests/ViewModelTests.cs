@@ -15,12 +15,16 @@ public sealed class ViewModelTests
         await vm.AddAsync([files.Mod("Example Mod A", "x = 1;\n"), Path.Combine(files.Root, "missing.win"), files.Mod("Example Mod B", "x = 2;\n")]);
         Assert.Equal(2, vm.Mods.Count);
         await vm.CreateProfileAsync("first");
-        // Persist enablement explicitly; the property handler exercises the first checkbox.
+        // Switches stage changes; reordering below explicitly saves the profile order.
         vm.Order[0].Enabled = true;
         while (vm.IsBusy) await Task.Delay(10);
         vm.Order[1].Enabled = true;
         while (vm.IsBusy) await Task.Delay(10);
-        Assert.True(vm.CanInstall);
+        Assert.False(vm.CanInstall);
+        Assert.Equal(2, vm.PendingCount);
+        // Establish the saved profile explicitly for the remaining profile-management assertions.
+        new ProfileLibrary(files.Store).Update("first", vm.Order.Select(m => m.Id), []);
+        await vm.SelectProfileAsync("first");
         string firstId = vm.Order[0].Id;
         await vm.MoveAsync(0, 1);
         Assert.Equal(firstId, new ProfileLibrary(files.Store).Get("first").Mods[1]);

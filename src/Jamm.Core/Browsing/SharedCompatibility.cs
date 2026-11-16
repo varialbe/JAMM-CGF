@@ -19,13 +19,21 @@ public sealed class SharedCompatibility(ManagerStore store, ModHttp http)
     /// <summary>Looks up by provider identity before download or by verified archive hash afterwards.</summary>
     public async Task<SharedCheck?> FindAsync(string baseHash, ModDownloadFile file, string? verifiedHash, CancellationToken token)
     {
+        if (verifiedHash is not null && !IsHash(verifiedHash)) return null;
+        var document = await LoadIndexAsync(baseHash, token, verifiedHash);
+        return document?.Checks.FirstOrDefault(c => c.Provider == file.Provider && c.FileId == file.Id
+            && (verifiedHash is null || c.Facts.FileHash == verifiedHash));
+    }
+    /// <summary>Loads one validated shared index for bulk status matching without downloading mods.</summary>
+    public async Task<SharedIndex?> LoadIndexAsync(string baseHash, CancellationToken token, string? verifiedHash = null)
+    {
         if (!store.Config().UseSharedCompatibilityResults || !IsHash(baseHash) || verifiedHash is not null && !IsHash(verifiedHash)) return null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(3));
+        Cache? cached = null;
         try
         {
             string name = verifiedHash ?? "index";
             string path = store.Path("shared-compat", baseHash + "-" + name + ".json");
-            Cache? cached = null;
             if (File.Exists(path)) { try { cached = store.Read<Cache>(path); } catch (InvalidDataException) { } }
             using var response = await http.SendRangeAsync(new Uri($"https://varialbe.xyz/jamm/compat/v1/{baseHash}/{name}.json"), timeout.Token,
                 etag: cached?.ETag, modified: cached?.Modified);
@@ -33,6 +41,7 @@ public sealed class SharedCompatibility(ManagerStore store, ModHttp http)
             if (response.StatusCode == HttpStatusCode.NotModified) document = cached?.Document ?? throw new InvalidDataException();
             else
             {
+                response.EnsureSuccessStatusCode();
                 const int limit = 2 * 1048576;
                 if (response.Content.Headers.ContentLength > limit) return null;
                 using var bytes = new MemoryStream();
@@ -42,11 +51,10 @@ public sealed class SharedCompatibility(ManagerStore store, ModHttp http)
             if (!Valid(document, baseHash)) return null;
             if (response.StatusCode != HttpStatusCode.NotModified)
                 store.Write(path, new Cache(response.Headers.ETag?.ToString(), response.Content.Headers.LastModified, document));
-            return document.Checks.FirstOrDefault(c => c.Provider == file.Provider && c.FileId == file.Id
-                && (verifiedHash is null || c.Facts.FileHash == verifiedHash));
+            return document;
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidDataException or OperationCanceledException or ArgumentException)
-        { token.ThrowIfCancellationRequested(); return null; }
+        { token.ThrowIfCancellationRequested(); return cached is not null && Valid(cached.Document, baseHash) ? cached.Document : null; }
     }
     private static bool Valid(SharedIndex d, string hash) => d.SchemaVersion == 1 && d.BaseHash == hash && d.AnalyzerVersion == ModFactAnalyzer.Version
         && d.Checks is { Length: <= 10000 } && d.Checks.All(c => c is not null && c.Facts is { } f && IsHash(f.FileHash)
