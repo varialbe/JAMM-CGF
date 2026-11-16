@@ -3,11 +3,11 @@ using UndertaleModLib.Compiler;
 
 namespace Jamm.ModMaker;
 
-/// <summary>Conservative tick optimizations, independent of the Smooth controller.</summary>
+/// <summary>Phase 6a optimizations plus switchable paused-fish scheduling, independent of Smooth.</summary>
 public static class PerfMod
 {
     /// <summary>Applies guarded source edits to an original legacy game.</summary>
-    public static void Apply(UndertaleData data)
+    public static void Apply(UndertaleData data, bool debug = false)
     {
         var compiler = new CompileGroup(data);
         // FishThinner destroys owned lights before deactivation/death; reactivation and
@@ -61,6 +61,7 @@ public static class PerfMod
         compiler.QueueCodeReplace(scene, "if (!variable_instance_exists(id, \"jamm_perf_depth\")) { jamm_perf_depth = depth + 1; jamm_perf_object = object_index; }\n"
             + "if (jamm_perf_depth != depth || jamm_perf_object != object_index)\n{\n" + source[..end]
             + "jamm_perf_scene_depth = scene_depth;\njamm_perf_depth = depth;\njamm_perf_object = object_index;\n}\nscene_depth = jamm_perf_scene_depth;\n" + source[end..]);
+        PerfMode.Queue(data, compiler, debug);
         ModObjects.Compile(compiler);
 
         void Patch(string name, string before, string after, string? secondBefore = null, string? secondAfter = null)
@@ -70,6 +71,7 @@ public static class PerfMod
             string text = ModObjects.Decompile(data, code);
             if (text.Split(before, StringSplitOptions.None).Length != 2)
                 throw new InvalidDataException($"'{name}' differs: use the original legacy data.win.");
+            if (before.StartsWith("if (", StringComparison.Ordinal)) AssertNoElse(text, before, name);
             text = text.Replace(before, after, StringComparison.Ordinal);
             if (secondBefore is not null)
             {
@@ -77,7 +79,24 @@ public static class PerfMod
                     throw new InvalidDataException($"'{name}' differs: use the original legacy data.win.");
                 text = text.Replace(secondBefore, secondAfter!, StringComparison.Ordinal);
             }
+            if (name == "gml_Object_Fish_Step_2") text = PerfMode.Prefix(data) + text;
             compiler.QueueCodeReplace(code, text);
         }
     }
+    // WHY: wrapping an if that owns an else changes which if receives that else in GM1.
+    private static void AssertNoElse(string source, string before, string name)
+    {
+        int start = source.IndexOf(before, StringComparison.Ordinal) + before.Length;
+        int brace = source.IndexOf('{', start);
+        if (brace < 0) throw new InvalidDataException($"'{name}': expected a braced guarded statement; use the original legacy data.win.");
+        int end = brace + 1, depth = 1;
+        for (; end < source.Length && depth > 0; end++)
+        {
+            if (source[end] == '{') depth++;
+            if (source[end] == '}') depth--;
+        }
+        if (depth != 0 || source[end..].TrimStart().StartsWith("else", StringComparison.Ordinal))
+            throw new InvalidDataException($"'{name}': guarded statement has an else or unexpected shape; cannot safely apply Perf. Use the original legacy data.win.");
+    }
+
 }

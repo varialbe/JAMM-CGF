@@ -79,7 +79,7 @@ public static class HdMod
         }
         persistent = true;
         ini_open("jamm_hd.ini");
-        jamm_hd_aa = ini_read_real("HD", "AntiAliasing", 8);
+        jamm_hd_aa = ini_read_real("HD", "AntiAliasing", 4);
         jamm_hd_fullscreen = ini_read_real("HD", "Fullscreen", 1);
         ini_write_real("HD", "Fullscreen", jamm_hd_fullscreen);
         {{(debug ? "jamm_hd_window = ini_read_real(\"HD\", \"DebugWindowScale\", 1);" : "jamm_hd_window = 1;")}}

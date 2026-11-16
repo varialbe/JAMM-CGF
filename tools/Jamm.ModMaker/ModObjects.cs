@@ -37,7 +37,7 @@ public static class ModObjects
     }
 
     public static string Decompile(UndertaleData data, UndertaleCode code)
-        => new Underanalyzer.Decompiler.DecompileContext(new GlobalDecompileContext(data), code, data.ToolInfo.DecompilerSettings).DecompileToString();
+        => new Underanalyzer.Decompiler.DecompileContext(new GlobalDecompileContext(data), code, data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n", StringComparison.Ordinal);
 
     public static void Compile(CompileGroup compiler)
     {
