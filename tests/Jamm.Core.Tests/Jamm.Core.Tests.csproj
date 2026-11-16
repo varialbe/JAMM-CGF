@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Jamm.Core\Jamm.Core.csproj" />
     <ProjectReference Include="..\..\src\Jamm.Cli\Jamm.Cli.csproj" />
+    <ProjectReference Include="..\..\tools\Jamm.ModMaker\Jamm.ModMaker.csproj" />
   </ItemGroup>
 
 </Project>

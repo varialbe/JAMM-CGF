@@ -30,6 +30,7 @@ public static class SmoothMod
         Queue(compiler, data, controller, EventType.Other, (uint)EventSubtypeOther.RoomStart, RoomStart);
         Queue(compiler, data, controller, EventType.Step, (uint)EventSubtypeStep.BeginStep, BeginStep);
         Queue(compiler, data, controller, EventType.Step, (uint)EventSubtypeStep.EndStep, EndStep);
+        Queue(compiler, data, controller, EventType.Alarm, 0, InputBeginReplay);
         Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.PreDraw, PreDraw(data));
         Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, Toast);
         Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, GuiEnd(debug, data.GameObjects.ByName("Fish") is not null));
@@ -123,6 +124,7 @@ public static class SmoothMod
         jamm_tick_now = 1;
         jamm_frozen = 0;
                 jamm_frozen_list = ds_list_create();
+        jamm_input_begin = ds_map_create();
         jamm_moving = ds_list_create();
         jamm_restore = ds_list_create();
         jamm_known = ds_map_create();
@@ -194,6 +196,8 @@ public static class SmoothMod
         ds_list_clear(jamm_moving);
         ds_list_clear(jamm_restore);
         ds_list_clear(jamm_frozen_list);
+        ds_map_clear(jamm_input_begin);
+        alarm[0] = -1;
         ds_list_clear(jamm_cull);
         ds_list_clear(jamm_cull_fish);
         ds_list_clear(jamm_cand);
@@ -251,7 +255,14 @@ public static class SmoothMod
             {
                 jamm_n = ds_list_size(jamm_frozen_list);
                 for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
-                    instance_activate_object(ds_list_find_value(jamm_frozen_list, jamm_i));
+                {
+                    jamm_woken = ds_list_find_value(jamm_frozen_list, jamm_i);
+                    ds_map_add(jamm_input_begin, jamm_woken, 1);
+                    instance_activate_object(jamm_woken);
+                }
+                // Activation takes effect after this event: replay Begin Step in the alarm phase,
+                // before keyboard/mouse events, with the tick delta already updated below.
+                alarm[0] = 1;
                 ds_list_clear(jamm_frozen_list);
                 jamm_frozen = 0;
                 jamm_tick_now = 1;
@@ -268,6 +279,18 @@ public static class SmoothMod
             room_speed = jamm_room_base;
         }
         jamm_dbg_frames += 1;
+        """;
+
+    // with(all) retains engine instance order; the membership map excludes the controller,
+    // newly created instances, and anything deactivated by the game before Smooth froze it.
+    // Do not replay the controller's timing/input bookkeeping or run ordinary Begin Steps twice.
+    private const string InputBeginReplay = """
+        with (all)
+        {
+            if (id != other.id && ds_map_exists(other.jamm_input_begin, id))
+                event_perform(ev_step, ev_step_begin);
+        }
+        ds_map_clear(jamm_input_begin);
         """;
 
     // (De)activation is applied between events, so frozen instances are woken here, one event before
@@ -322,9 +345,10 @@ public static class SmoothMod
                                 if (bbox_right >= global.jamm_fl[jamm_k] && bbox_left <= global.jamm_fr[jamm_k] && bbox_bottom >= global.jamm_ft[jamm_k] && bbox_top <= global.jamm_fb[jamm_k])
                                     jamm_in = 1;
                             }
-                            if (jamm_in)
-                                ds_list_add(other.jamm_fish_on, id);
-                            else if (ds_map_exists(global.jamm_pure, object_index))
+                            // Sonar can become active between scans. Save every visible fish's
+                            // draw state, including fish normally eligible for off-screen culling.
+                            ds_list_add(other.jamm_fish_on, id);
+                            if (!jamm_in && ds_map_exists(global.jamm_pure, object_index))
                                 ds_list_add(other.jamm_cull_fish, id);
                         }
                     }
@@ -517,12 +541,16 @@ public static class SmoothMod
                 }
             }
         }
+        // SonarPanel draws all visible Fish itself (including advanced/quest silhouettes).
+        // Never change their visibility while sonar can draw; check every frame, not per scan.
+        jamm_sonar = view_visible[3];
+        {{(data.GameObjects.ByName("SonarPanel") is not null ? "if (instance_exists(SonarPanel)) jamm_sonar = jamm_sonar || (SonarPanel.active && SonarPanel.shouldDraw);" : "")}}
         jamm_n = ds_list_size(jamm_cull_fish);
         for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
         {
             with (ds_list_find_value(jamm_cull_fish, jamm_i))
             {
-                if (visible)
+                if (visible && !other.jamm_sonar)
                 {
                     visible = false;
                     ds_list_add(other.jamm_hidden, id);
@@ -545,7 +573,11 @@ public static class SmoothMod
         {
             with (ds_list_find_value(jamm_moving, jamm_i))
             {
-                if (x == jamm_cx && y == jamm_cy && image_angle == jamm_ca && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600)
+                // Casting draws mix custom Rod.angle, cached Lure.tether_x/y, Girl anchors,
+                // and hooked fish. Keep that assembly at its complete logic-tick pose.
+                jamm_casting = {{string.Join(" || ", new[] { "Girl", "Rod", "Lure", "Boat", "BoatBackground", "CatSwim" }.Where(n => data.GameObjects.ByName(n) is not null).Select(n => $"object_index == {n} || object_is_ancestor(object_index, {n})").DefaultIfEmpty("false"))}};
+                {{(data.GameObjects.ByName("Lure") is not null ? "if (instance_exists(Lure)) jamm_casting = jamm_casting || id == Lure.fish;" : "")}}
+                if (!jamm_casting && x == jamm_cx && y == jamm_cy && image_angle == jamm_ca && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600)
                 {
                     jamm_rx = x;
                     jamm_ry = y;
