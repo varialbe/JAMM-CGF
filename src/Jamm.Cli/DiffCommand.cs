@@ -17,6 +17,7 @@ internal static class DiffCommand
         for (int i = 0; i < arguments.Length; i++)
         {
             string arg = arguments[i];
+            if (arg == "--verbose") continue;
             if (arg == "--force") { if (force) throw new ArgumentException("--force was given twice."); force = true; }
             else if (arg == "--json-summary") { if (json) throw new ArgumentException("--json-summary was given twice."); json = true; }
             else if (arg is "--name" or "--out" or "--show")
@@ -32,42 +33,9 @@ internal static class DiffCommand
         string output = options.GetValueOrDefault("--out", Path.GetFileNameWithoutExtension(paths[1]) + ".cgfmm-patch.json");
         OutputFile.Validate(output, paths);
         var timer = Stopwatch.StartNew();
-        ModPatch? patch = null;
-        bool reused = false;
-        // Cache lookup reads only the input bytes, never UTML models or the decompiler.
-        string baseHash = Hash(paths[0]), modHash = Hash(paths[1]);
-        if (!force && File.Exists(output))
-        {
-            try
-            {
-                var candidate = PatchJson.Deserialize(File.ReadAllText(output));
-                if (candidate.Base.Sha256 == baseHash && candidate.Mod.Sha256 == modHash)
-                { patch = candidate; reused = true; }
-            }
-            catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)
-            { Console.Error.WriteLine($"Cache '{Path.GetFileName(output)}' cannot be reused; recomputing ({ex.Message})."); }
-        }
-        try
-        {
-            if (patch is null)
-            {
-                using var original = Load(paths[0]);
-                using var mod = Load(paths[1]);
-                try { patch = PatchBuilder.Create(original, mod, options.GetValueOrDefault("--name"), Progress); }
-                catch (NotComparableException) { throw; }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                { throw new InvalidDataException($"Could not analyse {original.Inspection.FileName} against {mod.Inspection.FileName}: {ex.Message} Check the file versions or try another complete copy of the mod.", ex); }
-                // Detect inputs replaced during analysis; an old cache hash must not name different bytes.
-                if (patch.Base.Sha256 != baseHash || patch.Mod.Sha256 != modHash)
-                    throw new IOException("An input changed during analysis. Retry with stable copies of the files.");
-                OutputFile.Write(output, PatchJson.Serialize(patch), paths);
-            }
-            else if (options.TryGetValue("--name", out string? name) && patch.Mod.Name != name)
-            {
-                patch = patch with { Mod = patch.Mod with { Name = name } };
-                OutputFile.Write(output, PatchJson.Serialize(patch), paths);
-            }
-        }
+        ModPatch patch;
+        bool reused;
+        try { patch = Obtain(paths[0], paths[1], output, options.GetValueOrDefault("--name"), force, paths, out reused); }
         catch (NotComparableException ex) { Console.Error.WriteLine($"cgfmm: {ex.Message}"); return 2; }
         timer.Stop();
         var counts = patch.Changes.ToDictionary(x => x.Key, x => new { added = x.Value.Added.Count,
@@ -88,6 +56,49 @@ internal static class DiffCommand
         return 0;
     }
 
+    internal static ModPatch Obtain(string basePath, string modPath, string output, string? name, bool force,
+        IEnumerable<string> protectedInputs, out bool reused)
+    {
+        OutputFile.Validate(output, protectedInputs);
+        ModPatch? patch = null;
+        reused = false;
+        string effectiveName = name ?? Path.GetFileNameWithoutExtension(modPath);
+        // Cache lookup reads only the input bytes, never UTML models or the decompiler.
+        string baseHash = Hash(basePath), modHash = Hash(modPath);
+        if (!force && File.Exists(output))
+        {
+            try
+            {
+                var candidate = PatchJson.Deserialize(File.ReadAllText(output));
+                if (candidate.Base.Sha256 == baseHash && candidate.Mod.Sha256 == modHash)
+                { patch = candidate; reused = true; }
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)
+            { Console.Error.WriteLine($"Cache '{Path.GetFileName(output)}' cannot be reused; recomputing ({ex.Message})."); }
+        }
+        {
+            if (patch is null)
+            {
+                using var original = Load(basePath);
+                using var mod = Load(modPath);
+                try { patch = PatchBuilder.Create(original, mod, effectiveName, Progress); }
+                catch (NotComparableException) { throw; }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                { throw new InvalidDataException($"Could not analyse {original.Inspection.FileName} against {mod.Inspection.FileName}: {ex.Message} Check the file versions or try another complete copy of the mod.", ex); }
+                // Detect inputs replaced during analysis; an old cache hash must not name different bytes.
+                if (patch.Base.Sha256 != baseHash || patch.Mod.Sha256 != modHash)
+                    throw new IOException("An input changed during analysis. Retry with stable copies of the files.");
+                OutputFile.Write(output, PatchJson.Serialize(patch), protectedInputs);
+            }
+            else if (patch.Mod.Name != effectiveName)
+            {
+                patch = patch with { Mod = patch.Mod with { Name = effectiveName } };
+                OutputFile.Write(output, PatchJson.Serialize(patch), protectedInputs);
+            }
+        }
+        return patch;
+    }
+
     private static LoadedGameFile Load(string path)
     {
         try { return GameFileLoader.Load(path, Progress); }
@@ -96,7 +107,7 @@ internal static class DiffCommand
     }
 
     private static void Progress(string message) => Console.Error.WriteLine(message);
-    private static string Hash(string path)
+    internal static string Hash(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         return Convert.ToHexStringLower(SHA256.HashData(stream));
@@ -115,7 +126,9 @@ internal static class DiffCommand
                 if (asset.ModCode is { } code)
                 {
                     writer.WriteLine($"Text format: {asset.BaseCode?.Format ?? "absent"} -> {code.Format}");
-                    writer.Write(LineDiff.Unified(asset.BaseCode?.Text ?? "", code.Text, name));
+                    if (code.Format != "gml" || asset.BaseCode is { Format: not "gml" })
+                        writer.WriteLine("GML diff unavailable: disassembly fallback must be inspected separately.");
+                    else writer.Write(LineDiff.Unified(asset.BaseCode?.Text ?? "", code.Text, name));
                 }
                 foreach (var field in asset.Fields)
                     writer.WriteLine($"{field.Path}: {field.Base?.GetRawText() ?? "<absent>"} -> {field.Mod?.GetRawText() ?? "<absent>"}");

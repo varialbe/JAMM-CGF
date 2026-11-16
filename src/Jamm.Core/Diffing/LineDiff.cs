@@ -5,7 +5,7 @@ namespace Jamm.Core.Diffing;
 /// <summary>A line edit suitable for display and future three-way merging.</summary>
 public sealed record LineEdit(char Kind, string Text, bool HasNewline = true);
 
-/// <summary>Myers shortest edit scripts over normalized lines.</summary>
+/// <summary>Linear-space shortest edit scripts over normalized lines (Hirschberg LCS).</summary>
 public static class LineDiff
 {
     /// <summary>Normalizes platform line endings to LF.</summary>
@@ -27,40 +27,64 @@ public static class LineDiff
     public static IReadOnlyList<LineEdit> Compare(string before, string after)
     {
         string[] a = Lines(before), b = Lines(after);
-        if (a.Length == 0) return b.Select(line => Edit('+', line)).ToArray();
-        if (b.Length == 0) return a.Select(line => Edit('-', line)).ToArray();
-        int max = a.Length + b.Length, offset = max + 1;
-        int[] v = new int[2 * max + 3];
-        List<int[]> trace = [];
-        for (int d = 0; d <= max; d++)
+        List<LineEdit> edits = [];
+        Visit(0, a.Length, 0, b.Length);
+        return edits;
+
+        void Visit(int a0, int a1, int b0, int b1)
         {
-            trace.Add((int[])v.Clone());
-            for (int k = -d; k <= d; k += 2)
+            while (a0 < a1 && b0 < b1 && a[a0] == b[b0])
+            { edits.Add(Edit(' ', a[a0++])); b0++; }
+            int suffix = 0;
+            while (a0 < a1 && b0 < b1 && a[a1 - 1] == b[b1 - 1])
+            { a1--; b1--; suffix++; }
+            if (a0 == a1) for (int j = b0; j < b1; j++) edits.Add(Edit('+', b[j]));
+            else if (b0 == b1) for (int i = a0; i < a1; i++) edits.Add(Edit('-', a[i]));
+            else if (a1 - a0 == 1)
             {
-                int x = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1])
-                    ? v[offset + k + 1] : v[offset + k - 1] + 1;
-                int y = x - k;
-                while (x < a.Length && y < b.Length && a[x] == b[y]) { x++; y++; }
-                v[offset + k] = x;
-                if (x < a.Length || y < b.Length) continue;
-                List<LineEdit> edits = [];
-                for (int depth = d; depth >= 0; depth--)
+                int match = Array.IndexOf(b, a[a0], b0, b1 - b0);
+                if (match < 0) edits.Add(Edit('-', a[a0]));
+                for (int j = b0; j < b1; j++) edits.Add(Edit(j == match ? ' ' : '+', b[j]));
+            }
+            else
+            {
+                int middle = (a0 + a1) / 2;
+                int split = Split(a0, middle, a1, b0, b1);
+                Visit(a0, middle, b0, split);
+                Visit(middle, a1, split, b1);
+            }
+            for (int i = 0; i < suffix; i++) edits.Add(Edit(' ', a[a1 + i]));
+        }
+
+        int Split(int a0, int middle, int a1, int b0, int b1)
+        {
+            // Rows are released before recursion: peak auxiliary memory is linear.
+            int width = b1 - b0;
+            var forward = Row(a0, middle, false);
+            var reverse = Row(middle, a1, true);
+            int best = -1, split = 0;
+            for (int j = 0; j <= width; j++)
+                if (forward[j] + reverse[width - j] > best)
+                { best = forward[j] + reverse[width - j]; split = j; }
+            return b0 + split;
+
+            int[] Row(int start, int end, bool backwards)
+            {
+                int[] row = new int[width + 1];
+                for (int i = 0; i < end - start; i++)
                 {
-                    int[] previous = trace[depth];
-                    int diagonal = x - y;
-                    int prevK = diagonal == -depth || (diagonal != depth && previous[offset + diagonal - 1] < previous[offset + diagonal + 1])
-                        ? diagonal + 1 : diagonal - 1;
-                    int prevX = previous[offset + prevK], prevY = prevX - prevK;
-                    while (x > prevX && y > prevY) { edits.Add(Edit(' ', a[--x])); y--; }
-                    if (depth == 0) break;
-                    if (x == prevX) edits.Add(Edit('+', b[--y]));
-                    else edits.Add(Edit('-', a[--x]));
+                    int diagonal = 0;
+                    for (int j = 1; j <= width; j++)
+                    {
+                        int old = row[j];
+                        row[j] = a[backwards ? end - i - 1 : start + i] == b[backwards ? b1 - j : b0 + j - 1]
+                            ? diagonal + 1 : Math.Max(row[j], row[j - 1]);
+                        diagonal = old;
+                    }
                 }
-                edits.Reverse();
-                return edits;
+                return row;
             }
         }
-        throw new InvalidOperationException("Could not calculate line differences.");
     }
 
     /// <summary>Formats context-limited unified hunks, retaining reusable edits separately.</summary>

@@ -32,7 +32,7 @@ public static class PatchBuilder
     /// <summary>Reads one asset snapshot for displaying a removal without retaining removed payloads in a patch.</summary>
     public static JsonElement ReadAsset(LoadedGameFile source, AssetKind kind, string name, Action<string>? warning = null)
     {
-        var fields = new AssetFields(warning ?? (_ => { }));
+        var fields = new AssetFields(warning ?? (_ => { }), source.Data);
         if (kind == AssetKind.Strings) return AssetFields.Json(new { Value = name });
         if (kind is AssetKind.Variables or AssetKind.Functions) return Definitions(source.Data, kind, fields)[name];
         string? hash = kind == AssetKind.TexturePages
@@ -63,8 +63,8 @@ public static class PatchBuilder
         var leftHashes = new ContentFingerprints(warnings.Add).Snapshot(original);
         progress?.Invoke($"Fingerprinting {modFile.FileName}");
         var rightHashes = new ContentFingerprints(warnings.Add).Snapshot(mod);
-        var leftFields = new AssetFields(warnings.Add);
-        var rightFields = new AssetFields(warnings.Add);
+        var leftFields = new AssetFields(warnings.Add, original);
+        var rightFields = new AssetFields(warnings.Add, mod);
         var leftSource = new CodeDecompiler(original, baseFile.FileName, warnings.Add);
         var rightSource = new CodeDecompiler(mod, modFile.FileName, warnings.Add);
         SortedDictionary<string, AssetChanges> changes = new(StringComparer.Ordinal);
@@ -77,7 +77,10 @@ public static class PatchBuilder
                 var left = original.Strings.Select(x => x.Content).ToHashSet(StringComparer.Ordinal);
                 var right = mod.Strings.Select(x => x.Content).ToHashSet(StringComparer.Ordinal);
                 foreach (string value in right.Except(left).Order(StringComparer.Ordinal))
-                    added.Add(new(value, null, AssetFields.Json(new { Value = value }), []));
+                {
+                    var snapshot = AssetFields.Json(new { Value = value });
+                    added.Add(new(value, null, snapshot, FieldDiff.Compare(null, snapshot), OriginalIndex: mod.Strings.ToList().FindIndex(x => x.Content == value)));
+                }
                 removed.AddRange(left.Except(right).Order(StringComparer.Ordinal));
             }
             else if (kind is AssetKind.Variables or AssetKind.Functions)
@@ -85,7 +88,10 @@ public static class PatchBuilder
                 var left = Definitions(original, kind, leftFields);
                 var right = Definitions(mod, kind, rightFields);
                 foreach (string key in right.Keys.Except(left.Keys).Order(StringComparer.Ordinal))
-                    added.Add(new(key, null, right[key], []));
+                    added.Add(new(key, null, right[key], FieldDiff.Compare(null, right[key]), OriginalIndex: DefinitionIndex(mod, kind, key)));
+                foreach (string key in right.Keys.Intersect(left.Keys).Order(StringComparer.Ordinal))
+                    if (!JsonElement.DeepEquals(left[key], right[key]))
+                        changed.Add(new(key, left[key], right[key], FieldDiff.Compare(left[key], right[key])));
                 removed.AddRange(left.Keys.Except(right.Keys).Order(StringComparer.Ordinal));
             }
             else
@@ -97,7 +103,7 @@ public static class PatchBuilder
                     || x.OriginalFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) == true
                     || x.ModFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) == true).ToArray();
                 int completed = 0, total = differences.Count(x => x.Classification != AssetClassification.Removed);
-                foreach (var difference in differences)
+                foreach (var difference in kind == AssetKind.TexturePages ? differences.OrderBy(x => int.Parse(x.Name, System.Globalization.CultureInfo.InvariantCulture)) : differences.AsEnumerable())
                 {
                     string key = difference.Name;
                     if (difference.Classification == AssetClassification.Removed) { removed.Add(key); continue; }
@@ -113,17 +119,53 @@ public static class PatchBuilder
                         if (baseCode is not null && JsonElement.DeepEquals(AssetFields.Json(baseCode), AssetFields.Json(modCode))
                             && before is { } originalFields && JsonElement.DeepEquals(originalFields, after)) continue;
                     }
-                    if (difference.Classification == AssetClassification.Identical && before is { } identicalFields
-                        && JsonElement.DeepEquals(identicalFields, after)) continue;
-                    var patch = new AssetPatch(key, before, after, FieldDiff.Compare(before, after), baseCode, modCode);
+                    if (kind != AssetKind.Code && before is { } identicalFields
+                        && JsonElement.DeepEquals(identicalFields, after)
+                        && !identicalFields.GetRawText().Contains("unsupported:", StringComparison.Ordinal)
+                        && difference.OriginalFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) != true
+                        && difference.ModFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) != true) continue;
+                    int sourceIndex = kind == AssetKind.TexturePages ? int.Parse(key, System.Globalization.CultureInfo.InvariantCulture)
+                        : AssetsList(mod, kind).ToList().IndexOf(right[key]);
+                    if (kind == AssetKind.TexturePages)
+                    {
+                        after = AssetFields.Json(new { ContentHash = difference.ModFingerprint, SourceIndex = sourceIndex });
+                        if (before is not null) before = AssetFields.Json(new { ContentHash = difference.OriginalFingerprint, SourceIndex = sourceIndex });
+                        else key = difference.ModFingerprint is { } pageHash && !pageHash.StartsWith("unsupported:", StringComparison.Ordinal)
+                            ? "sha256:" + pageHash : $"unsupported:{sourceIndex}";
+                    }
+                    var patch = new AssetPatch(key, before, after, FieldDiff.Compare(before, after), baseCode, modCode, before is null ? sourceIndex : null);
                     if (before is null) added.Add(patch); else changed.Add(patch);
                 }
             }
+            if (kind == AssetKind.TexturePages)
+                added = added.GroupBy(a => a.Name, StringComparer.Ordinal).Select(group =>
+                {
+                    var first = group.First();
+                    var snapshot = AssetFields.Json(new { ContentHash = first.Mod.GetProperty("contentHash").GetString(),
+                        SourceIndices = group.Select(p => p.OriginalIndex!.Value).Order().ToArray() });
+                    return first with { Mod = snapshot, Fields = FieldDiff.Compare(null, snapshot) };
+                }).ToList();
             changes.Add(kind.ToString()[..1].ToLowerInvariant() + kind.ToString()[1..], new(added, changed, removed));
         }
         string version = typeof(PatchBuilder).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         return new(PatchJson.FormatVersion, $"cgfmm {version}", DateTimeOffset.UtcNow, modFile, baseFile,
-            warnings.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), changes);
+            warnings.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), changes,
+            new SortedDictionary<string, string[]>(Enum.GetValues<AssetKind>().Where(k => k != AssetKind.TexturePages && k != AssetKind.Strings && k != AssetKind.TexturePageItems)
+                .ToDictionary(k => k.ToString()[..1].ToLowerInvariant() + k.ToString()[1..], k => AssetsList(original, k).Cast<UndertaleNamedResource>().Select(x => x.Name.Content).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()), StringComparer.Ordinal),
+            ReferenceSnapshots(mod, rightFields));
+    }
+
+    private static int DefinitionIndex(UndertaleData data, AssetKind kind, string key) => AssetsList(data, kind).ToList().FindIndex(x =>
+        (kind == AssetKind.Variables ? AssetFields.Json(new object[] { ((UndertaleVariable)x).Name.Content, ((UndertaleVariable)x).InstanceType.ToString() }).GetRawText() : ((UndertaleNamedResource)x).Name.Content) == key);
+
+    private static IReadOnlyList<AssetReference> ReferenceSnapshots(UndertaleData data, AssetFields fields)
+    {
+        List<AssetReference> result = [];
+        foreach (var kind in new[] { AssetKind.Objects, AssetKind.Rooms, AssetKind.Scripts, AssetKind.Timelines })
+            foreach (var asset in AssetsList(data, kind).Cast<UndertaleNamedResource>())
+                result.AddRange(Merging.GmlReferences.Structured(kind.ToString().ToLowerInvariant(), asset.Name.Content, fields.Snapshot(asset)));
+        return result.Distinct().OrderBy(x => x.Family, StringComparer.Ordinal).ThenBy(x => x.Asset, StringComparer.Ordinal)
+            .ThenBy(x => x.TargetFamily, StringComparer.Ordinal).ThenBy(x => x.Target, StringComparer.Ordinal).ToArray();
     }
 
     private static JsonElement Snapshot(object asset, AssetFields fields, string? hash) => asset switch

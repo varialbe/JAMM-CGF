@@ -5,7 +5,7 @@
 
 Cat Goes Fishing mods usually replace the entire `data.win`, so only one can run at a
 time. JAMM-CGF aims to compare each mod against the original, identify conflicts and
-build one merged `data.win`. Phase 1 provides read-only inspection, content comparisons and reusable semantic JSON patches.
+build one merged `data.win`. Phase 2 provides read-only inspection, reusable semantic JSON patches and conflict checks with three-way GML previews.
 
 > **Important: you need the legacy bytecode version.** The inspected August 2024 Steam
 > build is YYC and contains no bytecode. Known mods target GameMaker 1.4 bytecode 16 and
@@ -19,13 +19,14 @@ build one merged `data.win`. Phase 1 provides read-only inspection, content comp
 | --- | --- | --- |
 | Phase 0 | Done | Inspect files, fingerprint assets, compare bases and report feasibility |
 | Phase 1 | Done | GML/asset diffs, cached JSON patches and unified diffs |
-| Phase 2 | Planned | Conflict detection |
+| Phase 2 | Done | Conflict detection, three-way code previews and reusable resolution choices |
 | Phase 3 | Planned | Build a merged `data.win` |
 | Phase 4 | Planned | Install with backups and launch |
 | GUI | Later | Graphical mod management |
 
-See the [Phase 0 findings](docs/reports/phase0.md) and [verification](docs/reports/phase0-verification.md).
-Merging and installation are not available yet.
+See the [Phase 0 findings](docs/reports/phase0.md), [Phase 0 verification](docs/reports/phase0-verification.md)
+and [Phase 2 verification](docs/reports/phase2-verification.md).
+Writing a merged game archive and installation are not available yet.
 
 ## Requirements and build
 
@@ -90,6 +91,44 @@ string values: **keep them local and never commit or redistribute them**. Binary
 payloads are content hashes referencing the mod archive. See [patch format](docs/patch-format.md)
 for field meanings, identities, caching and future merge/build requirements.
 
+Check mods in load order (later entries win by default in the future builder):
+
+```sh
+dotnet run --project src/Jamm.Cli -- check \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/cave-expansion.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/colour-expansion.win" \
+  --base "$HOME/Games/CatGoesFishing-legacy/data.win" --json out/check.json
+
+# Existing patches also work; choose an asset from the findings table:
+dotnet run --project src/Jamm.Cli -- check \
+  out/patches/the-abyss-beta.cgfmm-patch.json out/patches/cave-expansion.cgfmm-patch.json \
+  --base "$HOME/Games/CatGoesFishing-legacy/data.win" --details '<asset name>'
+```
+
+Example output (illustrative synthetic names/counts):
+
+```text
+Load order (later mod wins by default when building):
+  1. Mod A: +2 changed 1 removed 0; warnings 0
+  2. Mod B: +1 changed 1 removed 0; warnings 0
+CONFLICT (1 findings)
+list         code           fish_catalog       Mod A + Mod B: different insertions at the same position.
+AUTO (1 findings)
+field        objects        fish               Mod A + Mod B: changes to different fields form a union.
+INFO (0 findings)
+WARNING (0 findings)
+Decisions required. Use --details <asset> to inspect a finding. No game files were written.
+```
+
+`check` returns **0** when there are no conflicts, **3** when conflicts need decisions,
+and **1** for an error. It generates/reuses patches in `./patches/`, or beside the
+JSON report in `patches/`; `--patches-dir` overrides this. `--details` prints GML
+conflict markers or base/mod field values. All patches must match the selected
+base's complete SHA-256. Reports include merged text and per-hunk choices for Phase 3.
+Keep reports local: they can include game code and strings. See [conflict rules and
+limitations](docs/conflicts.md). Checking does not build or install a merged archive.
+
 Run inspection and comparisons together and write a Markdown report:
 
 ```sh
@@ -118,6 +157,7 @@ of the remaining readable mods.
 | 0 | Analysis completed, including different-base or YYC results from `compare` / `phase0` |
 | 1 | Read, analysis, output or usage failure |
 | 2 | `inspect`: YYC / empty CODE or unsupported VM bytecode; `diff`: YYC / empty CODE |
+| 3 | `check`: analysis succeeded, conflicts need decisions |
 
 Comparison matches named assets by ordinal name; strings use value hashes and texture
 pages use indices. The overall unchanged percentage covers code, scripts, sprites, objects,
@@ -148,7 +188,7 @@ Never commit game archives, extracted game content or personal absolute paths.
 
 | Path | Purpose |
 | --- | --- |
-| `src/Jamm.Core/` | Read-only loader, fingerprints, semantic patches and line diffs; no console output |
+| `src/Jamm.Core/` | Read-only loader, fingerprints, semantic patches, line/field merges and conflict analysis; no console output |
 | `src/Jamm.Cli/` | `cgfmm` commands and text/JSON reports |
 | `tests/Jamm.Core.Tests/` | Synthetic regressions and opt-in real-file checks |
 | `external/UndertaleModTool/` | Pinned dependency; do not edit |

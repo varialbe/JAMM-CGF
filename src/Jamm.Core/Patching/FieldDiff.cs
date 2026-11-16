@@ -14,7 +14,13 @@ public static class FieldDiff
 
         void Visit(string path, JsonElement? a, JsonElement? b)
         {
-            if (a is { ValueKind: JsonValueKind.Object } left && b is { ValueKind: JsonValueKind.Object } right)
+            if (path == "" && (a is null || b is null) && (a ?? b) is { ValueKind: JsonValueKind.Object } root)
+            {
+                foreach (var property in root.EnumerateObject().OrderBy(x => x.Name, StringComparer.Ordinal))
+                    Visit("/" + property.Name.Replace("~", "~0").Replace("/", "~1"),
+                        a is null ? null : property.Value, b is null ? null : property.Value);
+            }
+            else if (a is { ValueKind: JsonValueKind.Object } left && b is { ValueKind: JsonValueKind.Object } right)
             {
                 var names = left.EnumerateObject().Select(x => x.Name).Union(right.EnumerateObject().Select(x => x.Name))
                     .Order(StringComparer.Ordinal);

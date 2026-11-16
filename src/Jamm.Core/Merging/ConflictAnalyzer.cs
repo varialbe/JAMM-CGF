@@ -1,0 +1,301 @@
+using System.Text.Json;
+using Jamm.Core.Diffing;
+using Jamm.Core.Patching;
+
+namespace Jamm.Core.Merging;
+
+/// <summary>Checks portable patches in load order, without opening archives or depending on game model types.</summary>
+public static class ConflictAnalyzer
+{
+    private sealed record Change(int Mod, AssetPatch? Asset, bool Added, bool Removed);
+    private sealed record Write(int Mod, string Code, IndexWrite Slot);
+
+    /// <summary>Analyzes semantic overlaps and indirect references. All patches must target exactly the same base.</summary>
+    public static ConflictReport Analyze(IReadOnlyList<ModPatch> patches)
+    {
+        if (patches.Count < 2) throw new ArgumentException("check needs at least two mods or patches.");
+        string baseHash = patches[0].Base.Sha256;
+        if (patches.Any(p => p.Base.Sha256 != baseHash))
+            throw new InvalidDataException("Mods target different bases: " + string.Join("; ", patches.Select(p => $"{Name(p)} targets {p.Base.FileName} (SHA-256 {p.Base.Sha256})")) + ". Recompute every patch against the same --base archive.");
+        if (patches.Any(p => p.FormatVersion != PatchJson.FormatVersion))
+            throw new InvalidDataException("A patch uses an unsupported format. Recompute it with diff --force.");
+        // Labels remain unambiguous even when display names happen to match.
+        string[] names = patches.Select((p, i) => patches.Count(q => Name(q) == Name(p)) > 1 ? $"{Name(p)} [{i + 1}]" : Name(p)).ToArray();
+        List<ConflictItem> findings = [];
+        SortedDictionary<string, MergeResult> codeMerges = new(StringComparer.Ordinal);
+        List<FieldMerge> fieldMerges = [];
+        foreach (string family in patches.SelectMany(p => p.Changes.Keys).Distinct().Order(StringComparer.Ordinal))
+        {
+            var assets = new SortedDictionary<string, List<Change>>(StringComparer.Ordinal);
+            for (int m = 0; m < patches.Count; m++)
+            {
+                if (!patches[m].Changes.TryGetValue(family, out var changes)) continue;
+                foreach (var asset in changes.Added) Add(asset.Name, new(m, asset, true, false));
+                foreach (var asset in changes.Changed) Add(asset.Name, new(m, asset, false, false));
+                foreach (string asset in changes.Removed) Add(asset, new(m, null, false, true));
+            }
+            foreach (var (asset, versions) in assets)
+            {
+                if (versions.Select(v => v.Mod).Distinct().Count() != versions.Count)
+                    throw new InvalidDataException($"Ambiguous {family}/{asset}: a patch records more than one change for the same identity. Recompute the patch.");
+                if (versions.Any(v => v.Added) && versions.Any(v => !v.Added))
+                    throw new InvalidDataException($"Inconsistent ancestor for {family}/{asset}: one patch adds it while another changes/removes it. Recompute against a common base.");
+                if (family == "code") Code(asset, versions);
+                else if (versions.Count > 1) CompareAssets(family, asset, versions);
+                else if (versions[0].Asset is { } unknown && unknown.Mod.GetRawText().Contains("unsupported:", StringComparison.Ordinal))
+                    findings.Add(new("CONFLICT", "binary", family, asset, [names[versions[0].Mod]],
+                        "Unsupported content cannot prove equality; inspect or choose a complete asset version.",
+                        [new("", unknown.Base, [new(names[versions[0].Mod], unknown.Mod)])]));
+                if (family is "objects" or "rooms" or "scripts" or "functions" && versions.All(v => !v.Removed))
+                {
+                    JsonElement snapshot = versions[0].Asset!.Base ?? versions[0].Asset!.Mod;
+                    foreach (var version in versions)
+                        snapshot = version.Added ? version.Asset!.Mod : FieldMergeEngine.Apply(snapshot, version.Asset!.Fields, version.Asset.Mod);
+                    fieldMerges.Add(new(family, asset, snapshot, findings.Any(f => f.Family == family && f.Asset == asset && f.Severity == "CONFLICT")));
+                }
+            }
+            void Add(string key, Change change)
+            {
+                if (!assets.TryGetValue(key, out var list)) assets[key] = list = [];
+                list.Add(change);
+            }
+        }
+        Indirect();
+        foreach (var (patch, i) in patches.Select((p, i) => (p, i)))
+            foreach (string warning in patch.Warnings)
+                findings.Add(new("WARNING", "patch", "patch", patch.Mod.FileName, [names[i]], warning));
+        var ordered = findings.Distinct().OrderBy(f => Rank(f.Severity)).ThenBy(f => f.Family, StringComparer.Ordinal)
+            .ThenBy(f => f.Asset, StringComparer.Ordinal).ThenBy(f => f.Kind, StringComparer.Ordinal)
+            .ThenBy(f => string.Join("\0", f.Mods), StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).ToArray();
+        return new(baseHash, patches.Select((p, i) => new ModSummary(names[i], p.Mod.FileName, p.Mod.Sha256,
+            p.Changes.Values.Sum(c => c.Added.Count), p.Changes.Values.Sum(c => c.Changed.Count), p.Changes.Values.Sum(c => c.Removed.Count), p.Warnings.Count)).ToArray(), ordered, codeMerges, fieldMerges);
+
+        void Code(string asset, List<Change> versions)
+        {
+            if (versions.Any(v => v.Removed))
+            {
+                if (versions.Count > 1) Removed("code", asset, versions);
+                var surviving = versions.Where(v => !v.Removed).Select(v => v.Asset!).ToArray();
+                if (surviving.Length > 0 && surviving.All(a => a.BaseCode?.Format == "gml" && a.ModCode?.Format == "gml"))
+                    codeMerges[asset] = ThreeWayMerge.Removal(surviving[0].BaseCode!.Text,
+                        versions.Select(v => new MergeVersion(names[v.Mod], v.Removed ? "" : v.Asset!.ModCode!.Text)).ToArray());
+                else if (surviving.Length > 0)
+                    findings.Add(new("CONFLICT", "disassembly", "code", asset, versions.Select(v => names[v.Mod]).ToArray(),
+                        "GML unavailable for the surviving version; select a whole-code version instead of line-merging disassembly."));
+                return;
+            }
+            var entries = versions.Select(v => v.Asset!).ToArray();
+            if (entries.Any(e => e.ModCode?.Format != "gml" || (!versions[0].Added && e.BaseCode?.Format != "gml")))
+            {
+                findings.Add(new("CONFLICT", "disassembly", "code", asset, versions.Select(v => names[v.Mod]).ToArray(),
+                    "GML unavailable: disassembly fallback cannot be line-diffed or merged as GML. Re-decompile or select a complete code version."));
+                return;
+            }
+            if (!versions[0].Added && entries.Skip(1).Any(e => LineDiff.Normalize(e.BaseCode!.Text) != LineDiff.Normalize(entries[0].BaseCode!.Text)))
+                throw new InvalidDataException($"Patches disagree about ancestor GML for {asset}. Recompute them against the same archive.");
+            var texts = versions.Select(v => new MergeVersion(names[v.Mod], v.Asset!.ModCode!.Text)).ToArray();
+            MergeResult merge = versions[0].Added ? ThreeWayMerge.Added(texts) : ThreeWayMerge.Merge(entries[0].BaseCode!.Text, texts);
+            codeMerges[asset] = merge;
+            if (versions.Count < 2) return;
+            foreach (var hunk in merge.Hunks.Where(h => h.Versions.Count > 1))
+                findings.Add(new(hunk.Status, hunk.Kind, "code", asset, hunk.Versions.Select(v => v.Name).ToArray(),
+                    $"Ancestor line {hunk.Start + 1}: " + (hunk.Status == "INFO" ? "identical code changes." : hunk.Kind == "list"
+                    ? "different insertions at the same position (shared list/catalog)." : hunk.Kind == "addition" ? "same-name code additions have different definitions." : "overlapping code edits require a decision."),
+                    SuggestedResolution: hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
+            if (merge.Hunks.Any(h => h.Versions.Count == 1))
+                findings.Add(new("AUTO", "code", "code", asset, versions.Select(v => names[v.Mod]).ToArray(), "Non-overlapping code hunks are retained automatically in the merge preview."));
+            // Counts/parent/children and the semantic snapshot remain independent of text.
+            CompareFields("code", asset, versions, metadata: true);
+        }
+
+        void CompareAssets(string family, string asset, List<Change> versions)
+        {
+            if (versions.Any(v => v.Removed)) { Removed(family, asset, versions); return; }
+            if (family is "strings" or "variables" or "functions" && versions.All(v => v.Added))
+            { findings.Add(new("INFO", "union", family, asset, versions.Select(v => names[v.Mod]).ToArray(), "Definition additions form a union.")); return; }
+            if (versions.All(v => v.Added))
+            {
+                bool equal = versions.All(v => SameSnapshot(family, versions[0].Asset!.Mod, v.Asset!.Mod));
+                bool unsupported = versions.Any(v => v.Asset!.Mod.GetRawText().Contains("unsupported:", StringComparison.Ordinal));
+                equal &= !unsupported;
+                findings.Add(new(equal ? "INFO" : "CONFLICT", "addition", family, asset, versions.Select(v => names[v.Mod]).ToArray(),
+                    equal ? "Identical same-name additions are included once." : unsupported ? "Same-name additions contain unsupported content; equality cannot be established." : "Same-name additions have different content; choose which definition to keep.",
+                    [new("", null, versions.Select(v => new ModValue(names[v.Mod], v.Asset!.Mod)).ToArray())]));
+                return;
+            }
+            if (family is "objects" or "rooms" or "scripts" or "functions") CompareFields(family, asset, versions);
+            else
+            {
+                bool equal = versions.All(v => SameSnapshot(family, versions[0].Asset!.Mod, v.Asset!.Mod));
+                bool unsupported = versions.Any(v => v.Asset!.Mod.GetRawText().Contains("unsupported:", StringComparison.Ordinal));
+                findings.Add(new(unsupported ? "CONFLICT" : equal ? "INFO" : "CONFLICT", "binary", family, asset,
+                    versions.Select(v => names[v.Mod]).ToArray(), unsupported ? "Unsupported content cannot prove equality; inspect or choose a version."
+                    : equal ? "Identical content in every mod." : "Different content; later mod wins by default in Phase 3, subject to your decision.",
+                    Differences(versions)));
+            }
+        }
+
+        IReadOnlyList<FieldConflict> Differences(List<Change> versions) => versions.SelectMany(v => v.Asset!.Fields.Select(f => f.Path))
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).Select(path => new FieldConflict(path,
+                FieldMergeEngine.At(versions[0].Asset!.Base, path), versions.Select(v => new ModValue(names[v.Mod], FieldMergeEngine.At(v.Asset!.Mod, path))).ToArray())).ToArray();
+
+        void CompareFields(string family, string asset, List<Change> versions, bool metadata = false)
+        {
+            for (int a = 0; a < versions.Count; a++)
+                for (int b = a + 1; b < versions.Count; b++)
+                {
+                    var left = versions[a]; var right = versions[b];
+                    List<FieldConflict> collisions = [], identical = [];
+                    foreach (var x in left.Asset!.Fields)
+                        foreach (var y in right.Asset!.Fields.Where(y => FieldMergeEngine.Overlaps(x.Path, y.Path)))
+                        {
+                            string path = x.Path.Length <= y.Path.Length ? x.Path : y.Path;
+                            var av = FieldMergeEngine.At(left.Asset.Mod, path); var bv = FieldMergeEngine.At(right.Asset.Mod, path);
+                            var detail = new FieldConflict(path, FieldMergeEngine.At(left.Asset.Base, path), [new(names[left.Mod], av), new(names[right.Mod], bv)]);
+                            (FieldMergeEngine.Equal(av, bv) ? identical : collisions).Add(detail);
+                        }
+                    string[] mods = [names[left.Mod], names[right.Mod]];
+                    if (collisions.Count > 0)
+                        findings.Add(new("CONFLICT", "field", family, asset, mods,
+                            metadata ? "Code metadata differs; choose compatible counts/parent/children." : "The same field has different values, or a removal overlaps an edit.",
+                            collisions.DistinctBy(c => c.Path).ToArray()));
+                    if (identical.Count > 0)
+                        findings.Add(new("INFO", "field", family, asset, mods, "Identical field changes; duplicate instances/additions are included once.", identical.DistinctBy(c => c.Path).ToArray()));
+                    if (!metadata && (left.Asset!.Fields.Any(x => !right.Asset!.Fields.Any(y => FieldMergeEngine.Overlaps(x.Path, y.Path)))
+                        || right.Asset!.Fields.Any(y => !left.Asset!.Fields.Any(x => FieldMergeEngine.Overlaps(x.Path, y.Path)))))
+                        findings.Add(new("AUTO", "field", family, asset, mods, "Changes to different fields or distinct room instance/tile keys form a union.", Differences([left, right])));
+                }
+        }
+
+        void Removed(string family, string asset, List<Change> versions)
+        {
+            bool all = versions.All(v => v.Removed);
+            findings.Add(new(all ? "INFO" : "CONFLICT", "removal", family, asset, versions.Select(v => names[v.Mod]).ToArray(),
+                all ? "Every participating mod removes this asset." : "One mod removes an asset another changes; choose removal or a surviving version.",
+                all ? null : [new("", versions.First(v => !v.Removed).Asset!.Base,
+                    versions.Select(v => new ModValue(names[v.Mod], v.Removed ? null : v.Asset!.Mod)).ToArray())]));
+        }
+
+        void Indirect()
+        {
+            var catalog = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            foreach (var patch in patches)
+            {
+                foreach (var (family, assets) in patch.BaseAssets ?? [])
+                    if (family is "sprites" or "objects" or "sounds" or "scripts" or "rooms")
+                        foreach (string asset in assets) Catalog(asset, family);
+                foreach (var (family, changes) in patch.Changes.Where(c => c.Key is "sprites" or "objects" or "sounds" or "scripts" or "rooms"))
+                    foreach (string asset in changes.Added.Select(a => a.Name).Concat(changes.Removed)) Catalog(asset, family);
+            }
+            List<AssetReference>[] references = patches.Select(p => (p.References ?? []).Concat(p.Changes.SelectMany(c => c.Value.Added.Concat(c.Value.Changed)
+                .SelectMany(a => GmlReferences.Structured(c.Key, a.Name, a.Mod)))).Distinct().ToList()).ToArray();
+            List<Write> writes = [];
+            for (int m = 0; m < patches.Count; m++)
+                foreach (var entry in patches[m].Changes["code"].Added.Concat(patches[m].Changes["code"].Changed))
+                {
+                    if (entry.ModCode is not { Format: "gml" } code) continue;
+                    foreach (string id in GmlReferences.Identifiers(code.Text))
+                        if (catalog.TryGetValue(id, out var families))
+                            foreach (string family in families) references[m].Add(new("code", entry.Name, family, id));
+                    if (entry.BaseCode is { Format: not "gml" }) continue;
+                    HashSet<int> changed = [], deleted = []; int line = 1, baseLine = 1;
+                    foreach (var edit in LineDiff.Compare(entry.BaseCode?.Text ?? "", code.Text))
+                    {
+                        if (edit.Kind == '+') changed.Add(line);
+                        if (edit.Kind == '-') deleted.Add(baseLine);
+                        if (edit.Kind != '-') line++;
+                        if (edit.Kind != '+') baseLine++;
+                    }
+                    var changedSlots = GmlReferences.IndexWrites(entry.BaseCode?.Text ?? "")
+                        .Where(slot => Enumerable.Range(slot.Line, slot.EndLine - slot.Line + 1).Any(deleted.Contains))
+                        .Select(slot => (slot.Container, slot.Index)).ToHashSet();
+                    foreach (var slot in GmlReferences.IndexWrites(code.Text))
+                        if (changedSlots.Contains((slot.Container, slot.Index))
+                            || Enumerable.Range(slot.Line, slot.EndLine - slot.Line + 1).Any(changed.Contains)) writes.Add(new(m, entry.Name, slot));
+                }
+            var sourceChanges = patches.SelectMany(p => p.Changes.SelectMany(c =>
+                c.Value.Added.Concat(c.Value.Changed).Select(a => (Key: (Family: c.Key, Asset: a.Name), Asset: (AssetPatch?)a, Removed: false))
+                .Concat(c.Value.Removed.Select(a => (Key: (Family: c.Key, Asset: a), Asset: (AssetPatch?)null, Removed: true)))))
+                .GroupBy(c => c.Key).ToDictionary(g => g.Key, g => g.ToArray());
+            var previews = fieldMerges.ToDictionary(f => (f.Family, f.Asset));
+            HashSet<(string Family, string Asset)> conditional = [];
+            var effective = references.SelectMany(r => r).Select(r => (r.Family, r.Asset)).Distinct()
+                .ToDictionary(key => key, key => SurvivingReferences(key.Family, key.Asset));
+            for (int m = 0; m < references.Length; m++)
+                references[m] = references[m].Select(r => (r.Family, r.Asset)).Distinct()
+                    .SelectMany(key => effective[key]).Distinct().ToList();
+            for (int a = 0; a < patches.Count; a++)
+                foreach (var (family, changes) in patches[a].Changes)
+                    foreach (string removed in changes.Removed)
+                        for (int b = 0; b < patches.Count; b++)
+                        {
+                            if (a == b) continue;
+                            // If B also removes the target there is no cross-mod survivor.
+                            if (patches[b].Changes[family].Removed.Contains(removed, StringComparer.Ordinal)) continue;
+                            var users = references[b].Where(r => r.TargetFamily == family && r.Target == removed)
+                                .Select(r => $"{r.Family}/{r.Asset}").Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+                            bool dependsOnChoice = references[b].Any(r => r.TargetFamily == family && r.Target == removed && conditional.Contains((r.Family, r.Asset)))
+                                || sourceChanges[(family, removed)].Any(c => !c.Removed);
+                            if (users.Length > 0) findings.Add(new("CONFLICT", "reference", family, removed, [names[a], names[b]],
+                                dependsOnChoice
+                                    ? $"{names[a]} removes an asset that may still be used by {names[b]}, depending on unresolved choices ({users.Length} referencing assets)."
+                                    : $"{names[a]} removes an asset used by {names[b]} ({users.Length} referencing assets). GML identifier matches require review.", Sources: users));
+                        }
+            foreach (var group in writes.GroupBy(w => (w.Slot.Container, w.Slot.Index))
+                .Where(g => g.Select(w => w.Mod).Distinct().Count() > 1).OrderBy(g => g.Key.Container, StringComparer.Ordinal).ThenBy(g => g.Key.Index, StringComparer.Ordinal))
+            {
+                string[] sources = group.OrderBy(w => w.Mod).ThenBy(w => w.Code, StringComparer.Ordinal).ThenBy(w => w.Slot.Line)
+                    .Select(w => $"{names[w.Mod]}: {w.Code}:{w.Slot.Line}").Distinct(StringComparer.Ordinal).ToArray();
+                findings.Add(new("CONFLICT", "index", "code", $"{group.Key.Container}[{group.Key.Index}]", group.Select(w => w.Mod).Distinct().Order().Select(m => names[m]).ToArray(),
+                    $"Literal slot collision: container {group.Key.Container}, index/key {group.Key.Index}.", Sources: sources));
+            }
+            void Catalog(string asset, string family)
+            {
+                if (!catalog.TryGetValue(asset, out var families)) catalog[asset] = families = new(StringComparer.Ordinal);
+                families.Add(family);
+            }
+
+            IReadOnlyList<AssetReference> SurvivingReferences(string family, string asset)
+            {
+                if (!sourceChanges.TryGetValue((family, asset), out var changes))
+                    return references.SelectMany(r => r).Where(r => r.Family == family && r.Asset == asset).Distinct().ToArray();
+                if (changes.All(c => c.Removed)) return [];
+                bool removed = changes.Any(c => c.Removed);
+                if (removed) conditional.Add((family, asset));
+                if (previews.TryGetValue((family, asset), out var preview))
+                {
+                    List<AssetReference> result = [.. GmlReferences.Structured(family, asset, preview.Snapshot)];
+                    if (preview.RequiresDecision)
+                    {
+                        conditional.Add((family, asset));
+                        foreach (var field in findings.Where(f => f.Family == family && f.Asset == asset && f.Severity == "CONFLICT")
+                            .SelectMany(f => f.Fields ?? []))
+                            foreach (var version in field.Versions)
+                            {
+                                var alternative = FieldMergeEngine.Apply(preview.Snapshot, [new(field.Path, field.Base, version.Value)]);
+                                result.AddRange(GmlReferences.Structured(family, asset, alternative));
+                            }
+                    }
+                    return result.Distinct().ToArray();
+                }
+                if (family == "code")
+                {
+                    var merge = codeMerges.GetValueOrDefault(asset);
+                    if (merge is null || merge.HasConflicts) conditional.Add((family, asset));
+                    var texts = merge is { HasConflicts: false } ? new[] { merge.Text }
+                        : changes.Where(c => c.Asset?.ModCode?.Format == "gml").Select(c => c.Asset!.ModCode!.Text);
+                    return texts.SelectMany(GmlReferences.Identifiers).Distinct(StringComparer.Ordinal)
+                        .Where(catalog.ContainsKey).SelectMany(id => catalog[id].Select(target => new AssetReference(family, asset, target, id))).ToArray();
+                }
+                var snapshots = changes.Where(c => !c.Removed).Select(c => c.Asset!.Mod).ToArray();
+                if (snapshots.Skip(1).Any(s => !JsonElement.DeepEquals(snapshots[0], s))) conditional.Add((family, asset));
+                return snapshots.SelectMany(s => GmlReferences.Structured(family, asset, s)).Distinct().ToArray();
+            }
+        }
+    }
+
+    private static bool SameSnapshot(string family, JsonElement a, JsonElement b) => family == "texturePages"
+        ? FieldMergeEngine.Equal(a.GetProperty("contentHash"), b.GetProperty("contentHash")) : JsonElement.DeepEquals(a, b);
+    private static string Name(ModPatch patch) => patch.Mod.Name ?? Path.GetFileNameWithoutExtension(patch.Mod.FileName);
+    private static int Rank(string status) => status switch { "CONFLICT" => 0, "AUTO" => 1, "INFO" => 2, _ => 3 };
+}

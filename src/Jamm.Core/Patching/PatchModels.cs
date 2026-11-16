@@ -5,11 +5,15 @@ namespace Jamm.Core.Patching;
 
 /// <summary>A portable diff. These records have no UndertaleModLib dependencies.</summary>
 public sealed record ModPatch(int FormatVersion, string Tool, DateTimeOffset CreatedUtc,
-    PatchFile Mod, PatchFile Base, IReadOnlyList<string> Warnings, SortedDictionary<string, AssetChanges> Changes);
+    PatchFile Mod, PatchFile Base, IReadOnlyList<string> Warnings, SortedDictionary<string, AssetChanges> Changes,
+    SortedDictionary<string, string[]>? BaseAssets = null, IReadOnlyList<AssetReference>? References = null);
 
 /// <summary>Content-addressed source identity; no personal source paths are saved.</summary>
 public sealed record PatchFile(string FileName, string Sha256, ulong Gen8Timestamp,
     string GmVersion, byte Bytecode, string? Name = null);
+
+/// <summary>A named resource reference retained for checks without opening game archives.</summary>
+public sealed record AssetReference(string Family, string Asset, string TargetFamily, string Target);
 
 /// <summary>Ordinally ordered changes in one asset family; removed entries are matching keys.</summary>
 public sealed record AssetChanges(IReadOnlyList<AssetPatch> Added, IReadOnlyList<AssetPatch> Changed,
@@ -18,7 +22,7 @@ public sealed record AssetChanges(IReadOnlyList<AssetPatch> Added, IReadOnlyList
 /// <summary>Full semantic snapshots plus leaf-level differences. Binary data is represented only by hashes.</summary>
 public sealed record AssetPatch(string Name,
     [property: JsonConverter(typeof(OptionalJsonConverter))] JsonElement? Base, JsonElement Mod,
-    IReadOnlyList<FieldChange> Fields, CodeText? BaseCode = null, CodeText? ModCode = null);
+    IReadOnlyList<FieldChange> Fields, CodeText? BaseCode = null, CodeText? ModCode = null, int? OriginalIndex = null);
 
 /// <summary>A JSON Pointer and its old/new value; missing sides differ from JSON null.</summary>
 public sealed record FieldChange(string Path,
@@ -33,7 +37,7 @@ public sealed record CodeText(string Text, string Format, uint LocalsCount, usho
 public static class PatchJson
 {
     /// <summary>The current on-disk schema version.</summary>
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
 
     /// <summary>Writes deterministic JSON for an already ordered patch.</summary>
     public static string Serialize(ModPatch patch) => JsonSerializer.Serialize(patch, PatchJsonContext.Default.ModPatch) + "\n";
@@ -48,7 +52,7 @@ public static class PatchJson
             ?? throw new InvalidDataException("The patch is empty. Recompute it with --force.");
         if (patch.FormatVersion != FormatVersion)
             throw new InvalidDataException($"Patch format {patch.FormatVersion} is unsupported. Recompute it with --force.");
-        if (patch.Base is null || patch.Mod is null || patch.Changes is null || patch.Warnings is null
+        if (patch.Base is null || patch.Mod is null || patch.Changes is null || patch.Warnings is null || patch.BaseAssets is null || patch.References is null
             || string.IsNullOrWhiteSpace(patch.Base.Sha256) || string.IsNullOrWhiteSpace(patch.Mod.Sha256)
             || Families.Any(family => !patch.Changes.ContainsKey(family))
             || patch.Changes.Values.Any(x => x is null || x.Added is null || x.Changed is null || x.Removed is null

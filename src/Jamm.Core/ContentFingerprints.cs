@@ -115,13 +115,8 @@ public sealed class ContentFingerprints
     public string Sprite(UndertaleSprite sprite)
     {
         if (sprite.IsSpecialType && sprite.SSpriteType != UndertaleSprite.SpriteType.Normal)
-            return Unsupported(sprite.SSpriteType switch
-            {
-                UndertaleSprite.SpriteType.Spine => "Spine sprite",
-                UndertaleSprite.SpriteType.SWF => "SWF sprite",
-                _ => "sprite format"
-            }, Name(sprite));
-        string[] frames = sprite.Textures.Select(x => Region(x.Texture)).ToArray();
+            return SpecialSpriteContent(sprite)!;
+        string[] frames = sprite.Textures.Select(x => Region(x?.Texture)).ToArray();
         if (frames.FirstOrDefault(x => x.StartsWith("unsupported:", StringComparison.Ordinal)) is { } marker)
             return marker;
         return Of(new { sprite.Width, sprite.Height, sprite.OriginX, sprite.OriginY,
@@ -132,6 +127,23 @@ public sealed class ContentFingerprints
             Masks = sprite.CollisionMasks.Select(x => Hash(x.Data)).ToArray() });
     }
 
+    // These payloads are self-contained trees, unlike the surrounding resource graph.
+    // Only their digest enters a patch; incomplete/unknown payloads remain unresolved.
+    internal string? SpecialSpriteContent(UndertaleSprite sprite)
+    {
+        if (!sprite.IsSpecialType || sprite.SSpriteType == UndertaleSprite.SpriteType.Normal) return null;
+        if (sprite.SSpriteType == UndertaleSprite.SpriteType.SWF && sprite.YYSWF?.Timeline is { } timeline
+            && timeline.UsedItems is not null && timeline.Frames is not null && timeline.CollisionMasks is not null
+            && timeline.UsedItems.All(i => i.ItemType == UndertaleYYSWFItemType.ItemShape && i.ShapeData is not null
+                || i.ItemType == UndertaleYYSWFItemType.ItemBitmap && i.BitmapData is not null))
+            return Of(new { sprite.SWFVersion, sprite.YYSWF });
+        if (sprite.SSpriteType == UndertaleSprite.SpriteType.Spine && sprite.IsSpineSprite)
+            return Of(new { sprite.SpineVersion, sprite.SpineCacheVersion, sprite.SpineJSON, sprite.SpineAtlas,
+                sprite.SpineHasTextureData, Textures = sprite.SpineTextures.Select(t => new
+                { t.PageWidth, t.PageHeight, t.TextureEntryLength, ContentHash = t.TexBlob is null ? null : Hash(t.TexBlob) }).ToArray() });
+        return Unsupported($"{sprite.SSpriteType} sprite", Name(sprite));
+    }
+
     /// <summary>Snapshots supported families. YYC skips code-dependent families; strings use value hashes.</summary>
     public IReadOnlyDictionary<AssetKind, IReadOnlyList<AssetFingerprint>> Snapshot(UndertaleData data, bool skipBytecode = false)
     {
@@ -139,7 +151,7 @@ public sealed class ContentFingerprints
         decodedPixels = null;
         regions.Clear();
         pixels.Clear();
-        var fields = new AssetFields(warning ?? (_ => { }));
+        var fields = new AssetFields(warning ?? (_ => { }), data, this);
         skipBytecode |= data.IsYYC() || data.Code is null || data.Code.Count == 0 || data.UnsupportedBytecodeVersion;
         string Checked(AssetKind kind, string name, Func<string> fingerprint)
         {
@@ -166,11 +178,11 @@ public sealed class ContentFingerprints
             // Hash regions page-by-page before the named assets, so switching between sprites
             // never decodes an atlas repeatedly. Retain hashes, not decoded atlas images.
             var items = (data.Sprites ?? []).Where(x => !x.IsSpecialType || x.SSpriteType == UndertaleSprite.SpriteType.Normal)
-                .SelectMany(x => x.Textures).Select(x => x.Texture)
-                .Concat((data.Fonts ?? []).Select(x => x.Texture))
-                .Concat((data.Backgrounds ?? []).Select(x => x.Texture))
+                .SelectMany(x => x.Textures).Select(x => x?.Texture)
+                .Concat((data.Fonts ?? []).Select(x => x?.Texture))
+                .Concat((data.Backgrounds ?? []).Select(x => x?.Texture))
                 .Where(x => x is not null).Distinct();
-            foreach (var page in items.GroupBy(x => x.TexturePage))
+            foreach (var page in items.GroupBy(x => x!.TexturePage))
                 foreach (var item in page)
                     Checked(AssetKind.TexturePageItems, Name(item) ?? "<unnamed>", () => Region(item));
             decodedPage = null;
@@ -184,35 +196,18 @@ public sealed class ContentFingerprints
                 [AssetKind.Timelines] = Named(AssetKind.Timelines, data.Timelines, x => Of(fields.Snapshot(x))),
                 [AssetKind.Code] = Named(AssetKind.Code, data.Code, x => codeHashes[x]),
                 [AssetKind.Scripts] = Named(AssetKind.Scripts, data.Scripts, x => Of(new { Code = Name(x.Code), x.IsConstructor, Hash = CodeHash(x.Code) })),
-                [AssetKind.Sprites] = Named(AssetKind.Sprites, data.Sprites, Sprite),
-                [AssetKind.Objects] = Named(AssetKind.Objects, data.GameObjects, x => Of(new { Sprite = Name(x.Sprite), Parent = Name(x.ParentId),
-                    Mask = Name(x.TextureMaskId), x.Visible, x.Managed, x.Solid, x.Depth, x.Persistent,
-                    x.UsesPhysics, x.IsSensor, x.CollisionShape, x.Density, x.Restitution, x.Group,
-                    x.LinearDamping, x.AngularDamping, x.Friction, x.Awake, x.Kinematic,
-                    Vertices = x.PhysicsVertices.Select(v => new { v.X, v.Y }).ToArray(),
-                    Events = x.Events.Select((events, type) => new { Type = type,
-                        Entries = events.Select(e => new { e.EventSubtype,
-                            Code = e.Actions.Select(a => Name(a.CodeId)).ToArray() }).ToArray() }).ToArray() })),
-                [AssetKind.Rooms] = Named(AssetKind.Rooms, data.Rooms, Room),
-                [AssetKind.Sounds] = Named(AssetKind.Sounds, data.Sounds, x => Of(new { x.Flags, x.Effects, x.Volume, x.Pitch, x.Preload,
-                    Type = x.Type?.Content, File = x.File?.Content, x.GroupID,
-                    Audio = x.AudioFile is null ? null : Hash(x.AudioFile.Data) })),
+                [AssetKind.Sprites] = Named(AssetKind.Sprites, data.Sprites, x => Sprite(x) is { } hash && hash.StartsWith("unsupported:", StringComparison.Ordinal) ? hash : Of(fields.Snapshot(x))),
+                [AssetKind.Objects] = Named(AssetKind.Objects, data.GameObjects, x => Of(fields.Snapshot(x))),
+                [AssetKind.Rooms] = Named(AssetKind.Rooms, data.Rooms, x => Of(fields.Snapshot(x))),
+                [AssetKind.Sounds] = Named(AssetKind.Sounds, data.Sounds, x => Of(fields.Snapshot(x))),
                 [AssetKind.TexturePages] = (data.EmbeddedTextures ?? []).Select((x, i) =>
                     new AssetFingerprint(i.ToString(System.Globalization.CultureInfo.InvariantCulture), Checked(AssetKind.TexturePages, i.ToString(System.Globalization.CultureInfo.InvariantCulture), () => Page(x, data.IsVersionAtLeast(2022, 5))))).ToArray(),
                 [AssetKind.Strings] = (data.Strings ?? []).Select(x => { string hash = Of(x.Content);
                     return new AssetFingerprint($"sha256:{hash}", hash); }).ToArray(),
                 [AssetKind.Variables] = Named(AssetKind.Variables, data.Variables, x => Of(new { x.InstanceType })),
                 [AssetKind.Functions] = Named(AssetKind.Functions, data.Functions, x => Of(new { x.Classification })),
-                [AssetKind.Fonts] = Named(AssetKind.Fonts, data.Fonts, x => Of(new { DisplayName = x.DisplayName?.Content, x.EmSize,
-                    x.Bold, x.Italic, x.RangeStart, x.RangeEnd, x.Charset, x.AntiAliasing, x.ScaleX, x.ScaleY,
-                    x.Ascender, x.AscenderOffset, x.SDFSpread, x.LineHeight, Region = Region(x.Texture),
-                    Glyphs = x.Glyphs.Select(g => new { g.Character, g.SourceX, g.SourceY, g.SourceWidth,
-                        g.SourceHeight, g.Shift, g.Offset, Kerning = g.Kerning.Select(k => new { k.Character, k.ShiftModifier }).ToArray() }).ToArray() })),
-                [AssetKind.Backgrounds] = Named(AssetKind.Backgrounds, data.Backgrounds, x => Of(new { x.Transparent, x.Smooth, x.Preload,
-                    Region = Region(x.Texture), x.GMS2TileWidth, x.GMS2TileHeight, x.GMS2OutputBorderX,
-                    x.GMS2OutputBorderY, x.GMS2TileColumns, x.GMS2ItemsPerTileCount, x.GMS2TileCount,
-                    x.GMS2FrameLength, x.GMS2TileSeparationX, x.GMS2TileSeparationY,
-                    TileIds = x.GMS2TileIds.Select(t => t.ID).ToArray() }))
+                [AssetKind.Fonts] = Named(AssetKind.Fonts, data.Fonts, x => Of(fields.Snapshot(x))),
+                [AssetKind.Backgrounds] = Named(AssetKind.Backgrounds, data.Backgrounds, x => Of(fields.Snapshot(x)))
             }.Where(x => !skipBytecode || !x.Key.RequiresBytecode()).ToDictionary(x => x.Key, x => x.Value);
         }
         finally
@@ -261,14 +256,12 @@ public sealed class ContentFingerprints
         },
         UndertaleRoom.Layer.LayerAssetsData assets => new
         {
-            Tiles = assets.LegacyTiles?.Select(Tile).ToArray(),
+            Tiles = assets.LegacyTiles is null ? null : AssetFields.Tiles(assets.LegacyTiles),
             Sprites = assets.Sprites?.Select(SpriteInstance).ToArray(),
             NineSlices = assets.NineSlices?.Select(SpriteInstance).ToArray()
         },
         _ => null
     };
-
-    private static string Room(UndertaleRoom room) => Of(AssetFields.Room(room));
 
     private string Page(UndertaleEmbeddedTexture page, bool modernHeader)
     {

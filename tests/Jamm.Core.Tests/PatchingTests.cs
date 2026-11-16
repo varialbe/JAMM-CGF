@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Jamm.Core.Diffing;
+using Jamm.Core.Merging;
 using Jamm.Core.Patching;
 using UndertaleModLib;
 using UndertaleModLib.Models;
@@ -50,6 +51,66 @@ public class PatchingTests
             f => f.Path == "/events/0:0" && f.Mod is null);
     }
 
+    private static UndertaleSprite Swf(byte payload) => new()
+    {
+        Name = new("swf"), IsSpecialType = true, SSpriteType = UndertaleSprite.SpriteType.SWF, SWFVersion = 8,
+        YYSWF = new() { Version = 8, JPEGTable = [payload], Timeline = new() { UsedItems = [], Frames = [], CollisionMasks = [] } }
+    };
+
+    [Fact]
+    public void SwfPayloadChangesSurviveProjectionAndPortableRoundTrip()
+    {
+        using var a = Model(); using var b = Model(); using var c = Model();
+        a.Sprites.Add(Swf(1)); b.Sprites.Add(Swf(2)); c.Sprites.Add(Swf(3));
+        var patch = PatchBuilder.Create(a, b, Base, Mod);
+        var change = Assert.Single(patch.Changes["sprites"].Changed);
+        Assert.Contains(change.Fields, f => f.Path == "/specialContentHash");
+        var portable = PatchJson.Deserialize(PatchJson.Serialize(patch));
+        Assert.Equal(3, ConflictAnalyzer.Analyze([portable, PatchBuilder.Create(a, c, Base, Mod with { Name = "C" })]).ExitCode);
+        b.Sprites[0].YYSWF.JPEGTable = [1];
+        Assert.Empty(PatchBuilder.Create(a, b, Base, Mod).Changes["sprites"].Changed);
+        b.Sprites[0].YYSWF.Timeline.UsedItems.Add(new()
+        {
+            ItemType = UndertaleYYSWFItemType.ItemBitmap,
+            BitmapData = new() { Width = 1, Height = 1, ImageData = [42] }
+        });
+        Assert.Single(PatchBuilder.Create(a, b, Base, Mod).Changes["sprites"].Changed);
+    }
+
+    [Fact]
+    public void UnknownSpritePayloadsRemainExplicitUnresolvedChangesEvenWithEqualMetadata()
+    {
+        using var a = Model(); using var b = Model();
+        var first = Swf(1); var second = Swf(2);
+        first.YYSWF.Timeline.UsedItems.Add(new() { ItemType = UndertaleYYSWFItemType.ItemInvalid });
+        second.YYSWF.Timeline.UsedItems.Add(new() { ItemType = UndertaleYYSWFItemType.ItemInvalid });
+        a.Sprites.Add(first); b.Sprites.Add(second);
+        var patch = PatchJson.Deserialize(PatchJson.Serialize(PatchBuilder.Create(a, b, Base, Mod)));
+        var asset = Assert.Single(patch.Changes["sprites"].Changed);
+        Assert.StartsWith("unsupported:", asset.Mod.GetProperty("specialContentHash").GetString());
+        using var unchanged = Model();
+        var empty = PatchBuilder.Create(unchanged, unchanged, Base, Mod with { Name = "Other" });
+        var report = ConflictAnalyzer.Analyze([patch, empty]);
+        Assert.Equal(3, report.ExitCode);
+        Assert.Contains(report.Findings, f => f.Asset == "swf" && f.Kind == "binary" && f.Severity == "CONFLICT");
+    }
+
+    [Fact]
+    public void SpinePayloadEditsAreHashedWithoutExportingTheirContent()
+    {
+        using var a = Model(); using var b = Model();
+        foreach (var data in new[] { a, b })
+            data.Sprites.Add(new() { Name = new("spine"), IsSpecialType = true, SSpriteType = UndertaleSprite.SpriteType.Spine,
+                SpineVersion = 2, SpineJSON = "private-json", SpineAtlas = "private-atlas",
+                SpineTextures = [new() { PageWidth = 1, PageHeight = 1, TexBlob = [1] }] });
+        Assert.Empty(PatchBuilder.Create(a, b, Base, Mod).Changes["sprites"].Changed);
+        b.Sprites[0].SpineTextures[0].TexBlob = [2];
+        var patch = PatchBuilder.Create(a, b, Base, Mod);
+        Assert.Single(patch.Changes["sprites"].Changed);
+        Assert.DoesNotContain("private-json", PatchJson.Serialize(patch));
+        Assert.DoesNotContain("private-atlas", PatchJson.Serialize(patch));
+    }
+
     [Fact]
     public void StringsAreValuesAndVariablesIncludeInstanceType()
     {
@@ -97,7 +158,7 @@ public class PatchingTests
         Assert.Equal(json, PatchJson.Serialize(second));
         Assert.Equal(json, PatchJson.Serialize(PatchJson.Deserialize(json)));
         Assert.DoesNotContain("Undertale", json);
-        Assert.Throws<InvalidDataException>(() => PatchJson.Deserialize(json.Replace("\"formatVersion\": 1", "\"formatVersion\": 99")));
+        Assert.Throws<InvalidDataException>(() => PatchJson.Deserialize(json.Replace($"\"formatVersion\": {PatchJson.FormatVersion}", "\"formatVersion\": 99")));
         Assert.Throws<InvalidDataException>(() => PatchJson.Deserialize("{}"));
     }
 
@@ -136,6 +197,10 @@ public class PatchingTests
         var change = Assert.Single(FieldDiff.Compare(before, after));
         Assert.Equal("/a~1b~0", change.Path);
         Assert.Equal(JsonValueKind.Null, change.Base!.Value.ValueKind); Assert.Null(change.Mod);
+        var explicitNull = JsonSerializer.Deserialize<ModValue>("{\"Mod\":\"A\",\"Value\":null}")!;
+        var absent = JsonSerializer.Deserialize<ModValue>("{\"Mod\":\"B\"}")!;
+        Assert.Equal(JsonValueKind.Null, explicitNull.Value!.Value.ValueKind);
+        Assert.Null(absent.Value);
     }
 
     [Fact]
@@ -201,7 +266,7 @@ public class PatchingTests
         b.Rooms[0].Backgrounds[0].Enabled = true;
         var patch = PatchBuilder.Create(a, b, Base, Mod);
         Assert.Contains(Assert.Single(patch.Changes["paths"].Changed).Fields, x => x.Path == "/points/0/x");
-        Assert.Contains(Assert.Single(patch.Changes["timelines"].Changed).Fields, x => x.Path == "/moments/0/step");
+        Assert.Contains(Assert.Single(patch.Changes["timelines"].Changed).Fields, x => x.Path == "/moments/2");
         var room = Assert.Single(patch.Changes["rooms"].Changed);
         Assert.Contains(room.Fields, x => x.Path == "/views/0/viewWidth");
         Assert.Contains(room.Fields, x => x.Path == "/backgrounds/0/enabled");
@@ -253,9 +318,14 @@ public class PatchingTests
             Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath, "--show", "old_object"]));
             Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath, "--name", "Renamed"]));
             Assert.Equal("Renamed", PatchJson.Deserialize(File.ReadAllText(patchPath)).Mod.Name);
+            Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath, "--verbose"]));
+            Assert.Equal("mod", PatchJson.Deserialize(File.ReadAllText(patchPath)).Mod.Name);
             Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath, "--force"]));
             var forced = PatchJson.Deserialize(File.ReadAllText(patchPath));
             Assert.Equal(first, PatchJson.Serialize(forced with { CreatedUtc = PatchJson.Deserialize(first).CreatedUtc }));
+            File.WriteAllText(patchPath, PatchJson.Serialize(forced with { FormatVersion = 1 }));
+            Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath]));
+            Assert.Equal(PatchJson.FormatVersion, PatchJson.Deserialize(File.ReadAllText(patchPath)).FormatVersion);
             File.WriteAllText(patchPath, "invalid JSON");
             Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath]));
             Assert.Equal(original, File.ReadAllBytes(basePath)); Assert.Equal(mod, File.ReadAllBytes(modPath));
