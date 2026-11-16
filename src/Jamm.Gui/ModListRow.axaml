@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Jamm.Gui.ModListRow" KeyboardNavigation.TabNavigation="Continue">
+  <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+    <StackPanel>
+      <Grid MinHeight="48">
+        <Button x:Name="HeaderButton" Background="Transparent" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12,8,76,8" Click="HeaderClick" KeyDown="HeaderKeyDown" AutomationProperties.Name="{Binding Name}">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Name}" TextWrapping="Wrap"/><TextBlock Text="● pending" Foreground="#D6A500" FontSize="12" IsVisible="{Binding IsPending}"/></StackPanel>
+            <TextBlock Grid.Column="1" x:Name="Chevron" Text="⌄" VerticalAlignment="Center"/>
+          </Grid>
+        </Button>
+        <ToggleSwitch x:Name="EnableSwitch" Width="48" OnContent="" OffContent="" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" MinWidth="0" IsChecked="{Binding Enabled, Mode=TwoWay}" AutomationProperties.Name="{Binding EnableName}"/>
+      </Grid>
+      <StackPanel x:Name="Details" IsVisible="False" Spacing="6" Margin="12,6,12,12">
+        <Grid ColumnDefinitions="36,*" ColumnSpacing="8">
+          <Border Width="36" Height="36" CornerRadius="6" Background="#516579"><Grid><TextBlock Text="◈" Foreground="White" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Icon}" Stretch="UniformToFill"/></Grid></Border>
+          <TextBlock Grid.Column="1" Text="{Binding Badge}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+        </Grid>
+        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
+        <TextBlock Text="{Binding Metadata}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Classes="muted"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>
