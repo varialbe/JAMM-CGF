@@ -3,6 +3,14 @@ namespace Jamm.Core.Management;
 /// <summary>Persistent paths, selected profile and Wine/Proton settings.</summary>
 public sealed record ManagerConfig
 {
+    /// <summary>Allows anonymous read-only shared compatibility lookups.</summary>
+    public bool UseSharedCompatibilityResults { get; init; } = true;
+    /// <summary>Shows expert controls when explicitly enabled.</summary>
+    public bool AdvancedMode { get; init; }
+    /// <summary>Includes previews and unsupported download sources in Browse.</summary>
+    public bool ShowModsWithoutDownload { get; init; }
+    /// <summary>Game copy whose concrete replacement and backup paths were approved.</summary>
+    public string? ConfirmedInstallDirectory { get; init; }
     /// <summary>Read-only merge ancestor, preferably outside the installed game.</summary>
     public string? Base { get; init; }
     /// <summary>Legacy game directory containing the executable and installed archive.</summary>
@@ -20,7 +28,7 @@ public sealed record ManagerConfig
 /// <summary>Wine runner settings.</summary>
 public sealed record WineSettings
 {
-    /// <summary>Either wine, proton or proton-flatpak.</summary>
+    /// <summary>Either direct (Windows), wine, proton or proton-flatpak.</summary>
     public string Mode { get; init; } = "wine";
     /// <summary>Optional absolute Wine prefix.</summary>
     public string? Prefix { get; init; }
@@ -48,7 +56,14 @@ public sealed record SteamSettings
 
 /// <summary>Installed library metadata, including the exact patch ancestor and source build.</summary>
 public sealed record ManagedMod(string Id, string Name, string SourceFileName, string Sha256,
-    DateTimeOffset AddedUtc, string BaseSha256, ulong Gen8Timestamp, string GmVersion, byte Bytecode);
+    DateTimeOffset AddedUtc, string BaseSha256, ulong Gen8Timestamp, string GmVersion, byte Bytecode)
+{
+    /// <summary>Exact-byte online provenance; absent in older/manual imports. Hashes identify bytes, not trusted authorship.</summary>
+    public ModOrigin[] Origins { get; init; } = [];
+}
+
+/// <summary>Public source identity recorded only after successful local import/hash deduplication.</summary>
+public sealed record ModOrigin(string Catalog, string ModId, string SourcePage, string Provider, string FileId, string? ReleaseId, string? Version);
 
 /// <summary>Ordered library IDs and reusable Phase 3 resolution choices.</summary>
 public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, string> Resolutions)

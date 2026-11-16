@@ -16,11 +16,12 @@ public static class ArchiveVerifier
     /// <summary>Verifies an archive; throws a contextual error if a load, reference or code check fails.</summary>
     public static VerificationResult Verify(string path, GameInspection? expected = null,
         IReadOnlyList<PlannedAsset>? plan = null, Action<string>? progress = null,
-        IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>>? expectedReferences = null, CancellationToken cancellationToken = default)
+        IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>>? expectedReferences = null, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
     {
+        options ??= AnalysisOptions.Default;
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Invoke($"Verifying {Path.GetFileName(path)}: reload, references, decompile and compile");
-        using var loaded = GameFileLoader.Load(path);
+        using var loaded = GameFileLoader.Load(path, cancellationToken: cancellationToken, options: options);
         if (expected is not null) PatchBuilder.Validate(expected, loaded.Inspection);
         if (loaded.Inspection.IsYyc || !loaded.Inspection.BytecodeSupported)
             throw new InvalidDataException($"Cannot verify '{Path.GetFileName(path)}': VM bytecode is unavailable or unsupported. Use the legacy 2023 build.");
@@ -37,13 +38,14 @@ public static class ArchiveVerifier
         List<string> warnings = [.. loaded.Warnings];
         ValidateReferences(loaded.Data, warnings.Add);
         var names = SemanticReferences.Names(loaded.Data);
-        var reader = new CodeDecompiler(loaded.Data, Path.GetFileName(path), warnings.Add, AssetSymbols.Ambiguous([names]));
+        var entries = CodeDecompiler.ReadAll(loaded.Data, Path.GetFileName(path), warnings.Add, AssetSymbols.Ambiguous([names]), options,
+            message => { cancellationToken.ThrowIfCancellationRequested(); progress?.Invoke(message); });
         var compiler = new CompileGroup(loaded.Data);
         int count = 0;
         foreach (var code in loaded.Data.Code.Where(c => c.ParentEntry is null))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var text = reader.Read(code);
+            var text = entries[code.Name.Content];
             if (text.Format != "gml") throw new InvalidDataException($"Verification failed for '{Path.GetFileName(path)}', code '{code.Name.Content}': GML decompilation failed. No verified build is available.");
             if (expectedReferences is not null)
             {
@@ -57,16 +59,18 @@ public static class ArchiveVerifier
         return new(loaded.Inspection, count, warnings, expectedReferences?.Count ?? 0);
     }
 
-    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default)
+    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
     {
-        var reader = new CodeDecompiler(data, "merged archive", _ => { }, AssetSymbols.Ambiguous([SemanticReferences.Names(data)]));
+        options ??= AnalysisOptions.Default;
+        var entries = CodeDecompiler.ReadAll(data, "merged archive", _ => { }, AssetSymbols.Ambiguous([SemanticReferences.Names(data)]), options,
+            _ => cancellationToken.ThrowIfCancellationRequested());
         var names = SemanticReferences.Names(data);
         foreach (var code in data.Code.Where(c => c.ParentEntry is null))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!expected.TryGetValue(code.Name.Content, out var references))
                 throw new InvalidDataException($"Missing semantic expectations for code '{code.Name.Content}'. No output was published.");
-            var text = reader.Read(code);
+            var text = entries[code.Name.Content];
             if (text.Format != "gml") throw new InvalidDataException($"Cannot verify references in code '{code.Name.Content}': decompilation failed.");
             SemanticReferences.Verify(code.Name.Content, references, SemanticReferences.Resolve(text.Text, code.Name.Content, names));
         }
@@ -89,6 +93,7 @@ public static class ArchiveVerifier
             .Concat(data.AudioGroups ?? []).Concat(data.CodeLocals ?? []).ToArray();
         resources.UnionWith(roots);
         HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
+        HashSet<UndertaleTexturePageItem> referencedItems = new(ReferenceEqualityComparer.Instance);
         foreach (object root in roots) Visit(root, root is UndertaleNamedResource named ? named.Name?.Content ?? root.GetType().Name : root.GetType().Name, true);
         Visit(data.GeneralInfo, "GEN8");
         Visit(data.GlobalInitScripts, "global initialization scripts");
@@ -97,7 +102,12 @@ public static class ArchiveVerifier
         {
             if (page.TexturePage is null)
             {
-                if (page.SourceWidth != 0 || page.SourceHeight != 0) throw new InvalidDataException($"Texture item '{page.Name?.Content}' has pixels but no embedded page.");
+                if (page.SourceWidth != 0 || page.SourceHeight != 0)
+                {
+                    if (referencedItems.Contains(page))
+                        throw new InvalidDataException($"Texture item '{page.Name?.Content}' is referenced but has pixels and no embedded page. JAMM cannot safely reconstruct its texture; choose another mod while support is investigated.");
+                    warning?.Invoke($"Unused texture item '{page.Name?.Content}' has pixels but no embedded page; preserved as-is.");
+                }
                 continue; // Empty null page items are valid placeholders in the supplied mods.
             }
             if (!resources.Contains(page.TexturePage))
@@ -112,6 +122,7 @@ public static class ArchiveVerifier
                     throw new InvalidDataException($"Object '{obj.Name.Content}' has an invalid collision object index {collision.EventSubtype}.");
         void Visit(object? value, string context, bool root = false)
         {
+            if (!root && value is UndertaleTexturePageItem textureItem) referencedItems.Add(textureItem);
             if (value is null || value is string || value is Delegate || value.GetType().IsValueType) return;
             if (!root && (value is UndertaleNamedResource || value is UndertaleString))
             {

@@ -472,6 +472,7 @@ public sealed class ManagementTests : IDisposable
     private static void WriteArchive(string path, short value)
     {
         using var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Timestamp = 1692207312; // Matching fixtures must not depend on the current second.
         data.GeneralInfo.Major = 1; data.GeneralInfo.Minor = 0; data.GeneralInfo.Release = 0; data.GeneralInfo.Build = 1773;
         var code = UndertaleCode.CreateEmptyEntry(data, "synthetic");
         var compiler = new CompileGroup(data);

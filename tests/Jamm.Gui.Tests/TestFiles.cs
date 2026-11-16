@@ -28,6 +28,7 @@ internal sealed class TestFiles : IDisposable
     private static void Write(string path, string text, Action<UndertaleData>? customize)
     {
         using var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Timestamp = 1692207312;
         data.GeneralInfo.Major = 1; data.GeneralInfo.Minor = 0; data.GeneralInfo.Release = 0; data.GeneralInfo.Build = 1773;
         var code = UndertaleCode.CreateEmptyEntry(data, "example_code");
         var compiler = new CompileGroup(data); compiler.QueueCodeReplace(code, text);

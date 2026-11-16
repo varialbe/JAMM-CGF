@@ -40,9 +40,18 @@ curl -fsSL https://raw.githubusercontent.com/varialbe/JAMM-CGF/main/scripts/inst
 Invoke-WebRequest https://raw.githubusercontent.com/varialbe/JAMM-CGF/main/scripts/install.ps1 -UseBasicParsing -OutFile "$env:TEMP\jamm-install.ps1"; if ($?) { powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\jamm-install.ps1" }
 ```
 
-Open **JAMM-CGF** from the applications/Start menu, configure the clean base and
-modded game folder in Settings, add mods, then create a profile and Check/Install.
+Open **JAMM-CGF** from the applications/Start menu. First-run setup finds your legacy
+game (Steam libraries, moved depot downloads, other drives) and creates a separate
+modded copy with one click. Then add mods or download them in **Browse mods**, switch
+them on or off, and press **Play**.
 A Windows `.exe` installer and an Ubuntu `.deb` package are planned.
+
+## Browse mods
+
+Download mods from the [Litterbox](https://litterbox.fyi) catalog inside the app. Each
+card shows what the mod adds (counted from the file, not copied from its description)
+and a compatibility icon: green check, yellow question mark or red cross, with the
+reason one click away. [More about browsing and the shared compatibility results](docs/user-guide.md#browse-mods).
 
 ## Example mods
 

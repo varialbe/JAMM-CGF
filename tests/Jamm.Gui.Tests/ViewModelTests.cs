@@ -138,7 +138,7 @@ public sealed class ViewModelTests
     [Fact]
     public async Task BusyDisablesWritesAndCancellationSurfacesWithoutStackTrace()
     {
-        using var files = new TestFiles(false); var vm = new MainViewModel(files.Store);
+        using var files = new TestFiles(false); var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
         var started = new TaskCompletionSource(); var release = new TaskCompletionSource();
         Task operation = vm.RunAsync("Long test", async (token, _) => { started.SetResult(); await release.Task; token.ThrowIfCancellationRequested(); });
         await started.Task;
@@ -146,7 +146,7 @@ public sealed class ViewModelTests
         vm.Cancel(); release.SetResult(); await operation;
         Assert.False(vm.IsBusy); Assert.True(vm.CanEdit); Assert.Contains("Cancelled", vm.Log);
         await vm.AddAsync([Path.Combine(files.Root, "missing.win")]);
-        Assert.Contains("Could not complete", vm.Status); Assert.DoesNotContain(" at Jamm.", vm.Log);
+        Assert.True(vm.SetupOpen); Assert.True(vm.NeedsSetup); Assert.Contains("legacy", vm.SetupMessage); Assert.DoesNotContain(" at Jamm.", vm.Log);
     }
 
     [Fact]

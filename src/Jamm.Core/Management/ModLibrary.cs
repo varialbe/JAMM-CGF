@@ -25,6 +25,9 @@ public sealed class ModLibrary(ManagerStore store)
         .Where(p => !Path.GetFileName(p).StartsWith('.')).Order(StringComparer.Ordinal)
         .Select(p => ReadMod(Path.GetFileName(p))).ToArray();
 
+    /// <summary>Reads library identities and provenance without loading game archives.</summary>
+    public IReadOnlyList<ManagedMod> Metadata() => All();
+
     private ManagedMod ReadMod(string id)
     {
         ManagerStore.Name(id);
@@ -47,7 +50,7 @@ public sealed class ModLibrary(ManagerStore store)
     }
 
     /// <summary>Copies a .win or the single nested data.win in a zip, then immediately patches against the configured base.</summary>
-    public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default, ModOrigin? origin = null)
     {
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
@@ -64,7 +67,7 @@ public sealed class ModLibrary(ManagerStore store)
         string? publishedPatch = null;
         try
         {
-            if (source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(source, copy);
+            if (source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(source, copy, cancellationToken);
             else if (source.EndsWith(".win", StringComparison.OrdinalIgnoreCase))
             {
                 using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -79,6 +82,12 @@ public sealed class ModLibrary(ManagerStore store)
                 Patch(existing);
                 if (existing.BaseSha256 != BuildFiles.Hash(basePath))
                     throw new InvalidDataException($"'{existing.Name}' was patched against another base. Restore that base configuration, or remove this mod from its profiles and re-add it.");
+                if (origin is not null && !existing.Origins.Contains(origin))
+                {
+                    existing = existing with { Origins = [.. existing.Origins, origin] };
+                    cancellationToken.ThrowIfCancellationRequested();
+                    store.Write(store.Path("mods", existing.Id, "mod.json"), existing);
+                }
                 return new(existing, ["This exact archive is already in the library; its existing name is retained."], true);
             }
             if (All().Any(m => m.Name == displayName)) throw new ArgumentException($"Mod name '{displayName}' already exists. Use --name with a unique name.");
@@ -86,7 +95,7 @@ public sealed class ModLibrary(ManagerStore store)
             using var mod = GameFileLoader.Load(copy, progress);
             List<string> notices = CompatibilityWarnings(original.Inspection, mod.Inspection).ToList();
             ModPatch patch;
-            try { patch = PatchBuilder.Create(original, mod, displayName, progress); }
+            try { patch = PatchBuilder.Create(original, mod, displayName, progress, AnalysisOptions.Default with { DataDirectory = store.Root }); }
             catch (Exception ex) when (ex is ArgumentException or NotComparableException or InvalidDataException)
             { throw new InvalidDataException($"Cannot add '{sourceName}': {string.Join(" ", notices)} {ex.Message} Choose a compatible legacy VM mod and base.", ex); }
             // Patch identity describes the .win bytes; metadata separately retains the supplied zip filename.
@@ -94,7 +103,7 @@ public sealed class ModLibrary(ManagerStore store)
             if (BuildFiles.Hash(basePath) != patch.Base.Sha256 || hash != patch.Mod.Sha256)
                 throw new IOException("An input changed during import. Retry with stable copies.");
             var entry = new ManagedMod(hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
-                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode);
+                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode) { Origins = origin is null ? [] : [origin] };
             store.Write(store.Path("mods", Path.GetFileName(stage), "mod.json"), entry);
             string patchPath = PatchPath(entry);
             if (File.Exists(patchPath)) throw new IOException("An orphaned patch already exists for this mod. Remove it from the data directory and retry.");
@@ -151,12 +160,18 @@ public sealed class ModLibrary(ManagerStore store)
         Directory.Delete(directory, true);
     }
 
-    private static void CopyZip(string source, string destination)
+    internal static void CopyZip(string source, string destination, CancellationToken cancellationToken)
     {
         using var zip = ZipFile.OpenRead(source);
         List<ZipArchiveEntry> candidates = [];
+        long expanded = 0;
+        const long limit = 512L * 1048576;
+        if (zip.Entries.Count > 4096) throw new InvalidDataException("ZIP has too many entries. Choose a smaller mod archive.");
         foreach (var entry in zip.Entries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry.Length > limit - expanded) throw new InvalidDataException("ZIP expanded data exceeds the 512 MB safety limit.");
+            expanded += entry.Length;
             string normalized = entry.FullName.Replace('\\', '/');
             if (normalized.StartsWith('/') || normalized.Contains(':') || normalized.Split('/').Any(p => p == "..")
                 || (entry.ExternalAttributes >> 16 & 0xF000) == 0xA000)
@@ -166,7 +181,14 @@ public sealed class ModLibrary(ManagerStore store)
         if (candidates.Count != 1) throw new InvalidDataException($"'{Path.GetFileName(source)}' must contain exactly one data.win (nested folders are supported); found {candidates.Count}.");
         using var input = candidates[0].Open();
         using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write);
-        input.CopyTo(output);
+        byte[] buffer = new byte[65536]; long copied = 0;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int count = input.Read(buffer); if (count == 0) break; copied += count;
+            if (copied > limit) throw new InvalidDataException("Expanded data.win exceeds the 512 MB safety limit.");
+            output.Write(buffer, 0, count);
+        }
     }
 
     private static IEnumerable<string> CompatibilityWarnings(GameInspection original, GameInspection mod)

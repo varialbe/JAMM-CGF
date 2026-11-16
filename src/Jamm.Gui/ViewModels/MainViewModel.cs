@@ -1,15 +1,17 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Jamm.Core.Building;
+using Jamm.Core.Browsing;
 using Jamm.Core.Management;
 using Jamm.Core.Merging;
 
 namespace Jamm.Gui.ViewModels;
 
 /// <summary>Desktop workflow over the shared Core services. All archive operations run on worker threads.</summary>
-public sealed class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject
 {
     private readonly ManagerStore store;
+    private readonly Func<CancellationToken, IProgress<string>, DetectedGame[]> searchGames;
     private CancellationTokenSource? cancellation;
     private bool busy, loading, cancellable;
     private string status = "Ready", log = "", gameStatus = "Choose a legacy game folder in Settings.", validation = "Choose a legacy base data.win.";
@@ -18,7 +20,8 @@ public sealed class MainViewModel : ObservableObject
     private bool updatingConflictChoices;
     private IReadOnlyDictionary<string, string> conflictResolutions = new Dictionary<string, string>();
     /// <summary>Creates a manager model without opening game archives on the calling thread.</summary>
-    public MainViewModel(ManagerStore store) { this.store = store; }
+    public MainViewModel(ManagerStore store, ModHttp? browseHttp = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null, Func<CancellationToken, IProgress<string>, DetectedGame[]>? gameSearch = null)
+    { this.store = store; searchGames = gameSearch ?? ((token, progress) => SteamGameDetection.Detect(token, progress).Concat(GameFolderSearch.Scan(GameFolderSearch.Roots(), token, progress)).DistinctBy(g => g.Archive).ToArray()); Browse = new BrowseViewModel(this, store, browseHttp, catalog, resolver); }
     /// <summary>Current library rows.</summary>
     public ObservableCollection<ModRow> Mods { get; } = [];
     /// <summary>Active profile order, including disabled mods.</summary>
@@ -28,7 +31,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Grouped findings in severity order.</summary>
     public ObservableCollection<ConflictRow> Conflicts { get; } = [];
     /// <summary>Busy state excludes every mutating operation.</summary>
-    public bool IsBusy { get => busy; private set { SetProperty(ref busy, value); NotifyButtons(); } }
+    public bool IsBusy { get => busy; private set { SetProperty(ref busy, value); NotifyButtons(); Browse?.NotifyActions(); } }
     /// <summary>Enables lightweight editing while idle.</summary>
     public bool CanEdit => !IsBusy;
     /// <summary>Enables order editing once a profile has been selected.</summary>
@@ -38,7 +41,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Installation requires a known game and an enabled selection.</summary>
     public bool CanInstall => CanCheck && knownGame;
     /// <summary>Play uses the same checked installation workflow.</summary>
-    public bool CanPlay => CanInstall;
+    public bool CanPlay => !IsBusy && SelectedProfile is not null && knownGame;
     /// <summary>Restore is available only for a recognized game with a backup.</summary>
     public bool CanRestore => !IsBusy && knownGame && canRestore;
     /// <summary>Cancellation is unavailable during the short atomic installation/restore stage.</summary>
@@ -60,9 +63,30 @@ public sealed class MainViewModel : ObservableObject
 
     private void NotifyButtons()
     {
-        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel) }) OnPropertyChanged(property);
+        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy) }) OnPropertyChanged(property);
     }
-    private void Message(string message) { Status = message; Log += message + Environment.NewLine; }
+    private double operationProgress;
+    private bool operationIndeterminate = true;
+    private string operationStep = "Ready";
+    /// <summary>Current plain-language processing step.</summary>
+    public string OperationStep { get => operationStep; private set => SetProperty(ref operationStep, value); }
+    /// <summary>Completed fraction within the current step.</summary>
+    public double OperationProgress { get => operationProgress; private set => SetProperty(ref operationProgress, value); }
+    /// <summary>True when this step has no trustworthy count.</summary>
+    public bool OperationIndeterminate { get => operationIndeterminate; private set => SetProperty(ref operationIndeterminate, value); }
+    internal void ReportProcessingStep(string message) => Message(message);
+    internal void UpdateOperation(string message)
+    {
+        var count = System.Text.RegularExpressions.Regex.Match(message, @"(\d[\d,]*)/(\d[\d,]*)");
+        OperationIndeterminate = !count.Success;
+        OperationProgress = count.Success && double.TryParse(count.Groups[2].Value.Replace(",", ""), out double total) && total > 0
+            ? 100 * double.Parse(count.Groups[1].Value.Replace(",", ""), System.Globalization.CultureInfo.InvariantCulture) / total : 0;
+        OperationStep = message.StartsWith("Fingerprinting") ? "Reading game content" : message.StartsWith("Decompiling") || message.StartsWith("Resolving")
+            ? "Reading game code" : message.StartsWith("Compiling") ? "Building game code" : message.Contains("verification", StringComparison.OrdinalIgnoreCase)
+            || message.StartsWith("Verifying") ? "Verifying the merged game" : message.StartsWith("Writing") ? "Saving merged game" : message;
+        if (count.Success) OperationStep += " · " + count.Value;
+    }
+    private void Message(string message) { Status = message; Log += message + Environment.NewLine; UpdateOperation(message); }
 
     /// <summary>Runs one serialized operation, surfaces a friendly error, and restores button states on every exit.</summary>
     public async Task RunAsync(string label, Func<CancellationToken, IProgress<string>, Task> action, bool supportsCancellation = true)
@@ -75,13 +99,22 @@ public sealed class MainViewModel : ObservableObject
         var progress = new Progress<string>(Message);
         try { await action(cancellation.Token, progress); if (Status == label) Message(label + " complete."); }
         catch (OperationCanceledException) { Message("Cancelled. The game was not replaced."); }
-        catch (Exception ex) { Message("Could not complete " + label.ToLowerInvariant() + ": " + ex.Message); }
+        catch (Exception ex) { ReportError("Could not complete " + label.ToLowerInvariant() + ": " + ex.Message + " Check the selected file or folder and try again."); }
         finally { cancellation.Dispose(); cancellation = null; IsBusy = false; }
     }
     /// <summary>Requests cancellation at the next safe Core checkpoint.</summary>
     public void Cancel() { if (CanCancel) { cancellation?.Cancel(); Status = "Cancelling at the next safe checkpoint…"; } }
     /// <summary>Loads library and profiles, then recognizes the configured installation.</summary>
-    public Task InitializeAsync() => RunAsync("Loading library", async (_, _) => await ReloadAsync());
+    public Task InitializeAsync() => RunAsync("Loading library", async (token, _) =>
+    {
+        await ReloadAsync();
+        if (NeedsSetup) await SearchGamesInternalAsync(token, new Progress<string>(m => SetupMessage = m));
+    });
+    /// <summary>Persisted expert-mode preference.</summary>
+    public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); } }
+    /// <summary>Displays operation errors in the desktop shell as well as the status line.</summary>
+    public event Action<string>? Error;
+    internal void ReportError(string text) { Message(text); Error?.Invoke(text); }
 
     /// <summary>Guards configuration reads and settings construction, including first-run setup.</summary>
     public async Task OpenSettingsAsync(Func<Task> show, bool onlyWhenUnconfigured = false)
@@ -98,12 +131,30 @@ public sealed class MainViewModel : ObservableObject
     private async Task ReloadAsync()
     {
         var data = await Task.Run(() => (Mods: new ModLibrary(store).List(), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
+        var summaries = await Task.Run(() => data.Mods.ToDictionary(m => m.Mod.Id, m =>
+        {
+            try
+            {
+                var patch = new ModLibrary(store).Patch(m.Mod);
+                string factsPath = Path.Combine(store.Root, "analysis", $"{m.Mod.Sha256}-{m.Mod.BaseSha256}-{ModFactAnalyzer.Version}.json");
+                var facts = File.Exists(factsPath) ? System.Text.Json.JsonSerializer.Deserialize<ModFacts>(File.ReadAllText(factsPath),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) : null;
+                string[] adds = facts?.Adds ?? ModFactAnalyzer.Extract(patch, []);
+                string verdict = facts is null ? "? " + m.Compatibility : (facts.Compatibility == "Compatible" ? "✓ " : facts.Compatibility == "Incompatible" ? "✕ " : "? ") + facts.Compatibility + ": " + facts.Reason;
+                return (adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", adds)) + "\nSource: "
+                    + (m.Mod.Origins.FirstOrDefault()?.SourcePage ?? m.Mod.SourceFileName) + "\nCompatibility: " + verdict;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { return "Summary unavailable: " + ex.Message; }
+        }));
+        usableBase = data.Config.Base is { } basePath && await Task.Run(() => SteamGameDetection.Inspect(basePath).Usable);
         loading = true;
         try
         {
             Mods.Clear(); Profiles.Clear(); Order.Clear(); Conflicts.Clear();
             foreach (var m in data.Mods)
-                Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length));
+                Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length)
+                    { Summary = summaries[m.Mod.Id], CatalogId = m.Mod.Origins.FirstOrDefault(o => o.Catalog == "litterbox")?.ModId });
+            RefreshLocalIcons();
             foreach (var p in data.Profiles) Profiles.Add(p.Name);
             SelectedProfile = data.Config.ActiveProfile;
             var profile = data.Profiles.FirstOrDefault(p => p.Name == SelectedProfile);
@@ -120,12 +171,24 @@ public sealed class MainViewModel : ObservableObject
                 row.PropertyChanged += async (_, e) => { if (e.PropertyName == nameof(ModRow.Enabled) && !loading && !IsBusy) await SaveOrderAsync(); };
             }
             knownGame = data.State.Known; canRestore = data.State.CanRestore; GameStatus = data.State.Message;
-            OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
+            OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(NeedsSetup)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         }
         finally { loading = false; }
+        await Browse.UpdateMembershipAsync();
+        await Browse.LoadLocalIconsAsync(cancellation?.Token ?? CancellationToken.None);
+    }
+    internal void RefreshLocalIcons()
+    {
+        foreach (var row in Mods) row.Icon = Browse.CatalogIcon(row.CatalogId);
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
-    public Task AddAsync(IEnumerable<string> paths) => RunAsync("Adding mods", async (token, progress) =>
+    public Task AddAsync(IEnumerable<string> paths)
+    {
+        var savedPaths = paths.ToArray();
+        if (savedPaths.Length == 0) return Task.CompletedTask;
+        return AfterSetupAsync(() => AddReadyAsync(savedPaths));
+    }
+    private Task AddReadyAsync(IEnumerable<string> paths) => RunAsync("Adding mods", async (token, progress) =>
     {
         foreach (string path in paths)
         {
@@ -137,7 +200,7 @@ public sealed class MainViewModel : ObservableObject
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Message($"Could not complete adding '{path}': {ex.Message}");
+                ReportError($"Could not add mod '{path}': {ex.Message} Choose a legacy .win or supported .zip mod and try again.");
             }
         }
         await ReloadAsync();
@@ -159,6 +222,26 @@ public sealed class MainViewModel : ObservableObject
         var ids = Order.Select(m => m.Id).ToArray(); var disabled = Order.Where(m => !m.Enabled).Select(m => m.Id).ToArray();
         await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile, ids, disabled));
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons(); Message("Load order saved. Check again to review conflicts.");
+    }, false);
+    /// <summary>Toggles a library mod, creating the default profile when needed.</summary>
+    public Task ToggleModAsync(string id) => RunAsync("Updating enabled mods", async (_, _) =>
+    {
+        await Task.Run(() =>
+        {
+            var profiles = new ProfileLibrary(store);
+            string? name = SelectedProfile;
+            if (name is null)
+            {
+                name = profiles.List().FirstOrDefault()?.Name;
+                if (name is null) { name = "default"; profiles.CreateEmpty(name); }
+                profiles.Use(name);
+            }
+            var profile = profiles.Get(name);
+            bool enabled = profile.EnabledMods.Contains(id);
+            string[] ids = profile.Mods.Contains(id) ? profile.Mods : [.. profile.Mods, id];
+            profiles.Update(name, ids, enabled ? profile.DisabledMods.Append(id) : profile.DisabledMods.Where(m => m != id));
+        });
+        await ReloadAsync();
     }, false);
     /// <summary>Moves a mod to an absolute position for drag/drop and keyboard buttons.</summary>
     public async Task MoveAsync(int from, int to)
@@ -274,10 +357,11 @@ public sealed class MainViewModel : ObservableObject
             foreach (string decision in prepared.Build.Plan.Decisions) Message(decision);
             token.ThrowIfCancellationRequested();
             string gameFile = Path.Combine(prepared.Config.GameDir!, "data.win");
-            if (!await confirm($"Replace:\n{gameFile}\n\nVerified original backups:\n{gameFile}.cgfmm-original\n{Path.Combine(store.Root, "backups", prepared.BaseSha256 + ".win")}\n\nInstall verified profile '{prepared.Profile.Name}'?")) { Message("Installation declined. The game was not replaced."); return; }
+            if (prepared.Config.ConfirmedInstallDirectory != prepared.Config.GameDir && !await confirm($"Replace:\n{gameFile}\n\nVerified original backups:\n{gameFile}.cgfmm-original\n{Path.Combine(store.Root, "backups", prepared.BaseSha256 + ".win")}\n\nInstall verified profile '{prepared.Profile.Name}'?")) { Message("Installation declined. The game was not replaced."); return; }
             token.ThrowIfCancellationRequested();
             cancellable = false; NotifyButtons();
             await Task.Run(() => installer.Install(prepared, retainIndependentBase: true));
+            store.Set("confirmedInstallDirectory", prepared.Config.GameDir!);
             foreach (string warning in prepared.Build.Verification!.Warnings) Message(warning);
             await ReloadAsync();
             Message($"Installed and verified: {prepared.Build.Verification!.DecompiledEntries} code entries; {prepared.Build.SemanticEntries} semantic checks. SHA-256 {prepared.Build.Verification.Inspection.Sha256}");
@@ -288,8 +372,22 @@ public sealed class MainViewModel : ObservableObject
     public Task PlayAsync(Func<string, Task<bool>> confirm) => RunAsync("Preparing play", async (token, progress) =>
     {
         var command = await Task.Run(() => { var c = GameLauncher.Create(store.Config(), store.Root); GameLauncher.Validate(c); return c; }, token);
-        await InstallInternalAsync(confirm, token, progress);
-        if (!await Task.Run(() => new ProfileInstaller(store).IsInstalled(SelectedProfile))) return;
+        if (Order.Any(m => m.Enabled))
+        {
+            await InstallInternalAsync(confirm, token, progress);
+            if (!await Task.Run(() => new ProfileInstaller(store).IsInstalled(SelectedProfile))) return;
+        }
+        else
+        {
+            var state = await Task.Run(() => new ManagerOperations(store).Status(), token);
+            if (!state.Known) throw new IOException(state.Message);
+            if (state.CanRestore)
+            {
+                token.ThrowIfCancellationRequested(); cancellable = false; NotifyButtons();
+                await Task.Run(() => new ProfileInstaller(store).Restore());
+                await ReloadAsync();
+            }
+        }
         await Task.Run(() => { if (store.Config().Wine.Mode == "proton" && store.Config().Proton.CompatDataPath is null) store.EnsureProtonDataDirectory(); GameLauncher.Launch(command); });
         Message("Started " + command.Display());
     });

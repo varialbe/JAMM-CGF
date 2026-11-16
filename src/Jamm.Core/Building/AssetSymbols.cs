@@ -47,6 +47,30 @@ internal static class AssetSymbols
         }
         return Replace(text, edits);
     }
+    // Older legacy patches may contain the decompiler's raw, invalid asset identifier.
+    // Match whole token spans only: quoted strings and comments are never substituted.
+    internal static string QualifyLegacyNames(string text, string entry, IReadOnlyDictionary<string, string[]> source)
+    {
+        var tokens = GmlReferences.Tokens(text);
+        List<(GmlReferences.Token Token, string Value)> edits = [];
+        var invalid = source.SelectMany(p => p.Value.Where(n => n.StartsWith('[') && n.EndsWith(']')).Select(n => (Family: p.Key, Name: n)))
+            .GroupBy(p => p.Name, StringComparer.Ordinal);
+        foreach (var group in invalid)
+        {
+            var pattern = GmlReferences.Tokens(group.Key);
+            if (pattern.Count == 0) continue;
+            for (int i = 0; i + pattern.Count <= tokens.Count; i++)
+            {
+                if (!pattern.Select((p, j) => p.Kind == tokens[i + j].Kind && p.Value == tokens[i + j].Value).All(x => x)) continue;
+                var families = group.Select(p => p.Family).ToArray();
+                if (families.Length != 1) throw new InvalidDataException($"Ambiguous legacy asset '{group.Key}' in '{entry}'. Regenerate this patch from its source archive.");
+                int end = tokens[i + pattern.Count - 1].Start + tokens[i + pattern.Count - 1].Length;
+                if (text[tokens[i].Start..end] != group.Key) continue;
+                edits.Add((tokens[i] with { Length = end - tokens[i].Start }, Symbol(families[0], group.Key)));
+            }
+        }
+        return Replace(text, edits);
+    }
     internal static string Link(string text, string entry, IReadOnlyDictionary<string, string[]> target)
     {
         List<(GmlReferences.Token Token, string Value)> edits = [];
@@ -66,12 +90,17 @@ internal static class AssetSymbols
         return result.ToString();
     }
 
-    internal sealed class Context(UndertaleData data, IReadOnlySet<string> ambiguous) : GlobalDecompileContext(data), IGameContext
+    internal static string SafeName(string family, string name) => IsIdentifier(name) ? name : Symbol(family, name);
+
+    private static bool IsIdentifier(string name) => name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_')
+        && name.All(c => char.IsLetterOrDigit(c) || c == '_');
+
+    internal sealed class Context(UndertaleData data, IReadOnlySet<string> ambiguous) : GlobalDecompileContext(data, data.GlobalFunctions), IGameContext
     {
         string? IGameContext.GetAssetName(AssetType type, int index)
         {
             string? name = GetAssetName(type, index);
-            if (name is null || !ambiguous.Contains(name)) return name;
+            if (name is null || !ambiguous.Contains(name) && IsIdentifier(name)) return name;
             string? family = type switch
             {
                 AssetType.Object => "objects", AssetType.Sprite => "sprites", AssetType.Sound => "sounds",

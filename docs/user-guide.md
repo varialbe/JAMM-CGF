@@ -226,3 +226,45 @@ if you want its original archive back.
 
 See also [example mods](example-mods.md), [CLI reference](cli.md),
 [conflict rules](conflicts.md), and [build/recovery details](building.md).
+
+## Browse mods
+
+Open **Browse mods**, select a card to see images and check its content, then press
+**Download**. JAMM imports the file and enables it in your active profile (creating a
+default profile if needed). Green/grey **Disable/Enable** buttons control your mods.
+Press **Play** to build, verify and apply changed selections before starting the game.
+The first installation asks you to approve the exact game-copy and backup paths.
+
+Cards show counts computed from the archives, rather than claims from descriptions.
+A green check means the patch built and verified with matching build information;
+a red cross means it cannot apply; a yellow question mark means unverified, failed
+analysis, or a different source build. Hover the icon for the reason. Mods built from another
+2023 legacy build whose only difference is the build timestamp count as compatible; the
+tooltip names the source build.
+
+**Advanced mode** is saved between sessions. It shows author descriptions, releases,
+file choices, load order, conflicts and the existing manager actions. A unique file
+from the newest release is chosen automatically; genuinely ambiguous choices require
+the advanced picker. Later mods win by default; advanced conflict choices remain available.
+
+First-run setup searches Steam libraries and depot downloads on Windows, Linux
+(including Flatpak/Snap Steam) and macOS. A detected legacy game can be copied into
+a separate sibling folder with one click. A bounded background search also checks mounted drives and your home folder for moved depot downloads. Add mods and Download open setup when needed and resume afterwards. If only the current game is found, copy the
+legacy-depot command into Steam's console, download it, then use **Check again**
+or **Choose folder…**.
+Found originals are read-only; JAMM never installs into them during automatic setup.
+
+The catalog loads on first visit; **Refresh** retries failures. Offline snapshots
+show their last successful fetch time. Selection checks are cancellable and downloaded
+archives/facts are cached under the selected manager data directory. Local management
+works without the catalog.
+
+Public Game Jolt project pages and direct HTTPS `.win`/`.zip` links are supported.
+Unsupported hosts offer a source-page fallback in Advanced mode. Previews without a
+release cannot download. SHA-256 identifies bytes, not authorship. New releases never
+change existing profiles automatically. [Storage, limits and provenance](docs/data-layout.md#online-catalog-and-downloads).
+
+Shared compatibility results: before checking a mod itself, JAMM asks
+`https://varialbe.xyz/jamm/compat/v1/` whether the server already checked exactly this file
+against exactly your game version (a plain HTTPS request without cookies or identifiers; the
+server sees your IP like any website). Switch it off in Settings. Details: [compat-db.md](compat-db.md).

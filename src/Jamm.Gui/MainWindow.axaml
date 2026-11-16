@@ -2,31 +2,44 @@
         Title="JAMM · Cat Goes Fishing Mod Manager" Width="1320" Height="860" MinWidth="1040" MinHeight="680" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
   <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="24" RowSpacing="16">
     <Grid ColumnDefinitions="*,Auto">
-      <StackPanel Spacing="3"><TextBlock Text="JAMM" FontSize="30" FontWeight="Bold"/><TextBlock Classes="muted" Text="Cat Goes Fishing · Your mods, together."/></StackPanel>
+      <StackPanel Spacing="3"><CheckBox Content="Advanced mode" IsChecked="{Binding AdvancedMode, Mode=TwoWay}" IsEnabled="{Binding CanEdit}"/><TextBlock Text="JAMM" FontSize="30" FontWeight="Bold"/><TextBlock Classes="muted" Text="Cat Goes Fishing · Your mods, together."/></StackPanel>
       <Button Grid.Column="1" Content="Settings" Click="SettingsClick" IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
     </Grid>
-    <Grid Grid.Row="1" ColumnDefinitions="285,280,*" ColumnSpacing="16">
+    <TabControl Grid.Row="1" x:Name="MainTabs">
+    <TabItem Header="Manager">
+    <Grid>
+    <Border Classes="card" IsVisible="{Binding !AdvancedMode}"><Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+      <TextBlock Text="Your mods" Classes="title"/>
+      <ListBox Grid.Row="1" ItemsSource="{Binding Order}" IsEnabled="{Binding CanEdit}">
+        <ListBox.ItemTemplate><DataTemplate><Grid ColumnDefinitions="*,Auto" Margin="4,10">
+          <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><Expander.Header><Grid ColumnDefinitions="40,*" ColumnSpacing="8"><Border Width="36" Height="36" CornerRadius="6" Background="#516579"><Grid><TextBlock Text="◈" Foreground="White" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Icon}" Stretch="UniformToFill"/></Grid></Border><TextBlock Grid.Column="1" Text="{Binding Name}" TextWrapping="Wrap" VerticalAlignment="Center"/></Grid></Expander.Header><StackPanel Spacing="6"><TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/><TextBlock Text="{Binding Metadata}" Classes="muted"/></StackPanel></Expander>
+          <Button Grid.Column="1" Content="{Binding ToggleLabel}" Background="{Binding ToggleColor}" Foreground="White" Click="ToggleModClick"/>
+        </Grid></DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+      <StackPanel Grid.Row="2" Spacing="8"><TextBlock Text="Download mods in Browse mods, or add a local file. Enable the mods you want, then press Play." TextWrapping="Wrap"/><Button Content="+ Add mods" Click="AddClick" IsEnabled="{Binding CanEdit}"/></StackPanel>
+    </Grid></Border>
+    <Grid IsVisible="{Binding AdvancedMode}" ColumnDefinitions="285,280,*" ColumnSpacing="16">
       <Border Classes="card"><Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
         <TextBlock Classes="title" Text="Mod library"/>
         <TextBlock Grid.Row="1" Classes="muted" Text="Drop .win or .zip files here"/>
         <ListBox Grid.Row="2" x:Name="LibraryList" ItemsSource="{Binding Mods}" IsEnabled="{Binding CanEdit}">
           <ListBox.ItemTemplate><DataTemplate><StackPanel Spacing="5" Margin="0,8">
             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding Metadata}" Classes="muted" FontSize="12"/>
-            <TextBlock Text="{Binding Badge}" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" FontSize="12" TextWrapping="Wrap"/>
+            <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Metadata}" Classes="muted" FontSize="12"/>
+            <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Badge}" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" FontSize="12" TextWrapping="Wrap"/>
           </StackPanel></DataTemplate></ListBox.ItemTemplate>
         </ListBox>
         <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEdit}"><Button Content="+ Add mods" Click="AddClick"/><Button Content="Remove" Click="RemoveClick"/></StackPanel>
       </Grid></Border>
       <Border Grid.Column="1" Classes="card"><Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="12">
-        <TextBlock Classes="title" Text="Load order"/>
+        <TextBlock Classes="title" Text="Your mods"/>
         <ComboBox Grid.Row="1" x:Name="ProfilePicker" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=OneWay}" SelectionChanged="ProfileChanged" PlaceholderText="Choose a profile" HorizontalAlignment="Stretch" IsEnabled="{Binding CanEdit}"/>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="5" IsEnabled="{Binding CanEdit}"><Button Content="New" Click="NewProfileClick"/><Button Content="Rename" Click="RenameProfileClick" Padding="9,8"/><Button Content="Delete" Click="DeleteProfileClick" Padding="9,8"/></StackPanel>
+        <StackPanel IsVisible="{Binding AdvancedMode}" Grid.Row="2" Orientation="Horizontal" Spacing="5" IsEnabled="{Binding CanEdit}"><Button Content="New" Click="NewProfileClick"/><Button Content="Rename" Click="RenameProfileClick" Padding="9,8"/><Button Content="Delete" Click="DeleteProfileClick" Padding="9,8"/></StackPanel>
         <TextBlock Grid.Row="3" Text="Later mods win overlapping changes." TextWrapping="Wrap" Classes="muted"/>
-        <ListBox Grid.Row="4" x:Name="OrderList" ItemsSource="{Binding Order}" IsEnabled="{Binding CanEditProfile}">
-          <ListBox.ItemTemplate><DataTemplate><CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" Content="{Binding Name}" Margin="0,5"/></DataTemplate></ListBox.ItemTemplate>
+        <ListBox Grid.Row="4" x:Name="OrderList" ItemsSource="{Binding Order}" IsEnabled="{Binding CanEdit}">
+          <ListBox.ItemTemplate><DataTemplate><StackPanel Spacing="6"><Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><Expander.Header><Grid ColumnDefinitions="40,*" ColumnSpacing="8"><Border Width="36" Height="36" CornerRadius="6" Background="#516579"><Grid><TextBlock Text="◈" Foreground="White" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Icon}" Stretch="UniformToFill"/></Grid></Border><TextBlock Grid.Column="1" Text="{Binding Name}" TextWrapping="Wrap" VerticalAlignment="Center"/></Grid></Expander.Header><StackPanel Spacing="6"><TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/><TextBlock Text="{Binding Metadata}" Classes="muted"/></StackPanel></Expander><Button Content="{Binding ToggleLabel}" Background="{Binding ToggleColor}" Foreground="White" Click="ToggleModClick"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
         </ListBox>
-        <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEditProfile}"><Button Content="↑ Move up" Click="UpClick"/><Button Content="↓ Down" Click="DownClick"/></StackPanel>
+        <StackPanel IsVisible="{Binding AdvancedMode}" Grid.Row="5" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEditProfile}"><Button Content="↑ Move up" Click="UpClick"/><Button Content="↓ Down" Click="DownClick"/></StackPanel>
       </Grid></Border>
       <Border Grid.Column="2" Classes="card"><Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
         <TextBlock Classes="title" Text="Compatibility &amp; conflicts"/>
@@ -50,18 +63,114 @@
         </StackPanel></ScrollViewer>
       </Grid></Border>
     </Grid>
+    </Grid>
+    </TabItem>
+    <TabItem Header="Browse mods">
+      <Grid DataContext="{Binding Browse}" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+          <TextBox Text="{Binding Search, Mode=TwoWay}" Watermark="Search name, author or description"/>
+          <ComboBox Grid.Column="1" ItemsSource="{Binding Categories}" SelectedItem="{Binding Category, Mode=TwoWay}" MinWidth="150"/>
+          <ComboBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Grid.Column="2" ItemsSource="{Binding Releases}" SelectedItem="{Binding Release, Mode=TwoWay}"/>
+          <ComboBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Grid.Column="3" ItemsSource="{Binding Sorts}" SelectedItem="{Binding Sort, Mode=TwoWay}"/>
+          <Button Grid.Column="4" Content="Refresh" Click="BrowseRefreshClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}"/>
+        </Grid>
+        <StackPanel Grid.Row="1" Spacing="4">
+          <WrapPanel Orientation="Horizontal"><CheckBox Content="Show mods without download" IsChecked="{Binding ShowModsWithoutDownload, Mode=TwoWay}" Margin="0,0,16,0"/><TextBlock Text="{Binding ShownCount}" VerticalAlignment="Center"/></WrapPanel>
+          <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+          <TextBlock Text="{Binding EmptyMessage}" Classes="muted"/>
+          <ProgressBar Value="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding IsLoading}" Height="8"/><Button Content="Cancel check" Click="BrowseCancelClick" IsVisible="{Binding IsLoading}"/>
+        </StackPanel>
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="16">
+          <ListBox x:Name="BrowseList" ItemsSource="{Binding Mods}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionChanged="BrowseSelectionChanged" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}">
+            <ListBox.ItemTemplate><DataTemplate>
+              <Grid ColumnDefinitions="64,*" ColumnSpacing="12" Margin="4,10">
+                <Image Source="{Binding Icon}" Width="56" Height="56" Stretch="Uniform"/>
+                <StackPanel Grid.Column="1" Spacing="5">
+                  <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding CompatibilityIcon}" Foreground="{Binding CompatibilityColor}" ToolTip.Tip="{Binding CompatibilityReason}" AutomationProperties.Name="{Binding CompatibilityReason}" FontSize="22"/><Button Content="info" FontSize="11" Padding="5,2" IsVisible="{Binding HasCompatibilityInfo}" ToolTip.Tip="{Binding CompatibilityReason}" AutomationProperties.Name="Compatibility information">
+                    <Button.Flyout><Flyout><ScrollViewer MaxHeight="360" MaxWidth="560"><SelectableTextBlock Text="{Binding CompatibilityReason}" TextWrapping="Wrap" Focusable="True"/></ScrollViewer></Flyout></Button.Flyout>
+                  </Button><TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="18" TextWrapping="Wrap"/></StackPanel><TextBlock Text="{Binding Adds}" TextWrapping="Wrap"/>
+                  <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Litterbox page" Click="CardPageClick"/><Button Content="Download" Click="CardDownloadClick" IsEnabled="{Binding Mod.HasDownload}"/></StackPanel>
+                  <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap"/>
+                  <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Excerpt}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Grid>
+            </DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+          <Border Grid.Column="1" Classes="card"><Grid RowDefinitions="*,Auto,Auto" RowSpacing="12"><ScrollViewer><StackPanel Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="{Binding Selected.CompatibilityIcon}" Foreground="{Binding Selected.CompatibilityColor}" ToolTip.Tip="{Binding Selected.CompatibilityReason}" AutomationProperties.Name="{Binding Selected.CompatibilityReason}" FontSize="22"/><Button Content="info" FontSize="11" Padding="5,2" IsVisible="{Binding Selected.HasCompatibilityInfo}" ToolTip.Tip="{Binding Selected.CompatibilityReason}" AutomationProperties.Name="Compatibility information">
+                    <Button.Flyout><Flyout><ScrollViewer MaxHeight="360" MaxWidth="560"><SelectableTextBlock Text="{Binding Selected.CompatibilityReason}" TextWrapping="Wrap" Focusable="True"/></ScrollViewer></Flyout></Button.Flyout>
+                  </Button><TextBlock Text="{Binding Selected.Name}" Classes="title" TextWrapping="Wrap"/></StackPanel>
+            <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Selected.Summary}" Classes="muted" TextWrapping="Wrap"/>
+            <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Selected.Mod.Description}" TextWrapping="Wrap"/>
+            <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Selected.Mod.Credits}" TextWrapping="Wrap" Classes="muted"/>
+            <ItemsControl ItemsSource="{Binding Images}"><ItemsControl.ItemTemplate><DataTemplate><Image Source="{Binding}" MaxHeight="220" Stretch="Uniform" Margin="0,4"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding DetailStatus}" TextWrapping="Wrap"/>
+          </StackPanel></ScrollViewer>
+            <WrapPanel Grid.Row="1">
+              <Button IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Refresh" Click="BrowseResolveClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" Margin="0,0,6,6"/>
+              <Button IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Open source page" Click="BrowseSourceClick" Margin="0,0,6,6"/>
+              <Button Content="Litterbox details" Click="BrowseCatalogClick" Margin="0,0,0,6"/>
+            </WrapPanel>
+          <StackPanel Grid.Row="2" Spacing="10">
+            <ComboBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" SelectionChanged="BrowseFileChanged" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}" PlaceholderText="Choose a file / release" HorizontalAlignment="Stretch" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}">
+              <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{Binding Membership}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+
+            <ProgressBar Value="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding $parent[Window].DataContext.IsBusy}" Height="6"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Download" Click="BrowseAddClick" IsEnabled="{Binding CanDownload}" Margin="0,0,8,8"/>
+              <Button IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Download &amp; install" Click="BrowseInstallClick" IsEnabled="{Binding CanDownloadInstall}" Margin="0,0,0,8"/>
+            </WrapPanel>
+            <TextBlock Text="Download enables the mod. Press Play to apply your enabled mods and start the game." Classes="muted" TextWrapping="Wrap"/>
+          </StackPanel></Grid></Border>
+        </Grid>
+      </Grid>
+    </TabItem>
+    </TabControl>
     <Border Grid.Row="2" Classes="card"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-      <StackPanel Spacing="6"><TextBlock Text="{Binding GameStatus}" TextWrapping="Wrap" FontWeight="SemiBold"/><TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes="muted" MaxHeight="44"/></StackPanel>
+      <StackPanel Spacing="6">
+
+        <TextBlock Text="{Binding GameStatus}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+        <TextBlock Text="{Binding Status}" IsVisible="{Binding !IsBusy}" TextWrapping="Wrap" Classes="muted" MaxHeight="44"/>
+        <TextBlock Text="{Binding OperationStep}" IsVisible="{Binding IsBusy}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+        <ProgressBar Value="{Binding OperationProgress}" IsIndeterminate="{Binding OperationIndeterminate}" IsVisible="{Binding IsBusy}" Height="8"/>
+      </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-        <Button Content="Check" Click="CheckClick" IsEnabled="{Binding CanCheck}"/>
-        <Button Content="Install" Click="InstallClick" IsEnabled="{Binding CanInstall}" Background="#2563EB" Foreground="White"/>
-        <Button Content="Play" Click="PlayClick" IsEnabled="{Binding CanPlay}"/>
-        <Button Content="Restore original" Click="RestoreClick" IsEnabled="{Binding CanRestore}"/>
+        <Button IsVisible="{Binding AdvancedMode}" Content="Check" Click="CheckClick" IsEnabled="{Binding CanCheck}"/>
+        <Button IsVisible="{Binding AdvancedMode}" Content="Install" Click="InstallClick" IsEnabled="{Binding CanInstall}" Background="#2563EB" Foreground="White"/>
+        <Button Content="Play" Background="#2563EB" Foreground="White" Click="PlayClick" IsEnabled="{Binding CanPlay}"/>
+        <Button IsVisible="{Binding AdvancedMode}" Content="Restore original" Click="RestoreClick" IsEnabled="{Binding CanRestore}"/>
         <Button Content="Cancel" Click="CancelClick" IsVisible="{Binding IsBusy}" IsEnabled="{Binding CanCancel}"/>
       </StackPanel>
     </Grid></Border>
-    <Expander Grid.Row="3" Header="Activity log" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+    <Expander Grid.Row="3" Header="Show details" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
       <Grid RowDefinitions="Auto,*" Height="150"><Button Content="Copy log" Click="CopyLogClick" HorizontalAlignment="Right"/><TextBox Grid.Row="1" Text="{Binding Log, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="monospace" FontSize="11" TextWrapping="Wrap"/></Grid>
     </Expander>
+        <Border Grid.Row="1" Grid.RowSpan="3" ZIndex="9" Background="#55000000" IsVisible="{Binding SetupOpen}"/>
+        <Border Margin="16" MaxWidth="1100" CornerRadius="12" BorderBrush="#9CA3AF" Grid.Row="1" Grid.RowSpan="3" ZIndex="10" VerticalAlignment="Center" HorizontalAlignment="Stretch" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" IsVisible="{Binding SetupOpen}" BorderThickness="1" Padding="16">
+          <ScrollViewer MaxHeight="450"><StackPanel Spacing="6">
+            <TextBlock Text="Set up your legacy game" FontWeight="Bold"/>
+            <TextBlock Text="{Binding SetupMessage}" TextWrapping="Wrap"/>
+            <ListBox ItemsSource="{Binding DetectedGames}" SelectedItem="{Binding DetectedLegacy, Mode=TwoWay}" MaxHeight="140" IsEnabled="{Binding CanEdit}">
+              <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" Classes="muted"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <Expander Header="Other folders found (not usable)">
+              <ItemsControl ItemsSource="{Binding OtherGames}"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="4"><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            </Expander>
+            <TextBlock Text="Separate modded copy:"/>
+            <TextBlock Text="{Binding ModdedDirectory}" TextWrapping="Wrap"/>
+            <TextBox IsVisible="{Binding AdvancedMode}" Text="{Binding ModdedDirectory}" Watermark="Modded folder destination"/>
+            <WrapPanel>
+              <Button Content="Use this" IsEnabled="{Binding HasDetectedLegacy}" Click="UseDetectedClick" Margin="0,0,8,4"/>
+              <Button Content="Choose folder…" IsEnabled="{Binding CanEdit}" Click="ChooseGameClick" Margin="0,0,8,4"/>
+              <Button Content="Check again" IsEnabled="{Binding CanEdit}" Click="CheckGamesClick" Margin="0,0,8,4"/>
+              <Button Content="Cancel setup" Click="CancelSetupClick"/>
+            </WrapPanel>
+            <TextBlock Text="Steam console command (downloads the legacy Windows build):" TextWrapping="Wrap"/>
+            <TextBlock Text="download_depot 343780 343782 9039707068725406600" TextWrapping="Wrap"/>
+            <Button Content="Copy legacy download command" Click="CopyDepotClick"/>
+          </StackPanel></ScrollViewer>
+        </Border>
   </Grid>
 </Window>

@@ -22,6 +22,14 @@ public sealed partial class MainWindow : Window
     public MainWindow(bool initializeOnOpen)
     {
         InitializeComponent();
+        MainViewModel? errorModel = null;
+        DataContextChanged += (_, _) =>
+        {
+            if (errorModel is not null) errorModel.Error -= ShowError;
+            errorModel = Model;
+            if (errorModel is not null) errorModel.Error += ShowError;
+        };
+        Closed += (_, _) => { if (errorModel is not null) errorModel.Error -= ShowError; };
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, (_, e) => { e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; });
         AddHandler(DragDrop.DropEvent, async (_, e) =>
@@ -50,15 +58,69 @@ public sealed partial class MainWindow : Window
             if (!initializeOnOpen || initialized || Model is null) return;
             initialized = true;
             await Model.InitializeAsync();
-            await Model.OpenSettingsAsync(() => new SettingsWindow(Model).ShowDialog(this), onlyWhenUnconfigured: true);
+            // First-run detection and setup actions are shown in the main window.
         };
+        MainTabs.SelectionChanged += async (_, e) =>
+        {
+            if (e.Source == MainTabs && MainTabs.SelectedIndex == 1 && Model is { } vm && vm.Browse.Mods.Count == 0 && !vm.Browse.IsLoading) await vm.Browse.RefreshAsync();
+        };
+        Closed += (_, _) => Model?.Browse.Dispose();
         Closing += (_, e) => { if (Model?.IsBusy == true) { e.Cancel = true; Model.Cancel(); } };
+    }
+    private async void CardPageClick(object? sender, RoutedEventArgs e) { if (sender is Control { DataContext: CatalogRow row }) await OpenPublicPageAsync(row.Mod.SourcePage); e.Handled = true; }
+    private async void CardDownloadClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is not { CanEdit: true } vm || sender is not Control { DataContext: CatalogRow row }) return;
+        e.Handled = true;
+        if (vm.Browse.Selected != row || vm.Browse.IsLoading) { vm.Browse.Selected = row; await vm.Browse.SelectAsync(); }
+        await vm.Browse.DownloadAsync(false, ConfirmAsync);
+    }
+    private async void ShowError(string message)
+    {
+        var dialog = new Window { Title = "Could not complete action · JAMM", Width = 600, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var close = new Button { Content = "OK" };
+        close.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel { Margin = new Thickness(24), Spacing = 12, Children = { new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, close } };
+        await dialog.ShowDialog(this);
+    }
+    private async void ChooseGameClick(object? sender, RoutedEventArgs e)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new() { Title = "Choose the complete legacy Cat Goes Fishing folder", AllowMultiple = false });
+        if (folders.FirstOrDefault()?.TryGetLocalPath() is { } path && Model is { } vm) await vm.ChooseGameFolderAsync(path);
+    }
+    private async void CheckGamesClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.SearchGamesAsync(); }
+    private void CancelSetupClick(object? sender, RoutedEventArgs e) => Model?.CancelSetup();
+    private async void UseDetectedClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.UseDetectedGameAsync(); }
+    private async void CopyDepotClick(object? sender, RoutedEventArgs e) { if (Clipboard is { } clipboard) await clipboard.SetTextAsync(Jamm.Core.Management.SteamGameDetection.LegacyCommand); }
+    private async void ToggleModClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm && sender is Control { DataContext: ModRow row }) await vm.ToggleModAsync(row.Id); }
+    private async void BrowseFileChanged(object? sender, SelectionChangedEventArgs e) { if (Model is { } vm && e.AddedItems.Count > 0) await vm.Browse.SelectFileAsync(); }
+    private void BrowseCancelClick(object? sender, RoutedEventArgs e) => Model?.Browse.CancelReads();
+    private async void BrowseRefreshClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.Browse.RefreshAsync(); }
+    private async void BrowseSelectionChanged(object? sender, SelectionChangedEventArgs e) { if (Model is { } vm && e.Source == BrowseList && e.AddedItems.Count > 0) await vm.Browse.SelectAsync(); }
+    private async void BrowseResolveClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm) await vm.Browse.SelectAsync(); }
+    private async void BrowseAddClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.Browse.DownloadAsync(false, ConfirmAsync); }
+    private async void BrowseInstallClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is not { } vm) return;
+        await vm.Browse.DownloadAsync(true, ConfirmAsync);
+        if (vm.Conflicts.Any(c => c.Severity == "CONFLICT")) MainTabs.SelectedIndex = 0;
+    }
+    private async void BrowseSourceClick(object? sender, RoutedEventArgs e) { if (Model?.Browse.Selected?.Mod is { } mod) await OpenPublicPageAsync(mod.FileUrl ?? mod.SourcePage); }
+    private async void BrowseCatalogClick(object? sender, RoutedEventArgs e) { if (Model?.Browse.Selected?.Mod is { } mod) await OpenPublicPageAsync(mod.SourcePage); }
+    private async Task OpenPublicPageAsync(string url)
+    {
+        try { await Launcher.LaunchUriAsync(Jamm.Core.Browsing.ModHttp.PublicUri(url)); }
+        catch (Exception ex) { await ConfirmAsync("Could not open source page: " + ex.Message); }
     }
     private async void SettingsClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.OpenSettingsAsync(() => new SettingsWindow(vm).ShowDialog(this)); }
     private async void AddClick(object? sender, RoutedEventArgs e)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "Add local mods", AllowMultiple = true, FileTypeFilter = [new("Mods (.win, .zip)") { Patterns = ["*.win", "*.zip"] }] });
-        if (Model is { } vm) await vm.AddAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
+        if (Model is not { } vm) return;
+        await vm.AfterSetupAsync(async () =>
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "Add local mods", AllowMultiple = true, FileTypeFilter = [new("Mods (.win, .zip)") { Patterns = ["*.win", "*.zip"] }] });
+            await vm.AddAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
+        });
     }
     private async void RemoveClick(object? sender, RoutedEventArgs e)
     {
