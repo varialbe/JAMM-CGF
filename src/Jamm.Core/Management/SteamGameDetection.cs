@@ -67,12 +67,18 @@ public static partial class SteamGameDetection
         return libraries.ToArray();
     }
 
+    /// <summary>Orders verified originals before unverified games, preferring plain archives to JAMM backups.</summary>
+    public static IOrderedEnumerable<DetectedGame> OrderCandidates(IEnumerable<DetectedGame> games) => games
+        .OrderBy(g => g.Suitability)
+        .ThenBy(g => Path.GetFileName(g.Archive).Equals("data.win.cgfmm-original", StringComparison.OrdinalIgnoreCase))
+        .ThenBy(g => g.Archive, StringComparer.Ordinal);
+
     /// <summary>Classifies all found originals via the existing read-only inspector.</summary>
     public static DetectedGame[] Detect(CancellationToken token = default, IProgress<string>? progress = null)
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Candidates(Roots(home, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)))
-            .Select(path => Inspect(path, token, progress: progress)).OrderBy(g => g.Suitability).ToArray();
+        return OrderCandidates(Candidates(Roots(home, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)))
+            .Select(path => Inspect(path, token, progress: progress))).ToArray();
     }
 
     /// <summary>Classifies one candidate using bounded header reads before hashing plausible originals.
@@ -123,7 +129,7 @@ public static partial class SteamGameDetection
             }
             if (!gen8) throw new InvalidDataException("The GEN8 header is missing.");
             if (!code) return new(path, false, "Current Steam build (YYC); download the legacy depot to use mods.");
-            if (bytecode != 16 || build < 1773 || timestamp < 1692057600)
+            if (bytecode != 16 || build < 1773 || timestamp < 1692057440)
                 return new(path, false, $"Unsupported version (GEN8 build {build}, timestamp {timestamp}). Download the 2023 legacy depot.");
             if (supportedOriginals.Values.Contains(stream.Length))
             {

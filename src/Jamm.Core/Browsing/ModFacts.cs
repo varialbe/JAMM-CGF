@@ -12,7 +12,7 @@ public sealed record ModFacts(string FileHash, string BaseHash, int AnalyzerVers
 public sealed class ModFactAnalyzer(ManagerStore store)
 {
     /// <summary>Invalidates cached facts when extraction or compatibility rules change.</summary>
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>Computes facts without importing or enabling a mod.</summary>
     public ModFacts Analyze(string archive, CancellationToken token) => Analyze(archive, token, null);
@@ -78,7 +78,8 @@ public sealed class ModFactAnalyzer(ManagerStore store)
     private static ModFacts WithSource(ModFacts facts, ulong timestamp) => facts.Reason.Contains("Source build:", StringComparison.Ordinal)
         ? facts : facts with { Reason = facts.Reason + " Source build: " + SourceDate(timestamp) + "." };
     private static bool ToolFailure(Exception ex) => ex.Message.Contains("compil", StringComparison.OrdinalIgnoreCase)
-        || ex.Message.Contains("semantic reference", StringComparison.OrdinalIgnoreCase);
+        || ex.Message.Contains("semantic reference", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("is referenced but has pixels and no embedded page", StringComparison.Ordinal);
     private static string SourceDate(ulong timestamp) => timestamp <= 253402300799
         ? DateTimeOffset.FromUnixTimeSeconds((long)timestamp).ToString("yyyy-MM-dd HH:mm 'UTC'") : "unknown (invalid GEN8 timestamp)";
 

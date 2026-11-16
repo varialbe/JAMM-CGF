@@ -89,6 +89,7 @@ public static class ArchiveVerifier
             .Concat(data.AudioGroups ?? []).Concat(data.CodeLocals ?? []).ToArray();
         resources.UnionWith(roots);
         HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
+        HashSet<UndertaleTexturePageItem> referencedItems = new(ReferenceEqualityComparer.Instance);
         foreach (object root in roots) Visit(root, root is UndertaleNamedResource named ? named.Name?.Content ?? root.GetType().Name : root.GetType().Name, true);
         Visit(data.GeneralInfo, "GEN8");
         Visit(data.GlobalInitScripts, "global initialization scripts");
@@ -97,7 +98,12 @@ public static class ArchiveVerifier
         {
             if (page.TexturePage is null)
             {
-                if (page.SourceWidth != 0 || page.SourceHeight != 0) throw new InvalidDataException($"Texture item '{page.Name?.Content}' has pixels but no embedded page.");
+                if (page.SourceWidth != 0 || page.SourceHeight != 0)
+                {
+                    if (referencedItems.Contains(page))
+                        throw new InvalidDataException($"Texture item '{page.Name?.Content}' is referenced but has pixels and no embedded page. JAMM cannot safely reconstruct its texture; choose another mod while support is investigated.");
+                    warning?.Invoke($"Unused texture item '{page.Name?.Content}' has pixels but no embedded page; preserved as-is.");
+                }
                 continue; // Empty null page items are valid placeholders in the supplied mods.
             }
             if (!resources.Contains(page.TexturePage))
@@ -112,6 +118,7 @@ public static class ArchiveVerifier
                     throw new InvalidDataException($"Object '{obj.Name.Content}' has an invalid collision object index {collision.EventSubtype}.");
         void Visit(object? value, string context, bool root = false)
         {
+            if (!root && value is UndertaleTexturePageItem textureItem) referencedItems.Add(textureItem);
             if (value is null || value is string || value is Delegate || value.GetType().IsValueType) return;
             if (!root && (value is UndertaleNamedResource || value is UndertaleString))
             {

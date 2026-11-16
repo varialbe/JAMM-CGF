@@ -56,7 +56,7 @@ public sealed partial class MainViewModel
         try { found = await Task.Run(() => searchGames(token, setupProgress), token); }
         finally { searching = false; }
         DetectedGames.Clear(); OtherGames.Clear();
-        foreach (var game in found.OrderBy(g => g.Suitability).ThenBy(g => g.Archive, StringComparer.Ordinal))
+        foreach (var game in SteamGameDetection.OrderCandidates(found))
             if (game.Usable) DetectedGames.Add(game); else OtherGames.Add(game);
         DetectedLegacy = DetectedGames.FirstOrDefault(g => g.Suitability == GameSuitability.SupportedOriginal);
         SetupMessage = found.Any(g => g.Usable) ? "Select a legacy game and press Use this. JAMM creates a separate modded copy." : "No usable legacy game found. In Steam open steam://open/console, run the command below, then choose the downloaded folder or Check again. Current Steam builds cannot load these mods.";
@@ -73,7 +73,7 @@ public sealed partial class MainViewModel
         if (!results.Any(g => g.Archive == game.Archive))
         {
             results.Add(game);
-            var sorted = results.OrderBy(g => g.Suitability).ThenBy(g => g.Archive, StringComparer.Ordinal).ToArray();
+            var sorted = SteamGameDetection.OrderCandidates(results).ToArray();
             results.Clear(); foreach (var result in sorted) results.Add(result);
         }
         DetectedLegacy = game.Usable ? game : null;

@@ -61,7 +61,7 @@ public static class GameFolderSearch
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
         progress?.Report("Search finished (bounded to 25 seconds and 30,000 folders). Choose folder if your game is not listed.");
-        return found.DistinctBy(g => g.Archive).OrderBy(g => g.Suitability).ToArray();
+        return SteamGameDetection.OrderCandidates(found.DistinctBy(g => g.Archive)).ToArray();
     }
 
     /// <summary>Chooses an installed Proton and Steam runner, preferring Flatpak on Linux.</summary>

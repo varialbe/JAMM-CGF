@@ -8,6 +8,8 @@ public sealed class Phase9dTests
 {
     [Theory]
     [InlineData(1692207312, 1773, false, GameSuitability.UnverifiedLegacy)]
+    [InlineData(1692057440, 1773, false, GameSuitability.UnverifiedLegacy)]
+    [InlineData(1692057439, 1773, false, GameSuitability.NotUsable)]
     [InlineData(1692057761, 1773, false, GameSuitability.UnverifiedLegacy)]
     [InlineData(1509155170, 1772, false, GameSuitability.NotUsable)]
     [InlineData(1573603200, 1773, false, GameSuitability.NotUsable)]
@@ -23,6 +25,11 @@ public sealed class Phase9dTests
         string before = BuildFiles.Hash(path);
         var result = SteamGameDetection.Inspect(path);
         Assert.Equal(expected, result.Suitability);
+        if (timestamp == 1692057440)
+        {
+            Assert.Contains("Older legacy build", result.Reason);
+            Assert.True(result.Usable); Assert.Equal("#A66B00", result.Color);
+        }
         Assert.Equal(before, BuildFiles.Hash(path));
     }
 
@@ -54,6 +61,19 @@ public sealed class Phase9dTests
         var result = SteamGameDetection.Inspect(path);
         Assert.Equal(GameSuitability.UnverifiedLegacy, result.Suitability);
         Assert.Contains("Modified or other build", result.Reason);
+    }
+
+    [Fact]
+    public async Task PlainOriginalPrecedesBackupEvenWhenBackupSortsFirstByPath()
+    {
+        using var files = new TestFiles(false);
+        var backup = new DetectedGame("a-copy/data.win.cgfmm-original", true, "backup") { Suitability = GameSuitability.SupportedOriginal };
+        var plain = new DetectedGame("z-original/data.win", true, "original") { Suitability = GameSuitability.SupportedOriginal };
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => [backup, plain]);
+        await vm.SearchGamesAsync();
+        Assert.Equal(new[] { plain, backup }, vm.DetectedGames);
+        Assert.Equal(plain, vm.DetectedLegacy);
+        vm.Browse.Dispose();
     }
 
     private sealed class Messages : IProgress<string>
