@@ -1,0 +1,69 @@
+using UndertaleModLib;
+
+namespace Jamm.ModMaker;
+
+/// <summary>Entry point: builds example JAMM mods (as complete data.win files) from an original data.win.</summary>
+public static class Program
+{
+    public static int Main(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                jamm-modmaker — builds example mods for JAMM-CGF from YOUR original data.win
+                  inspect <original.win>
+                  smooth  <original.win> <out.win>
+                  hd      <original.win> <out.win> [--upscaled-pages <dir>]
+                  export-pages <original.win> <dir>
+                The original is opened read-only; output must be a new path.
+                """);
+            return 1;
+        }
+        string command = args[0];
+        string original = Path.GetFullPath(args[1]);
+        string? output = command is not ("dump" or "names" or "rooms") && args.Length > 2 ? Path.GetFullPath(args[2]) : null;
+        if (output is not null && output == original)
+        {
+            Console.Error.WriteLine("Output must be a different file than the original.");
+            return 1;
+        }
+        UndertaleData data = Load(original);
+        switch (command)
+        {
+            case "inspect": Inspector.Run(data); return 0;
+            case "dump": Dump.Run(data, args.Skip(2)); return 0;
+            case "names": foreach (var c in data.Code) Console.WriteLine(c.Name.Content); return 0;
+            case "rooms":
+                foreach (var r in data.Rooms)
+                    Console.WriteLine($"{r.Name.Content}: {r.GameObjects.Count} instances; mod instances: {string.Join(", ", r.GameObjects.Select((g, i) => (g, i)).Where(p => p.g.ObjectDefinition?.Name.Content.StartsWith("obj_jamm") == true).Select(p => $"{p.g.ObjectDefinition.Name.Content}@{p.i} id {p.g.InstanceID}"))}");
+                return 0;
+            case "export-pages": TexturePages.Export(data, output!); return 0;
+            case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
+            case "hd":
+                string? pages = OptionValue(args, "--upscaled-pages");
+                HdMod.Apply(data, pages, args.Contains("--debug")); Save(data, output!); return 0;
+            default: Console.Error.WriteLine($"Unknown command '{command}'."); return 1;
+        }
+    }
+
+    private static string? OptionValue(string[] args, string name)
+    {
+        int index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
+
+    private static UndertaleData Load(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return UndertaleIO.Read(stream, (warning, _) => { }, _ => { });
+    }
+
+    private static void Save(UndertaleData data, string path)
+    {
+        string temp = path + ".tmp";
+        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write))
+            UndertaleIO.Write(stream, data);
+        File.Move(temp, path, overwrite: true);
+        Console.WriteLine($"Wrote {path} ({new FileInfo(path).Length:N0} bytes).");
+    }
+}
