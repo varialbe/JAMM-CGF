@@ -64,7 +64,7 @@ internal sealed class SemanticCode
                     before = patchBase with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(legacy ? AssetSymbols.QualifyLegacyNames(patchBase.Text, name, baseNames) : patchBase.Text, name, baseNames), name, baseNames, ambiguous) };
                 bool same = before is not null && before.Text == effective.Text && before.LocalsCount == effective.LocalsCount
                     && before.ArgumentsCount == effective.ArgumentsCount && before.Parent == effective.Parent && before.Children.SequenceEqual(effective.Children);
-                if (same && asset is null) { index++; continue; }
+                if ((same || patch.AssetTypesVersion == PatchJson.AssetTypesVersion) && asset is null) { index++; continue; }
                 var snapshot = asset?.Mod ?? AssetFields.Json(new { text.LocalsCount, text.ArgumentsCount, Offset = 0, WeirdLocalFlag = false, text.Parent, text.Children });
                 System.Text.Json.JsonElement? baseline = before is null ? null : asset?.Base ?? AssetFields.Json(new { before.LocalsCount, before.ArgumentsCount, Offset = 0, WeirdLocalFlag = false, before.Parent, before.Children });
                 var updated = new AssetPatch(name, baseline, snapshot, FieldDiff.Compare(baseline, snapshot), before, effective, before is null ? index : null);
@@ -120,7 +120,7 @@ internal sealed class SemanticCode
             // Count all changed/added source references requiring relocation, including alternatives
             // intentionally dropped by conflict decisions. The selected stream is verified separately.
             foreach (var asset in patches[i].Changes["code"].Added.Concat(patches[i].Changes["code"].Changed))
-                foreach (var r in SemanticReferences.Resolve(Mods[i][asset.Name].Text, asset.Name, modNames[i]))
+                foreach (var r in SemanticReferences.Resolve(asset.ModCode?.Text ?? Mods[i][asset.Name].Text, asset.Name, modNames[i]))
                 {
                     int index = Array.IndexOf(modNames[i][r.Family], r.Name);
                     // Dropped conflict alternatives may legitimately name an omitted added asset.

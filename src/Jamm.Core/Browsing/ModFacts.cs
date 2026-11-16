@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Jamm.Core.Building;
 using Jamm.Core.Management;
 using Jamm.Core.Patching;
@@ -6,13 +7,14 @@ using UndertaleModLib.Models;
 namespace Jamm.Core.Browsing;
 
 /// <summary>Only proven archive facts, tied to exact input bytes and analyzer revision.</summary>
-public sealed record ModFacts(string FileHash, string BaseHash, int AnalyzerVersion, string Compatibility, string Reason, string[] Adds);
+public sealed record ModFacts(string FileHash, string BaseHash, int AnalyzerVersion, string Compatibility, string Reason, string[] Adds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SanitizedChange>? RemovedPerformanceChanges = null);
 
 /// <summary>Analyzes read-only archives through the existing semantic patch/build pipeline.</summary>
 public sealed class ModFactAnalyzer(ManagerStore store, AnalysisOptions? options = null)
 {
-    /// <summary>Invalidates cached facts when extraction or compatibility rules change.</summary>
-    public const int Version = 4;
+    /// <summary>Invalidates cached facts when extraction, sanitizer or compatibility rules change.</summary>
+    public const int Version = 5;
 
     /// <summary>Computes facts without importing or enabling a mod.</summary>
     public ModFacts Analyze(string archive, CancellationToken token) => Analyze(archive, token, null);
@@ -48,6 +50,9 @@ public sealed class ModFactAnalyzer(ManagerStore store, AnalysisOptions? options
                 result = WithSource(result, mod.Inspection.Timestamp);
                 token.ThrowIfCancellationRequested(); store.Write(cache, result); return result;
             }
+            var sanitized = ModSanitizer.Sanitize(patch);
+            patch = sanitized.Patch;
+            var removedChanges = sanitized.Report.Removed.Count > 0 ? sanitized.Report.Removed : null;
             var facts = Extract(patch, mod.Data.GameObjects);
             string output = store.Path("analysis", Guid.NewGuid().ToString("N") + ".win");
             try
@@ -63,12 +68,12 @@ public sealed class ModFactAnalyzer(ManagerStore store, AnalysisOptions? options
                 result = new(hash, baseHash, Version, legacyTimestampOnly ? "Compatible" : "Unsure",
                     "Patch built and verified against the configured base. Source build: " + date
                     + (legacyTimestampOnly ? " (legacy build; GEN8 timestamp differences alone do not imply incompatibility)."
-                        : " (source differs from the known legacy build; code ancestry cannot be established)."), facts);
+                        : " (source differs from the known legacy build; code ancestry cannot be established)."), facts, removedChanges);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is InvalidDataException or NotComparableException or ArgumentException)
             { result = new(hash, baseHash, Version, ToolFailure(ex) ? "Tool limitation" : "Incompatible",
-                (ToolFailure(ex) ? "JAMM could not process this mod (tool limitation): " : "The patch cannot apply: ") + ex.Message, facts); }
+                (ToolFailure(ex) ? "JAMM could not process this mod (tool limitation): " : "The patch cannot apply: ") + ex.Message, facts, removedChanges); }
             finally { if (File.Exists(output)) File.Delete(output); }
         }
         result = WithSource(result, mod.Inspection.Timestamp);

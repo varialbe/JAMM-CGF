@@ -152,16 +152,19 @@ public sealed partial class MainViewModel : ObservableObject
         {
             try
             {
-                var patch = new ModLibrary(store).Patch(m.Mod);
+                var library = new ModLibrary(store);
+                var patch = library.Patch(m.Mod);
+                var report = library.SanitizerReport(m.Mod);
                 string factsPath = Path.Combine(store.Root, "analysis", $"{m.Mod.Sha256}-{m.Mod.BaseSha256}-{ModFactAnalyzer.Version}.json");
                 var facts = currentBaseHash == m.Mod.BaseSha256 && File.Exists(factsPath) ? System.Text.Json.JsonSerializer.Deserialize<ModFacts>(File.ReadAllText(factsPath),
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) : null;
                 string[] adds = facts?.Adds ?? ModFactAnalyzer.Extract(patch, []);
                 string verdict = facts is null ? "? " + m.Compatibility : (facts.Compatibility == "Compatible" ? "✓ " : facts.Compatibility == "Incompatible" ? "✕ " : "? ") + facts.Compatibility + ": " + facts.Reason;
-                return (adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", adds)) + "\nSource: "
+                string text = (adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", adds)) + "\nSource: "
                     + (m.Mod.Origins.FirstOrDefault()?.SourcePage ?? m.Mod.SourceFileName) + "\nCompatibility: " + verdict;
+                return (Summary: text, Report: (Jamm.Core.Patching.ModSanitizerReport?)report);
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { return "Summary unavailable: " + ex.Message; }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { return (Summary: "Summary unavailable: " + ex.Message, Report: null); }
         }));
         usableBase = data.Config.Base is { } basePath && await Task.Run(() => SteamGameDetection.Inspect(basePath).Usable);
         loading = true;
@@ -169,8 +172,18 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Mods.Clear(); Profiles.Clear(); Order.Clear(); Conflicts.Clear();
             foreach (var m in data.Mods)
+            {
+                var info = summaries[m.Mod.Id];
                 Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length)
-                    { Summary = summaries[m.Mod.Id], CatalogId = m.Mod.Origins.FirstOrDefault(o => o.Catalog == "litterbox")?.ModId });
+                {
+                    Summary = info.Summary,
+                    CatalogId = m.Mod.Origins.FirstOrDefault(o => o.Catalog == "litterbox")?.ModId,
+                    IsJammMod = info.Report?.IsJammMod ?? false,
+                    RemovedPerformanceCount = info.Report?.Removed.Count ?? 0,
+                    SanitizedDetails = info.Report?.FormatDetails() ?? "",
+                    KeepAuthorPerformanceChanges = m.Mod.KeepAuthorPerformanceChanges
+                });
+            }
             RefreshLocalIcons();
             foreach (var p in data.Profiles) Profiles.Add(p.Name);
             SelectedProfile = data.Config.ActiveProfile;
@@ -187,7 +200,12 @@ public sealed partial class MainViewModel : ObservableObject
                 if (!Order.Contains(row)) Order.Add(row);
                 row.AcceptChanges();
                 if (previousProfile == SelectedProfile && pending.TryGetValue(row.Id, out bool staged)) row.Enabled = staged;
-                row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModRow.Enabled) && !loading) { Conflicts.Clear(); NotifyButtons(); } };
+                row.PropertyChanged += async (_, e) =>
+                {
+                    if (loading) return;
+                    if (e.PropertyName == nameof(ModRow.Enabled)) { Conflicts.Clear(); NotifyButtons(); }
+                    else if (e.PropertyName == nameof(ModRow.KeepAuthorPerformanceChanges)) await SetKeepAuthorPerformanceChangesAsync(row);
+                };
             }
             knownGame = data.State.Known; canRestore = data.State.CanRestore; GameStatus = data.State.Message;
             OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(NeedsSetup)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
@@ -248,6 +266,13 @@ public sealed partial class MainViewModel : ObservableObject
         if (!IsBusy && Mods.FirstOrDefault(m => m.Id == id) is { } row) row.Enabled = !row.Enabled;
         return Task.CompletedTask;
     }
+    /// <summary>Persists the Advanced per-mod opt-out to keep or strip the author's performance changes.</summary>
+    public Task SetKeepAuthorPerformanceChangesAsync(ModRow row) => RunAsync("Updating performance changes setting", async (_, _) =>
+    {
+        await Task.Run(() => new ModLibrary(store).SetKeepAuthorPerformanceChanges(row.Id, row.KeepAuthorPerformanceChanges));
+        Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
+        Message($"{row.Name}: {(row.KeepAuthorPerformanceChanges ? "keeping the author's performance changes" : "using JAMM's sanitized patch")}.");
+    }, false);
     /// <summary>Number of switches waiting to be applied.</summary>
     public int PendingCount => Mods.Count(m => m.IsPending);
     /// <summary>Whether staged changes can be discarded.</summary>

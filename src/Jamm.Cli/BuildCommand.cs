@@ -123,7 +123,9 @@ internal static class BuildCommand
         string directory = Path.GetDirectoryName(Path.GetFullPath(patchPath))!;
         if (Path.GetFileName(patch.Mod.FileName) != patch.Mod.FileName) throw new InvalidDataException("Patch mod.fileName must be a filename without directories.");
         string? configured = Environment.GetEnvironmentVariable("JAMM_MODS_DIR");
-        var candidates = new[] { Path.Combine(directory, patch.Mod.FileName), Path.Combine(Path.GetDirectoryName(directory)!, patch.Mod.FileName),
+        string parent = Path.GetDirectoryName(directory)!;
+        var candidates = new[] { Path.Combine(directory, patch.Mod.FileName), Path.Combine(parent, patch.Mod.FileName),
+            Path.Combine(parent, "mods", patch.Mod.Sha256, "data.win"), Path.Combine(parent, "download-cache", patch.Mod.FileName),
             Path.Combine(Environment.CurrentDirectory, patch.Mod.FileName) }
             .Concat(configured is null ? [] : Directory.Exists(configured) ? Directory.EnumerateFiles(configured, "*.win") : [])
             .Distinct(StringComparer.Ordinal);
