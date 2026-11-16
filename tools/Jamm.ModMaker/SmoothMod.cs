@@ -95,10 +95,17 @@ public static class SmoothMod
         persistent = true;
         global.jamm_tick_delta = 33333;
         global.jamm_smooth_debug = {{(debug ? 1 : 0)}};
-        jamm_target = 60;
+        jamm_target = 120;
         ini_open("jamm_smooth.ini");
         jamm_target = ini_read_real("Smooth", "TargetFPS", jamm_target);
         ini_close();
+        jamm_bypass = 1;
+        jamm_frame_start = get_timer();
+        jamm_dbg_tick_us = 0;
+        jamm_dbg_render_us = 0;
+        jamm_dbg_tick_max = 0;
+        jamm_dbg_render_max = 0;
+        jamm_dbg_render_n = 0;
         jamm_margin = 900;
         jamm_logic = 30;
         jamm_room_base = 30;
@@ -188,6 +195,7 @@ public static class SmoothMod
         ds_list_clear(jamm_hidden);
         ds_list_clear(jamm_fish_on);
         jamm_render = 0;
+        jamm_bypass = 1;
         jamm_frozen = 0;
                 jamm_tick_now = 1;
         jamm_elapsed = 0;
@@ -205,6 +213,7 @@ public static class SmoothMod
     // First event of every frame. Input on a render-only frame wakes the frozen instances right away,
     // so pressed/released events are never swallowed.
     private const string BeginStep = """
+        jamm_frame_start = get_timer();
         jamm_last_dt = delta_time;
         jamm_dbg_maxdt = max(jamm_dbg_maxdt, delta_time);
         if (delta_time > 12000)
@@ -365,6 +374,19 @@ public static class SmoothMod
                     part_system_automatic_update(jamm_i, false);
                     part_system_update(jamm_i);
                 }
+            }
+            // A tick that already fills its interval cannot benefit from interpolation. Skip
+            // all instance scans/maps/culling; retry on every tick so recovery is automatic.
+            jamm_was_bypass = jamm_bypass;
+            jamm_bypass = jamm_target <= jamm_logic || (jamm_now - jamm_frame_start + jamm_render_dt * 1.5) >= (1000000 / jamm_logic);
+            if (jamm_bypass)
+            {
+                if (!jamm_was_bypass)
+                {
+                    ds_map_clear(jamm_known);
+                    jamm_scan_age = 99;
+                }
+                exit;
             }
             // Rescan which instances are near a camera every 4 ticks, or at once when the main camera
             // moved far; the wide margin covers anything that can move between two scans.
@@ -553,7 +575,8 @@ public static class SmoothMod
     // End of the frame: undo interpolation, fish draw side effects and culling, then decide by real
     // time whether the next frame runs a logic tick or only renders.
     private static string GuiEnd(bool debug, bool fish) => $$"""
-        {{(debug ? DebugShots : "")}}
+        if (!jamm_bypass)
+        {
         jamm_n = ds_list_size(jamm_restore);
         for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
         {
@@ -600,11 +623,15 @@ public static class SmoothMod
                 jamm_vset[jamm_i] = 0;
             }
         }
-        {{(debug ? DebugLog : "")}}
-        jamm_eff = max(jamm_target, jamm_logic);
+        }
+        // Bypass runs one tick per frame: let the engine pace it at Girl's logic rate
+        // (including Tab's 60), otherwise a 29 ms tick runs faster than the original 30 Hz.
+        jamm_eff = jamm_logic;
+        if (!jamm_bypass)
+            jamm_eff = max(jamm_target, jamm_logic);
         room_speed = jamm_eff;
         jamm_interval = 1000000 / jamm_logic;
-        if (jamm_eff <= jamm_logic || (jamm_elapsed + (jamm_render_dt * 1.5)) >= jamm_interval)
+        if (jamm_bypass || jamm_eff <= jamm_logic || (jamm_elapsed + (jamm_render_dt * 1.5)) >= jamm_interval)
         {
             jamm_tick_now = 1;
         }
@@ -622,29 +649,37 @@ public static class SmoothMod
             jamm_frozen = 1;
             jamm_tm_map += get_timer() - jamm_t0;
         }
-        """;
-
-    private const string DebugShots = """
-        if ((current_time > 45000 && jamm_dbg_shots < 6) || (current_time > 75000 && jamm_dbg_shots < 12))
-        {
-            if (jamm_tick_now)
-                screen_save("jamm_shot_" + string(jamm_dbg_shots) + "_tick.png");
-            else
-                screen_save("jamm_shot_" + string(jamm_dbg_shots) + "_render.png");
-            jamm_dbg_shots += 1;
-        }
+        {{(debug ? DebugLog : "")}}
         """;
 
     private const string DebugLog = """
+        // Active CPU/event time: excludes frame limiting and includes draw, unlike delta_time.
+        jamm_frame_us = get_timer() - jamm_frame_start;
+        if (jamm_prev_tick)
+        {
+            jamm_dbg_tick_us += jamm_frame_us;
+            jamm_dbg_tick_max = max(jamm_dbg_tick_max, jamm_frame_us);
+        }
+        else
+        {
+            jamm_dbg_render_n += 1;
+            jamm_dbg_render_us += jamm_frame_us;
+            jamm_dbg_render_max = max(jamm_dbg_render_max, jamm_frame_us);
+        }
         if (fps_real < 100)
             jamm_dbg_slow += 1;
         if ((current_time - jamm_dbg_time) >= 1000)
         {
             jamm_f = file_text_open_append("jamm_smooth_log.txt");
-            file_text_write_string(jamm_f, "t=" + string(current_time) + " fps=" + string(fps) + " frames>12ms=" + string(jamm_dbg_long) + " max_dt=" + string(jamm_dbg_maxdt div 1000) + " cull=" + string(ds_list_size(jamm_cull)) + "+" + string(ds_list_size(jamm_cull_fish)) + " fish_on=" + string(ds_list_size(jamm_fish_on)) + " frames=" + string(jamm_dbg_frames) + " ticks=" + string(jamm_dbg_ticks) + " probe b/s/e/d=" + string(global.jamm_probe_begin) + "/" + string(global.jamm_probe_step) + "/" + string(global.jamm_probe_end) + "/" + string(global.jamm_probe_draw) + " awake=" + string(jamm_dbg_awake) + " redeact=" + string(jamm_dbg_redeact) + " ms map/act/redeact/record/interp=" + string(jamm_tm_map div 1000) + "/" + string(jamm_tm_act div 1000) + "/" + string(jamm_tm_redeact div 1000) + "/" + string(jamm_tm_record div 1000) + "/" + string(jamm_tm_interp div 1000) + " moving=" + string(ds_list_size(jamm_moving)) + " logic=" + string(jamm_logic) + " target=" + string(jamm_target) + " delta=" + string(global.jamm_tick_delta) + " render_dt=" + string(jamm_render_dt) + " room=" + room_get_name(room));
+            file_text_write_string(jamm_f, "t=" + string(current_time) + " tick_ms_avg/max=" + string(jamm_dbg_tick_us / max(1, jamm_dbg_ticks) / 1000) + "/" + string(jamm_dbg_tick_max / 1000) + " render_ms_avg/max=" + string(jamm_dbg_render_us / max(1, jamm_dbg_render_n) / 1000) + "/" + string(jamm_dbg_render_max / 1000) + " render_n=" + string(jamm_dbg_render_n) + " bypass=" + string(jamm_bypass) + " fps=" + string(fps) + " frames>12ms=" + string(jamm_dbg_long) + " max_dt=" + string(jamm_dbg_maxdt div 1000) + " cull=" + string(ds_list_size(jamm_cull)) + "+" + string(ds_list_size(jamm_cull_fish)) + " fish_on=" + string(ds_list_size(jamm_fish_on)) + " frames=" + string(jamm_dbg_frames) + " ticks=" + string(jamm_dbg_ticks) + " probe b/s/e/d=" + string(global.jamm_probe_begin) + "/" + string(global.jamm_probe_step) + "/" + string(global.jamm_probe_end) + "/" + string(global.jamm_probe_draw) + " awake=" + string(jamm_dbg_awake) + " redeact=" + string(jamm_dbg_redeact) + " ms map/act/redeact/record/interp=" + string(jamm_tm_map div 1000) + "/" + string(jamm_tm_act div 1000) + "/" + string(jamm_tm_redeact div 1000) + "/" + string(jamm_tm_record div 1000) + "/" + string(jamm_tm_interp div 1000) + " moving=" + string(ds_list_size(jamm_moving)) + " logic=" + string(jamm_logic) + " target=" + string(jamm_target) + " delta=" + string(global.jamm_tick_delta) + " render_dt=" + string(jamm_render_dt) + " room=" + room_get_name(room));
             file_text_writeln(jamm_f);
             file_text_close(jamm_f);
             jamm_dbg_time = current_time;
+            jamm_dbg_tick_us = 0;
+            jamm_dbg_render_us = 0;
+            jamm_dbg_tick_max = 0;
+            jamm_dbg_render_max = 0;
+            jamm_dbg_render_n = 0;
             jamm_dbg_ticks = 0;
             jamm_dbg_frames = 0;
             jamm_dbg_slow = 0;

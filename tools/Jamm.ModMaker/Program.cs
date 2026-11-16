@@ -7,12 +7,24 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        try { return Run(args); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine($"Mod creation failed: {ex.Message} Check the input file and choose a writable new output path.");
+            if (args.Contains("--verbose")) Console.Error.WriteLine(ex);
+            return 1;
+        }
+    }
+
+    private static int Run(string[] args)
+    {
         if (args.Length < 2)
         {
             Console.Error.WriteLine("""
                 jamm-modmaker — builds example mods for JAMM-CGF from YOUR original data.win
                   inspect <original.win>
-                  smooth  <original.win> <out.win>
+                  perf    <original.win> <out.win>
+                  smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
@@ -26,6 +38,19 @@ public static class Program
         {
             Console.Error.WriteLine("Output must be a different file than the original.");
             return 1;
+        }
+        if (command is "perf" or "smooth" or "hd" or "profile")
+        {
+            if (output is null)
+            {
+                Console.Error.WriteLine($"'{command}' requires an original file and a new output file path.");
+                return 1;
+            }
+            if (File.Exists(output))
+            {
+                Console.Error.WriteLine($"Output '{output}' already exists. Choose a new path to protect existing game files.");
+                return 1;
+            }
         }
         UndertaleData data = Load(original);
         switch (command)
@@ -48,6 +73,15 @@ public static class Program
                     Console.WriteLine($"{r.Name.Content}: {r.GameObjects.Count} instances; mod instances: {string.Join(", ", r.GameObjects.Select((g, i) => (g, i)).Where(p => p.g.ObjectDefinition?.Name.Content.StartsWith("obj_jamm") == true).Select(p => $"{p.g.ObjectDefinition.Name.Content}@{p.i} id {p.g.InstanceID}"))}");
                 return 0;
             case "export-pages": TexturePages.Export(data, output!); return 0;
+            case "perf":
+                string[] changed = ["gml_Object_Fish_Step_2", "gml_Script_fish_check_trawler",
+                    "gml_Script_fish_avoid_fish", "gml_Object_SceneItem_Step_2",
+                    "gml_Object_Magmer_Draw_0", "gml_Object_Volteen_Other_13", "gml_Object_Volteen_Other_10"];
+                var before = changed.ToDictionary(n => n, n => data.Code.ByName(n)?.Instructions.Count ?? 0);
+                PerfMod.Apply(data);
+                foreach (string name in changed)
+                    Console.WriteLine($"{name}: {before[name]} -> {data.Code.ByName(name)!.Instructions.Count} instructions (static size, not executed work).");
+                Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "profile":
                 // Profiles a (possibly modded) data.win: instruments all object events.
