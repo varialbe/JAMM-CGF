@@ -23,10 +23,10 @@ public sealed class BrowseViewModelTests
     private static async Task Select(MainViewModel vm)
     {
         await vm.InitializeAsync(); await vm.Browse.RefreshAsync(); vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync();
-        Assert.Null(vm.Browse.SelectedFile); vm.Browse.SelectedFile = vm.Browse.Files.FirstOrDefault();
+        Assert.Equal(vm.Browse.Files.FirstOrDefault(), vm.Browse.SelectedFile);
     }
     [Fact]
-    public async Task SearchFiltersPreviewsAndExplicitFileSelectionDriveButtons()
+    public async Task SearchFiltersAndAutomaticSingleFileSelectionDriveButtons()
     {
         using var files = new TestFiles(); var vm = Create(files, _ => throw new Exception(), Example(), Example(true) with { Id = "41", Name = "Preview", Categories = ["Boats"] });
         await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
@@ -34,7 +34,7 @@ public sealed class BrowseViewModelTests
         vm.Browse.Category = "Boats"; Assert.Single(vm.Browse.Mods);
         vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync(); Assert.Empty(vm.Browse.Files); Assert.False(vm.Browse.CanDownload);
         vm.Browse.Category = "All categories"; vm.Browse.Release = "Released"; Assert.Single(vm.Browse.Mods);
-        vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync(); Assert.False(vm.Browse.CanDownload);
+        vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync(); Assert.True(vm.Browse.CanDownload);
         vm.Browse.SelectedFile = Assert.Single(vm.Browse.Files); Assert.True(vm.Browse.CanDownload); Assert.False(vm.Browse.CanDownloadInstall);
         vm.Browse.Search = "does not exist"; Assert.Empty(vm.Browse.Mods); Assert.Contains("No mods", vm.Browse.EmptyMessage);
         vm.Browse.Dispose();
@@ -48,7 +48,7 @@ public sealed class BrowseViewModelTests
         Assert.Contains("no proven local", vm.Browse.Membership);
         await vm.Browse.DownloadAsync(false, _ => throw new Exception("Add must not install"));
         Assert.Single(vm.Mods); Assert.Equal(manual.Id, vm.Mods[0].Id); Assert.Equal("Manual", vm.Mods[0].Name);
-        Assert.Contains("In library", vm.Browse.Membership); Assert.DoesNotContain("currently installed", vm.Browse.Membership);
+        Assert.Contains("Enabled in selected profile", vm.Browse.Membership); Assert.DoesNotContain("currently installed", vm.Browse.Membership);
         var saved = new ModLibrary(files.Store).Find(manual.Id); var origin = Assert.Single(saved.Origins);
         Assert.Equal("litterbox", origin.Catalog); Assert.Equal("40", origin.ModId); Assert.Equal("file-id", origin.FileId); Assert.Equal("release-id", origin.ReleaseId); Assert.Equal("1.0", origin.Version);
         await vm.Browse.DownloadAsync(false, _ => Task.FromResult(false)); Assert.Single(new ModLibrary(files.Store).Find(manual.Id).Origins);
@@ -91,7 +91,8 @@ public sealed class BrowseViewModelTests
     {
         using var files = new TestFiles(); string source = files.Mod("Source", "x = 1;\n");
         var started = new TaskCompletionSource(); var release = new TaskCompletionSource(); int downloads = 0;
-        var vm = Create(files, async token => { downloads++; started.SetResult(); await release.Task.WaitAsync(token); return File.ReadAllBytes(source); });
+        bool first = true;
+        var vm = Create(files, async token => { if (first) { first = false; throw new HttpRequestException("Selection check failed; retry Download."); } downloads++; started.SetResult(); await release.Task.WaitAsync(token); return File.ReadAllBytes(source); });
         await Select(vm); Task download = vm.Browse.DownloadAsync(false, _ => Task.FromResult(false)); await started.Task;
         Assert.True(vm.IsBusy); Assert.False(vm.Browse.CanDownload); Assert.False(vm.CanEdit); Assert.False(vm.CanRestore); Assert.True(vm.CanCancel);
         await vm.AddAsync([source]); await vm.RestoreAsync(); await vm.InstallAsync(_ => throw new Exception("Busy")); await vm.Browse.DownloadAsync(false, _ => Task.FromResult(false));
@@ -101,17 +102,27 @@ public sealed class BrowseViewModelTests
         Assert.Empty(Directory.GetFiles(Path.Combine(files.Store.Root, "downloads"))); vm.Browse.Dispose();
     }
     [Fact]
-    public async Task DownloadAddCanEnableWithoutInstallingAndNewReleaseNeverChangesProfilesImplicitly()
+    public async Task DownloadEnablesWithoutInstallingAndRetainsSelectedReleaseBytes()
     {
         using var files = new TestFiles(); string source = files.Mod("Source", "x = 1;\n");
         var profiles = new ProfileLibrary(files.Store); profiles.CreateEmpty("online"); profiles.Use("online");
-        var vm = Create(files, _ => Task.FromResult(File.ReadAllBytes(source))); await Select(vm); vm.Browse.AddToProfile = true;
+        var vm = Create(files, _ => Task.FromResult(File.ReadAllBytes(source))); await Select(vm);
         string game = Path.Combine(files.Store.Config().GameDir!, "data.win"), before = BuildFiles.Hash(game);
         await vm.Browse.DownloadAsync(false, _ => throw new Exception()); Assert.Single(profiles.Get("online").EnabledMods); Assert.Equal(before, BuildFiles.Hash(game));
         string old = profiles.Get("online").Mods[0];
-        source = files.Mod("NewRelease", "x = 2;\n"); vm.Browse.AddToProfile = false;
+        source = files.Mod("NewRelease", "x = 2;\n");
         await vm.Browse.DownloadAsync(false, _ => throw new Exception());
-        Assert.Equal(2, vm.Mods.Count); Assert.Equal(old, Assert.Single(profiles.Get("online").Mods)); Assert.Equal(before, BuildFiles.Hash(game)); vm.Browse.Dispose();
+        Assert.Single(vm.Mods); Assert.Equal(old, Assert.Single(profiles.Get("online").Mods)); Assert.Equal(before, BuildFiles.Hash(game)); vm.Browse.Dispose();
+    }
+    [Fact]
+    public async Task OversizedOptionalThumbnailDoesNotClaimCatalogFailed()
+    {
+        using var files = new TestFiles();
+        var vm = Create(files, _ => Task.FromResult(new byte[300000]), Example() with { IconUrl = "https://example.com/huge.png" });
+        await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
+        Assert.Single(vm.Browse.Mods); Assert.Contains("Last successful fetch", vm.Browse.Status);
+        Assert.DoesNotContain("Could not load", vm.Browse.Status);
+        Assert.Null(vm.Browse.Mods[0].Icon); vm.Browse.Dispose();
     }
     private sealed class OfflineCatalog : IModCatalogProvider
     { public Task<CatalogSnapshot> LoadAsync(CancellationToken token) => throw new HttpRequestException("Offline; check your connection and Retry."); }

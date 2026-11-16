@@ -40,7 +40,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Installation requires a known game and an enabled selection.</summary>
     public bool CanInstall => CanCheck && knownGame;
     /// <summary>Play uses the same checked installation workflow.</summary>
-    public bool CanPlay => CanInstall;
+    public bool CanPlay => !IsBusy && SelectedProfile is not null && knownGame;
     /// <summary>Restore is available only for a recognized game with a backup.</summary>
     public bool CanRestore => !IsBusy && knownGame && canRestore;
     /// <summary>Cancellation is unavailable during the short atomic installation/restore stage.</summary>
@@ -83,7 +83,36 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Requests cancellation at the next safe Core checkpoint.</summary>
     public void Cancel() { if (CanCancel) { cancellation?.Cancel(); Status = "Cancelling at the next safe checkpoint…"; } }
     /// <summary>Loads library and profiles, then recognizes the configured installation.</summary>
-    public Task InitializeAsync() => RunAsync("Loading library", async (_, _) => await ReloadAsync());
+    public Task InitializeAsync() => RunAsync("Loading library", async (token, _) =>
+    {
+        await ReloadAsync();
+        if (Config.Base is null)
+        {
+            var found = await Task.Run(() => SteamGameDetection.Detect(token), token);
+            DetectedLegacy = found.FirstOrDefault(g => g.Usable);
+            SetupMessage = DetectedLegacy is not null ? "Legacy game found. Create a separate modded copy to get started." : "Open Steam's console and download the legacy game, then restart JAMM. Your installed game stays safe.";
+            OnPropertyChanged(nameof(HasDetectedLegacy));
+        }
+    });
+    /// <summary>Persisted expert-mode preference.</summary>
+    public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); } }
+    /// <summary>First usable detected legacy game.</summary>
+    public DetectedGame? DetectedLegacy { get; private set; }
+    /// <summary>Whether a game base still needs to be configured.</summary>
+    public bool NeedsSetup => Config.Base is null;
+    /// <summary>Whether one-click safe setup is available.</summary>
+    public bool HasDetectedLegacy => DetectedLegacy is not null && Config.Base is null;
+    private string setupMessage = "";
+    /// <summary>First-run next step.</summary>
+    public string SetupMessage { get => setupMessage; private set => SetProperty(ref setupMessage, value); }
+    /// <summary>Creates an independent modded game and base.</summary>
+    public Task UseDetectedGameAsync() => RunAsync("Creating modded game", async (token, _) =>
+    {
+        if (DetectedLegacy is null) return;
+        await Task.Run(() => SteamGameDetection.Use(store, DetectedLegacy, token), token);
+        SetupMessage = "Separate modded game ready. Browse mods to get started.";
+        OnPropertyChanged(nameof(HasDetectedLegacy)); await ReloadAsync();
+    });
 
     /// <summary>Guards configuration reads and settings construction, including first-run setup.</summary>
     public async Task OpenSettingsAsync(Func<Task> show, bool onlyWhenUnconfigured = false)
@@ -122,7 +151,7 @@ public sealed partial class MainViewModel : ObservableObject
                 row.PropertyChanged += async (_, e) => { if (e.PropertyName == nameof(ModRow.Enabled) && !loading && !IsBusy) await SaveOrderAsync(); };
             }
             knownGame = data.State.Known; canRestore = data.State.CanRestore; GameStatus = data.State.Message;
-            OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
+            OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(NeedsSetup)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         }
         finally { loading = false; }
         await Browse.UpdateMembershipAsync();
@@ -162,6 +191,26 @@ public sealed partial class MainViewModel : ObservableObject
         var ids = Order.Select(m => m.Id).ToArray(); var disabled = Order.Where(m => !m.Enabled).Select(m => m.Id).ToArray();
         await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile, ids, disabled));
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons(); Message("Load order saved. Check again to review conflicts.");
+    }, false);
+    /// <summary>Toggles a library mod, creating the default profile when needed.</summary>
+    public Task ToggleModAsync(string id) => RunAsync("Updating enabled mods", async (_, _) =>
+    {
+        await Task.Run(() =>
+        {
+            var profiles = new ProfileLibrary(store);
+            string? name = SelectedProfile;
+            if (name is null)
+            {
+                name = profiles.List().FirstOrDefault()?.Name;
+                if (name is null) { name = "default"; profiles.CreateEmpty(name); }
+                profiles.Use(name);
+            }
+            var profile = profiles.Get(name);
+            bool enabled = profile.EnabledMods.Contains(id);
+            string[] ids = profile.Mods.Contains(id) ? profile.Mods : [.. profile.Mods, id];
+            profiles.Update(name, ids, enabled ? profile.DisabledMods.Append(id) : profile.DisabledMods.Where(m => m != id));
+        });
+        await ReloadAsync();
     }, false);
     /// <summary>Moves a mod to an absolute position for drag/drop and keyboard buttons.</summary>
     public async Task MoveAsync(int from, int to)
@@ -277,10 +326,11 @@ public sealed partial class MainViewModel : ObservableObject
             foreach (string decision in prepared.Build.Plan.Decisions) Message(decision);
             token.ThrowIfCancellationRequested();
             string gameFile = Path.Combine(prepared.Config.GameDir!, "data.win");
-            if (!await confirm($"Replace:\n{gameFile}\n\nVerified original backups:\n{gameFile}.cgfmm-original\n{Path.Combine(store.Root, "backups", prepared.BaseSha256 + ".win")}\n\nInstall verified profile '{prepared.Profile.Name}'?")) { Message("Installation declined. The game was not replaced."); return; }
+            if (prepared.Config.ConfirmedInstallDirectory != prepared.Config.GameDir && !await confirm($"Replace:\n{gameFile}\n\nVerified original backups:\n{gameFile}.cgfmm-original\n{Path.Combine(store.Root, "backups", prepared.BaseSha256 + ".win")}\n\nInstall verified profile '{prepared.Profile.Name}'?")) { Message("Installation declined. The game was not replaced."); return; }
             token.ThrowIfCancellationRequested();
             cancellable = false; NotifyButtons();
             await Task.Run(() => installer.Install(prepared, retainIndependentBase: true));
+            store.Set("confirmedInstallDirectory", prepared.Config.GameDir!);
             foreach (string warning in prepared.Build.Verification!.Warnings) Message(warning);
             await ReloadAsync();
             Message($"Installed and verified: {prepared.Build.Verification!.DecompiledEntries} code entries; {prepared.Build.SemanticEntries} semantic checks. SHA-256 {prepared.Build.Verification.Inspection.Sha256}");
@@ -291,8 +341,22 @@ public sealed partial class MainViewModel : ObservableObject
     public Task PlayAsync(Func<string, Task<bool>> confirm) => RunAsync("Preparing play", async (token, progress) =>
     {
         var command = await Task.Run(() => { var c = GameLauncher.Create(store.Config(), store.Root); GameLauncher.Validate(c); return c; }, token);
-        await InstallInternalAsync(confirm, token, progress);
-        if (!await Task.Run(() => new ProfileInstaller(store).IsInstalled(SelectedProfile))) return;
+        if (Order.Any(m => m.Enabled))
+        {
+            await InstallInternalAsync(confirm, token, progress);
+            if (!await Task.Run(() => new ProfileInstaller(store).IsInstalled(SelectedProfile))) return;
+        }
+        else
+        {
+            var state = await Task.Run(() => new ManagerOperations(store).Status(), token);
+            if (!state.Known) throw new IOException(state.Message);
+            if (state.CanRestore)
+            {
+                token.ThrowIfCancellationRequested(); cancellable = false; NotifyButtons();
+                await Task.Run(() => new ProfileInstaller(store).Restore());
+                await ReloadAsync();
+            }
+        }
         await Task.Run(() => { if (store.Config().Wine.Mode == "proton" && store.Config().Proton.CompatDataPath is null) store.EnsureProtonDataDirectory(); GameLauncher.Launch(command); });
         Message("Started " + command.Display());
     });

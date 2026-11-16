@@ -106,7 +106,9 @@ public sealed class ManagerStore
         string Full() => System.IO.Path.GetFullPath(value);
         config = key switch
         {
+            "advancedMode" when bool.TryParse(value, out _) => config with { AdvancedMode = bool.Parse(value) },
             "base" => config with { Base = Full() },
+            "confirmedInstallDirectory" => config with { ConfirmedInstallDirectory = Full() },
             "gameDir" => config with { GameDir = Full() },
             "wine.mode" when value is "wine" or "proton" or "proton-flatpak" => config with { Wine = config.Wine with { Mode = value } },
             "wine.prefix" => config with { Wine = config.Wine with { Prefix = Full() } },

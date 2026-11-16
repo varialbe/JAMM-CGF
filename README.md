@@ -31,25 +31,38 @@ The desktop window and CLI use the same data directory and settings. Pass `--dat
 
 ## Browse mods
 
-Open **Browse mods** to search Litterbox by name, author or description, filter categories
-and released/preview entries, and sort by name, date or rating. Select a mod to read the
-full author description, view available images, and open its original source page.
-The catalog loads on first visit; **Retry / Refresh** retries a failed fetch. Offline
-snapshots show their last successful fetch time. Local management works without the catalog.
+Open **Browse mods**, select a card to see images and check its content, then press
+**Download**. JAMM imports the file and enables it in your active profile (creating a
+default profile if needed). Green/grey **Disable/Enable** buttons control your mods.
+Press **Play** to build, verify and apply changed selections before starting the game.
+The first installation asks you to approve the exact game-copy and backup paths.
 
-Choose a file/release explicitly, then **Download & add**. Optionally enable it in the
-selected profile. **Download & install** also enables it, checks conflicts, and uses the
-existing build/verify/install confirmation with concrete target and backup paths.
-New overlaps return you to **Manager** to review choices and press Install. Importing
-alone never replaces the game's archive. The shared **Cancel** button cancels transfers
-and import work at safe checkpoints.
+Cards show counts computed from the archives, rather than claims from descriptions.
+A green check means the patch built and verified with matching build information;
+a red cross means it cannot apply; a yellow question mark means unverified, failed
+analysis, or a different source build. Hover the icon for the reason. Colour Expansion
+builds against the August 16 base but remains yellow because its source is August 15.
+
+**Advanced mode** is saved between sessions. It shows author descriptions, releases,
+file choices, load order, conflicts and the existing manager actions. A unique file
+from the newest release is chosen automatically; genuinely ambiguous choices require
+the advanced picker. Later mods win by default; advanced conflict choices remain available.
+
+First-run setup searches Steam libraries and depot downloads on Windows, Linux
+(including Flatpak/Snap Steam) and macOS. A detected legacy game can be copied into
+separate manager storage with one click. If only the current game is found, copy the
+legacy-depot command into Steam's console and restart JAMM after downloading it.
+Found originals are read-only; JAMM never installs into them during automatic setup.
+
+The catalog loads on first visit; **Retry / Refresh** retries failures. Offline snapshots
+show their last successful fetch time. Selection checks are cancellable and downloaded
+archives/facts are cached under the selected manager data directory. Local management
+works without the catalog.
 
 Public Game Jolt project pages and direct HTTPS `.win`/`.zip` links are supported.
-Unsupported hosts, dashboard/private links, or missing downloads offer **Open source page**;
-a browser fallback is not a completed download. Previews without a release cannot download.
-Compatibility remains **unknown** until local import checks; a verified-creator badge
-is not evidence of compatibility. Archive SHA-256 identifies downloaded bytes, not authorship.
-New releases never change existing profiles automatically. [Storage, limits and provenance](docs/data-layout.md#online-catalog-and-downloads).
+Unsupported hosts offer a source-page fallback in Advanced mode. Previews without a
+release cannot download. SHA-256 identifies bytes, not authorship. New releases never
+change existing profiles automatically. [Storage, limits and provenance](docs/data-layout.md#online-catalog-and-downloads).
 
 ## Review the overlap
 

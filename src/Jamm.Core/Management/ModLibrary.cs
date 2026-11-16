@@ -160,7 +160,7 @@ public sealed class ModLibrary(ManagerStore store)
         Directory.Delete(directory, true);
     }
 
-    private static void CopyZip(string source, string destination, CancellationToken cancellationToken)
+    internal static void CopyZip(string source, string destination, CancellationToken cancellationToken)
     {
         using var zip = ZipFile.OpenRead(source);
         List<ZipArchiveEntry> candidates = [];

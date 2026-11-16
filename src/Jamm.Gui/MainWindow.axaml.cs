@@ -50,7 +50,7 @@ public sealed partial class MainWindow : Window
             if (!initializeOnOpen || initialized || Model is null) return;
             initialized = true;
             await Model.InitializeAsync();
-            await Model.OpenSettingsAsync(() => new SettingsWindow(Model).ShowDialog(this), onlyWhenUnconfigured: true);
+            // First-run detection and setup actions are shown in the main window.
         };
         MainTabs.SelectionChanged += async (_, e) =>
         {
@@ -59,6 +59,19 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) => Model?.Browse.Dispose();
         Closing += (_, e) => { if (Model?.IsBusy == true) { e.Cancel = true; Model.Cancel(); } };
     }
+    private async void CardPageClick(object? sender, RoutedEventArgs e) { if (sender is Control { DataContext: CatalogRow row }) await OpenPublicPageAsync(row.Mod.SourcePage); e.Handled = true; }
+    private async void CardDownloadClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is not { CanEdit: true } vm || sender is not Control { DataContext: CatalogRow row }) return;
+        e.Handled = true;
+        if (vm.Browse.Selected != row || vm.Browse.IsLoading) { vm.Browse.Selected = row; await vm.Browse.SelectAsync(); }
+        await vm.Browse.DownloadAsync(false, ConfirmAsync);
+    }
+    private async void UseDetectedClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.UseDetectedGameAsync(); }
+    private async void CopyDepotClick(object? sender, RoutedEventArgs e) { if (Clipboard is { } clipboard) await clipboard.SetTextAsync(Jamm.Core.Management.SteamGameDetection.LegacyCommand); }
+    private async void ToggleModClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm && sender is Control { DataContext: ModRow row }) await vm.ToggleModAsync(row.Id); }
+    private async void BrowseFileChanged(object? sender, SelectionChangedEventArgs e) { if (Model is { } vm && e.AddedItems.Count > 0) await vm.Browse.SelectFileAsync(); }
+    private void BrowseCancelClick(object? sender, RoutedEventArgs e) => Model?.Browse.CancelReads();
     private async void BrowseRefreshClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.Browse.RefreshAsync(); }
     private async void BrowseSelectionChanged(object? sender, SelectionChangedEventArgs e) { if (Model is { } vm && e.Source == BrowseList && e.AddedItems.Count > 0) await vm.Browse.SelectAsync(); }
     private async void BrowseResolveClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm) await vm.Browse.SelectAsync(); }

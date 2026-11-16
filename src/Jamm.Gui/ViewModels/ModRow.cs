@@ -15,5 +15,9 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     /// <summary>Readable archive size and cache state.</summary>
     public string Metadata { get; } = $"{size / 1048576.0:0.0} MB · Patch {(cached ? "cached ✓" : "missing")}";
     /// <summary>Whether this mod participates in the active profile.</summary>
-    public bool Enabled { get => enabled; set => SetProperty(ref enabled, value); }
+    public bool Enabled { get => enabled; set { if (SetProperty(ref enabled, value)) { OnPropertyChanged(nameof(ToggleLabel)); OnPropertyChanged(nameof(ToggleColor)); } } }
+    /// <summary>Explicit action for the current state.</summary>
+    public string ToggleLabel => Enabled ? "Disable" : "Enable";
+    /// <summary>Green enabled and grey disabled state.</summary>
+    public string ToggleColor => Enabled ? "#258549" : "#656565";
 }

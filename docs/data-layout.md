@@ -16,8 +16,13 @@ cgfmm/
   backups/<base-sha256>.win
   builds/<unique-build-id>.win
   catalog/litterbox.json              # last successful public catalog snapshot
+  download-cache/<sha256>.win         # immutable validated/extracted downloads
+  download-cache/<identity-hash>.json # provider/release/file identity -> archive hash
+  analysis/<filehash>-<basehash>-1.json # proven counts and compatibility, analyzer v1
+  base/data.win                      # independent ancestor created by automatic setup
+  game/                              # separate game copy created by automatic setup
   downloads/<random-id>.part          # bounded transfer staging; removed on failure/cancel
-  downloads/<random-id>.win or .zip   # validated transfer; removed after import attempt
+  downloads/<random-id>.win or .zip   # validated staging; moved/extracted to cache
   installed.json
   proton/<steam-app-id>/              # default Proton compatibility directory
 ```
@@ -190,3 +195,38 @@ Browse distinguishes catalog availability, transfer/import, library membership,
 selected-profile enablement and verified installed-profile membership. The last is
 shown only when the existing installer can verify the saved profile signature and
 installed archive. It does not infer game installation from a successful download.
+
+
+## Simple browsing and automatic setup (Phase 9b)
+
+`config.json` adds optional `advancedMode` (false) and `confirmedInstallDirectory`
+(null). Confirmation is retained only for that exact destination; the installer still
+validates the current game, original backups, exact profile signature and build bytes
+on every apply. Play skips build/apply when the installed signature still matches.
+With all mods disabled, Play restores the verified original before launch.
+
+Selection downloads into the bounded staging area, extracts a validated ZIP's single
+archive, and retains bytes by SHA-256 in `download-cache/`. Provider/source/release/file
+identities have hashed JSON index names; a cache hit rehashes bytes before reuse.
+Signed Game Jolt URLs are never persisted. Analysis is keyed by archive SHA-256,
+configured base SHA-256 and analyzer revision. Deleting these two cache directories
+while the manager is idle is safe; library/profile state remains independent.
+There is currently no automatic cache eviction.
+
+Analysis generates a semantic patch and performs a complete build/reload/verification
+into temporary manager storage, deleting its output afterward. Resource additions and
+changed code entries come from patch counts. Fish require an actual ancestor named
+`Fish`, following parent links with cycle protection; names/descriptions are not hints.
+Unprovable boat/catalog counts are omitted. Timestamp differences retain an Unsure
+icon even after a successful build. Failures do not import or enable a library mod.
+Only the explicit Download action imports through `ModLibrary.Add`, attaches provenance
+and enables the result. Its transfer/import and profile writes use the existing
+serialized GUI operation guard. Selection analysis is read-only with respect to game,
+library and profile inputs and can be cancelled independently.
+
+Steam detection checks default Windows, native Linux, Flatpak, Snap and macOS roots,
+reads modern and older `libraryfolders.vdf` path entries, and inspects common game and
+legacy depot archive candidates through `GameFileLoader`. Automatic setup copies the
+chosen legacy directory to guarded `game/` storage and retains independent `base/data.win`.
+It refuses an existing game copy and skips filesystem links. The found source is never
+written. Steam ownership/download and the configured Wine/Proton runner remain required.

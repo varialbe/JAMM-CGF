@@ -68,6 +68,7 @@ public sealed class HeadlessTests
         var b = library.Add(files.Mod("Example Mod B", "x = 2;\n")).Mod;
         var profiles = new ProfileLibrary(files.Store); profiles.Create("drag", [a.Id, b.Id]); profiles.Use("drag");
         var vm = new MainViewModel(files.Store); await vm.InitializeAsync();
+        vm.AdvancedMode = true;
         var window = new MainWindow(false) { DataContext = vm }; window.Show(); window.UpdateLayout();
         var list = window.FindControl<ListBox>("OrderList")!;
         var first = list.ContainerFromIndex(0)!; var second = list.ContainerFromIndex(1)!;
@@ -106,7 +107,7 @@ public sealed class HeadlessTests
         Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
         var list = window.FindControl<ListBox>("BrowseList")!; list.SelectedIndex = 1;
         while (vm.Browse.IsLoading) await Task.Delay(10);
-        Assert.NotNull(vm.Browse.Selected); Assert.NotEmpty(vm.Browse.Files); Assert.False(vm.Browse.CanDownload);
+        Assert.NotNull(vm.Browse.Selected); Assert.NotEmpty(vm.Browse.Files); Assert.True(vm.Browse.CanDownload);
         vm.Browse.SelectedFile = vm.Browse.Files[0]; Assert.True(vm.Browse.CanDownload);
         Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);

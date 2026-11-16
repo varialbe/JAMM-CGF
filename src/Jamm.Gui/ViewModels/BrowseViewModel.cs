@@ -10,6 +10,15 @@ namespace Jamm.Gui.ViewModels;
 public sealed class CatalogRow(CatalogMod mod) : ObservableObject
 {
     private Bitmap? icon;
+    private string adds = "Checking on selection…", compatibility = "?", reason = "Unsure: select this mod to check its content.", color = "#D6A500";
+    /// <summary>Proven resource counts.</summary>
+    public string Adds { get => adds; internal set => SetProperty(ref adds, value); }
+    /// <summary>Accessible compatibility symbol.</summary>
+    public string CompatibilityIcon { get => compatibility; internal set => SetProperty(ref compatibility, value); }
+    /// <summary>Compatibility reason for tooltip and assistive technology.</summary>
+    public string CompatibilityReason { get => reason; internal set => SetProperty(ref reason, value); }
+    /// <summary>Compatibility color.</summary>
+    public string CompatibilityColor { get => color; internal set => SetProperty(ref color, value); }
     /// <summary>Public metadata and stable catalog identity.</summary>
     public CatalogMod Mod { get; } = mod;
     /// <summary>Display name.</summary>
@@ -30,7 +39,6 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     private readonly ModHttp http;
     private readonly IModCatalogProvider catalog;
     private readonly IModDownloadResolver resolver;
-    private readonly ModDownloadService downloads;
     private CancellationTokenSource? reading;
     private CatalogRow[] all = [];
     private ManagedMod[] localMods = [];
@@ -38,7 +46,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     private CatalogRow? selected;
     private ModDownloadFile? selectedFile;
     private string search = "", category = "All categories", release = "All releases", sort = "Name", status = "Choose Retry to load Litterbox.", detailStatus = "Select a mod for details.", membership = "Available in catalog", transferState = "";
-    private bool loading, indeterminate = true, addToProfile;
+    private bool loading, indeterminate = true;
     private double progress;
     /// <summary>Creates public discovery services, with injectable providers for deterministic tests.</summary>
     public BrowseViewModel(MainViewModel owner, ManagerStore store, ModHttp? http = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null)
@@ -46,7 +54,6 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
         this.owner = owner; this.store = store; this.http = http ?? new();
         this.catalog = catalog ?? new LitterboxCatalogProvider(store, this.http);
         this.resolver = resolver ?? new GameJoltDownloadResolver(this.http);
-        downloads = new(store, this.http);
     }
     /// <summary>Filtered native rows.</summary>
     public ObservableCollection<CatalogRow> Mods { get; } = [];
@@ -56,7 +63,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     public string[] Releases { get; } = ["All releases", "Released", "Preview"];
     /// <summary>Sort keys supported by the catalog metadata.</summary>
     public string[] Sorts { get; } = ["Name", "Newest", "Rating"];
-    /// <summary>Explicit file choices; no file is selected implicitly.</summary>
+    /// <summary>Advanced file choices; a unique file in the newest release is selected automatically.</summary>
     public ObservableCollection<ModDownloadFile> Files { get; } = [];
     /// <summary>Selected detail images, held only in memory and released on selection change.</summary>
     public ObservableCollection<Bitmap> Images { get; } = [];
@@ -86,8 +93,6 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     public double Progress { get => progress; private set => SetProperty(ref progress, value); }
     /// <summary>Whether transfer size is unknown.</summary>
     public bool IsIndeterminate { get => indeterminate; private set => SetProperty(ref indeterminate, value); }
-    /// <summary>Whether add-only also enables the imported mod in the selected profile.</summary>
-    public bool AddToProfile { get => addToProfile; set => SetProperty(ref addToProfile, value); }
     /// <summary>Direct actions require a released file, configured base and the shared idle state.</summary>
     public bool CanDownload => !owner.IsBusy && !IsLoading && Selected?.Mod.HasDownload == true && SelectedFile is not null && owner.HasOnlineBase;
     /// <summary>Installation additionally requires a selected profile and recognized game.</summary>
@@ -133,7 +138,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                     var bytes = await http.ReadAsync(url, Math.Min(256 * 1024, budget), current.Token); budget -= bytes.Length;
                     using var stream = new MemoryStream(bytes); row.Icon = Bitmap.DecodeToWidth(stream, 72);
                 }
-                catch (Exception ex) when (ex is HttpRequestException or IOException or ArgumentException or NotSupportedException or TimeoutException) { /* Optional image; text remains usable. */ }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or ArgumentException or NotSupportedException or TimeoutException) { /* Optional image; text remains usable. */ }
             }
         }
         catch (OperationCanceledException) { if (reading == current) Status = "Catalog loading cancelled. Retry when ready."; }
@@ -147,15 +152,16 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
         var row = Selected; IsLoading = true; Files.Clear(); SelectedFile = null;
         foreach (var image in Images) image.Dispose(); Images.Clear();
         if (row is null) { IsLoading = false; reading = null; current.Dispose(); return; }
-        DetailStatus = "Resolving source… Compatibility: unknown. Version: unknown until a release is resolved.";
+        row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
+        row.CompatibilityReason = "Unsure: resolving selected source."; row.Adds = "Checking content…";
+        DetailStatus = "Finding the download…";
         try
         {
             var resolution = await resolver.ResolveAsync(row.Mod, current.Token);
             if (reading != current || row != Selected) return;
             foreach (var file in resolution.Files) Files.Add(file);
-            DetailStatus = (resolution.Notice ?? "Choose a file/release below.") + (resolution.Files.Any(f => f.Version is not null) ? " " : " Version: unknown. ") + "Compatibility with your base: unknown until import. "
-                + (row.Mod.VerifiedCreator ? "Verified creator is a catalog badge, not a compatibility guarantee." : "");
-            IsLoading = false;
+            SelectedFile = ModFileSelection.Choose(resolution.Files);
+            DetailStatus = resolution.Notice ?? "Checking selected download…";
             foreach (string url in new[] { row.Mod.BannerUrl }.Concat(row.Mod.Screenshots ?? []).OfType<string>().Take(4))
             {
                 try
@@ -164,12 +170,45 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                     if (reading != current || row != Selected) return;
                     using var stream = new MemoryStream(bytes); Images.Add(Bitmap.DecodeToWidth(stream, 600));
                 }
-                catch (Exception ex) when (ex is HttpRequestException or IOException or ArgumentException or NotSupportedException or TimeoutException) { /* Optional image. */ }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or ArgumentException or NotSupportedException or TimeoutException) { /* Optional image. */ }
+            }
+            if (SelectedFile is { } chosen && owner.HasOnlineBase)
+            {
+                await CheckFactsAsync(row, chosen, current.Token);
+            }
+            else
+            {
+                DetailStatus = resolution.Notice ?? (SelectedFile is null ? "Several downloads are available. Turn on Advanced mode to choose one." : "Choose a game base in Settings to check and download this mod.");
+                row.Adds = DetailStatus;
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (reading == current) DetailStatus = "Could not resolve this source: " + ex.Message + " Open source page or select again to retry."; }
+        catch (Exception ex) { if (reading == current) { DetailStatus = "Could not check this mod: " + ex.Message + " Select again to retry."; row.Adds = "Content check unavailable. Select again to retry."; row.CompatibilityReason = "Unsure: " + ex.Message; } }
         finally { if (reading == current) { reading = null; IsLoading = false; } current.Dispose(); }
+    }
+    private async Task CheckFactsAsync(CatalogRow row, ModDownloadFile chosen, CancellationToken token)
+    {
+        row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
+        row.CompatibilityReason = "Unsure: checking selected file.";
+        row.Adds = "Checking content…";
+        string archive = await new ModDownloadCache(store, http).FetchFileAsync(chosen, resolver, null, token);
+        var facts = await Task.Run(() => new ModFactAnalyzer(store).Analyze(archive, token), token);
+        token.ThrowIfCancellationRequested();
+        row.Adds = facts.Adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", facts.Adds);
+        row.CompatibilityIcon = facts.Compatibility == "Compatible" ? "✓" : facts.Compatibility == "Incompatible" ? "✕" : "?";
+        row.CompatibilityColor = facts.Compatibility == "Compatible" ? "#259D50" : facts.Compatibility == "Incompatible" ? "#D74040" : "#D6A500";
+        row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason;
+        DetailStatus = facts.Reason;
+    }
+    /// <summary>Checks an explicitly chosen advanced release without changing the catalog selection.</summary>
+    public async Task SelectFileAsync()
+    {
+        if (IsLoading || owner.IsBusy || Selected is not { } row || SelectedFile is not { } file) return;
+        reading?.Cancel(); using var current = new CancellationTokenSource(); reading = current; IsLoading = true;
+        try { await CheckFactsAsync(row, file, current.Token); }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { row.Adds = "Content check unavailable. Select again to retry."; row.CompatibilityReason = "Unsure: " + ex.Message; }
+        finally { if (reading == current) { reading = null; IsLoading = false; } }
     }
     /// <summary>Computes proven profile/installation membership off the UI thread after local changes.</summary>
     public async Task UpdateMembershipAsync()
@@ -195,29 +234,31 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
             var ids = localMods.Where(m => m.Origins.Any(o => o.Catalog == "litterbox" && o.ModId == Selected.Mod.Id)).Select(m => m.Id).ToArray();
             string state = ids.Length == 0 ? "Available in catalog; no proven local import" : ids.Intersect(enabledIds).Any() ? "Enabled in selected profile" : "In library";
             if (ids.Intersect(installedIds).Any()) state += " · Included in currently installed profile";
-            Membership = (transferState.Length == 0 ? "" : transferState + " · ") + state;
+            Membership = (transferState.Length == 0 || transferState == state ? "" : transferState + " · ") + state;
         }
         catch (Exception ex) { Membership = "Local status unavailable: " + ex.Message; }
     }
-    /// <summary>Downloads, imports and optionally activates/installs under the existing serialized operation.</summary>
+    /// <summary>Downloads, imports and enables under the existing serialized operation; advanced mode can also install.</summary>
     public Task DownloadAsync(bool install, Func<string, Task<bool>> confirm)
     {
         if (!CanDownload || install && !CanDownloadInstall) return Task.CompletedTask;
-        var mod = Selected!.Mod; var file = SelectedFile!; string? profile = owner.SelectedProfile; bool enable = install || AddToProfile;
+        var mod = Selected!.Mod; var file = SelectedFile!; string? profile = owner.SelectedProfile;
         return owner.RunAsync("Downloading mod", async (token, progressText) =>
         {
-            string? path = null; bool reloaded = false, imported = false; int transferring = 1;
+            string? path = null; bool reloaded = false, imported = false; int transferring = 1; object transferGate = new();
             try
             {
                 transferState = "Downloading"; RefreshMembership(); Progress = 0; IsIndeterminate = true;
-                var uri = await resolver.GetFileUriAsync(file, token);
-                path = await downloads.DownloadAsync(uri, new Progress<ModDownloadProgress>(p =>
+                path = await new ModDownloadCache(store, http).FetchFileAsync(file, resolver, new Progress<ModDownloadProgress>(p =>
                 {
-                    if (Volatile.Read(ref transferring) == 0) return;
+                    lock (transferGate)
+                    {
+                    if (transferring == 0) return;
                     IsIndeterminate = p.Total is null or <= 0; Progress = p.Total > 0 ? 100d * p.Received / p.Total.Value : 0;
                     transferState = $"Downloading: {p.Received / 1048576d:0.0} MB"; Membership = transferState;
+                    }
                 }), token);
-                Interlocked.Exchange(ref transferring, 0);
+                lock (transferGate) transferring = 0;
                 transferState = "Importing"; RefreshMembership(); IsIndeterminate = true;
                 var origin = new ModOrigin("litterbox", mod.Id, file.SourceUrl, file.Provider, file.Id, file.ReleaseId, file.Version);
                 var result = await Task.Run(() =>
@@ -232,8 +273,14 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                 }, token);
                 imported = true; transferState = "In library";
                 foreach (string warning in result.Warnings) progressText.Report(warning);
-                if (enable && profile is not null)
                 {
+                    if (profile is null)
+                    {
+                        var profiles = new ProfileLibrary(store);
+                        profile = profiles.List().FirstOrDefault()?.Name;
+                        if (profile is null) { profile = "default"; profiles.CreateEmpty(profile); }
+                        profiles.Use(profile);
+                    }
                     token.ThrowIfCancellationRequested();
                     await Task.Run(() =>
                     {
@@ -243,15 +290,15 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                     transferState = "Enabled in selected profile";
                 }
                 await owner.ReloadAfterDownloadAsync(); reloaded = true; RefreshMembership();
-                progressText.Report("Imported into library. Use the Manager to review load order and conflicts before installation.");
+                progressText.Report("Mod enabled. Press Play to apply your mods and start the game.");
                 if (install) await owner.InstallDownloadAsync(confirm, token, progressText);
             }
-            catch (OperationCanceledException) { transferState = "Cancelled"; throw; }
-            catch { transferState = "Failed"; throw; }
+            catch (OperationCanceledException) { lock (transferGate) { transferring = 0; transferState = "Cancelled"; } throw; }
+            catch { lock (transferGate) { transferring = 0; transferState = "Failed"; } throw; }
             finally
             {
-                Interlocked.Exchange(ref transferring, 0);
-                if (path is not null && File.Exists(path)) File.Delete(path);
+                lock (transferGate) transferring = 0;
+                // Validated content-addressed downloads are retained for selection and import reuse.
                 // A completed import remains valid even if cancellation/failure happens during a later profile/install step.
                 if (imported && !reloaded)
                 {
@@ -262,6 +309,8 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
             }
         });
     }
+    /// <summary>Cancels selection analysis and catalog requests.</summary>
+    public void CancelReads() => reading?.Cancel();
     /// <summary>Cancels discovery reads without affecting local manager operations.</summary>
     public void Dispose() { reading?.Cancel(); foreach (var row in all) row.Icon?.Dispose(); foreach (var image in Images) image.Dispose(); http.Dispose(); }
 }

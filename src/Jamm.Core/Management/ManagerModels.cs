@@ -3,6 +3,10 @@ namespace Jamm.Core.Management;
 /// <summary>Persistent paths, selected profile and Wine/Proton settings.</summary>
 public sealed record ManagerConfig
 {
+    /// <summary>Shows expert controls when explicitly enabled.</summary>
+    public bool AdvancedMode { get; init; }
+    /// <summary>Game copy whose concrete replacement and backup paths were approved.</summary>
+    public string? ConfirmedInstallDirectory { get; init; }
     /// <summary>Read-only merge ancestor, preferably outside the installed game.</summary>
     public string? Base { get; init; }
     /// <summary>Legacy game directory containing the executable and installed archive.</summary>
