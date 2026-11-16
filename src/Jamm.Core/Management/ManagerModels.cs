@@ -68,6 +68,9 @@ public sealed record ModOrigin(string Catalog, string ModId, string SourcePage, 
 /// <summary>Ordered library IDs and reusable Phase 3 resolution choices.</summary>
 public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, string> Resolutions)
 {
+    /// <summary>Unrecognized profile fields retained across saves for forward compatibility.</summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? ExtraFields { get; init; }
     /// <summary>Disabled library IDs retained in the profile order; absent in older profiles.</summary>
     public string[] DisabledMods { get; init; } = [];
     /// <summary>Active library IDs in load order.</summary>

@@ -14,7 +14,7 @@ public sealed class ProfileInstaller(ManagerStore store)
 {
     private sealed record InstalledProfile(string Signature, string GameDirectory, string BuildSha256, string? Profile = null);
 
-    private (ModProfile Profile, ManagerConfig Config, IReadOnlyList<BuildInput> Inputs, string Signature) Selection(string? name)
+    private (ModProfile Profile, ManagerConfig Config, IReadOnlyList<BuildInput> Inputs, string Signature) Selection(string? name, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var config = store.Config();
         if (config.Base is null || config.GameDir is null)
@@ -22,7 +22,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         var profile = new ProfileLibrary(store).Get(name ?? config.ActiveProfile
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
         var library = new ModLibrary(store);
-        var inputs = profile.EnabledMods.Select(id => library.Find(id)).Select(m => new BuildInput(library.Patch(m), library.Archive(m))).ToArray();
+        var inputs = profile.EnabledMods.Select(id => library.Find(id)).Select(m => new BuildInput(library.Patch(m, progress, cancellationToken), library.Archive(m))).ToArray();
         string hash = BuildFiles.Hash(config.Base);
         if (inputs.Any(i => i.Patch.Base.Sha256 != hash))
             throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
@@ -35,11 +35,11 @@ public sealed class ProfileInstaller(ManagerStore store)
         return (profile, config, inputs, signature);
     }
 
-    /// <summary>Checks installation identities without writing. Stale installation state returns false;
+    /// <summary>Checks installation identities without modifying the game, refreshing outdated patch caches as needed. Stale installation state returns false;
     /// invalid configuration, profiles or mod sources still report errors.</summary>
-    public bool IsInstalled(string? name = null)
+    public bool IsInstalled(string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
-        var selection = Selection(name);
+        var selection = Selection(name, progress, cancellationToken);
         string path = store.Path("installed.json");
         if (!File.Exists(path)) return false;
         InstalledProfile installed;
@@ -77,11 +77,11 @@ public sealed class ProfileInstaller(ManagerStore store)
     public PreparedProfile Prepare(string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var selection = Selection(name);
+        var selection = Selection(name, progress, cancellationToken);
         string hash = BuildFiles.Hash(selection.Config.Base!);
         string output = store.Path("builds", $"{Guid.NewGuid():N}.win");
         GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
-        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, selection.Profile.Resolutions, progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root });
+        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, new ProfileLibrary(store).ActiveResolutions(selection.Profile), progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root });
         return new(selection.Profile, selection.Config, selection.Signature, output, hash, result);
     }
 

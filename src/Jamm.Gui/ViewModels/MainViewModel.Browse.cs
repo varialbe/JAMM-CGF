@@ -11,7 +11,7 @@ public sealed partial class MainViewModel
     internal Task ReloadAfterDownloadAsync() => ReloadAsync();
     internal async Task InstallDownloadAsync(Func<string, Task<bool>> confirm, CancellationToken token, IProgress<string> progress)
     {
-        var report = await Task.Run(() => new ManagerOperations(store).Check(SelectedProfile!, token), token);
+        var report = await Task.Run(() => new ManagerOperations(store).Check(SelectedProfile!, token, progress.Report), token);
         var resolutions = new ProfileLibrary(store).Get(SelectedProfile!).Resolutions;
         PopulateConflicts(report, resolutions);
         // Discovery never silently accepts newly introduced overlaps. Continue in the existing Manager UI.

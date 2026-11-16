@@ -7,6 +7,65 @@ namespace Jamm.Gui.Tests;
 
 public sealed class ViewModelTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReorderToggleAndPlayPreserveResolutionAndExtraFields(bool createDefault)
+    {
+        using var files = new TestFiles(); files.Store.Set("useSharedCompatibilityResults", "false");
+        var library = new ModLibrary(files.Store);
+        var a = library.Add(files.Mod("Abyss", "x = 1;\n")).Mod;
+        var b = library.Add(files.Mod("Other", "x = 2;\n")).Mod;
+        var profiles = new ProfileLibrary(files.Store);
+        File.WriteAllText(Path.Combine(files.Store.Config().GameDir!, "Cat Goes Fishing.exe"), "test placeholder");
+        files.Store.Set("wine.mode", "wine"); files.Store.Set("wine.binary", "/bin/true");
+        if (!createDefault) { profiles.Create("everything", [a.Id, b.Id]); profiles.Use("everything"); }
+        var vm = new MainViewModel(files.Store); await vm.InitializeAsync();
+        if (createDefault)
+        {
+            await vm.ToggleModAsync(a.Id); await vm.ToggleModAsync(b.Id);
+            await vm.PlayAsync(_ => Task.FromResult(false));
+            Assert.Equal("default", vm.SelectedProfile);
+        }
+        string name = vm.SelectedProfile!;
+        profiles.Resolve(name, "code/example_code", a.Id);
+        string path = Path.Combine(files.Store.Root, "profiles", name + ".json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        json["future"] = System.Text.Json.Nodes.JsonNode.Parse("{\"values\":[1,true]}");
+        File.WriteAllText(path, json.ToJsonString());
+        void Verify()
+        {
+            Assert.Equal(a.Name, profiles.Get(name).Resolutions["code/example_code"]);
+            Assert.Equal(json["future"]!.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!["future"]!.ToJsonString());
+        }
+        await vm.MoveAsync(0, 1); Verify();
+        await vm.ToggleModAsync(a.Id); Verify();
+        await vm.PlayAsync(_ => Task.FromResult(true)); Verify();
+        Assert.Contains(a.Id, profiles.Get(name).DisabledMods);
+        Assert.Contains("Started", vm.Status);
+        await vm.ToggleModAsync(a.Id);
+        await vm.PlayAsync(_ => Task.FromResult(true)); Verify();
+        Assert.Empty(profiles.Get(name).DisabledMods);
+        using var installed = Jamm.Core.GameFileLoader.Load(Path.Combine(files.Store.Config().GameDir!, "data.win"));
+        using var original = Jamm.Core.GameFileLoader.Load(files.Original);
+        var patch = Jamm.Core.Patching.PatchBuilder.Create(original, installed, "Installed");
+        Assert.Contains("x = 1", Assert.Single(patch.Changes["code"].Changed).ModCode!.Text);
+        vm.Browse.Dispose();
+    }
+
+    [Fact]
+    public async Task GuiReloadRefreshesOldPatchAndReportsProgress()
+    {
+        using var files = new TestFiles(); files.Store.Set("useSharedCompatibilityResults", "false");
+        var library = new ModLibrary(files.Store); var mod = library.Add(files.Mod("Old", "x = 1;\n")).Mod;
+        string path = Path.Combine(files.Store.Root, "patches", mod.Id + ".cgfmm-patch.json");
+        File.WriteAllText(path, Jamm.Core.Patching.PatchJson.Serialize(library.Patch(mod) with { AssetTypesVersion = 0 }));
+        var vm = new MainViewModel(files.Store); await vm.InitializeAsync();
+        Assert.Equal(Jamm.Core.Patching.PatchJson.AssetTypesVersion, library.Patch(mod).AssetTypesVersion);
+        Assert.Contains("Refreshing outdated", vm.Log);
+        vm.Browse.Dispose();
+    }
+
     [Fact]
     public async Task AddRemoveReorderSwitchAndDisabledModsPersist()
     {

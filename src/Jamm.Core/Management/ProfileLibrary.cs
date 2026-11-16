@@ -38,8 +38,8 @@ public sealed class ProfileLibrary(ManagerStore store)
         return result;
     }
 
-    /// <summary>Updates the complete order and disabled IDs, clearing choices that may no longer apply.</summary>
-    public ModProfile Update(string name, IEnumerable<string> mods, IEnumerable<string> disabled)
+    /// <summary>Updates order and enablement, retaining choices unless their winning mod is removed.</summary>
+    public ModProfile Update(string name, IEnumerable<string> mods, IEnumerable<string> disabled, Action<string>? notice = null)
     {
         var profile = Get(name);
         var library = new ModLibrary(store);
@@ -47,8 +47,13 @@ public sealed class ProfileLibrary(ManagerStore store)
         var off = disabled.ToArray();
         if (ids.Distinct().Count() != ids.Length || off.Except(ids).Any())
             throw new ArgumentException("Profile order must contain unique library mods; disabled mods must be in that order.");
-        var result = profile with { Mods = ids, DisabledMods = off, Resolutions = new(StringComparer.Ordinal) };
+        var removedNames = profile.Mods.Except(ids, StringComparer.Ordinal).Select(library.Find).Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        var removed = profile.Resolutions.Where(r => removedNames.Contains(r.Value)).ToArray();
+        var resolutions = new Dictionary<string, string>(profile.Resolutions, StringComparer.Ordinal);
+        foreach (var choice in removed) resolutions.Remove(choice.Key);
+        var result = profile with { Mods = ids, DisabledMods = off, Resolutions = resolutions };
         store.Write(FilePath(name), result);
+        foreach (var choice in removed) notice?.Invoke($"Removed resolution for {choice.Key}: winning mod '{choice.Value}' was removed from profile '{name}'. Review conflicts before playing.");
         return result;
     }
 
@@ -83,8 +88,15 @@ public sealed class ProfileLibrary(ManagerStore store)
         File.Delete(FilePath(name));
     }
 
+    internal Dictionary<string, string> ActiveResolutions(ModProfile profile)
+    {
+        var library = new ModLibrary(store);
+        var disabled = profile.DisabledMods.Select(library.Find).Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        return profile.Resolutions.Where(r => !disabled.Contains(r.Value)).ToDictionary(r => r.Key, r => r.Value, StringComparer.Ordinal);
+    }
+
     /// <summary>Records a valid asset choice, translating a library ID or name to the patch display name.</summary>
-    public ModProfile Resolve(string name, string asset, string choice)
+    public ModProfile Resolve(string name, string asset, string choice, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var profile = Get(name);
         var library = new ModLibrary(store);
@@ -92,7 +104,7 @@ public sealed class ProfileLibrary(ManagerStore store)
         if (choice != "keep-both" && !profile.Mods.Select(library.Find).Any(m => m.Name == winner))
             throw new ArgumentException($"Mod '{choice}' is not in profile '{name}'. Choose one of its mods.");
         var updated = new Dictionary<string, string>(profile.Resolutions, StringComparer.Ordinal) { [asset] = winner };
-        BuildPlan.Create(profile.EnabledMods.Select(id => library.Patch(library.Find(id))).ToArray(), updated);
+        BuildPlan.Create(profile.EnabledMods.Select(id => library.Patch(library.Find(id), progress, cancellationToken)).ToArray(), ActiveResolutions(profile with { Resolutions = updated }));
         var result = profile with { Resolutions = updated };
         store.Write(FilePath(name), result);
         return result;

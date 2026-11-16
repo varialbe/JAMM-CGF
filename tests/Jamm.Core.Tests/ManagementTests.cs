@@ -29,6 +29,86 @@ public sealed class ManagementTests : IDisposable
     }
 
     [Fact]
+    public void ProfileEditsRetainChoicesAndUnknownFieldsUntilWinnerIsRemoved()
+    {
+        var library = new ModLibrary(store);
+        var a = library.Add(source, "Abyss").Mod;
+        string second = Path.Combine(directory, "other.win"); WriteArchive(second, 9);
+        var b = library.Add(second, "Other").Mod;
+        var profiles = new ProfileLibrary(store); profiles.Create("everything", [a.Id, b.Id]);
+        profiles.Resolve("everything", "code/synthetic", a.Id);
+        string path = Path.Combine(store.Root, "profiles", "everything.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        json["future"] = System.Text.Json.Nodes.JsonNode.Parse("{\"nested\":[1,true,\"value\"]}");
+        File.WriteAllText(path, json.ToJsonString());
+        List<string> notices = [];
+        profiles.Update("everything", [b.Id, a.Id], [a.Id], notices.Add);
+        Assert.Equal("Abyss", profiles.Get("everything").Resolutions["code/synthetic"]);
+        profiles.Update("everything", [a.Id, b.Id], [], notices.Add);
+        profiles.Rename("everything", "renamed");
+        Assert.Empty(notices);
+        Assert.Equal(json["future"]!.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(store.Root, "profiles", "renamed.json")))!["future"]!.ToJsonString());
+        profiles.Update("renamed", [b.Id], [], notices.Add);
+        Assert.Empty(profiles.Get("renamed").Resolutions);
+        Assert.Contains("code/synthetic", Assert.Single(notices));
+    }
+
+    [Theory]
+    [InlineData("check")]
+    [InlineData("resolve")]
+    [InlineData("apply")]
+    public void OutdatedPatchIsLazilyRefreshedFromStoredCopy(string operation)
+    {
+        var library = new ModLibrary(store); var a = library.Add(source, "Abyss").Mod;
+        string second = Path.Combine(directory, "other.win"); WriteArchive(second, 9);
+        var b = library.Add(second, "Other").Mod;
+        var profiles = new ProfileLibrary(store); profiles.Create("everything", [a.Id, b.Id]);
+        string path = Path.Combine(store.Root, "patches", a.Id + ".cgfmm-patch.json");
+        var patch = library.Patch(a);
+        File.WriteAllText(path, Jamm.Core.Patching.PatchJson.Serialize(patch with { AssetTypesVersion = 0 }));
+        string stale = File.ReadAllText(path);
+        File.Delete(source); // Only the library copy remains available.
+        List<string> progress = [];
+        if (operation == "check") new ManagerOperations(store).Check("everything", progress: progress.Add);
+        else if (operation == "resolve") profiles.Resolve("everything", "code/synthetic", a.Id, progress.Add);
+        else
+        {
+            string game = Path.Combine(directory, "game"); Directory.CreateDirectory(game);
+            File.Copy(original, Path.Combine(game, "data.win")); store.Set("gameDir", game);
+            var installer = new ProfileInstaller(store);
+            var prepared = installer.Prepare("everything", progress.Add); installer.Discard(prepared);
+        }
+        Assert.Contains(progress, p => p.Contains("Refreshing outdated"));
+        Assert.NotEqual(stale, File.ReadAllText(path));
+        Assert.Equal(Jamm.Core.Patching.PatchJson.AssetTypesVersion, library.Patch(a).AssetTypesVersion);
+        string refreshed = File.ReadAllText(path); library.Patch(a);
+        Assert.Equal(refreshed, File.ReadAllText(path));
+        Assert.Equal(patch.Mod.Sha256, BuildFiles.Hash(Path.Combine(store.Root, "mods", a.Id, "data.win")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedOrCancelledRefreshKeepsOldCache(bool missingCopy)
+    {
+        var library = new ModLibrary(store); var mod = library.Add(source, "Abyss").Mod;
+        string path = Path.Combine(store.Root, "patches", mod.Id + ".cgfmm-patch.json");
+        File.WriteAllText(path, Jamm.Core.Patching.PatchJson.Serialize(library.Patch(mod) with { AssetTypesVersion = 0 }));
+        string stale = File.ReadAllText(path);
+        if (missingCopy)
+        {
+            File.Delete(Path.Combine(store.Root, "mods", mod.Id, "data.win"));
+            Assert.Contains("Add the original mod again", Assert.Throws<InvalidDataException>(() => library.Patch(mod)).Message);
+        }
+        else
+        {
+            using var cancel = new CancellationTokenSource();
+            Assert.Throws<OperationCanceledException>(() => library.Patch(mod, _ => cancel.Cancel(), cancel.Token));
+        }
+        Assert.Equal(stale, File.ReadAllText(path));
+    }
+
+    [Fact]
     public void ConfigPersistsValidatesAndHonorsExplicitDataDirectory()
     {
         store.Set("wine.mode", "proton");

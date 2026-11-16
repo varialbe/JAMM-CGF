@@ -20,7 +20,7 @@ public sealed class ManagerOperations(ManagerStore store)
     }
 
     /// <summary>Runs the portable conflict analyzer on the active profile's verified cached patches.</summary>
-    public ConflictReport Check(string profile, CancellationToken cancellationToken = default)
+    public ConflictReport Check(string profile, CancellationToken cancellationToken = default, Action<string>? progress = null)
     {
         var library = new ModLibrary(store);
         var selection = new ProfileLibrary(store).Get(profile);
@@ -30,7 +30,7 @@ public sealed class ManagerOperations(ManagerStore store)
         var patches = selection.EnabledMods.Select(id =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var patch = library.Patch(library.Find(id));
+            var patch = library.Patch(library.Find(id), progress, cancellationToken);
             if (patch.Base.Sha256 != hash) throw new InvalidDataException("This profile targets another base. Select its original base in Settings or re-add its mods.");
             return patch;
         }).ToArray();

@@ -83,13 +83,40 @@ public sealed class BrowseViewModelTests
         vm.Browse.Dispose();
     }
     [Fact]
+    public async Task NewDownloadEnableRetainsExistingProfileChoicesAndExtraFields()
+    {
+        using var files = new TestFiles();
+        var old = new ModLibrary(files.Store).Add(files.Mod("Abyss", "x = 3;\n")).Mod;
+        var profiles = new ProfileLibrary(files.Store); profiles.Create("everything", [old.Id]); profiles.Use("everything");
+        profiles.Resolve("everything", "code/example_code", old.Id);
+        string path = Path.Combine(files.Store.Root, "profiles", "everything.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!; json["future"] = "retained";
+        File.WriteAllText(path, json.ToJsonString());
+        string download = files.Mod("Download", "x = 1;\n");
+        var vm = Create(files, _ => Task.FromResult(File.ReadAllBytes(download))); await Select(vm);
+        await vm.Browse.DownloadAsync(false, _ => throw new Exception("Enable must not install"));
+        Assert.Equal(2, profiles.Get("everything").EnabledMods.Length);
+        Assert.Equal(old.Name, profiles.Get("everything").Resolutions["code/example_code"]);
+        Assert.Equal("retained", System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!["future"]!.GetValue<string>());
+        vm.Browse.Dispose();
+    }
+
+    [Fact]
     public async Task DownloadImportDeduplicatesManualBytesAndAttachesOnlyProvenOrigins()
     {
         using var files = new TestFiles(); string source = files.Mod("Manual", "x = 1;\n");
         var manual = new ModLibrary(files.Store).Add(source).Mod;
+        var profiles = new ProfileLibrary(files.Store); profiles.Create("existing", [manual.Id]); profiles.Use("existing");
+        profiles.Resolve("existing", "code/example_code", manual.Id);
+        profiles.Update("existing", [manual.Id], [manual.Id]);
+        string profilePath = Path.Combine(files.Store.Root, "profiles", "existing.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(profilePath))!; json["future"] = 42;
+        File.WriteAllText(profilePath, json.ToJsonString());
         var vm = Create(files, _ => Task.FromResult(File.ReadAllBytes(source))); await Select(vm);
         Assert.Contains("no proven local", vm.Browse.Membership);
         await vm.Browse.DownloadAsync(false, _ => throw new Exception("Add must not install"));
+        Assert.Equal(manual.Name, profiles.Get("existing").Resolutions["code/example_code"]);
+        Assert.Equal(42, System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(profilePath))!["future"]!.GetValue<int>());
         Assert.Single(vm.Mods); Assert.Equal(manual.Id, vm.Mods[0].Id); Assert.Equal("Manual", vm.Mods[0].Name);
         Assert.Contains("Enabled in selected profile", vm.Browse.Membership); Assert.DoesNotContain("currently installed", vm.Browse.Membership);
         var saved = new ModLibrary(files.Store).Find(manual.Id); var origin = Assert.Single(saved.Origins);

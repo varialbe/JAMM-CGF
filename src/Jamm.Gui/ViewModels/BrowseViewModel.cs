@@ -359,7 +359,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
                     await Task.Run(() =>
                     {
                         var profiles = new ProfileLibrary(store); var p = profiles.Get(profile);
-                        if (!p.EnabledMods.Contains(result.Mod.Id)) profiles.Update(profile, p.Mods.Contains(result.Mod.Id) ? p.Mods : [.. p.Mods, result.Mod.Id], p.DisabledMods.Where(id => id != result.Mod.Id));
+                        if (!p.EnabledMods.Contains(result.Mod.Id)) profiles.Update(profile, p.Mods.Contains(result.Mod.Id) ? p.Mods : [.. p.Mods, result.Mod.Id], p.DisabledMods.Where(id => id != result.Mod.Id), progressText.Report);
                     }, token);
                     transferState = "Enabled in selected profile";
                 }

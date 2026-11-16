@@ -142,9 +142,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task ReloadAsync()
     {
+        IProgress<string> refreshProgress = new Progress<string>(Message);
         var pending = Mods.Where(m => m.IsPending).ToDictionary(m => m.Id, m => m.Enabled);
         string? previousProfile = SelectedProfile;
-        var data = await Task.Run(() => (Mods: new ModLibrary(store).List(), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
+        var data = await Task.Run(() => (Mods: new ModLibrary(store).List(refreshProgress.Report), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
         string? currentBaseHash = data.Config.Base is { } configuredBase && File.Exists(configuredBase)
             ? await Task.Run(() => BuildFiles.Hash(configuredBase)) : null;
         var summaries = await Task.Run(() => data.Mods.ToDictionary(m => m.Mod.Id, m =>
@@ -233,12 +234,12 @@ public sealed partial class MainViewModel : ObservableObject
     public Task DeleteProfileAsync() => RunAsync("Deleting profile", async (_, _) => { await Task.Run(() => new ProfileLibrary(store).Delete(SelectedProfile!)); await ReloadAsync(); }, false);
     /// <summary>Switches profiles and reloads their order and enablement.</summary>
     public Task SelectProfileAsync(string name) => RunAsync("Selecting profile", async (_, _) => { await Task.Run(() => new ProfileLibrary(store).Use(name)); await ReloadAsync(); }, false);
-    /// <summary>Persists checkbox state and ordering; editing invalidates previously checked choices.</summary>
-    public Task SaveOrderAsync() => RunAsync("Saving load order", async (_, _) =>
+    /// <summary>Persists checkbox state and ordering while retaining saved conflict choices.</summary>
+    public Task SaveOrderAsync() => RunAsync("Saving load order", async (_, progress) =>
     {
         if (SelectedProfile is null) throw new ArgumentException("Create or select a profile before enabling mods.");
         var ids = Order.Select(m => m.Id).ToArray(); var disabled = Order.Where(m => !m.SavedEnabled).Select(m => m.Id).ToArray();
-        await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile, ids, disabled));
+        await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile, ids, disabled, progress.Report));
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons(); Message("Load order saved. Check again to review conflicts.");
     }, false);
     /// <summary>Stages enablement without building, installing or persisting the selection.</summary>
@@ -263,7 +264,7 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var row in Mods) row.UndoChanges();
         NotifyButtons();
     }
-    private async Task ApplyPendingAsync()
+    private async Task ApplyPendingAsync(IProgress<string> progress)
     {
         if (PendingCount == 0) return;
         if (SelectedProfile is null)
@@ -274,7 +275,7 @@ public sealed partial class MainViewModel : ObservableObject
             profiles.Use(name); SelectedProfile = name;
             if (!Profiles.Contains(name)) Profiles.Add(name);
         }
-        await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile!, Order.Select(m => m.Id), Order.Where(m => !m.Enabled).Select(m => m.Id)));
+        await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile!, Order.Select(m => m.Id), Order.Where(m => !m.Enabled).Select(m => m.Id), progress.Report));
         foreach (var row in Mods) row.AcceptChanges();
         NotifyButtons();
     }
@@ -298,9 +299,9 @@ public sealed partial class MainViewModel : ObservableObject
         await ReloadAsync(); Message("Settings saved.");
     }, false);
     /// <summary>Runs shared conflict checks and displays per-hunk choices where applicable.</summary>
-    public Task CheckAsync() => RunAsync("Checking conflicts", async (token, _) =>
+    public Task CheckAsync() => RunAsync("Checking conflicts", async (token, progress) =>
     {
-        var report = await Task.Run(() => new ManagerOperations(store).Check(SelectedProfile!, token), token);
+        var report = await Task.Run(() => new ManagerOperations(store).Check(SelectedProfile!, token, progress.Report), token);
         PopulateConflicts(report, new ProfileLibrary(store).Get(SelectedProfile!).Resolutions);
         Message(ConflictCounts);
     });
@@ -368,11 +369,11 @@ public sealed partial class MainViewModel : ObservableObject
         finally { updatingConflictChoices = false; }
     }
     /// <summary>Persists an explicit asset or hunk choice through Core validation.</summary>
-    public Task ResolveAsync(string key, string choice) => RunAsync("Saving conflict choice", async (_, _) =>
+    public Task ResolveAsync(string key, string choice) => RunAsync("Saving conflict choice", async (token, progress) =>
     {
         try
         {
-            var profile = await Task.Run(() => new ProfileLibrary(store).Resolve(SelectedProfile!, key, choice));
+            var profile = await Task.Run(() => new ProfileLibrary(store).Resolve(SelectedProfile!, key, choice, progress.Report, token));
             conflictResolutions = profile.Resolutions;
             Message($"Saved {key}: {choice}");
         }
@@ -385,7 +386,7 @@ public sealed partial class MainViewModel : ObservableObject
         var installer = new ProfileInstaller(store);
         var state = await Task.Run(() => new ManagerOperations(store).Status(), token);
         if (!state.Known) throw new IOException(state.Message);
-        if (await Task.Run(() => installer.IsInstalled(SelectedProfile), token)) { Message("This exact profile is already installed and verified."); return; }
+        if (await Task.Run(() => installer.IsInstalled(SelectedProfile, progress.Report, token), token)) { Message("This exact profile is already installed and verified."); return; }
         var prepared = await Task.Run(() => installer.Prepare(SelectedProfile, progress.Report, token), token);
         try
         {
@@ -407,7 +408,7 @@ public sealed partial class MainViewModel : ObservableObject
     public Task PlayAsync(Func<string, Task<bool>> confirm) => RunAsync("Preparing play", async (token, progress) =>
     {
         var command = await Task.Run(() => { var c = GameLauncher.Create(store.Config(), store.Root); GameLauncher.Validate(c); return c; }, token);
-        await ApplyPendingAsync();
+        await ApplyPendingAsync(progress);
         if (Order.Any(m => m.Enabled))
         {
             await InstallInternalAsync(confirm, token, progress);

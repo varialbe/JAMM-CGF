@@ -114,7 +114,7 @@ internal static class ManagementCommand
                         break;
                     case "use": Count(2); profiles.Use(positional[1]); Console.WriteLine($"Active profile: {positional[1]}."); break;
                     case "delete": Count(2); profiles.Delete(positional[1]); Console.WriteLine($"Deleted profile '{positional[1]}'."); break;
-                    case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3]); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
+                    case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3], Console.WriteLine); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
                     default: throw new ArgumentException($"Unknown profile action '{action}'. See 'cgfmm --help'.");
                 }
                 break;
@@ -126,7 +126,7 @@ internal static class ManagementCommand
                 string? selected = options.GetValueOrDefault("--profile");
                 GameLaunchCommand? launch = command == "play" ? GameLauncher.Create(store.Config(), store.Root) : null;
                 if (launch is not null) GameLauncher.Validate(launch);
-                if (installer.IsInstalled(selected))
+                if (installer.IsInstalled(selected, Console.WriteLine))
                 {
                     if (selected is not null) profiles.Use(selected);
                     Console.WriteLine("Selected profile is already installed; archive and backup hashes verified.");

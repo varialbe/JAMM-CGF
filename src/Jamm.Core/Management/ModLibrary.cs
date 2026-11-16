@@ -11,13 +11,35 @@ public sealed class ModLibrary(ManagerStore store)
     internal string Archive(ManagedMod mod) => store.Path("mods", ManagerStore.Name(mod.Id), "data.win");
     internal string PatchPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".cgfmm-patch.json");
 
-    /// <summary>Reads a cached patch only when both complete archive identities still match.</summary>
-    public ModPatch Patch(ManagedMod mod)
+    /// <summary>Verifies archive identities and atomically refreshes cached patches from older analysis revisions.</summary>
+    public ModPatch Patch(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var patch = PatchJson.Deserialize(File.ReadAllText(PatchPath(mod)));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(Archive(mod)))
+            throw new InvalidDataException($"Stored library copy for '{mod.Name}' is missing: '{Archive(mod)}'. Add the original mod again to regenerate its cached patch.");
         if (patch.Base.Sha256 != mod.BaseSha256 || patch.Mod.Sha256 != mod.Sha256 || patch.Mod.Name != mod.Name
             || BuildFiles.Hash(Archive(mod)) != mod.Sha256)
             throw new InvalidDataException($"Mod '{mod.Name}' or its patch changed. Remove and add the original mod again.");
+        if (patch.AssetTypesVersion != PatchJson.AssetTypesVersion)
+        {
+            string basePath = store.Config().Base ?? throw new ArgumentException("Choose the legacy base data.win in Settings before refreshing cached patches.");
+            if (BuildFiles.Hash(basePath) != mod.BaseSha256)
+                throw new InvalidDataException($"Cannot refresh cached patch for '{mod.Name}': '{basePath}' is not its original base. Select the original legacy base in Settings.");
+            progress?.Invoke($"Refreshing outdated cached patch for {mod.Name}…");
+            void Report(string message) { cancellationToken.ThrowIfCancellationRequested(); progress?.Invoke(message); }
+            using var original = GameFileLoader.Load(basePath, Report, cancellationToken);
+            using var archive = GameFileLoader.Load(Archive(mod), Report, cancellationToken);
+            var refreshed = PatchBuilder.Create(original, archive, mod.Name, Report, AnalysisOptions.Default with { DataDirectory = store.Root });
+            refreshed = refreshed with { Mod = refreshed.Mod with { FileName = patch.Mod.FileName } };
+            if (BuildFiles.Hash(basePath) != mod.BaseSha256 || BuildFiles.Hash(Archive(mod)) != mod.Sha256
+                || refreshed.Base.Sha256 != mod.BaseSha256 || refreshed.Mod.Sha256 != mod.Sha256)
+                throw new IOException($"Inputs changed while refreshing '{mod.Name}'. Retry with stable archive copies.");
+            cancellationToken.ThrowIfCancellationRequested();
+            store.WriteText(PatchPath(mod), PatchJson.Serialize(refreshed));
+            patch = refreshed;
+            progress?.Invoke($"Refreshed cached patch for {mod.Name}.");
+        }
         return patch;
     }
 
@@ -79,7 +101,7 @@ public sealed class ModLibrary(ManagerStore store)
             var existing = All().FirstOrDefault(m => m.Sha256 == hash);
             if (existing is not null)
             {
-                Patch(existing);
+                Patch(existing, progress, cancellationToken);
                 if (existing.BaseSha256 != BuildFiles.Hash(basePath))
                     throw new InvalidDataException($"'{existing.Name}' was patched against another base. Restore that base configuration, or remove this mod from its profiles and re-add it.");
                 if (origin is not null && !existing.Origins.Contains(origin))
@@ -122,7 +144,7 @@ public sealed class ModLibrary(ManagerStore store)
     }
 
     /// <summary>Lists timestamp/version compatibility separately from exact patch-base hash compatibility.</summary>
-    public IReadOnlyList<ModListEntry> List()
+    public IReadOnlyList<ModListEntry> List(Action<string>? progress = null)
     {
         var all = All();
         if (all.Count == 0) return [];
@@ -134,7 +156,7 @@ public sealed class ModLibrary(ManagerStore store)
             bool timestamp = m.Gen8Timestamp == original?.Inspection.Timestamp;
             bool version = m.GmVersion == original?.Inspection.GameMakerVersion && m.Bytecode == original?.Inspection.BytecodeVersion;
             bool cached;
-            try { cached = hash && Patch(m).Base.Sha256 == m.BaseSha256; }
+            try { cached = hash && Patch(m, progress).Base.Sha256 == m.BaseSha256; }
             catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException or NotSupportedException) { cached = false; }
             return new ModListEntry(m, hash, timestamp, version, cached, original is null ? "base not configured"
                 : !hash ? "patch targets another base; re-add against this base"
