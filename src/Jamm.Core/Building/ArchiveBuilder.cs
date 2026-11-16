@@ -19,8 +19,11 @@ public static class ArchiveBuilder
 {
     /// <summary>Compiles a merged working copy; publishes only after the temporary output passes verification.</summary>
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
-        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null)
+        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
+        var reportProgress = progress;
+        progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
+        cancellationToken.ThrowIfCancellationRequested();
         string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath)];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
         using var original = GameFileLoader.Load(basePath, progress);
@@ -51,7 +54,7 @@ public static class ArchiveBuilder
             var data = working.Data;
             Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
             var expectedReferences = semantics.Expected(plan, data);
-            ArchiveVerifier.ValidateSemantics(data, expectedReferences);
+            ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken);
             var remapped = semantics.Remapped(patches, data);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
@@ -66,8 +69,9 @@ public static class ArchiveBuilder
                 progress?.Invoke("Writing temporary merged archive");
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     UndertaleIO.Write(stream, data);
-                var verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress, expectedReferences);
+                var verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress, expectedReferences, cancellationToken);
                 BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporary, destination, overwrite: true);
                 return new(plan, original.Inspection, verification, counts, new FileInfo(destination).Length, remapped, expectedReferences.Count);
             }

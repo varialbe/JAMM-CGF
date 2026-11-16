@@ -30,6 +30,7 @@ internal sealed class SemanticCode
         Dictionary<string, CodeText> result = new(StringComparer.Ordinal);
         foreach (var code in data.Code)
         {
+            if (result.Count % 50 == 0) progress?.Invoke($"Resolving {label}: {result.Count}/{data.Code.Count} code entries");
             var text = reader.Read(code);
             if (text.Format != "gml") throw new InvalidDataException($"Cannot verify semantic references in {label}, code '{code.Name.Content}': decompilation failed. Use a mod with decompilable legacy GML.");
             result[code.Name.Content] = text with { Text = SemanticReferences.NameTypedLiterals(text.Text, code.Name.Content, names) };

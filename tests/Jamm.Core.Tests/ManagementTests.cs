@@ -438,6 +438,37 @@ public sealed class ManagementTests : IDisposable
         return (process.ExitCode, output.GetAwaiter().GetResult(), error.GetAwaiter().GetResult());
     }
 
+    [Fact]
+    public void CliPersistsMixedHunkChoicesAndRejectsReplacementKeepBoth()
+    {
+        static void WriteCode(string path, string text)
+        {
+            using var data = UndertaleData.CreateNew();
+            data.GeneralInfo.Major = 1; data.GeneralInfo.Minor = 0; data.GeneralInfo.Release = 0; data.GeneralInfo.Build = 1773;
+            var code = UndertaleCode.CreateEmptyEntry(data, "synthetic");
+            var compiler = new CompileGroup(data); compiler.QueueCodeReplace(code, text);
+            Assert.True(compiler.Compile().Successful);
+            using var stream = File.Create(path); UndertaleIO.Write(stream, data);
+        }
+        WriteCode(original, "x = 0;\nz = 0;\ny = 0;\n");
+        WriteCode(source, "x = 0;\na = 1;\nz = 0;\ny = 1;\n");
+        string second = Path.Combine(directory, "second.win");
+        WriteCode(second, "x = 0;\nb = 2;\nz = 0;\ny = 2;\n");
+        var library = new ModLibrary(store);
+        var a = library.Add(source, "A").Mod; var b = library.Add(second, "B").Mod;
+        var profiles = new ProfileLibrary(store); profiles.Create("hunks", [a.Id, b.Id]);
+        var merge = Jamm.Core.Merging.ConflictAnalyzer.Analyze([library.Patch(a), library.Patch(b)]).CodeMerges["synthetic"];
+        var list = Assert.Single(merge.Hunks, h => h.Status == "CONFLICT" && h.KeepBoth is not null);
+        var replacement = Assert.Single(merge.Hunks, h => h.Status == "CONFLICT" && h.KeepBoth is null);
+        string key = $"code/synthetic#{list.Start}", replaceKey = $"code/synthetic#{replacement.Start}";
+        Assert.Equal(0, Cli(["profile", "resolve", "hunks", key, "keep-both", "--data-dir", store.Root]).Exit);
+        Assert.Equal(0, Cli(["profile", "resolve", "hunks", replaceKey, "A", "--data-dir", store.Root]).Exit);
+        Assert.Equal("keep-both", profiles.Get("hunks").Resolutions[key]);
+        Assert.Equal("A", profiles.Get("hunks").Resolutions[replaceKey]);
+        Assert.Equal(1, Cli(["profile", "resolve", "hunks", replaceKey, "keep-both", "--data-dir", store.Root]).Exit);
+        Assert.Equal("A", profiles.Get("hunks").Resolutions[replaceKey]);
+    }
+
     private static void WriteArchive(string path, short value)
     {
         using var data = UndertaleData.CreateNew();

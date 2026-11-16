@@ -51,7 +51,14 @@ public sealed record ManagedMod(string Id, string Name, string SourceFileName, s
     DateTimeOffset AddedUtc, string BaseSha256, ulong Gen8Timestamp, string GmVersion, byte Bytecode);
 
 /// <summary>Ordered library IDs and reusable Phase 3 resolution choices.</summary>
-public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, string> Resolutions);
+public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, string> Resolutions)
+{
+    /// <summary>Disabled library IDs retained in the profile order; absent in older profiles.</summary>
+    public string[] DisabledMods { get; init; } = [];
+    /// <summary>Active library IDs in load order.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string[] EnabledMods => Mods.Except(DisabledMods, StringComparer.Ordinal).ToArray();
+}
 
 /// <summary>Library entry with compatibility and cache validity for the currently configured base.</summary>
 public sealed record ModListEntry(ManagedMod Mod, bool BaseHashMatches, bool TimestampMatches,

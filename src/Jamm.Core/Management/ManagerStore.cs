@@ -75,8 +75,34 @@ public sealed class ManagerStore
     /// <summary>Sets a documented configuration key, validating enum and numeric values.</summary>
     public ManagerConfig Set(string key, string value)
     {
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"Configuration '{key}' needs a nonempty value.");
+        var result = ApplySetting(Config(), key, value);
+        SaveConfig(result);
+        return result;
+    }
+
+    /// <summary>Validates and saves a settings form atomically; blank optional paths clear their overrides.</summary>
+    public ManagerConfig SetMany(IReadOnlyDictionary<string, string> values)
+    {
         var config = Config();
+        foreach (var (key, value) in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) config = ApplySetting(config, key, value);
+            else config = key switch
+            {
+                "wine.prefix" => config with { Wine = config.Wine with { Prefix = null } },
+                "proton.path" => config with { Proton = config.Proton with { Path = null } },
+                "proton.compatDataPath" => config with { Proton = config.Proton with { CompatDataPath = null } },
+                "proton.clientInstallPath" => config with { Proton = config.Proton with { ClientInstallPath = null } },
+                _ => throw new ArgumentException($"Configuration '{key}' needs a nonempty value.")
+            };
+        }
+        SaveConfig(config);
+        return config;
+    }
+
+    private static ManagerConfig ApplySetting(ManagerConfig config, string key, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"Configuration '{key}' needs a nonempty value.");
         string Full() => System.IO.Path.GetFullPath(value);
         config = key switch
         {
@@ -93,7 +119,6 @@ public sealed class ManagerStore
             "steam.appId" => throw new ArgumentException("steam.appId must be a positive number."),
             _ => throw new ArgumentException($"Unknown configuration key '{key}'. See config in 'cgfmm --help'.")
         };
-        Write(Path("config.json"), config);
         return config;
     }
 

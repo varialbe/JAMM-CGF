@@ -191,11 +191,11 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             {
                 if (ordered.Any(v => v.Asset?.ModCode is { Format: not "gml" } || v.Asset?.BaseCode is { Format: not "gml" }))
                     throw new InvalidDataException($"Cannot compile code '{name}': a patch contains disassembly. Obtain a successfully decompiled GML patch first.");
-                var texts = ordered.Select(v => new MergeVersion(names[v.Index], v.Asset!.ModCode?.Text
+                var texts = ordered.OrderBy(v => v.Index).Select(v => new MergeVersion(names[v.Index], v.Asset!.ModCode?.Text
                     ?? throw new InvalidDataException($"Missing GML for '{name}'. Regenerate the patch."))).ToArray();
                 MergeResult merge = ordered[0].Asset!.BaseCode is { Format: "gml" } ancestor
                     ? ThreeWayMerge.Merge(ancestor.Text, texts) : ThreeWayMerge.Added(texts);
-                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, choice);
+                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, choice, $"code/{name}", resolutions, used, decisions);
             }
             else if (choice == "keep-both") throw new ArgumentException($"keep-both is only valid for code insertion conflicts ('{family}/{name}').");
             return new(family, name, last.Index, last.Asset, snapshot, gml);
@@ -216,9 +216,10 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
 
     private sealed record Version(int Index, string Family, string Name, AssetPatch? Asset);
 
-    private static string ResolveCode(string ancestor, MergeResult merge, string? choice)
+    private static string ResolveCode(string ancestor, MergeResult merge, string? choice, string asset,
+        IReadOnlyDictionary<string, string> resolutions, HashSet<string> used, List<string> decisions)
     {
-        if (choice == "keep-both" && (!merge.HasConflicts || merge.Hunks.Any(h => h.Status == "CONFLICT" && h.KeepBoth is null)))
+        if (choice == "keep-both" && (!merge.HasConflicts || merge.Hunks.Any(h => h.Status == "CONFLICT" && h.KeepBoth is null && !resolutions.ContainsKey($"{asset}#{h.Start}"))))
             throw new ArgumentException("keep-both requires only list/insertion conflicts in the selected code entry. Choose a mod for overlapping replacements.");
         if (!merge.HasConflicts) return merge.Text;
         string[] split = ancestor.Split('\n');
@@ -227,9 +228,19 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         int cursor = 0;
         foreach (var hunk in merge.Hunks)
         {
+            string key = $"{asset}#{hunk.Start}";
+            string? hunkChoice = choice;
+            if (resolutions.TryGetValue(key, out string? explicitChoice))
+            {
+                if (hunk.Status != "CONFLICT" || (explicitChoice == "keep-both" ? hunk.KeepBoth is null : !hunk.Versions.Any(v => v.Name == explicitChoice)))
+                    throw new ArgumentException($"Resolution '{key}' cannot use '{explicitChoice}'. Choose a participating mod, or keep-both for list insertions.");
+                used.Add(key);
+                hunkChoice = explicitChoice;
+                decisions.Add($"{key}: explicit {explicitChoice} resolution.");
+            }
             text.Append(string.Concat(lines[cursor..hunk.Start]));
-            text.Append(hunk.Status == "CONFLICT" && choice == "keep-both" ? hunk.KeepBoth
-                : hunk.Versions.LastOrDefault(v => v.Name == choice)?.Text ?? hunk.Versions[^1].Text);
+            text.Append(hunk.Status == "CONFLICT" && hunkChoice == "keep-both" ? hunk.KeepBoth
+                : hunk.Versions.LastOrDefault(v => v.Name == hunkChoice)?.Text ?? hunk.Versions[^1].Text);
             cursor = hunk.Start + hunk.Length;
         }
         return text.Append(string.Concat(lines[cursor..])).ToString();

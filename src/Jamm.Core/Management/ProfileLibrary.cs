@@ -17,7 +17,8 @@ public sealed class ProfileLibrary(ManagerStore store)
         string path = FilePath(name);
         if (!File.Exists(path)) throw new FileNotFoundException($"Profile '{name}' was not found. Use 'profile list' or create it first.");
         var profile = store.Read<ModProfile>(path);
-        if (profile.Name != name || profile.Mods is null || profile.Mods.Length == 0 || profile.Mods.Distinct(StringComparer.Ordinal).Count() != profile.Mods.Length || profile.Resolutions is null)
+        if (profile.Name != name || profile.Mods is null || profile.Mods.Distinct(StringComparer.Ordinal).Count() != profile.Mods.Length || profile.Resolutions is null
+            || profile.DisabledMods is null || profile.DisabledMods.Except(profile.Mods).Any())
             throw new InvalidDataException($"Profile '{name}' is invalid. Recreate it with a nonempty, unique mod list.");
         foreach (string mod in profile.Mods) ManagerStore.Name(mod);
         return profile;
@@ -35,6 +36,40 @@ public sealed class ProfileLibrary(ManagerStore store)
         var result = new ModProfile(name, ids, new(StringComparer.Ordinal));
         store.Write(path, result);
         return result;
+    }
+
+    /// <summary>Updates the complete order and disabled IDs, clearing choices that may no longer apply.</summary>
+    public ModProfile Update(string name, IEnumerable<string> mods, IEnumerable<string> disabled)
+    {
+        var profile = Get(name);
+        var library = new ModLibrary(store);
+        var ids = mods.Select(m => library.Find(m).Id).ToArray();
+        var off = disabled.ToArray();
+        if (ids.Distinct().Count() != ids.Length || off.Except(ids).Any())
+            throw new ArgumentException("Profile order must contain unique library mods; disabled mods must be in that order.");
+        var result = profile with { Mods = ids, DisabledMods = off, Resolutions = new(StringComparer.Ordinal) };
+        store.Write(FilePath(name), result);
+        return result;
+    }
+
+    /// <summary>Creates an empty profile ready for GUI selection.</summary>
+    public ModProfile CreateEmpty(string name)
+    {
+        string path = FilePath(name);
+        if (File.Exists(path)) throw new IOException($"Profile '{name}' already exists. Choose another name.");
+        var result = new ModProfile(name, [], new(StringComparer.Ordinal));
+        store.Write(path, result);
+        return result;
+    }
+
+    /// <summary>Renames a profile without changing its order, disabled mods or resolutions.</summary>
+    public void Rename(string name, string newName)
+    {
+        var profile = Get(name);
+        if (File.Exists(FilePath(newName))) throw new IOException($"Profile '{newName}' already exists. Choose another name.");
+        store.Write(FilePath(newName), profile with { Name = newName });
+        if (store.Config().ActiveProfile == name) Use(newName);
+        File.Delete(FilePath(name));
     }
 
     /// <summary>Selects an existing profile as the default for apply and play.</summary>
@@ -57,7 +92,7 @@ public sealed class ProfileLibrary(ManagerStore store)
         if (choice != "keep-both" && !profile.Mods.Select(library.Find).Any(m => m.Name == winner))
             throw new ArgumentException($"Mod '{choice}' is not in profile '{name}'. Choose one of its mods.");
         var updated = new Dictionary<string, string>(profile.Resolutions, StringComparer.Ordinal) { [asset] = winner };
-        BuildPlan.Create(profile.Mods.Select(id => library.Patch(library.Find(id))).ToArray(), updated);
+        BuildPlan.Create(profile.EnabledMods.Select(id => library.Patch(library.Find(id))).ToArray(), updated);
         var result = profile with { Resolutions = updated };
         store.Write(FilePath(name), result);
         return result;

@@ -11,9 +11,9 @@ public static class ConflictAnalyzer
     private sealed record Write(int Mod, string Code, IndexWrite Slot);
 
     /// <summary>Analyzes semantic overlaps and indirect references. All patches must target exactly the same base.</summary>
-    public static ConflictReport Analyze(IReadOnlyList<ModPatch> patches)
+    public static ConflictReport Analyze(IReadOnlyList<ModPatch> patches, bool allowSingle = false, CancellationToken cancellationToken = default)
     {
-        if (patches.Count < 2) throw new ArgumentException("check needs at least two mods or patches.");
+        if (patches.Count == 0 || patches.Count < 2 && !allowSingle) throw new ArgumentException("check needs at least two mods or patches.");
         if (patches.Select(p => p.AssetTypesVersion).Distinct().Count() > 1)
             throw new InvalidDataException("Patches use different asset-type definition revisions. Regenerate every patch with diff --force before checking them together.");
         string baseHash = patches[0].Base.Sha256;
@@ -28,6 +28,7 @@ public static class ConflictAnalyzer
         List<FieldMerge> fieldMerges = [];
         foreach (string family in patches.SelectMany(p => p.Changes.Keys).Distinct().Order(StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var assets = new SortedDictionary<string, List<Change>>(StringComparer.Ordinal);
             for (int m = 0; m < patches.Count; m++)
             {
@@ -38,6 +39,7 @@ public static class ConflictAnalyzer
             }
             foreach (var (asset, versions) in assets)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (versions.Select(v => v.Mod).Distinct().Count() != versions.Count)
                     throw new InvalidDataException($"Ambiguous {family}/{asset}: a patch records more than one change for the same identity. Recompute the patch.");
                 if (versions.Any(v => v.Added) && versions.Any(v => !v.Added))

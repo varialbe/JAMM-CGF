@@ -47,8 +47,11 @@ public sealed class ModLibrary(ManagerStore store)
     }
 
     /// <summary>Copies a .win or the single nested data.win in a zip, then immediately patches against the configured base.</summary>
-    public AddModResult Add(string source, string? name = null, Action<string>? progress = null)
+    public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
+        var reportProgress = progress;
+        progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
+        cancellationToken.ThrowIfCancellationRequested();
         string basePath = store.Config().Base ?? throw new ArgumentException("Set the legacy base first: cgfmm config set base <original data.win>.");
         string sourceName = Path.GetFileName(source);
         string displayName = name ?? Path.GetFileNameWithoutExtension(source);
@@ -97,6 +100,7 @@ public sealed class ModLibrary(ManagerStore store)
             if (File.Exists(patchPath)) throw new IOException("An orphaned patch already exists for this mod. Remove it from the data directory and retry.");
             publishedPatch = patchPath;
             store.WriteText(publishedPatch, PatchJson.Serialize(patch));
+            cancellationToken.ThrowIfCancellationRequested();
             Directory.Move(stage, store.Path("mods", entry.Id));
             return new(entry, notices.Concat(patch.Warnings).Distinct(StringComparer.Ordinal).ToArray(), false);
         }

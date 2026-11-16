@@ -152,3 +152,13 @@ its source entry, container, line, value and possible added/shifted asset famili
 It returns 0 when the audit completes; these are review hints, not conflicts or
 proof that ordinary numbers are asset IDs. Patch inputs in this mode also require
 the exact local mod archive. Keep audit JSON local.
+
+## Saving individual hunk choices
+
+The GUI presents each overlapping code hunk separately. Its persisted key is
+`code/<entry>#<start>`, where `start` is the report's zero-based ancestor line.
+For example, use `profile resolve combined 'code/example_catalog#12' keep-both`
+for an insertion and choose a participating mod for a replacement hunk in the same
+entry. Qualified and bare whole-entry choices still work. Per-hunk choices override
+whole-entry choices; unmatched keys are refused rather than silently ignored.
+See [building choices](building.md#conflict-choices).

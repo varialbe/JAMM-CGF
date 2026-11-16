@@ -1,0 +1,179 @@
+# CLI reference
+
+All commands support `--verbose`. Select isolated storage with `--data-dir <dir>`
+anywhere on the command line, or `CGFMM_DATA_DIR`; the default is
+`$XDG_DATA_HOME/cgfmm` (`~/.local/share/cgfmm`). See [data layout](data-layout.md)
+for schemas, compatibility reporting, backups and all launch settings.
+
+| Command | Behavior |
+| --- | --- |
+| `config show [--json]` | Show configuration |
+| `config set <key> <value>` | Set `base`, `gameDir`, `wine.mode`, `wine.prefix`, `wine.binary`, `proton.path`, `proton.compatDataPath`, `proton.clientInstallPath`, or `steam.appId` |
+| `add <file.win or file.zip> [--name <name>]` | Copy into the library and immediately compute a patch; warn about source build differences |
+| `list [--json]` | Show IDs, names, base hash/timestamp/version compatibility and patch cache validity |
+| `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
+| `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
+| `profile list [--json]` | List profiles and mark the active selection in text output |
+| `profile show <name> [--json]` | Show order and resolution choices |
+| `profile use <name>` | Select a profile for apply/play |
+| `profile delete <name>` | Delete a profile, clearing the active selection if needed |
+| `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
+| `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
+| `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
+| `restore` | Restore the configured game directory and retain all original backups |
+
+Use full IDs or unique case-sensitive names/source stems for `<mod>`. Names containing
+spaces must be quoted, including the entire comma-separated `--mods` value.
+Management commands return 0 on success, 1 for errors or declined installation.
+
+## Archive and analysis commands
+
+The CLI executable/assembly is named **`cgfmm`**. These examples run it from the checkout;
+`cgfmm <command>` works when the built executable is on your command path.
+
+Inspect metadata, asset counts, SHA-256, GameMaker version and VM/YYC compilation:
+
+```sh
+dotnet run --project src/Jamm.Cli -- inspect "$HOME/Games/CatGoesFishing-legacy/data.win"
+```
+
+Compare one original against one or more mods; optionally write full JSON classifications:
+
+```sh
+dotnet run --project src/Jamm.Cli -- compare \
+  "$HOME/Games/CatGoesFishing-legacy/data.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/cave-expansion.win" \
+  --json out/comparison.json
+```
+
+Diff a mod against the legacy base, save a reusable patch, and inspect one changed asset:
+
+```sh
+dotnet run --project src/Jamm.Cli -- diff \
+  "$HOME/Games/CatGoesFishing-legacy/data.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  --name "The Abyss" --out /tmp/cgfmm-patches/the-abyss-beta.cgfmm-patch.json
+
+# Repeat the command to reuse its matching cache; --force recomputes.
+# Choose an asset name from the patch's changes.code.changed array:
+dotnet run --project src/Jamm.Cli -- diff \
+  "$HOME/Games/CatGoesFishing-legacy/data.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  --out /tmp/cgfmm-patches/the-abyss-beta.cgfmm-patch.json --show "<asset name>"
+```
+
+The default output is `<mod stem>.cgfmm-patch.json` in the current directory.
+`--json-summary` emits machine-readable counts and timings; progress goes to stderr.
+Code is compared as decompiled GML, with warned disassembly fallback for failures.
+GameMaker/bytecode version mismatches are rejected. Patches contain game code and
+string values: **keep them local and never commit or redistribute them**. Binary
+payloads are content hashes referencing the mod archive. See [patch format](patch-format.md)
+for field meanings, identities, caching and future merge/build requirements.
+
+Check mods in load order (later participating entries win by default when building):
+
+```sh
+dotnet run --project src/Jamm.Cli -- check \
+  "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/cave-expansion.win" \
+  "$HOME/Cat-Goes-Fishing-Mods/colour-expansion.win" \
+  --base "$HOME/Games/CatGoesFishing-legacy/data.win" --json out/check.json
+
+# Existing patches also work; choose an asset from the findings table:
+dotnet run --project src/Jamm.Cli -- check \
+  out/patches/the-abyss-beta.cgfmm-patch.json out/patches/cave-expansion.cgfmm-patch.json \
+  --base "$HOME/Games/CatGoesFishing-legacy/data.win" --details '<asset name>'
+```
+
+Example output (illustrative synthetic names/counts):
+
+```text
+Load order (later mod wins by default when building):
+  1. Mod A: +2 changed 1 removed 0; warnings 0
+  2. Mod B: +1 changed 1 removed 0; warnings 0
+CONFLICT (1 findings)
+list         code           fish_catalog       Mod A + Mod B: different insertions at the same position.
+AUTO (1 findings)
+field        objects        fish               Mod A + Mod B: changes to different fields form a union.
+INFO (0 findings)
+WARNING (0 findings)
+Decisions required. Use --details <asset> to inspect a finding. No game files were written.
+```
+
+`check` returns **0** when there are no conflicts, **3** when conflicts need decisions,
+and **1** for an error. It generates/reuses patches in `./patches/`, or beside the
+JSON report in `patches/`; `--patches-dir` overrides this. `--details` prints GML
+conflict markers or base/mod field values. All patches must match the selected
+base's complete SHA-256. Reports include merged text and per-hunk choices for Phase 3.
+Keep reports local: they can include game code and strings. See [conflict rules and
+limitations](conflicts.md). Checking does not build or install a merged archive.
+
+Build, verify, install into a separate copy of the legacy game folder, and restore:
+
+```sh
+cgfmm build --base original.win --order abyss.win,cave.win,colour.win --out build/merged.win
+cgfmm build --base original.win --order abyss.win,cave.win --dry-run
+cgfmm verify build/merged.win
+cgfmm build --base original.win --order abyss.win,cave.win --out build/installed.win \
+  --resolve resolutions.json --install legacy-game-copy
+cgfmm restore --game legacy-game-copy
+```
+
+`--order` also accepts patch files, provided the exact mod `.win` payloads are available
+beside the patches or in `JAMM_MODS_DIR`. `--out` defaults to `./build/data.win`; a previous output can be replaced. Inputs,
+installed archives and original backups are protected. Normal
+builds publish only after the temporary archive reloads and passes reference and GML
+decompile/compile checks. A dry run compiles in memory and writes nothing.
+
+Resolutions are a JSON object mapping `family/name` (or an unambiguous bare asset name) to a winning mod display name, or
+`"keep-both"` for code insertion conflicts, for example
+`{"example_object":"cave-expansion","example_code_entry":"keep-both"}`. Later mods
+win other overlaps; disjoint changes combine. Every conflict decision is printed.
+Installation verifies a permanent `data.win.cgfmm-original` backup before replacement
+and accepts only the exact base or a previous build with matching marker hashes.
+Restore verifies its copy and retains the backup. See [building details, safety rules
+and known limitations](building.md).
+
+Run inspection and comparisons together and write a Markdown report:
+
+```sh
+dotnet run --project src/Jamm.Cli -- phase0 \
+  --original "$HOME/Games/CatGoesFishing-legacy/data.win" \
+  --mods "$HOME/Cat-Goes-Fishing-Mods" \
+  --out out/phase0.md
+```
+
+`--mods` accepts a single file or a directory of `.win` files. The default report path is
+`docs/reports/phase0.md`. Phase 0 reports and comparison JSON contain file names, metadata, counts and hashes;
+input paths and extracted game content are omitted. Inputs are opened read-only and
+cannot be selected as output destinations. Reports cannot use a `.win` destination.
+
+```sh
+dotnet run --project src/Jamm.Cli -- --help
+dotnet run --project src/Jamm.Cli -- inspect missing.win --verbose
+```
+
+`--verbose` works with every command and includes exception details on failure. Normal
+errors explain which file failed and what to check. A failed mod does not prevent analysis
+of the remaining readable mods.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Analysis completed, including different-base or YYC results from `compare` / `phase0` |
+| 1 | Read, analysis, output or usage failure |
+| 2 | `inspect`: YYC / empty CODE or unsupported VM bytecode; `diff`: YYC / empty CODE |
+| 3 | `check`: analysis succeeded, conflicts need decisions |
+
+Comparison matches named assets by ordinal name; strings use value hashes and texture
+pages use indices. The overall unchanged percentage covers code, scripts, sprites, objects,
+rooms, sounds, fonts and backgrounds. Strings and texture pages are reported separately.
+The base verdict uses identical original code: at least 80% = likely same base; 40% to
+below 80% = possibly different version; below 40% = different base. Similarity does not
+guarantee a merge will work.
+
+When either input is YYC, code, scripts, variables and functions are skipped. The result
+says `NOT COMPARABLE: <file> is YYC (no bytecode)` and omits unchanged percentages.
+Unsupported textures, Spine/SWF sprites and invalid texture regions warn and use
+`unsupported:<reason>` markers; identical markers do not prove identical content.
+

@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Jamm.Gui.MainWindow"
+        Title="JAMM · Cat Goes Fishing Mod Manager" Width="1320" Height="860" MinWidth="1040" MinHeight="680" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="24" RowSpacing="16">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="3"><TextBlock Text="JAMM" FontSize="30" FontWeight="Bold"/><TextBlock Classes="muted" Text="Cat Goes Fishing · Your mods, together."/></StackPanel>
+      <Button Grid.Column="1" Content="Settings" Click="SettingsClick" IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
+    </Grid>
+    <Grid Grid.Row="1" ColumnDefinitions="285,280,*" ColumnSpacing="16">
+      <Border Classes="card"><Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+        <TextBlock Classes="title" Text="Mod library"/>
+        <TextBlock Grid.Row="1" Classes="muted" Text="Drop .win or .zip files here"/>
+        <ListBox Grid.Row="2" x:Name="LibraryList" ItemsSource="{Binding Mods}" IsEnabled="{Binding CanEdit}">
+          <ListBox.ItemTemplate><DataTemplate><StackPanel Spacing="5" Margin="0,8">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Metadata}" Classes="muted" FontSize="12"/>
+            <TextBlock Text="{Binding Badge}" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" FontSize="12" TextWrapping="Wrap"/>
+          </StackPanel></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEdit}"><Button Content="+ Add mods" Click="AddClick"/><Button Content="Remove" Click="RemoveClick"/></StackPanel>
+      </Grid></Border>
+      <Border Grid.Column="1" Classes="card"><Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="12">
+        <TextBlock Classes="title" Text="Load order"/>
+        <ComboBox Grid.Row="1" x:Name="ProfilePicker" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=OneWay}" SelectionChanged="ProfileChanged" PlaceholderText="Choose a profile" HorizontalAlignment="Stretch" IsEnabled="{Binding CanEdit}"/>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="5" IsEnabled="{Binding CanEdit}"><Button Content="New" Click="NewProfileClick"/><Button Content="Rename" Click="RenameProfileClick" Padding="9,8"/><Button Content="Delete" Click="DeleteProfileClick" Padding="9,8"/></StackPanel>
+        <TextBlock Grid.Row="3" Text="Later mods win overlapping changes." TextWrapping="Wrap" Classes="muted"/>
+        <ListBox Grid.Row="4" x:Name="OrderList" ItemsSource="{Binding Order}" IsEnabled="{Binding CanEditProfile}">
+          <ListBox.ItemTemplate><DataTemplate><CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" Content="{Binding Name}" Margin="0,5"/></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEditProfile}"><Button Content="↑ Move up" Click="UpClick"/><Button Content="↓ Down" Click="DownClick"/></StackPanel>
+      </Grid></Border>
+      <Border Grid.Column="2" Classes="card"><Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+        <TextBlock Classes="title" Text="Compatibility &amp; conflicts"/>
+        <TextBlock Grid.Row="1" Text="{Binding ConflictCounts}" FontSize="12" TextWrapping="Wrap" Classes="muted"/>
+        <ScrollViewer Grid.Row="2"><StackPanel Spacing="10">
+          <TextBlock Text="Press Check to compare the enabled mods. Pick winners below; changes to different parts combine automatically." TextWrapping="Wrap" Classes="muted"/>
+          <ItemsControl ItemsSource="{Binding Conflicts}"><ItemsControl.ItemTemplate><DataTemplate>
+            <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+              <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="{Binding Severity}" FontWeight="Bold" Foreground="{DynamicResource SystemControlHighlightAccentBrush}"/><TextBlock Text="{Binding Kind}" Classes="muted"/></StackPanel>
+                <TextBlock Text="{Binding Key}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Mods}" Classes="muted" TextWrapping="Wrap" FontSize="12"/>
+                <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" FontSize="13"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice, Mode=TwoWay}" IsVisible="{Binding CanChoose}" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" PlaceholderText="Later mod (default)" HorizontalAlignment="Stretch"/>
+                  <Button Grid.Column="1" Content="Details" Click="DetailsClick"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+        </StackPanel></ScrollViewer>
+      </Grid></Border>
+    </Grid>
+    <Border Grid.Row="2" Classes="card"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+      <StackPanel Spacing="6"><TextBlock Text="{Binding GameStatus}" TextWrapping="Wrap" FontWeight="SemiBold"/><TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes="muted" MaxHeight="44"/></StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Content="Check" Click="CheckClick" IsEnabled="{Binding CanCheck}"/>
+        <Button Content="Install" Click="InstallClick" IsEnabled="{Binding CanInstall}" Background="#2563EB" Foreground="White"/>
+        <Button Content="Play" Click="PlayClick" IsEnabled="{Binding CanPlay}"/>
+        <Button Content="Restore original" Click="RestoreClick" IsEnabled="{Binding CanRestore}"/>
+        <Button Content="Cancel" Click="CancelClick" IsVisible="{Binding IsBusy}" IsEnabled="{Binding CanCancel}"/>
+      </StackPanel>
+    </Grid></Border>
+    <Expander Grid.Row="3" Header="Activity log" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+      <Grid RowDefinitions="Auto,*" Height="150"><Button Content="Copy log" Click="CopyLogClick" HorizontalAlignment="Right"/><TextBox Grid.Row="1" Text="{Binding Log, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="monospace" FontSize="11" TextWrapping="Wrap"/></Grid>
+    </Expander>
+  </Grid>
+</Window>

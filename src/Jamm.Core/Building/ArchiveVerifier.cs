@@ -16,8 +16,9 @@ public static class ArchiveVerifier
     /// <summary>Verifies an archive; throws a contextual error if a load, reference or code check fails.</summary>
     public static VerificationResult Verify(string path, GameInspection? expected = null,
         IReadOnlyList<PlannedAsset>? plan = null, Action<string>? progress = null,
-        IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>>? expectedReferences = null)
+        IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>>? expectedReferences = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         progress?.Invoke($"Verifying {Path.GetFileName(path)}: reload, references, decompile and compile");
         using var loaded = GameFileLoader.Load(path);
         if (expected is not null) PatchBuilder.Validate(expected, loaded.Inspection);
@@ -41,6 +42,7 @@ public static class ArchiveVerifier
         int count = 0;
         foreach (var code in loaded.Data.Code.Where(c => c.ParentEntry is null))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var text = reader.Read(code);
             if (text.Format != "gml") throw new InvalidDataException($"Verification failed for '{Path.GetFileName(path)}', code '{code.Name.Content}': GML decompilation failed. No verified build is available.");
             if (expectedReferences is not null)
@@ -55,12 +57,13 @@ public static class ArchiveVerifier
         return new(loaded.Inspection, count, warnings, expectedReferences?.Count ?? 0);
     }
 
-    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected)
+    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default)
     {
         var reader = new CodeDecompiler(data, "merged archive", _ => { }, AssetSymbols.Ambiguous([SemanticReferences.Names(data)]));
         var names = SemanticReferences.Names(data);
         foreach (var code in data.Code.Where(c => c.ParentEntry is null))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!expected.TryGetValue(code.Name.Content, out var references))
                 throw new InvalidDataException($"Missing semantic expectations for code '{code.Name.Content}'. No output was published.");
             var text = reader.Read(code);

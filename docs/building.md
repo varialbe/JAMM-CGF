@@ -59,11 +59,30 @@ to a mod's display name (normally its filename without the extension):
 These are illustrative names; use actual names from `cgfmm check`. A selected mod wins
 overlapping changes while other disjoint changes remain. Selecting an unchanged mod
 for a base asset retains that base asset. Unknown names/choices are errors. `keep-both`
-works only when all conflicting code hunks in the entry are insertions at the same
-ancestor position. It retains distinct insertions in load order. It cannot resolve an
+works on insertion conflicts. A whole-entry keep-both requires all unresolved
+hunks to be insertions; use per-hunk overrides for overlapping replacements. It retains distinct insertions in load order. It cannot resolve an
 overlapping replacement, deletion or differing whole-code addition. A qualified key selects exactly one family. Bare names apply only to conflicting
 families when names are shared; bare `keep-both` applies only to code. Qualify keys to
-resolve families independently. Use unique mod names when preparing patches with `diff --name`.
+resolve families independently.
+
+Per-hunk keys use `code/<entry>#<zero-based ancestor line>`, matching the report's
+`hunks[].start`. For example:
+
+```json
+{
+  "code/example_code_entry#12": "keep-both",
+  "code/example_code_entry#25": "cave-expansion"
+}
+```
+
+A hunk choice overrides the whole-entry choice. Other hunks use the whole-entry
+choice or the later participating mod by default. `keep-both` is valid only for
+insertion hunks; unknown/stale keys and nonparticipating mod choices are errors.
+Use `cgfmm profile resolve combined 'code/example_code_entry#12' keep-both` to save
+one through the CLI. Keep keys quoted in shells. Code edits or changed order can
+invalidate keys: check the profile again after editing it.
+
+Use unique mod names when preparing patches with `diff --name`.
 
 Deletion/reference conflicts use the final structured snapshot. A later surviving
 reference retains an earlier-deleted base asset and its surviving edits, with a printed decision. An explicit
@@ -172,3 +191,46 @@ and preserving multiple catalog insertions can require manual game-specific work
 An in-game test on the desktop with the legacy executable is still required. This
 machine cannot launch the game. See [Phase 3 verification](reports/phase3-verification.md)
 for build sizes, counts, decisions and timings.
+
+## Desktop GUI builds and verification
+
+`src/Jamm.Gui` targets .NET 10 and pins Avalonia 11.3.23 (the latest stable 11.x release
+at implementation) and CommunityToolkit.Mvvm 8.4.2. It follows the OS light/dark theme.
+Both interfaces use Jamm.Core's managed library, profiles and guarded installer;
+the GUI never serializes or writes a game archive itself.
+
+```sh
+dotnet run --project src/Jamm.Gui -c Release -- --data-dir "$HOME/.local/share/cgfmm"
+dotnet publish src/Jamm.Gui -c Release -r linux-x64 --self-contained
+dotnet publish src/Jamm.Gui -c Release -r win-x64 --self-contained
+```
+
+Outputs are under `src/Jamm.Gui/bin/Release/net10.0/<runtime>/publish/` and ignored
+by Git. Keep the whole publish directory together. Linux desktop rendering requires
+the usual fontconfig/X11 system libraries. Cross-publishing Windows is supported;
+running the published Windows executable still requires desktop testing.
+
+Headless GUI smoke tests use `Avalonia.Headless.XUnit` and Skia; no display is required.
+ViewModel tests exercise the same install/restore methods as the buttons. Real-file
+checks copy the entire game folder to temporary storage; source files stay read-only.
+
+```sh
+env -u JAMM_ORIGINAL -u JAMM_MODS_DIR dotnet test
+JAMM_ORIGINAL="$HOME/Games/CGF-legacy-original/data.win" \
+JAMM_MODS_DIR="$HOME/Cat-Goes-Fishing-Mods" dotnet test
+```
+
+Regenerate the README screenshots with the opt-in neutral demo test:
+
+```sh
+JAMM_SCREENSHOTS="$PWD/docs/images" dotnet test tests/Jamm.Gui.Tests -c Release \
+  --filter FullyQualifiedName~GenerateNeutralReadmeScreenshotsWhenRequested
+```
+
+This generator creates dark and light images using invented mod names, synthetic
+compatibility findings and no game assets. It does not load user configuration or
+archives. Inspect both PNGs before publishing documentation.
+
+Desktop checks still required: native file/folder pickers, external drag/drop,
+load-order dragging with your mouse, OS theme transitions, clipboard, display scaling,
+Wine/Proton launch and actual gameplay (including fish catalogs and textures).

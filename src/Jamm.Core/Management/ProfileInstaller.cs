@@ -12,7 +12,7 @@ public sealed record PreparedProfile(ModProfile Profile, ManagerConfig Config, s
 /// <summary>Recognizes the installed profile and delegates every game write to Phase 3's guarded installer.</summary>
 public sealed class ProfileInstaller(ManagerStore store)
 {
-    private sealed record InstalledProfile(string Signature, string GameDirectory, string BuildSha256);
+    private sealed record InstalledProfile(string Signature, string GameDirectory, string BuildSha256, string? Profile = null);
 
     private (ModProfile Profile, ManagerConfig Config, IReadOnlyList<BuildInput> Inputs, string Signature) Selection(string? name)
     {
@@ -22,14 +22,14 @@ public sealed class ProfileInstaller(ManagerStore store)
         var profile = new ProfileLibrary(store).Get(name ?? config.ActiveProfile
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
         var library = new ModLibrary(store);
-        var inputs = profile.Mods.Select(id => library.Find(id)).Select(m => new BuildInput(library.Patch(m), library.Archive(m))).ToArray();
+        var inputs = profile.EnabledMods.Select(id => library.Find(id)).Select(m => new BuildInput(library.Patch(m), library.Archive(m))).ToArray();
         string hash = BuildFiles.Hash(config.Base);
         if (inputs.Any(i => i.Patch.Base.Sha256 != hash))
             throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             // Invalidate installation records made before numeric-reference verification.
-            Builder = "phase3b", profile.Name, profile.Mods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Builder = "phase3b", profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);
@@ -57,19 +57,36 @@ public sealed class ProfileInstaller(ManagerStore store)
         catch (IOException) { return false; }
     }
 
-    /// <summary>Builds a temporary verified output without altering the game. Call Install or Discard when finished.</summary>
-    public PreparedProfile Prepare(string? name = null, Action<string>? progress = null)
+    /// <summary>Returns the recorded installed profile name when the game and retained backup are still recognized.</summary>
+    public string? InstalledProfileName()
     {
+        string path = store.Path("installed.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var installed = store.Read<InstalledProfile>(path);
+            var config = store.Config();
+            if (config.GameDir != installed.GameDirectory || config.Base is null) return null;
+            GameInstaller.Validate(config.GameDir!, BuildFiles.Hash(config.Base), basePath: config.Base);
+            return BuildFiles.Hash(Path.Combine(config.GameDir!, "data.win")) == installed.BuildSha256 ? installed.Profile : null;
+        }
+        catch (IOException) { return null; }
+    }
+
+    /// <summary>Builds a temporary verified output without altering the game. Call Install or Discard when finished.</summary>
+    public PreparedProfile Prepare(string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var selection = Selection(name);
         string hash = BuildFiles.Hash(selection.Config.Base!);
         string output = store.Path("builds", $"{Guid.NewGuid():N}.win");
         GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
-        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, selection.Profile.Resolutions, progress: progress);
+        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, selection.Profile.Resolutions, progress: progress, cancellationToken: cancellationToken);
         return new(selection.Profile, selection.Config, selection.Signature, output, hash, result);
     }
 
     /// <summary>Retains an additional permanent original in the data directory, then performs a Phase 3 install.</summary>
-    public void Install(PreparedProfile prepared)
+    public void Install(PreparedProfile prepared, bool retainIndependentBase = false)
     {
         var selection = Selection(prepared.Profile.Name);
         if (selection.Signature != prepared.Signature || selection.Config != prepared.Config)
@@ -90,9 +107,15 @@ public sealed class ProfileInstaller(ManagerStore store)
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         if (BuildFiles.Hash(backup) != prepared.BaseSha256) throw new IOException("The retained manager backup differs from the base. Choose another data directory; backups are never overwritten.");
+        bool rebase = retainIndependentBase && BuildFiles.SamePath(BuildFiles.Resolve(prepared.Config.Base!),
+            BuildFiles.Resolve(Path.Combine(prepared.Config.GameDir!, "data.win")));
         GameInstaller.Install(prepared.OutputPath, prepared.Config.GameDir!, prepared.BaseSha256,
             selection.Inputs.Select(i => i.ArchivePath), prepared.Config.Base);
-        store.Write(store.Path("installed.json"), new InstalledProfile(prepared.Signature, prepared.Config.GameDir!, BuildFiles.Hash(prepared.OutputPath)));
+        // First-run desktop setup may choose the game's own archive. Once installed,
+        // keep subsequent checks bound to the verified ancestor rather than the replacement.
+        if (rebase)
+            store.Set("base", backup);
+        store.Write(store.Path("installed.json"), new InstalledProfile(prepared.Signature, prepared.Config.GameDir!, BuildFiles.Hash(prepared.OutputPath), prepared.Profile.Name));
         new ProfileLibrary(store).Use(prepared.Profile.Name);
         Discard(prepared);
     }

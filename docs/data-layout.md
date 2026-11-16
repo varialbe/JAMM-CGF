@@ -41,7 +41,8 @@ Later participating mods win overlaps by default; disjoint changes combine.
 Profile names allow letters, digits, dots, hyphens, underscores, up to 100
 characters. `profile resolve` validates the asset and choice with the same plan
 used to build. Mod choices can be library IDs/names; stored choices use patch
-display names. `keep-both` has Phase 3's insertion-only restriction. A mod cannot
+display names. `keep-both` has Phase 3's insertion-only restriction. Code hunk keys use
+`code/<entry>#<zero-based ancestor line>`; per-hunk choices override entry choices. A mod cannot
 be removed while any profile references it. Deleting the active profile clears
 the selection; it does not alter the installed game or delete backups.
 
@@ -109,3 +110,17 @@ patch against the selected common base. Version/YYC incompatibilities fail impor
 Library archives, patches, backups, builds and runner prefixes are local user
 state. Patches contain game code and strings; do not commit or redistribute them.
 The manager does not download legacy builds or distribute game files.
+
+## Desktop profile editing
+
+The GUI uses the same profile JSON, with optional `disabledMods` (an array of library
+IDs, default empty). `mods` retains the complete profile order; only IDs absent from
+`disabledMods` participate in check/build/play. Empty profiles can be created in the
+GUI and must have an enabled mod before building. CLI-created profiles enable every
+mod. Changing GUI order/enablement clears resolutions for a fresh conflict review.
+Renaming or deleting a profile leaves the installed archive and all backups alone.
+
+When first-run GUI settings default `base` to the game folder's own archive, a
+successful GUI install selects the retained, hash-verified manager backup as the
+base for future checks and restore. A separately configured original base stays
+selected. CLI apply retains its explicit base configuration behavior.
