@@ -72,3 +72,9 @@ see conflicts in plain language, pick winners, and press **Install** / **Play** 
   (real files, skipped without env vars) and restore it; report that the original hash is back.
 - Final message: what works, what does not, what the user must test on the desktop.
 - Do NOT commit. No game content or personal paths in tracked files.
+
+## Core fix needed by the Conflicts screen (from the Phase 4 review)
+`profile resolve <p> <code entry> keep-both` is refused when the entry has list hunks *and* an overlapping
+replacement hunk (e.g. the fish catalog entry). Support per-hunk resolutions (stable hunk keys such as
+`code/<entry>#<ancestor line>`), let keep-both apply to the list hunks while other hunks take a mod choice, and
+keep the current whole-entry form working. CLI and GUI both use it; add tests.
