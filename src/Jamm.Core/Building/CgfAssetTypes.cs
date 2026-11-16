@@ -27,7 +27,7 @@ public static class CgfAssetTypes
         {
             var type = registry.FindType("Asset." + (definition.Family switch
             {
-                "objects" => "Object", "sprites" => "Sprite", "sounds" => "Sound", "paths" => "Path",
+                "objects" => "Object", "sprites" => "Sprite", "sounds" => "Sound", "paths" => "Path", "fonts" => "Font",
                 _ => throw new InvalidDataException($"Unknown asset family '{definition.Family}' in CGF type definitions.")
             }));
             if (definition.Argument is { } argument)
