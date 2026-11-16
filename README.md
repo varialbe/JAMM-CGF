@@ -44,7 +44,11 @@ Open **JAMM-CGF** from the applications/Start menu. First-run setup finds your l
 game (Steam libraries, moved depot downloads, other drives) and creates a separate
 modded copy with one click. Then add mods or download them in **Browse mods**, switch
 them on or off, and press **Play**.
-A Windows `.exe` installer and an Ubuntu `.deb` package are planned.
+Packaged builds need no system .NET: install the Ubuntu amd64 `.deb` with
+`sudo apt install ./jamm-cgf_<version>_amd64.deb`, or extract the Windows x64
+portable zip and run `cgfmm-gui.exe`. Windows CI also builds an `.exe` installer.
+For the headless CLI/scanner, build with `docker build -t jamm-cgf:local .`.
+[Package builds, installation and Docker examples](docs/packaging.md).
 
 ## Browse mods
 

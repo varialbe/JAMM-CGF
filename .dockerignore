@@ -1,0 +1,18 @@
+# Allow only build inputs; no local archives, credentials, outputs or game data.
+**
+!src/
+!src/**
+!external/
+!external/UndertaleModTool/
+!external/UndertaleModTool/UndertaleModLib/
+!external/UndertaleModTool/UndertaleModLib/**
+!external/UndertaleModTool/Underanalyzer/
+!external/UndertaleModTool/Underanalyzer/**
+!LICENSE
+!Dockerfile
+**/bin
+**/obj
+**/.git
+**/*.win*
+**/*.zip
+**/*.cgfmm-patch.json

@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: JAMM-CGF
+Source: https://github.com/varialbe/JAMM-CGF
+
+Files: *
+Copyright: JAMM-CGF contributors
+License: GPL-3.0
+ This program is distributed under the GNU General Public License version 3.
+ On Debian systems the full text is in /usr/share/common-licenses/GPL-3.
+
+Files: opt/jamm-cgf/*/cgfmm*
+Copyright: JAMM-CGF contributors and bundled dependency authors
+License: GPL-3.0 and other
+ The self-contained executables bundle UndertaleModLib (GPL-3.0),
+ .NET (MIT), Avalonia (MIT), SkiaSharp (MIT), SQLite (public domain),
+ and their transitive dependencies. Their upstream license notices are
+ retained where supplied by dotnet publish. See docs/packaging.md in
+ the corresponding source tree for source and redistribution guidance.
