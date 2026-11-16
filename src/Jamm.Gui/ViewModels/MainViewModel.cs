@@ -65,7 +65,28 @@ public sealed partial class MainViewModel : ObservableObject
     {
         foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy) }) OnPropertyChanged(property);
     }
-    private void Message(string message) { Status = message; Log += message + Environment.NewLine; }
+    private double operationProgress;
+    private bool operationIndeterminate = true;
+    private string operationStep = "Ready";
+    /// <summary>Current plain-language processing step.</summary>
+    public string OperationStep { get => operationStep; private set => SetProperty(ref operationStep, value); }
+    /// <summary>Completed fraction within the current step.</summary>
+    public double OperationProgress { get => operationProgress; private set => SetProperty(ref operationProgress, value); }
+    /// <summary>True when this step has no trustworthy count.</summary>
+    public bool OperationIndeterminate { get => operationIndeterminate; private set => SetProperty(ref operationIndeterminate, value); }
+    internal void ReportProcessingStep(string message) => Message(message);
+    internal void UpdateOperation(string message)
+    {
+        var count = System.Text.RegularExpressions.Regex.Match(message, @"(\d[\d,]*)/(\d[\d,]*)");
+        OperationIndeterminate = !count.Success;
+        OperationProgress = count.Success && double.TryParse(count.Groups[2].Value.Replace(",", ""), out double total) && total > 0
+            ? 100 * double.Parse(count.Groups[1].Value.Replace(",", ""), System.Globalization.CultureInfo.InvariantCulture) / total : 0;
+        OperationStep = message.StartsWith("Fingerprinting") ? "Reading game content" : message.StartsWith("Decompiling") || message.StartsWith("Resolving")
+            ? "Reading game code" : message.StartsWith("Compiling") ? "Building game code" : message.Contains("verification", StringComparison.OrdinalIgnoreCase)
+            || message.StartsWith("Verifying") ? "Verifying the merged game" : message.StartsWith("Writing") ? "Saving merged game" : message;
+        if (count.Success) OperationStep += " · " + count.Value;
+    }
+    private void Message(string message) { Status = message; Log += message + Environment.NewLine; UpdateOperation(message); }
 
     /// <summary>Runs one serialized operation, surfaces a friendly error, and restores button states on every exit.</summary>
     public async Task RunAsync(string label, Func<CancellationToken, IProgress<string>, Task> action, bool supportsCancellation = true)
@@ -110,13 +131,30 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ReloadAsync()
     {
         var data = await Task.Run(() => (Mods: new ModLibrary(store).List(), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
+        var summaries = await Task.Run(() => data.Mods.ToDictionary(m => m.Mod.Id, m =>
+        {
+            try
+            {
+                var patch = new ModLibrary(store).Patch(m.Mod);
+                string factsPath = Path.Combine(store.Root, "analysis", $"{m.Mod.Sha256}-{m.Mod.BaseSha256}-{ModFactAnalyzer.Version}.json");
+                var facts = File.Exists(factsPath) ? System.Text.Json.JsonSerializer.Deserialize<ModFacts>(File.ReadAllText(factsPath),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) : null;
+                string[] adds = facts?.Adds ?? ModFactAnalyzer.Extract(patch, []);
+                string verdict = facts is null ? "? " + m.Compatibility : (facts.Compatibility == "Compatible" ? "✓ " : facts.Compatibility == "Incompatible" ? "✕ " : "? ") + facts.Compatibility + ": " + facts.Reason;
+                return (adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", adds)) + "\nSource: "
+                    + (m.Mod.Origins.FirstOrDefault()?.SourcePage ?? m.Mod.SourceFileName) + "\nCompatibility: " + verdict;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { return "Summary unavailable: " + ex.Message; }
+        }));
         usableBase = data.Config.Base is { } basePath && await Task.Run(() => SteamGameDetection.Inspect(basePath).Usable);
         loading = true;
         try
         {
             Mods.Clear(); Profiles.Clear(); Order.Clear(); Conflicts.Clear();
             foreach (var m in data.Mods)
-                Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length));
+                Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length)
+                    { Summary = summaries[m.Mod.Id], CatalogId = m.Mod.Origins.FirstOrDefault(o => o.Catalog == "litterbox")?.ModId });
+            RefreshLocalIcons();
             foreach (var p in data.Profiles) Profiles.Add(p.Name);
             SelectedProfile = data.Config.ActiveProfile;
             var profile = data.Profiles.FirstOrDefault(p => p.Name == SelectedProfile);
@@ -137,6 +175,11 @@ public sealed partial class MainViewModel : ObservableObject
         }
         finally { loading = false; }
         await Browse.UpdateMembershipAsync();
+        await Browse.LoadLocalIconsAsync(cancellation?.Token ?? CancellationToken.None);
+    }
+    internal void RefreshLocalIcons()
+    {
+        foreach (var row in Mods) row.Icon = Browse.CatalogIcon(row.CatalogId);
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
     public Task AddAsync(IEnumerable<string> paths)

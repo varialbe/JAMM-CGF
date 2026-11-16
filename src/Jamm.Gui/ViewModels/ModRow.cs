@@ -6,6 +6,13 @@ namespace Jamm.Gui.ViewModels;
 public sealed class ModRow(string id, string name, string badge, bool cached, long size) : ObservableObject
 {
     private bool enabled;
+    private Avalonia.Media.Imaging.Bitmap? icon;
+    /// <summary>Catalog artwork, or the view's neutral geometric placeholder.</summary>
+    public Avalonia.Media.Imaging.Bitmap? Icon { get => icon; internal set => SetProperty(ref icon, value); }
+    /// <summary>Computed additions, provenance and compatibility for the expanded row.</summary>
+    public string Summary { get; internal set; } = "Content summary unavailable. Check this mod in Browse mods.";
+    /// <summary>Catalog identity used to associate artwork without matching display names.</summary>
+    public string? CatalogId { get; internal set; }
     /// <summary>Immutable library ID.</summary>
     public string Id { get; } = id;
     /// <summary>User-facing display name.</summary>

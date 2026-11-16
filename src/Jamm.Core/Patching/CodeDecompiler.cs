@@ -29,7 +29,7 @@ internal sealed class CodeDecompiler(UndertaleData data, string fileName, Action
             if (global is null)
             {
                 Building.CgfAssetTypes.Register(data);
-                global = ambiguous is null ? new GlobalDecompileContext(data) : new Building.AssetSymbols.Context(data, ambiguous);
+                global = new Building.AssetSymbols.Context(data, ambiguous ?? new HashSet<string>());
             }
             text = new DecompileContext(global, code).DecompileToString();
             format = "gml";

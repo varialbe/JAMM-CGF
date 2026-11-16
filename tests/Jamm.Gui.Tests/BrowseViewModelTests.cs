@@ -92,7 +92,7 @@ public sealed class BrowseViewModelTests
         using var files = new TestFiles(); string source = files.Mod("Source", "x = 1;\n");
         var started = new TaskCompletionSource(); var release = new TaskCompletionSource(); int downloads = 0;
         bool first = true;
-        var vm = Create(files, async token => { if (first) { first = false; throw new HttpRequestException("Selection check failed; retry Download."); } downloads++; started.SetResult(); await release.Task.WaitAsync(token); return File.ReadAllBytes(source); });
+        var vm = Create(files, async token => { if (first) { first = false; throw new HttpRequestException("Selection check failed; retry Download.", null, HttpStatusCode.NotFound); } downloads++; started.SetResult(); await release.Task.WaitAsync(token); return File.ReadAllBytes(source); });
         await Select(vm); Task download = vm.Browse.DownloadAsync(false, _ => Task.FromResult(false)); await started.Task;
         Assert.True(vm.IsBusy); Assert.False(vm.Browse.CanDownload); Assert.False(vm.CanEdit); Assert.False(vm.CanRestore); Assert.True(vm.CanCancel);
         await vm.AddAsync([source]); await vm.RestoreAsync(); await vm.InstallAsync(_ => throw new Exception("Busy")); await vm.Browse.DownloadAsync(false, _ => Task.FromResult(false));

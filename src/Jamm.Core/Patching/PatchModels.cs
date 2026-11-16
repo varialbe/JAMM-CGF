@@ -41,7 +41,7 @@ public static class PatchJson
     public const int FormatVersion = 2;
 
     /// <summary>Decompiler container-definition revision used to invalidate older analysis caches.</summary>
-    public const int AssetTypesVersion = 2;
+    public const int AssetTypesVersion = 3;
 
     /// <summary>Writes deterministic JSON for an already ordered patch.</summary>
     public static string Serialize(ModPatch patch) => JsonSerializer.Serialize(patch, PatchJsonContext.Default.ModPatch) + "\n";

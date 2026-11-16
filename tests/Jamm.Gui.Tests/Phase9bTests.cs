@@ -48,11 +48,15 @@ public sealed class Phase9bTests
         Assert.Equal(2, Directory.GetFiles(Path.Combine(files.Store.Root, "analysis"), "*.json").Length);
     }
     [Fact]
-    public void OtherBuildIsUnsureAndYycIsIncompatible()
+    public void LegacyTimestampDifferenceIsCompatibleUnknownBuildIsUnsureAndYycIsIncompatible()
     {
         using var files = new TestFiles();
         string older = files.Mod("Older", "x = 1;\n", d => d.GeneralInfo.Timestamp--);
-        Assert.Equal("Unsure", new ModFactAnalyzer(files.Store).Analyze(older, default).Compatibility);
+        var result = new ModFactAnalyzer(files.Store).Analyze(older, default);
+        Assert.Equal("Compatible", result.Compatibility);
+        Assert.Contains("2023-08-16", result.Reason);
+        string unknown = files.Mod("Unknown", "x = 1;\n", d => d.GeneralInfo.Timestamp = 1730000000);
+        Assert.Equal("Unsure", new ModFactAnalyzer(files.Store).Analyze(unknown, default).Compatibility);
         string yyc = files.Mod("Yyc", "x = 1;\n", d => d.Code.Clear());
         Assert.Equal("Incompatible", new ModFactAnalyzer(files.Store).Analyze(yyc, default).Compatibility);
     }

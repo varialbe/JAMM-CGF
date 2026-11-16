@@ -40,7 +40,7 @@ public static class SemanticReferences
                     if (!Number(tokens[start].Value, out decimal argumentIndex) || argumentIndex != decimal.Truncate(argumentIndex)
                         || !tables.TryGetValue(argumentFamily, out var argumentNames) || argumentIndex >= argumentNames.Length)
                         throw new InvalidDataException($"Code '{entry}', function '{tokens[i].Value}', argument {argument + 1}: invalid {argumentFamily} index {tokens[start].Value}. Fix the source mod.");
-                    replacements.Add((tokens[start].Start, tokens[start].Length, argumentNames[(int)argumentIndex]));
+                    replacements.Add((tokens[start].Start, tokens[start].Length, AssetSymbols.SafeName(argumentFamily, argumentNames[(int)argumentIndex])));
                 }
             }
             if (tokens[i].Kind != 'i' || CgfAssetTypes.Family(tokens[i].Value, entry) is not { } family) continue;
@@ -58,7 +58,7 @@ public static class SemanticReferences
             if (j + 1 < tokens.Count && tokens[j + 1].Value is not (";" or ")" or "," or "}" or "&&" or "||")) continue;
             if (!tables.TryGetValue(family, out var names) || index >= names.Length)
                 throw new InvalidDataException($"Code '{entry}', container '{tokens[i].Value}': invalid {family} index {index}. Fix this reference in the source mod.");
-            replacements.Add((tokens[j].Start, tokens[j].Length, names[index]));
+            replacements.Add((tokens[j].Start, tokens[j].Length, AssetSymbols.SafeName(family, names[index])));
         }
         StringBuilder result = new(text);
         foreach (var r in replacements.Distinct().OrderByDescending(r => r.Start)) result.Remove(r.Start, r.Length).Insert(r.Start, r.Name);

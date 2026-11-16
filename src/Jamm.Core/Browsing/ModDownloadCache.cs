@@ -6,28 +6,39 @@ namespace Jamm.Core.Browsing;
 /// <summary>Retains validated archive bytes by hash, without trusting expiring URLs or filenames.</summary>
 public sealed class ModDownloadCache(ManagerStore store, ModHttp http)
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> Gates = new();
     private sealed record CachedFile(string Hash);
     /// <summary>Reuses immutable provider file identities across sessions after verifying the cached bytes.</summary>
     public async Task<string> FetchFileAsync(ModDownloadFile file, IModDownloadResolver resolver, IProgress<ModDownloadProgress>? progress, CancellationToken token)
     {
         string key = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(file.Provider + "\n" + file.SourceUrl + "\n" + file.ReleaseId + "\n" + file.Id)));
-        string index = store.Path("download-cache", key + ".json");
-        if (File.Exists(index))
+        var gate = Gates.GetOrAdd(store.Root + "\n" + file.Provider + "\n" + file.SourceUrl, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(token);
+        try
         {
-            var entry = store.Read<CachedFile>(index);
-            if (entry.Hash.Length == 64 && entry.Hash.All(char.IsAsciiHexDigit))
+            string index = store.Path("download-cache", key + ".json");
+            if (File.Exists(index))
             {
-                string path = store.Path("download-cache", entry.Hash + ".win");
-                if (File.Exists(path) && BuildFiles.Hash(path) == entry.Hash) { token.ThrowIfCancellationRequested(); return path; }
+                var entry = store.Read<CachedFile>(index);
+                if (entry.Hash.Length == 64 && entry.Hash.All(char.IsAsciiHexDigit))
+                {
+                    string path = store.Path("download-cache", entry.Hash + ".win");
+                    if (File.Exists(path) && BuildFiles.Hash(path) == entry.Hash) { token.ThrowIfCancellationRequested(); return path; }
+                }
             }
+            string downloaded = await PublishAsync(await new ModDownloadService(store, http).DownloadResolvedAsync(t => resolver.GetFileUriAsync(file, t), progress, token), token);
+            store.Write(index, new CachedFile(BuildFiles.Hash(downloaded))); return downloaded;
         }
-        string downloaded = await FetchAsync(await resolver.GetFileUriAsync(file, token), progress, token);
-        store.Write(index, new CachedFile(BuildFiles.Hash(downloaded))); return downloaded;
+        finally { gate.Release(); }
     }
     /// <summary>Downloads with bounds/cancellation, extracts the single archive and publishes a content-addressed copy.</summary>
     public async Task<string> FetchAsync(Uri uri, IProgress<ModDownloadProgress>? progress, CancellationToken token)
     {
         string staging = await new ModDownloadService(store, http).DownloadAsync(uri, progress, token);
+        return await PublishAsync(staging, token);
+    }
+    private async Task<string> PublishAsync(string staging, CancellationToken token)
+    {
         string? extracted = null;
         try
         {
@@ -41,8 +52,11 @@ public sealed class ModDownloadCache(ManagerStore store, ModHttp http)
             string destination = store.Path("download-cache", hash + ".win");
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             token.ThrowIfCancellationRequested();
-            if (!File.Exists(destination)) File.Move(archive, destination);
-            else if (BuildFiles.Hash(destination) != hash) throw new InvalidDataException("Cached download changed. Remove the download-cache folder and retry.");
+            try { File.Move(archive, destination); }
+            catch (IOException) when (File.Exists(destination))
+            {
+                if (BuildFiles.Hash(destination) != hash) throw new InvalidDataException("Cached download changed. Remove the download-cache folder and retry.");
+            }
             return destination;
         }
         finally

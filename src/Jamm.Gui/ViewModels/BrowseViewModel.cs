@@ -41,6 +41,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     private readonly IModDownloadResolver resolver;
     private CancellationTokenSource? reading;
     private CatalogRow[] all = [];
+    private readonly Dictionary<string, Bitmap> localArtwork = [];
     private ManagedMod[] localMods = [];
     private string[] enabledIds = [], installedIds = [];
     private CatalogRow? selected;
@@ -100,6 +101,29 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     /// <summary>Raises derived command states after any manager operation.</summary>
     public void NotifyActions() { OnPropertyChanged(nameof(CanDownload)); OnPropertyChanged(nameof(CanDownloadInstall)); }
 
+    internal Bitmap? CatalogIcon(string? id) => all.FirstOrDefault(r => r.Mod.Id == id)?.Icon
+        ?? (id is not null ? localArtwork.GetValueOrDefault(id) : null);
+    internal async Task LoadLocalIconsAsync(CancellationToken token)
+    {
+        var ids = owner.Mods.Select(r => r.CatalogId).OfType<string>().Distinct().Where(id => CatalogIcon(id) is null).ToArray();
+        if (ids.Length == 0) return;
+        try
+        {
+            var snapshot = await catalog.LoadAsync(token);
+            foreach (var mod in snapshot.Mods.Where(m => ids.Contains(m.Id) && m.IconUrl is not null).Take(60))
+            {
+                try
+                {
+                    var bytes = await http.ReadAsync(mod.IconUrl!, 256 * 1024, token);
+                    using var stream = new MemoryStream(bytes);
+                    localArtwork[mod.Id] = Bitmap.DecodeToWidth(stream, 72);
+                    owner.RefreshLocalIcons();
+                }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or ArgumentException or NotSupportedException or TimeoutException) { }
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or OperationCanceledException or TimeoutException) { }
+    }
     private void Filter()
     {
         var rows = all.Where(r => (string.IsNullOrWhiteSpace(Search) || (r.Name + " " + r.Mod.Author + " " + r.Mod.Description).Contains(Search, StringComparison.OrdinalIgnoreCase))
@@ -121,7 +145,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
             var snapshot = await catalog.LoadAsync(current.Token);
             if (reading != current) return;
             foreach (var row in all) row.Icon?.Dispose();
-            all = snapshot.Mods.Select(m => new CatalogRow(m)).ToArray();
+            all = snapshot.Mods.Select(m => new CatalogRow(m)).ToArray(); owner.RefreshLocalIcons();
             Categories.Clear(); Categories.Add("All categories");
             foreach (string name in all.SelectMany(r => r.Mod.Categories).Distinct().Order()) Categories.Add(name);
             category = "All categories"; OnPropertyChanged(nameof(Category)); Filter();
@@ -136,7 +160,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                 try
                 {
                     var bytes = await http.ReadAsync(url, Math.Min(256 * 1024, budget), current.Token); budget -= bytes.Length;
-                    using var stream = new MemoryStream(bytes); row.Icon = Bitmap.DecodeToWidth(stream, 72);
+                    using var stream = new MemoryStream(bytes); row.Icon = Bitmap.DecodeToWidth(stream, 72); owner.RefreshLocalIcons();
                 }
                 catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or ArgumentException or NotSupportedException or TimeoutException) { /* Optional image; text remains usable. */ }
             }
@@ -191,8 +215,12 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
         row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
         row.CompatibilityReason = "Unsure: checking selected file.";
         row.Adds = "Checking content…";
-        string archive = await new ModDownloadCache(store, http).FetchFileAsync(chosen, resolver, null, token);
-        var facts = await Task.Run(() => new ModFactAnalyzer(store).Analyze(archive, token), token);
+        DetailStatus = "Downloading for content check…"; IsIndeterminate = true;
+        var bytes = new Progress<ModDownloadProgress>(p => { if (token.IsCancellationRequested) return; IsIndeterminate = p.Total is null or <= 0; Progress = p.Total > 0 ? 100d * p.Received / p.Total.Value : 0; DetailStatus = $"Downloading · {p.Received / 1048576d:0.0} MB"; });
+        string archive = await new ModDownloadCache(store, http).FetchFileAsync(chosen, resolver, bytes, token);
+        IsIndeterminate = true; DetailStatus = "Analyzing mod content…";
+        IProgress<string> steps = new Progress<string>(m => { if (!token.IsCancellationRequested) { owner.ReportProcessingStep(m); DetailStatus = owner.OperationStep; IsIndeterminate = owner.OperationIndeterminate; Progress = owner.OperationProgress; } });
+        var facts = await Task.Run(() => new ModFactAnalyzer(store).Analyze(archive, token, steps.Report), token);
         token.ThrowIfCancellationRequested();
         row.Adds = facts.Adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", facts.Adds);
         row.CompatibilityIcon = facts.Compatibility == "Compatible" ? "✓" : facts.Compatibility == "Incompatible" ? "✕" : "?";
@@ -271,6 +299,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                     if (transferring == 0) return;
                     IsIndeterminate = p.Total is null or <= 0; Progress = p.Total > 0 ? 100d * p.Received / p.Total.Value : 0;
                     transferState = $"Downloading: {p.Received / 1048576d:0.0} MB"; Membership = transferState;
+                    owner.UpdateOperation(p.Total > 0 ? $"Downloading {p.Received}/{p.Total.Value} bytes" : transferState);
                     }
                 }), token);
                 lock (transferGate) transferring = 0;
@@ -331,5 +360,5 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     /// <summary>Cancels selection analysis and catalog requests.</summary>
     public void CancelReads() => reading?.Cancel();
     /// <summary>Cancels discovery reads without affecting local manager operations.</summary>
-    public void Dispose() { reading?.Cancel(); foreach (var row in all) row.Icon?.Dispose(); foreach (var image in Images) image.Dispose(); http.Dispose(); }
+    public void Dispose() { reading?.Cancel(); foreach (var row in all) row.Icon?.Dispose(); foreach (var icon in localArtwork.Values) icon.Dispose(); foreach (var image in Images) image.Dispose(); http.Dispose(); }
 }

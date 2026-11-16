@@ -12,12 +12,17 @@ public sealed record ModFacts(string FileHash, string BaseHash, int AnalyzerVers
 public sealed class ModFactAnalyzer(ManagerStore store)
 {
     /// <summary>Invalidates cached facts when extraction or compatibility rules change.</summary>
-    public const int Version = 1;
+    public const int Version = 3;
 
     /// <summary>Computes facts without importing or enabling a mod.</summary>
-    public ModFacts Analyze(string archive, CancellationToken token)
+    public ModFacts Analyze(string archive, CancellationToken token) => Analyze(archive, token, null);
+
+    /// <summary>Computes facts while reporting cancellable pipeline steps.</summary>
+    public ModFacts Analyze(string archive, CancellationToken token, Action<string>? progress)
     {
         string basePath = store.Config().Base ?? throw new InvalidOperationException("Choose a game base in Settings to check content.");
+        progress?.Invoke("Fingerprinting game content");
+        token.ThrowIfCancellationRequested();
         string hash = BuildFiles.Hash(archive), baseHash = BuildFiles.Hash(basePath);
         string cache = store.Path("analysis", $"{hash}-{baseHash}-{Version}.json");
         if (File.Exists(cache))
@@ -26,40 +31,56 @@ public sealed class ModFactAnalyzer(ManagerStore store)
             catch (InvalidDataException) { File.Delete(cache); }
         }
         token.ThrowIfCancellationRequested();
-        using var original = GameFileLoader.Load(basePath);
-        using var mod = GameFileLoader.Load(archive);
+        progress?.Invoke("Reading game base");
+        using var original = GameFileLoader.Load(basePath, cancellationToken: token);
+        progress?.Invoke("Reading mod archive");
+        using var mod = GameFileLoader.Load(archive, cancellationToken: token);
         ModFacts result;
         if (mod.Inspection.IsYyc || !mod.Inspection.BytecodeSupported)
             result = new(hash, baseHash, Version, "Incompatible", "This game uses an unsupported engine or has no editable game code.", []);
         else
         {
             ModPatch patch;
-            try { patch = PatchBuilder.Create(original, mod, "Content check", _ => token.ThrowIfCancellationRequested()); }
+            try { patch = PatchBuilder.Create(original, mod, "Content check", message => { token.ThrowIfCancellationRequested(); progress?.Invoke(message); }); }
             catch (Exception ex) when (ex is InvalidDataException or NotComparableException or ArgumentException)
             {
                 result = new(hash, baseHash, Version, "Incompatible", "The patch cannot apply: " + ex.Message, []);
+                result = WithSource(result, mod.Inspection.Timestamp);
                 token.ThrowIfCancellationRequested(); store.Write(cache, result); return result;
             }
             var facts = Extract(patch, mod.Data.GameObjects);
             string output = store.Path("analysis", Guid.NewGuid().ToString("N") + ".win");
             try
             {
-                ArchiveBuilder.Build(basePath, [new(patch, archive)], output, cancellationToken: token);
-                bool match = original.Inspection.Timestamp == mod.Inspection.Timestamp
-                    && original.Inspection.GameMakerVersion == mod.Inspection.GameMakerVersion
-                    && original.Inspection.BytecodeVersion == mod.Inspection.BytecodeVersion;
-                result = new(hash, baseHash, Version, match ? "Compatible" : "Unsure", match
-                    ? "Patch built and verified against the configured base; engine and build information match."
-                    : "Patch built and verified against this base, but the source build differs. Test in the separate game copy."
-                        + (mod.Inspection.Timestamp == 1692057761 ? " The source uses the 2023-08-15 build." : ""), facts);
+                ArchiveBuilder.Build(basePath, [new(patch, archive)], output, progress: progress, cancellationToken: token);
+                // A successful verified build proves applicability. GEN8 timestamps alone do not
+                // establish a different code ancestor: mods necessarily change game code.
+                string date = SourceDate(mod.Inspection.Timestamp);
+                bool legacyTimestampOnly = original.Inspection.Timestamp == mod.Inspection.Timestamp
+                    || original.Inspection.BytecodeVersion == 16 && original.Inspection.GameMakerVersion == mod.Inspection.GameMakerVersion
+                    && SourceDate(original.Inspection.Timestamp).StartsWith("2023-", StringComparison.Ordinal)
+                    && date.StartsWith("2023-", StringComparison.Ordinal);
+                result = new(hash, baseHash, Version, legacyTimestampOnly ? "Compatible" : "Unsure",
+                    "Patch built and verified against the configured base. Source build: " + date
+                    + (legacyTimestampOnly ? " (legacy build; GEN8 timestamp differences alone do not imply incompatibility)."
+                        : " (source differs from the known legacy build; code ancestry cannot be established)."), facts);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is InvalidDataException or NotComparableException or ArgumentException)
-            { result = new(hash, baseHash, Version, "Incompatible", "The patch cannot apply: " + ex.Message, facts); }
+            { result = new(hash, baseHash, Version, ToolFailure(ex) ? "Tool limitation" : "Incompatible",
+                (ToolFailure(ex) ? "JAMM could not process this mod (tool limitation): " : "The patch cannot apply: ") + ex.Message, facts); }
             finally { if (File.Exists(output)) File.Delete(output); }
         }
+        result = WithSource(result, mod.Inspection.Timestamp);
         token.ThrowIfCancellationRequested(); store.Write(cache, result); return result;
     }
+
+    private static ModFacts WithSource(ModFacts facts, ulong timestamp) => facts.Reason.Contains("Source build:", StringComparison.Ordinal)
+        ? facts : facts with { Reason = facts.Reason + " Source build: " + SourceDate(timestamp) + "." };
+    private static bool ToolFailure(Exception ex) => ex.Message.Contains("compil", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("semantic reference", StringComparison.OrdinalIgnoreCase);
+    private static string SourceDate(ulong timestamp) => timestamp <= 253402300799
+        ? DateTimeOffset.FromUnixTimeSeconds((long)timestamp).ToString("yyyy-MM-dd HH:mm 'UTC'") : "unknown (invalid GEN8 timestamp)";
 
     /// <summary>Counts added resources and fish proven by an exact Fish ancestor; no name heuristics.</summary>
     public static string[] Extract(ModPatch patch, IEnumerable<UndertaleGameObject> objects)

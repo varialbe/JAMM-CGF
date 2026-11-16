@@ -18,7 +18,7 @@ public sealed class ModHttp : IDisposable
             {
                 var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, token);
                 if (addresses.Length == 0 || addresses.Any(a => !IsPublicAddress(a)))
-                    throw new HttpRequestException("The source resolves to a local/private network. Open a public HTTPS source instead.");
+                    throw new HttpRequestException("The source resolves to a local/private network. Open a public HTTPS source instead.") { Data = { ["JammPermanent"] = true } };
                 var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
                 try { await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, token); return new NetworkStream(socket, true); }
                 catch { socket.Dispose(); throw; }
@@ -51,16 +51,20 @@ public sealed class ModHttp : IDisposable
             || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
             || uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
             || IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ip) && !IsPublicAddress(ip))
-            throw new HttpRequestException("This source is not a public HTTPS URL. Use Open source page or choose a public file link.");
+            throw new HttpRequestException("This source is not a public HTTPS URL. Use Open source page or choose a public file link.") { Data = { ["JammPermanent"] = true } };
         return uri;
     }
     /// <summary>Sends a GET or the public Game Jolt URL lookup POST, without automatic redirects.</summary>
-    public async Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken token, string? apiKey = null, bool lookupPost = false)
+    public Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken token, string? apiKey = null, bool lookupPost = false)
+        => SendRangeAsync(uri, token, apiKey, lookupPost);
+
+    internal async Task<HttpResponseMessage> SendRangeAsync(Uri uri, CancellationToken token, string? apiKey = null, bool lookupPost = false, long? rangeStart = null, string? ifRange = null)
     {
         for (int hop = 0; hop < 6; hop++)
         {
             PublicUri(uri.AbsoluteUri);
             using var request = new HttpRequestMessage(lookupPost ? HttpMethod.Post : HttpMethod.Get, uri);
+            if (rangeStart > 0) { request.Headers.Range = new(rangeStart, null); if (ifRange is not null) request.Headers.TryAddWithoutValidation("If-Range", ifRange); }
             request.Headers.UserAgent.ParseAdd("JAMM-CGF/1.0");
             if (apiKey is not null) request.Headers.Add("apikey", apiKey);
             if (lookupPost) request.Content = new StringContent("{\"forceDownload\":true}", System.Text.Encoding.UTF8, "application/json");
@@ -86,13 +90,23 @@ public sealed class ModHttp : IDisposable
     /// <summary>Reads bounded metadata or image bytes with a timeout.</summary>
     public async Task<byte[]> ReadAsync(string url, int limit, CancellationToken token, string? apiKey = null, bool lookupPost = false)
     {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { return await ReadOnceAsync(url, limit, token, apiKey, lookupPost); }
+            catch (Exception ex) when (attempt < 2 && !token.IsCancellationRequested &&
+                (ex is TimeoutException or IOException || ex is HttpRequestException h && !h.Data.Contains("JammPermanent") && (h.StatusCode is null || (int)h.StatusCode >= 500 || (int)h.StatusCode is 408 or 429)))
+            { await Task.Delay(TimeSpan.FromSeconds(1 << attempt), token); }
+        }
+    }
+    private async Task<byte[]> ReadOnceAsync(string url, int limit, CancellationToken token, string? apiKey, bool lookupPost)
+    {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(45));
         try
         {
             using var response = await SendAsync(PublicUri(url), timeout.Token, apiKey, lookupPost);
             if (response.Content.Headers.ContentLength > limit) throw new InvalidDataException("Source metadata/image is too large. Open the source page instead.");
             using var output = new MemoryStream();
-            await CopyBoundedAsync(await response.Content.ReadAsStreamAsync(timeout.Token), output, limit, null, null, timeout.Token);
+            await CopyBoundedAsync(await response.Content.ReadAsStreamAsync(timeout.Token), output, limit, response.Content.Headers.ContentLength, null, timeout.Token);
             return output.ToArray();
         }
         catch (OperationCanceledException ex) when (!token.IsCancellationRequested)

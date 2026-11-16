@@ -12,9 +12,11 @@ internal sealed class SemanticCode
     private readonly Dictionary<string, string[]> baseNames;
     private readonly Dictionary<string, string[]>[] modNames;
     private readonly HashSet<string> ambiguous;
+    private readonly bool legacy;
 
     internal SemanticCode(UndertaleData original, IReadOnlyList<UndertaleData> sources, Action<string>? progress)
     {
+        legacy = !original.IsVersionAtLeast(2);
         baseNames = SemanticReferences.Names(original);
         modNames = sources.Select(SemanticReferences.Names).ToArray();
         ambiguous = AssetSymbols.Ambiguous([baseNames, .. modNames]);
@@ -51,9 +53,9 @@ internal sealed class SemanticCode
                 Base.TryGetValue(name, out var before);
                 var asset = existing.GetValueOrDefault(name);
                 var effective = asset?.ModCode is { } patchCode
-                    ? patchCode with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(patchCode.Text, name, modNames[i]), name, modNames[i], ambiguous) } : text;
+                    ? patchCode with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(legacy ? AssetSymbols.QualifyLegacyNames(patchCode.Text, name, modNames[i]) : patchCode.Text, name, modNames[i]), name, modNames[i], ambiguous) } : text;
                 if (asset?.BaseCode is { } patchBase)
-                    before = patchBase with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(patchBase.Text, name, baseNames), name, baseNames, ambiguous) };
+                    before = patchBase with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(legacy ? AssetSymbols.QualifyLegacyNames(patchBase.Text, name, baseNames) : patchBase.Text, name, baseNames), name, baseNames, ambiguous) };
                 bool same = before is not null && before.Text == effective.Text && before.LocalsCount == effective.LocalsCount
                     && before.ArgumentsCount == effective.ArgumentsCount && before.Parent == effective.Parent && before.Children.SequenceEqual(effective.Children);
                 if (same && asset is null) { index++; continue; }

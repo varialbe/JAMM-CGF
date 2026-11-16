@@ -21,7 +21,7 @@
 ## GUI quick start
 
 1. Build from source below, or use a published `cgfmm-gui` executable when packages become available. Launch `dotnet run --project src/Jamm.Gui -c Release`.
-2. Open **Settings**, choose a **separate copy of the complete legacy game folder**, and select the untouched base `data.win` outside that folder. The base must pass legacy bytecode validation. Set Wine or Proton there if you plan to play on Linux.
+2. In first-run setup, select a legacy game and click **Use this**. JAMM creates a separate modded copy next to the original, retains an independent read-only base, selects the runner, and creates a default profile. Use **Choose folder…** if your legacy folder is missing from the search. Advanced mode lets you edit the copy destination.
 3. Drag `.win` or `.zip` mods into the library, or press **Add mods**. Zip files must contain exactly one `data.win`; other contents are never extracted or executed.
 4. Create a profile, enable its mods, and arrange their order by dragging or using the arrow buttons. Later mods win overlaps by default.
 5. Press **Check**. Review conflict explanations, use **Details** for local code, and save winners for individual hunks. Press **Install**, then confirm the exact destination and backup paths after verification.
@@ -50,8 +50,9 @@ the advanced picker. Later mods win by default; advanced conflict choices remain
 
 First-run setup searches Steam libraries and depot downloads on Windows, Linux
 (including Flatpak/Snap Steam) and macOS. A detected legacy game can be copied into
-separate manager storage with one click. If only the current game is found, copy the
-legacy-depot command into Steam's console and restart JAMM after downloading it.
+a separate sibling folder with one click. A bounded background search also checks mounted drives and your home folder for moved depot downloads. Add mods and Download open setup when needed and resume afterwards. If only the current game is found, copy the
+legacy-depot command into Steam's console, download it, then use **Check again**
+or **Choose folder…**.
 Found originals are read-only; JAMM never installs into them during automatic setup.
 
 The catalog loads on first visit; **Retry / Refresh** retries failures. Offline snapshots
