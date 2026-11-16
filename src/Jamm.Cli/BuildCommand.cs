@@ -110,7 +110,7 @@ internal static class BuildCommand
             Console.WriteLine($"Built and verified '{Path.GetFullPath(output)}': {result.SizeBytes:N0} bytes.");
             if (install is not null)
             {
-                GameInstaller.Install(output, install, baseHash, protectedPaths.Skip(1), basePath);
+                GameInstaller.Install(output, install, baseHash, protectedPaths.Skip(1), basePath, result.Plan.Catalog);
                 Console.WriteLine("Installed verified build; SHA-256 verified original backup retained.");
             }
         }

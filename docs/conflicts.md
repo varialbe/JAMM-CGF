@@ -108,16 +108,15 @@ shared fish catalog. This is a **CONFLICT (list)** with a suggested **keepBoth**
 choice: keep distinct insertions in load order. It remains a conflict until someone
 chooses that option; the inserted code might have order dependencies.
 
-The Abyss and Cave Expansion both use boat slot 8 and fish catalog slots starting
-at `[2,58]`. `keep-both` keeps inserted statements, but two writes to the same slot
-still overwrite each other when executed. The later mod wins overlapping slots in
-the merged handler unless you select another mod. Keeping both fish in distinct
-catalog slots requires manual edits today; automatic slot renumbering is future work.
-A default choice selects an entire overlapping insertion hunk, which may contain
-several slots; inspect `--details` before choosing which insertion to keep.
-This slot conflict is separate from asset IDs: Phase 3b preserves base indices and
-links typed mod IDs to the intended named assets, but does not allocate new gameplay
-slots or coordinate execution order across different handlers.
+The catalog adapter is a specific exception to ordinary list merging. It retains
+base definitions, allocates distinct fish slots by object identity and rewrites
+supported references before analysis/building. Abyss, Cave and Colour additions
+therefore coexist without a manual CatalogData Create winner. Check reports an
+AUTO catalog finding. [API, supported patterns and save migration](catalog-api.md).
+
+Abyss and Cave still share boat slot 8 and the same Boat8 object/sprite names.
+Slot renumbering alone cannot preserve both boat implementations; ordinary asset
+choices apply until boat assets and saves have a namespacing adapter.
 
 Literal writes such as `catalog[42] = ...`, `ds_list_set(catalog, 42, ...)` and
 `ds_map_add(catalog, "key", ...)` are checked across code entries. Two mods writing

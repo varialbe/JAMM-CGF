@@ -74,6 +74,15 @@ internal sealed class SemanticCode
             changes["code"] = new(added.OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(), changed.OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(), changes["code"].Removed);
             result[i] = patch with { Changes = changes, AssetTypesVersion = PatchJson.AssetTypesVersion };
         });
+        if (Base.TryGetValue(CatalogMerge.Create, out var catalogBase)
+            && !result.Any(p => p.Changes["code"].Changed.Any(a => a.Name == CatalogMerge.Create)))
+        {
+            var snapshot = AssetFields.Json(new { catalogBase.LocalsCount, catalogBase.ArgumentsCount });
+            var anchor = new AssetPatch(CatalogMerge.Create, snapshot, snapshot, [], catalogBase, catalogBase);
+            var changes = new SortedDictionary<string, AssetChanges>(result[0].Changes, StringComparer.Ordinal);
+            changes["code"] = changes["code"] with { Changed = [.. changes["code"].Changed, anchor] };
+            result[0] = result[0] with { Changes = changes };
+        }
         return result;
     }
 
@@ -83,11 +92,14 @@ internal sealed class SemanticCode
         // A union catalog recognizes selected names even if a mistaken plan omitted their assets.
         var union = baseNames.Keys.ToDictionary(f => f, f => baseNames[f].Concat(modNames.SelectMany(m => m[f])).Distinct(StringComparer.Ordinal).ToArray(), StringComparer.Ordinal);
         var mergedNames = SemanticReferences.Names(merged);
+        foreach (string family in union.Keys.ToArray())
+            union[family] = union[family].Concat(mergedNames[family]).Distinct(StringComparer.Ordinal).ToArray();
         Dictionary<string, IReadOnlyList<ResolvedCodeReference>> expected = new(StringComparer.Ordinal);
         foreach (var code in merged.Code.Where(c => c.ParentEntry is null))
         {
             string name = code.Name.Content;
-            string text = selected.TryGetValue(name, out var choice) ? choice.Gml! : Base[name].Text;
+            string text = selected.TryGetValue(name, out var choice) ? choice.Gml!
+                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && CatalogRuntime.Scripts.TryGetValue(name[11..], out var runtime) ? runtime : Base[name].Text;
             var references = SemanticReferences.Resolve(text, name, union);
             foreach (var reference in references)
                 if (!mergedNames[reference.Family].Contains(reference.Name, StringComparer.Ordinal))
