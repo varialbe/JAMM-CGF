@@ -255,15 +255,27 @@ public sealed class ModSanitizerTests
     public void RealSevenModSetSanitizesBuildsAndVerifiesWithContentIntactAndHacksRemoved()
     {
         string basePath = Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!;
-        var store = new ManagerStore( Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "cgfmm") );
+        using var temp = new TemporaryDirectory();
+        var store = new ManagerStore(temp.PathFor("manager"));
+        store.Set("base", basePath);
+        string modsDirectory = Environment.GetEnvironmentVariable("JAMM_MODS_DIR")!;
         var library = new ModLibrary(store);
 
-        string[] orderNames = ["Abyss", "Cave", "Colour", "HDLite", "Perf", "Smooth", "Oops! All Chaws!"];
+        (string Name, string File)[] fixtures =
+        [
+            ("Abyss", "the-abyss-beta.win"), ("Cave", "cave-expansion.win"),
+            ("Colour", "colour-expansion.win"), ("HDLite", "jamm-hd-lite.win"),
+            ("Perf", "jamm-perf.win"), ("Smooth", "jamm-smooth-fps.win"),
+            ("Oops! All Chaws!", "oops-all-chaws.win")
+        ];
+        foreach (var (_, file) in fixtures)
+            Assert.True(File.Exists(Path.Combine(modsDirectory, file)),
+                $"Missing real-file fixture '{file}' in JAMM_MODS_DIR. See docs/real-file-tests.md.");
         List<BuildInput> inputs = [];
         Dictionary<string, ModSanitizerReport> reports = new(StringComparer.Ordinal);
-        foreach (string name in orderNames)
+        foreach (var (name, file) in fixtures)
         {
-            var mod = library.Find(name);
+            var mod = library.Add(Path.Combine(modsDirectory, file), name).Mod;
             var report = library.SanitizerReport(mod);
             reports[name] = report;
             var patch = library.Patch(mod);
@@ -305,7 +317,6 @@ public sealed class ModSanitizerTests
         Assert.Contains(oacReport.Removed, r => r.Category == ModSanitizer.FpsAdaptive && r.Entry == "gml_Object_FishThinner_Step_0");
         Assert.Contains(oacReport.Removed, r => r.Category == ModSanitizer.DebugOverlay && r.Entry == "gml_Object_ExperienceBar_Draw_0");
 
-        using var temp = new TemporaryDirectory();
         string output = temp.PathFor("merged-seven.win");
         var options = new Jamm.Core.AnalysisOptions { DataDirectory = store.Root };
         var build = ArchiveBuilder.Build(basePath, inputs, output, options: options);

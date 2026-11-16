@@ -22,6 +22,16 @@ public static class CgfAssetTypes
         data.GameSpecificRegistry ??= new();
         var registry = data.GameSpecificRegistry;
         registry.RegisterBasic();
+        // HUD setters preserve the built-in argument types after calls are redirected.
+        // Without these, decompilation turns alignment constants into bare numbers.
+        foreach (var (function, type) in new[]
+        {
+            ("jamm_hud_set_font", "Asset.Font"),
+            ("jamm_hud_set_halign", "Constant.HAlign"),
+            ("jamm_hud_set_valign", "Constant.VAlign")
+        })
+            registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(function,
+                new FunctionArgsMacroType([registry.FindType(type)]));
         Dictionary<string, NameMacroTypeResolver> scopes = new(StringComparer.Ordinal);
         foreach (var (container, definition) in Definitions)
         {

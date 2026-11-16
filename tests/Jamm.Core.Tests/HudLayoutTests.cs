@@ -67,6 +67,10 @@ public sealed partial class BuildingTests
         Assert.NotNull(build.Verification);
         Assert.Contains(build.Plan.Decisions, d => d.Contains("adapted 1 text call(s) in " + HudRuntime.Experience));
         using var merged = GameFileLoader.Load(output);
+        string barText = PatchBuilder.ReadCode(merged, HudRuntime.Experience).Text;
+        Assert.Contains("jamm_hud_set_font(font_quest)", barText);
+        Assert.Contains("jamm_hud_set_halign(fa_right)", barText);
+        Assert.Contains("jamm_hud_set_valign(fa_middle)", barText);
         var engine = merged.Data.GameObjects.ByName("QuestEngine");
         Assert.Equal(HudRuntime.Begin, engine.Events[8].Single(e => e.EventSubtype == 72).Actions[0].CodeId.Name.Content);
         Assert.Equal(HudRuntime.End, engine.Events[8].Single(e => e.EventSubtype == 73).Actions[0].CodeId.Name.Content);
