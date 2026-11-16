@@ -20,6 +20,9 @@ This file is updated regularly during the night; the pipeline's own status lines
     2026-11-16 03:45:45  phase 3b: agy unavailable -> review by a second Codex instance
     2026-11-16 04:16:14  phase 3b: DONE - committed and pushed to experimental (a4e0703 Phase 3b (pipeline): Implemented Phase 3b on `experimental`. No commit, push, or git-config changes.)
     2026-11-16 04:16:14  phase 5: implementation started
+    2026-11-16 04:53:32  phase 5: agy unavailable -> review by a second Codex instance
+    2026-11-16 05:16:46  phase 5: DONE - committed and pushed to experimental (0e0cc50 Phase 5 (pipeline): Implemented Phase 5 on `experimental`. No commits, pushes, or Git configuration changes.)
+    2026-11-16 05:16:46  pipeline finished: all phases done. In-game test of the merged data.win on the desktop is still required.
 
 ## Orchestrator notes
 - 00:20 Took over; Phase 2 implementation running.
@@ -31,3 +34,22 @@ This file is updated regularly during the night; the pipeline's own status lines
 - 03:46 Phase 3b implementation passed the gate: 160 tests with real files, 2,133 semantic code checks pass in both orders, 4 base objects retained. agy review failed (prompt > 128 KB argv limit), Codex fallback reviewing.
 - 03:47 Independent check of 3b: catalog consistency (name[a,i] vs object at object[a,i]) — old merge 171/234 slots wrong, new forward 0/234, reverse 0/266. Fix confirmed. Remaining limit: catalog slot collisions are winner-takes-all (renumbering is future work).
 - 04:21 Phase 3b committed (a4e0703) and re-verified from the commit: both orders build + verify, catalog 0 wrong slots, game files unchanged. Test builds with instructions staged locally in out/test-builds (gitignored). Phase 5 (GUI) started 04:16.
+
+## Follow-ups found by orchestrator review
+## Phase 2 (6efed81)
+- F2.1 Binary "unsupported content" for an asset changed by only ONE mod (e.g. pectora, spr_crasher) is reported as CONFLICT; should be WARNING (no second mod involved).
+- F2.2 Same code entry appears once per hunk in CONFLICT and AUTO lists (Boat7 x3, CatalogData x6); group per entry with hunk count in the table, keep per-hunk detail in --json/--details.
+- F2.3 Abyss and Cave both add "boat 8" (Boat8, spr_boat_icon8, slot [8] in BoatData) — semantically a real clash that keep-both cannot fix (same slot). Docs/README should say plainly: these two mods can't both have their boat 8; user must pick one (or a future renumbering feature).
+## Phase 3 (pre-review of uncommitted code)
+- F3.1 BuildFiles.RefuseLink refuses any game path whose *parent* directories contain a symlink (SamePath(Resolve(path), path) is false). On the desktop the legacy folder may sit on a symlinked/bind-mounted drive (D:) -> install would be refused. Safe but annoying: only refuse when data.win / backup / marker themselves are links; otherwise operate on the resolved path.
+- F3.2 Review item 11 (install into the dir that holds --base): refusing is the safer behaviour; if Codex relaxed it, make sure Phase 4 keeps a pristine copy of the base in the data dir (or uses data.win.cgfmm-original as base), otherwise the next build has no base.
+## Phase 4 (ccba099)
+- F4.1 `profile resolve <p> gml_Object_CatalogData_Create_0 keep-both` is refused because the entry also has one overlapping replacement hunk. Allow keep-both to apply to the list hunks of an entry while overlapping hunks follow a separate mod choice (or per-hunk resolution keys like `code/<entry>#<hunk>`); the GUI needs this too.
+- Pipeline: agy review prompt > 128 KB fails with 'Argument list too long' (single argv string limit). Pass the prompt via stdin or a file reference instead; fallback to Codex review works meanwhile.
+## Phase 3b (uncommitted at check time)
+- Independent check (orchestrator tool, catalog name[a,i] vs object at object[a,i]): old Phase 3 merge 171 of 234 slots wrong; 3b forward and reverse builds 0 wrong. Fix confirmed.
+- F3b.1 Catalog is still winner-takes-all on slot collisions: forward order keeps only Colour's 35 new catalog slots (234), reverse keeps Abyss' (266). The other mods' fish exist as objects but have no catalog entry -> in-game behaviour unknown. Next big feature: automatic slot renumbering (append colliding slots after the highest used index per area, rewrite all parallel arrays consistently).
+## Phase 5 (0e0cc50)
+- F5.1 `check` prints "Ancestor line 210" (1-based) but the per-hunk key needs `#209` (zero-based). Print the exact resolve key in the terminal table / --details.
+- F5.2 GUI: CONFLICT / AUTO / INFO labels share one colour; use distinct, accessible status colours.
+- 05:34 Phase 5 reviewed: 216/216 tests with real files, 0 warnings, CLI end-to-end apply + restore OK, catalog 0 wrong, per-hunk keep-both works (key is zero-based). Night finished; summary in docs/reports/overnight-summary.md.
