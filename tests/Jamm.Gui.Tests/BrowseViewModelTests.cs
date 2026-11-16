@@ -29,11 +29,47 @@ public sealed class BrowseViewModelTests
         await vm.InitializeAsync(); await vm.Browse.RefreshAsync(); vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync();
         Assert.Equal(vm.Browse.Files.FirstOrDefault(), vm.Browse.SelectedFile);
     }
+    [Theory]
+    [InlineData("https://example.com/mod.win", true)]
+    [InlineData("https://example.com/mod.ZIP?download=1", true)]
+    [InlineData("https://gamejolt.com/games/example/123", true)]
+    [InlineData("https://gamejolt.com/dashboard/games/123/packages/456", true)]
+    [InlineData("https://gamejolt.com/get/build?game=123&build=456", true)]
+    [InlineData("https://example.com/mod.rar", false)]
+    [InlineData("https://example.com/project", false)]
+    [InlineData("https://gamejolt.com/unknown", false)]
+    [InlineData("http://example.com/mod.win", false)]
+    [InlineData("invalid", false)]
+    public void DownloadFilterRecognizesSupportedSources(string url, bool expected)
+        => Assert.Equal(expected, GameJoltDownloadResolver.SupportsSource(Example() with { FileUrl = url }));
+
+    [Fact]
+    public async Task DefaultDownloadFilterCountsAndPreferenceSurviveRecreation()
+    {
+        using var files = new TestFiles();
+        CatalogMod[] mods = [Example(), Example(true) with { Id = "preview" },
+            Example() with { Id = "missing", FileUrl = null },
+            Example() with { Id = "unsupported", FileUrl = "https://example.com/project" }];
+        var vm = Create(files, _ => throw new Exception(), mods);
+        await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
+        Assert.False(vm.Browse.ShowModsWithoutDownload);
+        Assert.Single(vm.Browse.Mods); Assert.Equal("1 of 4 shown", vm.Browse.ShownCount);
+        vm.Browse.ShowModsWithoutDownload = true;
+        Assert.Equal(4, vm.Browse.Mods.Count); Assert.Equal("4 of 4 shown", vm.Browse.ShownCount);
+        vm.Browse.Search = "absent"; Assert.Equal("0 of 4 shown", vm.Browse.ShownCount);
+        vm.Browse.Dispose();
+        var reopened = Create(files, _ => throw new Exception(), mods);
+        await reopened.InitializeAsync(); await reopened.Browse.RefreshAsync();
+        Assert.True(reopened.Browse.ShowModsWithoutDownload); Assert.Equal(4, reopened.Browse.Mods.Count);
+        reopened.Browse.ShowModsWithoutDownload = false; Assert.Single(reopened.Browse.Mods);
+        reopened.Browse.Dispose();
+    }
     [Fact]
     public async Task SearchFiltersAndAutomaticSingleFileSelectionDriveButtons()
     {
         using var files = new TestFiles(); var vm = Create(files, _ => throw new Exception(), Example(), Example(true) with { Id = "41", Name = "Preview", Categories = ["Boats"] });
         await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
+        vm.Browse.ShowModsWithoutDownload = true;
         vm.Browse.Search = "Author"; Assert.Equal(2, vm.Browse.Mods.Count);
         vm.Browse.Category = "Boats"; Assert.Single(vm.Browse.Mods);
         vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync(); Assert.Empty(vm.Browse.Files); Assert.False(vm.Browse.CanDownload);

@@ -7,6 +7,8 @@ public sealed record ManagerConfig
     public bool UseSharedCompatibilityResults { get; init; } = true;
     /// <summary>Shows expert controls when explicitly enabled.</summary>
     public bool AdvancedMode { get; init; }
+    /// <summary>Includes previews and unsupported download sources in Browse.</summary>
+    public bool ShowModsWithoutDownload { get; init; }
     /// <summary>Game copy whose concrete replacement and backup paths were approved.</summary>
     public string? ConfirmedInstallDirectory { get; init; }
     /// <summary>Read-only merge ancestor, preferably outside the installed game.</summary>

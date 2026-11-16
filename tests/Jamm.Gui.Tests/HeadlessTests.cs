@@ -129,8 +129,20 @@ public sealed class HeadlessTests
         var window = new MainWindow(false) { DataContext = vm }; window.Show();
         var tabs = window.FindControl<TabControl>("MainTabs")!; tabs.SelectedIndex = 1;
         Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
-        var list = window.FindControl<ListBox>("BrowseList")!; list.SelectedIndex = 1;
+        var list = window.FindControl<ListBox>("BrowseList")!; list.SelectedIndex = 0;
         while (vm.Browse.IsLoading) await Task.Delay(10);
+        var refreshButtons = window.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.Content is string label && (label.Contains("Refresh") || label.Contains("Retry") || label.Contains("Reload"))).ToArray();
+        Assert.Equal(2, refreshButtons.Length);
+        Assert.All(refreshButtons, b => Assert.Equal("Refresh", b.Content));
+        var info = window.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Content, "info") && b.IsVisible);
+        Assert.True(info.Focusable);
+        var flyout = Assert.IsType<Flyout>(info.Flyout);
+        flyout.ShowAt(info); Dispatcher.UIThread.RunJobs();
+        var scroll = Assert.IsType<ScrollViewer>(flyout.Content);
+        var text = Assert.IsType<SelectableTextBlock>(scroll.Content);
+        Assert.Equal(vm.Browse.Selected!.CompatibilityReason, text.Text);
+        flyout.Hide();
         Assert.NotNull(vm.Browse.Selected); Assert.NotEmpty(vm.Browse.Files); Assert.True(vm.Browse.CanDownload);
         vm.Browse.SelectedFile = vm.Browse.Files[0]; Assert.True(vm.Browse.CanDownload);
         Dispatcher.UIThread.RunJobs(); window.UpdateLayout();

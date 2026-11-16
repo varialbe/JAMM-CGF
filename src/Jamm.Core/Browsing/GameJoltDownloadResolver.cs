@@ -9,6 +9,22 @@ public sealed partial class GameJoltDownloadResolver(ModHttp http) : IModDownloa
 {
     [GeneratedRegex(@"^/games/[^/]+/(\d+)/?$", RegexOptions.CultureInvariant)]
     private static partial Regex ProjectPath();
+    /// <summary>Whether metadata points to a supported public file or Game Jolt project, without a network request.</summary>
+    public static bool SupportsSource(CatalogMod mod)
+    {
+        if (!mod.HasDownload) return false;
+        try
+        {
+            var source = ModHttp.PublicUri(mod.FileUrl!);
+            if (source.Host is "gamejolt.com" or "www.gamejolt.com")
+                return ProjectPath().IsMatch(source.AbsolutePath)
+                    || Regex.IsMatch(source.AbsolutePath, @"^/dashboard/games/\d+/packages/\d+/?$")
+                    || source.AbsolutePath == "/get/build" && Regex.IsMatch(source.Query, @"[?&]game=\d+(&|$)")
+                        && Regex.IsMatch(source.Query, @"[?&]build=\d+(&|$)");
+            return SupportedName(source.AbsolutePath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidDataException or HttpRequestException) { return false; }
+    }
     /// <summary>Lists supported files, preserving package/release/build identities instead of guessing a first file.</summary>
     public async Task<ModDownloadResolution> ResolveAsync(CatalogMod mod, CancellationToken cancellationToken)
     {

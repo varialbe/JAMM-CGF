@@ -14,9 +14,11 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
     /// <summary>Proven resource counts.</summary>
     public string Adds { get => adds; internal set => SetProperty(ref adds, value); }
     /// <summary>Accessible compatibility symbol.</summary>
-    public string CompatibilityIcon { get => compatibility; internal set => SetProperty(ref compatibility, value); }
+    public string CompatibilityIcon { get => compatibility; internal set { if (SetProperty(ref compatibility, value)) OnPropertyChanged(nameof(HasCompatibilityInfo)); } }
     /// <summary>Compatibility reason for tooltip and assistive technology.</summary>
-    public string CompatibilityReason { get => reason; internal set => SetProperty(ref reason, value); }
+    public string CompatibilityReason { get => reason; internal set { if (SetProperty(ref reason, value)) OnPropertyChanged(nameof(HasCompatibilityInfo)); } }
+    /// <summary>Explains negative or uncertain compatibility through an accessible info control.</summary>
+    public bool HasCompatibilityInfo => CompatibilityIcon != "✓" && !string.IsNullOrWhiteSpace(CompatibilityReason);
     /// <summary>Compatibility color.</summary>
     public string CompatibilityColor { get => color; internal set => SetProperty(ref color, value); }
     /// <summary>Public metadata and stable catalog identity.</summary>
@@ -46,7 +48,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     private string[] enabledIds = [], installedIds = [];
     private CatalogRow? selected;
     private ModDownloadFile? selectedFile;
-    private string search = "", category = "All categories", release = "All releases", sort = "Name", status = "Choose Retry to load Litterbox.", detailStatus = "Select a mod for details.", membership = "Available in catalog", transferState = "";
+    private string search = "", category = "All categories", release = "All releases", sort = "Name", status = "Choose Refresh to load Litterbox.", detailStatus = "Select a mod for details.", membership = "Available in catalog", transferState = "";
     private bool loading, indeterminate = true;
     private double progress;
     /// <summary>Creates public discovery services, with injectable providers for deterministic tests.</summary>
@@ -124,17 +126,32 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or OperationCanceledException or TimeoutException) { }
     }
+    /// <summary>Persisted opt-in for previews and unsupported download sources.</summary>
+    public bool ShowModsWithoutDownload
+    {
+        get => store.Config().ShowModsWithoutDownload;
+        set
+        {
+            if (owner.IsBusy) return;
+            try { store.Set("showModsWithoutDownload", value.ToString()); OnPropertyChanged(); Filter(); }
+            catch (Exception ex) { owner.ReportError("Could not save Browse preference: " + ex.Message + " Check Settings and try again."); }
+        }
+    }
+    /// <summary>Visible results relative to the complete catalog, including hidden entries.</summary>
+    public string ShownCount => $"{Mods.Count} of {all.Length} shown";
     private void Filter()
     {
-        var rows = all.Where(r => (string.IsNullOrWhiteSpace(Search) || (r.Name + " " + r.Mod.Author + " " + r.Mod.Description).Contains(Search, StringComparison.OrdinalIgnoreCase))
+        bool includeWithoutDownload = ShowModsWithoutDownload;
+        var rows = all.Where(r => (includeWithoutDownload || GameJoltDownloadResolver.SupportsSource(r.Mod))
+            && (string.IsNullOrWhiteSpace(Search) || (r.Name + " " + r.Mod.Author + " " + r.Mod.Description).Contains(Search, StringComparison.OrdinalIgnoreCase))
             && (Category == "All categories" || r.Mod.Categories.Contains(Category))
             && (Release == "All releases" || r.Mod.IsPreview == (Release == "Preview")));
         rows = Sort switch { "Newest" => rows.OrderByDescending(r => r.Mod.CreatedUtc), "Rating" => rows.OrderByDescending(r => r.Mod.Rating), _ => rows.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase) };
         Mods.Clear(); foreach (var row in rows) Mods.Add(row);
-        OnPropertyChanged(nameof(EmptyMessage));
+        OnPropertyChanged(nameof(EmptyMessage)); OnPropertyChanged(nameof(ShownCount));
     }
     /// <summary>Explicit empty result explanation.</summary>
-    public string EmptyMessage => Mods.Count == 0 && !IsLoading ? "No mods match. Change filters or Retry." : "";
+    public string EmptyMessage => Mods.Count == 0 && !IsLoading ? "No mods match. Change filters or Refresh." : "";
     /// <summary>Loads public metadata or a timestamped offline snapshot.</summary>
     public async Task RefreshAsync()
     {
@@ -165,8 +182,8 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                 catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or ArgumentException or NotSupportedException or TimeoutException) { /* Optional image; text remains usable. */ }
             }
         }
-        catch (OperationCanceledException) { if (reading == current) Status = "Catalog loading cancelled. Retry when ready."; }
-        catch (Exception ex) { if (reading == current) Status = "Could not load catalog: " + ex.Message + " Retry or use the local Manager."; }
+        catch (OperationCanceledException) { if (reading == current) Status = "Catalog loading cancelled. Refresh when ready."; }
+        catch (Exception ex) { if (reading == current) Status = "Could not load catalog: " + ex.Message + " Refresh or use the local Manager."; }
         finally { if (reading == current) { reading = null; IsLoading = false; OnPropertyChanged(nameof(EmptyMessage)); } current.Dispose(); }
     }
     /// <summary>Resolves files and loads optional detail images without trusting creator badges for compatibility.</summary>
