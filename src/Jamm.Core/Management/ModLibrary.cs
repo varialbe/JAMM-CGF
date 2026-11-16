@@ -95,7 +95,7 @@ public sealed class ModLibrary(ManagerStore store)
             using var mod = GameFileLoader.Load(copy, progress);
             List<string> notices = CompatibilityWarnings(original.Inspection, mod.Inspection).ToList();
             ModPatch patch;
-            try { patch = PatchBuilder.Create(original, mod, displayName, progress); }
+            try { patch = PatchBuilder.Create(original, mod, displayName, progress, AnalysisOptions.Default with { DataDirectory = store.Root }); }
             catch (Exception ex) when (ex is ArgumentException or NotComparableException or InvalidDataException)
             { throw new InvalidDataException($"Cannot add '{sourceName}': {string.Join(" ", notices)} {ex.Message} Choose a compatible legacy VM mod and base.", ex); }
             // Patch identity describes the .win bytes; metadata separately retains the supplied zip filename.

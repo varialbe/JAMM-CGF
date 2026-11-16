@@ -13,37 +13,43 @@ internal sealed class SemanticCode
     private readonly Dictionary<string, string[]>[] modNames;
     private readonly HashSet<string> ambiguous;
     private readonly bool legacy;
+    private readonly AnalysisOptions options;
 
-    internal SemanticCode(UndertaleData original, IReadOnlyList<UndertaleData> sources, Action<string>? progress)
+    internal SemanticCode(UndertaleData original, IReadOnlyList<UndertaleData> sources, Action<string>? progress, AnalysisOptions options, string baseHash)
     {
+        this.options = options;
         legacy = !original.IsVersionAtLeast(2);
         baseNames = SemanticReferences.Names(original);
         modNames = sources.Select(SemanticReferences.Names).ToArray();
         ambiguous = AssetSymbols.Ambiguous([baseNames, .. modNames]);
-        Base = Read(original, "base", progress, ambiguous);
-        Mods = sources.Select((s, i) => Read(s, $"mod {i + 1}", progress, ambiguous)).ToArray();
+        Base = Read(original, "base", progress, ambiguous, options, baseHash);
+        Mods = sources.Select((s, i) => Read(s, $"mod {i + 1}", progress, ambiguous, options)).ToArray();
     }
 
-    private static Dictionary<string, CodeText> Read(UndertaleData data, string label, Action<string>? progress, IReadOnlySet<string> ambiguous)
+    private static Dictionary<string, CodeText> Read(UndertaleData data, string label, Action<string>? progress, IReadOnlySet<string> ambiguous, AnalysisOptions options, string? baseHash = null)
     {
         progress?.Invoke($"Resolving asset references in {label} code");
-        var reader = new CodeDecompiler(data, label, m => progress?.Invoke(m), ambiguous);
+        var entries = CodeDecompiler.ReadAll(data, label, m => progress?.Invoke(m), ambiguous, options, progress, baseHash);
         var names = SemanticReferences.Names(data);
-        Dictionary<string, CodeText> result = new(StringComparer.Ordinal);
-        foreach (var code in data.Code)
+        var codes = data.Code.ToArray();
+        var normalized = new CodeText[codes.Length];
+        AnalysisWork.For(codes.Length, options, i =>
         {
-            if (result.Count % 50 == 0) progress?.Invoke($"Resolving {label}: {result.Count}/{data.Code.Count} code entries");
-            var text = reader.Read(code);
+            var code = codes[i];
+            var text = entries[code.Name.Content];
             if (text.Format != "gml") throw new InvalidDataException($"Cannot verify semantic references in {label}, code '{code.Name.Content}': decompilation failed. Use a mod with decompilable legacy GML.");
-            result[code.Name.Content] = text with { Text = SemanticReferences.NameTypedLiterals(text.Text, code.Name.Content, names) };
-        }
+            normalized[i] = text with { Text = SemanticReferences.NameTypedLiterals(text.Text, code.Name.Content, names) };
+        });
+        var result = codes.Select((code, i) => (code.Name.Content, normalized[i])).ToDictionary(x => x.Content, x => x.Item2, StringComparer.Ordinal);
         return result;
     }
 
     internal ModPatch[] Prepare(IReadOnlyList<ModPatch> patches)
     {
-        return patches.Select((patch, i) =>
+        var result = new ModPatch[patches.Count];
+        AnalysisWork.For(patches.Count, options, i =>
         {
+            var patch = patches[i];
             var changes = new SortedDictionary<string, AssetChanges>(patch.Changes, StringComparer.Ordinal);
             var existing = changes["code"].Added.Concat(changes["code"].Changed).ToDictionary(a => a.Name, StringComparer.Ordinal);
             List<AssetPatch> added = [], changed = [];
@@ -66,8 +72,9 @@ internal sealed class SemanticCode
                 index++;
             }
             changes["code"] = new(added.OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(), changed.OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(), changes["code"].Removed);
-            return patch with { Changes = changes, AssetTypesVersion = PatchJson.AssetTypesVersion };
-        }).ToArray();
+            result[i] = patch with { Changes = changes, AssetTypesVersion = PatchJson.AssetTypesVersion };
+        });
+        return result;
     }
 
     internal Dictionary<string, IReadOnlyList<ResolvedCodeReference>> Expected(BuildPlan plan, UndertaleData merged)

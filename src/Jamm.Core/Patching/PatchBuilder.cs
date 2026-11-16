@@ -22,11 +22,12 @@ public static class PatchBuilder
     }
 
     /// <summary>Builds a patch, reporting decompile progress through the optional callback.</summary>
-    public static ModPatch Create(LoadedGameFile original, LoadedGameFile mod, string? name = null, Action<string>? progress = null)
+    public static ModPatch Create(LoadedGameFile original, LoadedGameFile mod, string? name = null, Action<string>? progress = null, AnalysisOptions? options = null)
     {
+        options ??= AnalysisOptions.Default;
         Validate(original.Inspection, mod.Inspection);
         var patch = Create(original.Data, mod.Data, Identity(original.Inspection), Identity(mod.Inspection) with
-        { Name = name ?? Path.GetFileNameWithoutExtension(mod.Inspection.FileName) }, progress);
+        { Name = name ?? Path.GetFileNameWithoutExtension(mod.Inspection.FileName) }, progress, options);
         return patch with { Warnings = original.Warnings.Concat(mod.Warnings).Concat(patch.Warnings).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray() };
     }
 
@@ -53,25 +54,51 @@ public static class PatchBuilder
 
     /// <summary>Diffs synthetic or loaded VM models. Caller retains model ownership; no files are written.</summary>
     public static ModPatch Create(UndertaleData original, UndertaleData mod, PatchFile baseFile, PatchFile modFile,
-        Action<string>? progress = null)
+        Action<string>? progress = null, AnalysisOptions? options = null)
     {
+        options ??= AnalysisOptions.Default with { UseCache = false };
         if (original.IsYYC() || mod.IsYYC() || original.Code is null || mod.Code is null || original.Code.Count == 0 || mod.Code.Count == 0)
             throw new NotComparableException($"Cannot diff {baseFile.FileName} and {modFile.FileName}: a file is YYC (no bytecode). Use the legacy VM build.");
         if (baseFile.GmVersion != modFile.GmVersion || baseFile.Bytecode != modFile.Bytecode)
             throw new InvalidDataException($"Cannot diff {baseFile.FileName} and {modFile.FileName}: GameMaker/bytecode versions differ. Select a matching base.");
         List<string> warnings = [];
         progress?.Invoke($"Fingerprinting {baseFile.FileName}");
-        var leftHashes = new ContentFingerprints(warnings.Add).Snapshot(original);
-        progress?.Invoke($"Fingerprinting {modFile.FileName}");
-        var rightHashes = new ContentFingerprints(warnings.Add).Snapshot(mod);
-        var leftFields = new AssetFields(warnings.Add, original);
-        var rightFields = new AssetFields(warnings.Add, mod);
+        var leftFingerprints = new ContentFingerprints(warnings.Add) { RetainRegionHashes = true };
+        var rightFingerprints = new ContentFingerprints(warnings.Add) { RetainRegionHashes = true };
+        Dictionary<AssetKind, AssetFingerprint[]> leftHashes;
+        IReadOnlyDictionary<AssetKind, IReadOnlyList<AssetFingerprint>> rightHashes;
+        using (new AnalysisPhase(options, "fingerprint"))
+        {
+            var cached = new AnalysisCache(options).Get(baseFile.Sha256, "fingerprints", () =>
+            {
+                List<string> messages = [];
+                var fingerprints = new ContentFingerprints(messages.Add) { RetainRegionHashes = true };
+                var hashes = fingerprints.Snapshot(original, options: options);
+                return new FingerprintBatch(hashes.ToDictionary(x => x.Key, x => x.Value.ToArray()), messages.ToArray(), fingerprints.CaptureRegions(original));
+            });
+            leftHashes = cached.Hashes;
+            leftFingerprints.RestoreRegions(original, cached.Regions);
+            warnings.AddRange(cached.Warnings);
+            progress?.Invoke($"Fingerprinting {modFile.FileName}");
+            rightHashes = rightFingerprints.Snapshot(mod, options: options);
+        }
+        var leftFields = new AssetFields(warnings.Add, original, leftFingerprints);
+        var rightFields = new AssetFields(warnings.Add, mod, rightFingerprints);
         var leftNames = SemanticReferences.Names(original);
         var rightNames = SemanticReferences.Names(mod);
         bool assetIndicesChanged = leftNames.Any(t => !t.Value.SequenceEqual(rightNames[t.Key], StringComparer.Ordinal));
         var ambiguous = AssetSymbols.Ambiguous([leftNames, rightNames]);
-        var leftSource = new CodeDecompiler(original, baseFile.FileName, warnings.Add, ambiguous);
-        var rightSource = new CodeDecompiler(mod, modFile.FileName, warnings.Add, ambiguous);
+        var codeCandidates = AssetComparer.CompareAssets(AssetKind.Code, leftHashes.GetValueOrDefault(AssetKind.Code) ?? [],
+            rightHashes.GetValueOrDefault(AssetKind.Code) ?? []).Assets
+            .Where(x => x.Classification != AssetClassification.Removed && (assetIndicesChanged || x.Classification != AssetClassification.Identical
+                || x.OriginalFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) == true
+                || x.ModFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) == true))
+            .Select(x => x.Name).ToHashSet(StringComparer.Ordinal);
+        var leftSource = CodeDecompiler.ReadAll(original, baseFile.FileName, warnings.Add, ambiguous, options, progress,
+            options.UseCache ? baseFile.Sha256 : null, original.Code.Where(c => codeCandidates.Contains(c.Name.Content)));
+        var rightSource = CodeDecompiler.ReadAll(mod, modFile.FileName, warnings.Add, ambiguous, options, progress,
+            selected: mod.Code.Where(c => codeCandidates.Contains(c.Name.Content)));
+        using var diffTiming = new AnalysisPhase(options, "diff");
         SortedDictionary<string, AssetChanges> changes = new(StringComparer.Ordinal);
         foreach (var kind in leftHashes.Keys.Union(rightHashes.Keys).Order())
         {
@@ -118,9 +145,9 @@ public static class PatchBuilder
                     CodeText? baseCode = null, modCode = null;
                     if (kind == AssetKind.Code)
                     {
-                        progress?.Invoke($"Decompiling {modFile.FileName} {++completed}/{total}: {key}");
-                        if (before is not null) baseCode = leftSource.Read((UndertaleCode)left[key]);
-                        modCode = rightSource.Read((UndertaleCode)right[key]);
+                        progress?.Invoke($"Diffing {modFile.FileName} {++completed}/{total}: {key}");
+                        if (before is not null) baseCode = leftSource[key];
+                        modCode = rightSource[key];
                         if (baseCode is { Format: "gml" }) baseCode = Normalize(baseCode, key, leftNames);
                         if (modCode.Format == "gml") modCode = Normalize(modCode, key, rightNames);
                         // Named semantic references and metadata decide actual code changes.
@@ -141,10 +168,17 @@ public static class PatchBuilder
                         else key = difference.ModFingerprint is { } pageHash && !pageHash.StartsWith("unsupported:", StringComparison.Ordinal)
                             ? "sha256:" + pageHash : $"unsupported:{sourceIndex}";
                     }
-                    var patch = new AssetPatch(key, before, after, FieldDiff.Compare(before, after), baseCode, modCode, before is null ? sourceIndex : null);
+                    var patch = new AssetPatch(key, before, after, [], baseCode, modCode, before is null ? sourceIndex : null);
                     if (before is null) added.Add(patch); else changed.Add(patch);
                 }
             }
+            // Snapshots use model-local image caches and stay serial; pure field diffs run independently.
+            var pending = added.Concat(changed).ToArray();
+            AnalysisWork.For(pending.Length, options, i =>
+                pending[i] = pending[i] with { Fields = FieldDiff.Compare(pending[i].Base, pending[i].Mod) });
+            int addedCount = added.Count;
+            added = pending.Take(addedCount).ToList();
+            changed = pending.Skip(addedCount).ToList();
             if (kind == AssetKind.TexturePages)
                 added = added.GroupBy(a => a.Name, StringComparer.Ordinal).Select(group =>
                 {
@@ -165,6 +199,8 @@ public static class PatchBuilder
         CodeText Normalize(CodeText code, string entry, IReadOnlyDictionary<string, string[]> tables) => code with
         { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(code.Text, entry, tables), entry, tables, ambiguous) };
     }
+
+    internal sealed record FingerprintBatch(Dictionary<AssetKind, AssetFingerprint[]> Hashes, string[] Warnings, ContentFingerprints.RegionFingerprint[] Regions);
 
     private static int DefinitionIndex(UndertaleData data, AssetKind kind, string key) => AssetsList(data, kind).ToList().FindIndex(x =>
         (kind == AssetKind.Variables ? AssetFields.Json(new object[] { ((UndertaleVariable)x).Name.Content, ((UndertaleVariable)x).InstanceType.ToString() }).GetRawText() : ((UndertaleNamedResource)x).Name.Content) == key);

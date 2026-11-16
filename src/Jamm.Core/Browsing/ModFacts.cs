@@ -9,7 +9,7 @@ namespace Jamm.Core.Browsing;
 public sealed record ModFacts(string FileHash, string BaseHash, int AnalyzerVersion, string Compatibility, string Reason, string[] Adds);
 
 /// <summary>Analyzes read-only archives through the existing semantic patch/build pipeline.</summary>
-public sealed class ModFactAnalyzer(ManagerStore store)
+public sealed class ModFactAnalyzer(ManagerStore store, AnalysisOptions? options = null)
 {
     /// <summary>Invalidates cached facts when extraction or compatibility rules change.</summary>
     public const int Version = 4;
@@ -41,7 +41,7 @@ public sealed class ModFactAnalyzer(ManagerStore store)
         else
         {
             ModPatch patch;
-            try { patch = PatchBuilder.Create(original, mod, "Content check", message => { token.ThrowIfCancellationRequested(); progress?.Invoke(message); }); }
+            try { patch = PatchBuilder.Create(original, mod, "Content check", message => { token.ThrowIfCancellationRequested(); progress?.Invoke(message); }, (options ?? AnalysisOptions.Default) with { DataDirectory = store.Root }); }
             catch (Exception ex) when (ex is InvalidDataException or NotComparableException or ArgumentException)
             {
                 result = new(hash, baseHash, Version, "Incompatible", "The patch cannot apply: " + ex.Message, []);
@@ -52,7 +52,7 @@ public sealed class ModFactAnalyzer(ManagerStore store)
             string output = store.Path("analysis", Guid.NewGuid().ToString("N") + ".win");
             try
             {
-                ArchiveBuilder.Build(basePath, [new(patch, archive)], output, progress: progress, cancellationToken: token);
+                ArchiveBuilder.Build(basePath, [new(patch, archive)], output, progress: progress, cancellationToken: token, options: (options ?? AnalysisOptions.Default) with { DataDirectory = store.Root });
                 // A successful verified build proves applicability. GEN8 timestamps alone do not
                 // establish a different code ancestor: mods necessarily change game code.
                 string date = SourceDate(mod.Inspection.Timestamp);

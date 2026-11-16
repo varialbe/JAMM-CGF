@@ -95,7 +95,7 @@ internal static class AssetSymbols
     private static bool IsIdentifier(string name) => name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_')
         && name.All(c => char.IsLetterOrDigit(c) || c == '_');
 
-    internal sealed class Context(UndertaleData data, IReadOnlySet<string> ambiguous) : GlobalDecompileContext(data), IGameContext
+    internal sealed class Context(UndertaleData data, IReadOnlySet<string> ambiguous) : GlobalDecompileContext(data, data.GlobalFunctions), IGameContext
     {
         string? IGameContext.GetAssetName(AssetType type, int index)
         {
