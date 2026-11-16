@@ -22,6 +22,14 @@ public sealed partial class MainWindow : Window
     public MainWindow(bool initializeOnOpen)
     {
         InitializeComponent();
+        MainViewModel? errorModel = null;
+        DataContextChanged += (_, _) =>
+        {
+            if (errorModel is not null) errorModel.Error -= ShowError;
+            errorModel = Model;
+            if (errorModel is not null) errorModel.Error += ShowError;
+        };
+        Closed += (_, _) => { if (errorModel is not null) errorModel.Error -= ShowError; };
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, (_, e) => { e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; });
         AddHandler(DragDrop.DropEvent, async (_, e) =>
@@ -67,6 +75,21 @@ public sealed partial class MainWindow : Window
         if (vm.Browse.Selected != row || vm.Browse.IsLoading) { vm.Browse.Selected = row; await vm.Browse.SelectAsync(); }
         await vm.Browse.DownloadAsync(false, ConfirmAsync);
     }
+    private async void ShowError(string message)
+    {
+        var dialog = new Window { Title = "Could not complete action · JAMM", Width = 600, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var close = new Button { Content = "OK" };
+        close.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel { Margin = new Thickness(24), Spacing = 12, Children = { new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, close } };
+        await dialog.ShowDialog(this);
+    }
+    private async void ChooseGameClick(object? sender, RoutedEventArgs e)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new() { Title = "Choose the complete legacy Cat Goes Fishing folder", AllowMultiple = false });
+        if (folders.FirstOrDefault()?.TryGetLocalPath() is { } path && Model is { } vm) await vm.ChooseGameFolderAsync(path);
+    }
+    private async void CheckGamesClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.SearchGamesAsync(); }
+    private void CancelSetupClick(object? sender, RoutedEventArgs e) => Model?.CancelSetup();
     private async void UseDetectedClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.UseDetectedGameAsync(); }
     private async void CopyDepotClick(object? sender, RoutedEventArgs e) { if (Clipboard is { } clipboard) await clipboard.SetTextAsync(Jamm.Core.Management.SteamGameDetection.LegacyCommand); }
     private async void ToggleModClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm && sender is Control { DataContext: ModRow row }) await vm.ToggleModAsync(row.Id); }
@@ -92,8 +115,12 @@ public sealed partial class MainWindow : Window
     private async void SettingsClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.OpenSettingsAsync(() => new SettingsWindow(vm).ShowDialog(this)); }
     private async void AddClick(object? sender, RoutedEventArgs e)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "Add local mods", AllowMultiple = true, FileTypeFilter = [new("Mods (.win, .zip)") { Patterns = ["*.win", "*.zip"] }] });
-        if (Model is { } vm) await vm.AddAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
+        if (Model is not { } vm) return;
+        await vm.AfterSetupAsync(async () =>
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "Add local mods", AllowMultiple = true, FileTypeFilter = [new("Mods (.win, .zip)") { Patterns = ["*.win", "*.zip"] }] });
+            await vm.AddAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
+        });
     }
     private async void RemoveClick(object? sender, RoutedEventArgs e)
     {

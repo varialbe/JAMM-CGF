@@ -93,10 +93,10 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     public double Progress { get => progress; private set => SetProperty(ref progress, value); }
     /// <summary>Whether transfer size is unknown.</summary>
     public bool IsIndeterminate { get => indeterminate; private set => SetProperty(ref indeterminate, value); }
-    /// <summary>Direct actions require a released file, configured base and the shared idle state.</summary>
-    public bool CanDownload => !owner.IsBusy && !IsLoading && Selected?.Mod.HasDownload == true && SelectedFile is not null && owner.HasOnlineBase;
+    /// <summary>Direct actions require a released file and idle state; missing setup is opened on demand.</summary>
+    public bool CanDownload => !owner.IsBusy && !IsLoading && Selected?.Mod.HasDownload == true && SelectedFile is not null;
     /// <summary>Installation additionally requires a selected profile and recognized game.</summary>
-    public bool CanDownloadInstall => CanDownload && owner.CanInstallOnline;
+    public bool CanDownloadInstall => CanDownload && (owner.NeedsSetup || owner.CanInstallOnline);
     /// <summary>Raises derived command states after any manager operation.</summary>
     public void NotifyActions() { OnPropertyChanged(nameof(CanDownload)); OnPropertyChanged(nameof(CanDownloadInstall)); }
 
@@ -241,6 +241,21 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     /// <summary>Downloads, imports and enables under the existing serialized operation; advanced mode can also install.</summary>
     public Task DownloadAsync(bool install, Func<string, Task<bool>> confirm)
     {
+        if (owner.IsBusy || IsLoading) return Task.CompletedTask;
+        if (!CanDownload)
+        {
+            owner.ReportError($"Cannot download '{Selected?.Name ?? "selected mod"}': {DetailStatus} Choose a supported file in Advanced mode or open the mod's source page.");
+            return Task.CompletedTask;
+        }
+        var requestedMod = Selected; var requestedFile = SelectedFile;
+        return owner.AfterSetupAsync(() =>
+        {
+            Selected = requestedMod; SelectedFile = requestedFile;
+            return DownloadReadyAsync(install, confirm);
+        });
+    }
+    private Task DownloadReadyAsync(bool install, Func<string, Task<bool>> confirm)
+    {
         if (!CanDownload || install && !CanDownloadInstall) return Task.CompletedTask;
         var mod = Selected!.Mod; var file = SelectedFile!; string? profile = owner.SelectedProfile;
         return owner.RunAsync("Downloading mod", async (token, progressText) =>
@@ -294,7 +309,11 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                 if (install) await owner.InstallDownloadAsync(confirm, token, progressText);
             }
             catch (OperationCanceledException) { lock (transferGate) { transferring = 0; transferState = "Cancelled"; } throw; }
-            catch { lock (transferGate) { transferring = 0; transferState = "Failed"; } throw; }
+            catch (Exception ex)
+            {
+                lock (transferGate) { transferring = 0; transferState = "Failed"; }
+                throw new IOException($"Could not download or add '{mod.Name}' from '{file.SourceUrl}': {ex.Message} Check your connection and retry Download, or add a local .win/.zip file.", ex);
+            }
             finally
             {
                 lock (transferGate) transferring = 0;

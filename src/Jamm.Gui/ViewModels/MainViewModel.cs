@@ -11,6 +11,7 @@ namespace Jamm.Gui.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly ManagerStore store;
+    private readonly Func<CancellationToken, IProgress<string>, DetectedGame[]> searchGames;
     private CancellationTokenSource? cancellation;
     private bool busy, loading, cancellable;
     private string status = "Ready", log = "", gameStatus = "Choose a legacy game folder in Settings.", validation = "Choose a legacy base data.win.";
@@ -19,8 +20,8 @@ public sealed partial class MainViewModel : ObservableObject
     private bool updatingConflictChoices;
     private IReadOnlyDictionary<string, string> conflictResolutions = new Dictionary<string, string>();
     /// <summary>Creates a manager model without opening game archives on the calling thread.</summary>
-    public MainViewModel(ManagerStore store, ModHttp? browseHttp = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null)
-    { this.store = store; Browse = new BrowseViewModel(this, store, browseHttp, catalog, resolver); }
+    public MainViewModel(ManagerStore store, ModHttp? browseHttp = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null, Func<CancellationToken, IProgress<string>, DetectedGame[]>? gameSearch = null)
+    { this.store = store; searchGames = gameSearch ?? ((token, progress) => SteamGameDetection.Detect(token).Concat(GameFolderSearch.Scan(GameFolderSearch.Roots(), token, progress)).DistinctBy(g => g.Archive).ToArray()); Browse = new BrowseViewModel(this, store, browseHttp, catalog, resolver); }
     /// <summary>Current library rows.</summary>
     public ObservableCollection<ModRow> Mods { get; } = [];
     /// <summary>Active profile order, including disabled mods.</summary>
@@ -62,7 +63,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void NotifyButtons()
     {
-        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel) }) OnPropertyChanged(property);
+        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy) }) OnPropertyChanged(property);
     }
     private void Message(string message) { Status = message; Log += message + Environment.NewLine; }
 
@@ -77,7 +78,7 @@ public sealed partial class MainViewModel : ObservableObject
         var progress = new Progress<string>(Message);
         try { await action(cancellation.Token, progress); if (Status == label) Message(label + " complete."); }
         catch (OperationCanceledException) { Message("Cancelled. The game was not replaced."); }
-        catch (Exception ex) { Message("Could not complete " + label.ToLowerInvariant() + ": " + ex.Message); }
+        catch (Exception ex) { ReportError("Could not complete " + label.ToLowerInvariant() + ": " + ex.Message + " Check the selected file or folder and try again."); }
         finally { cancellation.Dispose(); cancellation = null; IsBusy = false; }
     }
     /// <summary>Requests cancellation at the next safe Core checkpoint.</summary>
@@ -86,33 +87,13 @@ public sealed partial class MainViewModel : ObservableObject
     public Task InitializeAsync() => RunAsync("Loading library", async (token, _) =>
     {
         await ReloadAsync();
-        if (Config.Base is null)
-        {
-            var found = await Task.Run(() => SteamGameDetection.Detect(token), token);
-            DetectedLegacy = found.FirstOrDefault(g => g.Usable);
-            SetupMessage = DetectedLegacy is not null ? "Legacy game found. Create a separate modded copy to get started." : "Open Steam's console and download the legacy game, then restart JAMM. Your installed game stays safe.";
-            OnPropertyChanged(nameof(HasDetectedLegacy));
-        }
+        if (NeedsSetup) await SearchGamesInternalAsync(token, new Progress<string>(m => SetupMessage = m));
     });
     /// <summary>Persisted expert-mode preference.</summary>
     public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); } }
-    /// <summary>First usable detected legacy game.</summary>
-    public DetectedGame? DetectedLegacy { get; private set; }
-    /// <summary>Whether a game base still needs to be configured.</summary>
-    public bool NeedsSetup => Config.Base is null;
-    /// <summary>Whether one-click safe setup is available.</summary>
-    public bool HasDetectedLegacy => DetectedLegacy is not null && Config.Base is null;
-    private string setupMessage = "";
-    /// <summary>First-run next step.</summary>
-    public string SetupMessage { get => setupMessage; private set => SetProperty(ref setupMessage, value); }
-    /// <summary>Creates an independent modded game and base.</summary>
-    public Task UseDetectedGameAsync() => RunAsync("Creating modded game", async (token, _) =>
-    {
-        if (DetectedLegacy is null) return;
-        await Task.Run(() => SteamGameDetection.Use(store, DetectedLegacy, token), token);
-        SetupMessage = "Separate modded game ready. Browse mods to get started.";
-        OnPropertyChanged(nameof(HasDetectedLegacy)); await ReloadAsync();
-    });
+    /// <summary>Displays operation errors in the desktop shell as well as the status line.</summary>
+    public event Action<string>? Error;
+    internal void ReportError(string text) { Message(text); Error?.Invoke(text); }
 
     /// <summary>Guards configuration reads and settings construction, including first-run setup.</summary>
     public async Task OpenSettingsAsync(Func<Task> show, bool onlyWhenUnconfigured = false)
@@ -129,6 +110,7 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ReloadAsync()
     {
         var data = await Task.Run(() => (Mods: new ModLibrary(store).List(), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
+        usableBase = data.Config.Base is { } basePath && await Task.Run(() => SteamGameDetection.Inspect(basePath).Usable);
         loading = true;
         try
         {
@@ -157,7 +139,13 @@ public sealed partial class MainViewModel : ObservableObject
         await Browse.UpdateMembershipAsync();
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
-    public Task AddAsync(IEnumerable<string> paths) => RunAsync("Adding mods", async (token, progress) =>
+    public Task AddAsync(IEnumerable<string> paths)
+    {
+        var savedPaths = paths.ToArray();
+        if (savedPaths.Length == 0) return Task.CompletedTask;
+        return AfterSetupAsync(() => AddReadyAsync(savedPaths));
+    }
+    private Task AddReadyAsync(IEnumerable<string> paths) => RunAsync("Adding mods", async (token, progress) =>
     {
         foreach (string path in paths)
         {
@@ -169,7 +157,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Message($"Could not complete adding '{path}': {ex.Message}");
+                ReportError($"Could not add mod '{path}': {ex.Message} Choose a legacy .win or supported .zip mod and try again.");
             }
         }
         await ReloadAsync();

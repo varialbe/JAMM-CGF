@@ -24,7 +24,7 @@ public sealed record ManagerConfig
 /// <summary>Wine runner settings.</summary>
 public sealed record WineSettings
 {
-    /// <summary>Either wine, proton or proton-flatpak.</summary>
+    /// <summary>Either direct (Windows), wine, proton or proton-flatpak.</summary>
     public string Mode { get; init; } = "wine";
     /// <summary>Optional absolute Wine prefix.</summary>
     public string? Prefix { get; init; }

@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Jamm.Core.Management;
 using Jamm.Core.Browsing;
 using Jamm.Gui.ViewModels;
@@ -20,13 +21,36 @@ public static class HeadlessApp
 
 public sealed class HeadlessTests
 {
+    [AvaloniaFact]
+    public async Task FirstRunPanelShowsCandidatesAndErrorsAppearInDialogAndStatus()
+    {
+        using var files = new TestFiles();
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
+        await vm.InitializeAsync();
+        vm.DetectedGames.Add(new(Path.Combine(files.Root, "Games", "2023-08-16_manifest-9039707068725406600", "data.win"), true, "Legacy game found"));
+        vm.DetectedGames.Add(new(Path.Combine(files.Root, "Steam", "steamapps", "common", "Cat Goes Fishing", "data.win"), false, "Current game found; download the legacy depot to use mods."));
+        vm.DetectedLegacy = vm.DetectedGames[0]; vm.SetupOpen = true;
+        var window = new MainWindow(false) { DataContext = vm }; window.Show();
+        Dispatcher.UIThread.RunJobs(); window.UpdateLayout(); AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
+        if (Environment.GetEnvironmentVariable("JAMM_FIRSTRUN_SCREENSHOT") is { Length: > 0 } output)
+        { using var bitmap = window.CaptureRenderedFrame()!; bitmap.Save(output); }
+        Assert.Contains(window.GetVisualDescendants().OfType<Button>(), b => Equals(b.Content, "Choose folder…") && b.IsVisible);
+        vm.SetupOpen = false;
+        string missing = Path.Combine(files.Root, "missing.win");
+        await vm.AddAsync([missing]); Dispatcher.UIThread.RunJobs();
+        Assert.Contains(missing, vm.Status); Assert.Contains("try again", vm.Status);
+        var error = Assert.Single(window.OwnedWindows);
+        Assert.Contains(error.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == vm.Status);
+        error.Close(); window.Close();
+    }
+
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task MainWindowOpensWithEmptyAndConfiguredStorage(bool configured)
     {
         using var files = new TestFiles(configured);
-        var vm = new MainViewModel(files.Store);
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
         var window = new MainWindow { DataContext = vm };
         window.Show();
         while (vm.IsBusy) await Task.Delay(10);

@@ -34,6 +34,7 @@ public static class GameLauncher
         string game = Path.GetFullPath(config.GameDir ?? throw new ArgumentException("Set gameDir before playing."));
         string executable = Path.Combine(game, "Cat Goes Fishing.exe");
         Dictionary<string, string> environment = new(StringComparer.Ordinal) { ["SteamAppId"] = config.Steam.AppId, ["SteamGameId"] = config.Steam.AppId };
+        if (config.Wine.Mode == "direct") return new(executable, [], game, environment);
         if (config.Wine.Mode == "wine")
         {
             if (config.Wine.Prefix is not null) environment["WINEPREFIX"] = config.Wine.Prefix;
@@ -43,7 +44,7 @@ public static class GameLauncher
             return FlatpakSteamLauncher.Create(config, game, flatpakHost ?? new FlatpakLaunchHost());
         if (config.Wine.Mode != "proton") throw new ArgumentException("wine.mode must be 'wine', 'proton' or 'proton-flatpak'.");
         if (config.Proton.Path is null)
-            throw new ArgumentException("Proton needs 'proton.path' (folder containing proton). Set it with config set.");
+            throw new ArgumentException("Proton was not found. Install Proton - Experimental through Steam's Library (Tools), then choose its folder in Settings before Play.");
         environment["STEAM_COMPAT_DATA_PATH"] = config.Proton.CompatDataPath ?? Path.Combine(Path.GetFullPath(dataDirectory), "proton", config.Steam.AppId);
         string? steam = config.Proton.ClientInstallPath;
         if (string.IsNullOrWhiteSpace(steam)) steam = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_CLIENT_INSTALL_PATH");
@@ -62,7 +63,7 @@ public static class GameLauncher
     /// <summary>Checks that the game and runner exist and the runner is executable, before any profile installation.</summary>
     public static void Validate(GameLaunchCommand command)
     {
-        if (!File.Exists(command.Arguments[^1])) throw new FileNotFoundException($"Cannot launch: 'Cat Goes Fishing.exe' is missing in '{command.WorkingDirectory}'. Copy the whole legacy game folder and set gameDir to that folder.");
+        if (!File.Exists(Path.Combine(command.WorkingDirectory, "Cat Goes Fishing.exe"))) throw new FileNotFoundException($"Cannot launch: 'Cat Goes Fishing.exe' is missing in '{command.WorkingDirectory}'. Copy the whole legacy game folder and set gameDir to that folder.");
         string? runner = FindRunner(command.FileName);
         if (runner is null || !IsExecutable(runner))
             throw new FileNotFoundException($"Runner '{command.FileName}' is missing or not executable. Install Wine or Proton and set wine.binary or proton.path to its executable location.");

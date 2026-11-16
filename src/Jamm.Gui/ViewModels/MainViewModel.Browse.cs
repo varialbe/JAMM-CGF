@@ -6,7 +6,7 @@ public sealed partial class MainViewModel
 {
     /// <summary>Native online discovery, independent from local manager loading.</summary>
     public BrowseViewModel Browse { get; }
-    internal bool HasOnlineBase { get { try { return Config.Base is not null; } catch { return false; } } }
+    internal bool HasOnlineBase { get { try { return !NeedsSetup; } catch { return false; } } }
     internal bool CanInstallOnline => knownGame && SelectedProfile is not null && HasOnlineBase;
     internal Task ReloadAfterDownloadAsync() => ReloadAsync();
     internal async Task InstallDownloadAsync(Func<string, Task<bool>> confirm, CancellationToken token, IProgress<string> progress)

@@ -19,8 +19,8 @@ cgfmm/
   download-cache/<sha256>.win         # immutable validated/extracted downloads
   download-cache/<identity-hash>.json # provider/release/file identity -> archive hash
   analysis/<filehash>-<basehash>-1.json # proven counts and compatibility, analyzer v1
-  base/data.win                      # independent ancestor created by automatic setup
-  game/                              # separate game copy created by automatic setup
+  base/<sha256>.win                      # independent ancestor created by automatic setup
+  game/                              # optional game copy (GUI defaults to <original>-modded)
   downloads/<random-id>.part          # bounded transfer staging; removed on failure/cancel
   downloads/<random-id>.win or .zip   # validated staging; moved/extracted to cache
   installed.json
@@ -227,6 +227,14 @@ library and profile inputs and can be cancelled independently.
 Steam detection checks default Windows, native Linux, Flatpak, Snap and macOS roots,
 reads modern and older `libraryfolders.vdf` path entries, and inspects common game and
 legacy depot archive candidates through `GameFileLoader`. Automatic setup copies the
-chosen legacy directory to guarded `game/` storage and retains independent `base/data.win`.
+chosen legacy directory to a separate destination (GUI: `<original>-modded`) and retains independent `base/<sha256>.win`.
 It refuses an existing game copy and skips filesystem links. The found source is never
 written. Steam ownership/download and the configured Wine/Proton runner remain required.
+
+
+Phase 9c first-run setup defaults the game copy to `<original-folder>-modded`.
+The destination is editable in Advanced mode and must be outside the original.
+The base is an independent read-only input in `base/<sha256>.win`; source game
+files are never changed. Setup creates/selects `default` and chooses `direct`
+on Windows or native/Flatpak Proton from detected Steam installations. Add mods
+and Download defer their action until setup succeeds; cancelling setup discards it.

@@ -25,11 +25,12 @@ public sealed class LoadedGameFile : IDisposable
 public static class GameFileLoader
 {
     /// <summary>Loads a live model. The caller must dispose the result; load errors are thrown.</summary>
-    public static LoadedGameFile Load(string path, Action<string>? progress = null)
+    public static LoadedGameFile Load(string path, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         path = Path.GetFullPath(path);
         List<string> warnings = [];
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var stream = new CancellableGameStream(path, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         progress?.Invoke($"Loading {Path.GetFileName(path)} ({stream.Length:N0} bytes)");
         string sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
         stream.Position = 0;

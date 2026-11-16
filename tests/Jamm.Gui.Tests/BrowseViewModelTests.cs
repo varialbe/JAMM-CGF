@@ -141,7 +141,9 @@ public sealed class BrowseViewModelTests
     public async Task FailedDownloadSurfacesErrorAndLeavesNoLibraryEntry()
     {
         using var files = new TestFiles(); var vm = Create(files, _ => Task.FromResult("<html>server error</html>"u8.ToArray())); await Select(vm);
+        List<string> errors = []; vm.Error += errors.Add;
         await vm.Browse.DownloadAsync(false, _ => throw new Exception()); Assert.Empty(vm.Mods);
+        Assert.Equal(vm.Status, Assert.Single(errors)); Assert.Contains("https://example.com/data.win", vm.Status); Assert.Contains("retry Download", vm.Status);
         Assert.Contains("Failed", vm.Browse.Membership); Assert.Contains("HTML", vm.Status); Assert.True(vm.Browse.CanDownload);
         Assert.Empty(Directory.GetFiles(Path.Combine(files.Store.Root, "downloads"))); vm.Browse.Dispose();
     }

@@ -91,6 +91,7 @@ public sealed class Phase9bTests
         File.WriteAllText(Path.Combine(root, "steamapps", "libraryfolders.vdf"), "\"libraryfolders\" { \"0\" { \"path\" \"" + library.Replace("\\", "\\\\") + "\" } }");
         var found = SteamGameDetection.Candidates([root]); Assert.Contains(common, found); Assert.Contains(depot, found); Assert.Equal(2, found.Length);
         Assert.True(SteamGameDetection.Inspect(common).Usable);
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(depot)!, "Cat Goes Fishing.exe"), "fake");
         SteamGameDetection.Use(files.Store, SteamGameDetection.Inspect(depot), default);
         Assert.NotEqual(depot, files.Store.Config().Base); Assert.True(File.Exists(depot));
         Assert.True(File.Exists(Path.Combine(files.Store.Config().GameDir!, "data.win")));
