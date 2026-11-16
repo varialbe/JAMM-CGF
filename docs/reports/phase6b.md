@@ -148,3 +148,100 @@ lure geometry, centred GUI and HUD hits, minimap/sonar, room changes, F11/alt-ta
 black bars without smearing, and bar clicks/dragging in the standalone runner.
 The old screenshots are evidence of the reported failure; fresh fixed-build
 screenshots must come from that runtime review. Existing memory estimates apply.
+
+## Follow-up 2
+
+The orchestrator observed correct letterboxing but about 1 FPS, including in
+windowed mode: `delta_time` was 1,001,040 us while GML work took about 20 ms.
+Repeated port/GUI mutations triggered a runner rebuild each frame; the two dummy
+views also tripled instance Draw dispatch. This revision supersedes the rendering,
+MSAA, dummy-view, and bar-input approach in the earlier sections.
+
+The application surface stays **enabled**. Room Start saves all eight original
+ports and applies `k=min(window_width/1200,window_height/720)`. The surface is
+resized to `round(1200*k)` by `round(720*k)` (minimum one pixel), and each original
+port position and size is multiplied by k without offsets. World views/cameras
+and view visibility are untouched. Begin Step reads window dimensions and exits
+unless they changed; only then does it resize the surface, rewrite ports and call
+`display_set_gui_size(1200,720)` once. If the surface is not available at Room
+Start, the update is deferred until it exists. No Pre Draw renderer writes remain.
+At 3440x1440, the expected surface is 2400x1440, with the runner supplying centred
+520-pixel black bars and native mouse-coordinate mapping.
+
+Removed dummy views, their Draw-code guards, manual bar drawing/clearing,
+`display_set_gui_maximise`, mouse-button clearing, and the entire `display_reset`
+MSAA selection path. The old `[HD] AntiAliasing` INI key is ignored. Texture
+interpolation remains enabled. Window mutations occur only during initialization,
+F11 actions, and the debug screenshot sequence, rather than continuously.
+Reloaded both output archives and checked the serialized keep-aspect (`Scale`)
+and interpolation flags plus black outside colour; all passed
+(`followup2-options.log`). No existing game Draw events are rewritten.
+
+Debug retains the windowed/fullscreen screenshots and now appends ten samples,
+approximately one second apart, to `out/phase6b/jamm_hd_timing.txt` in the runner
+save sandbox. Each sample includes k, actual surface dimensions, all eight ports
+and visibility, and average `delta_time` in microseconds over that interval.
+Timing stops after ten samples independently of the screenshot sequence.
+
+Rebuilt `out/phase6b/hd.win` (192,744,646 bytes) and `hd-debug.win`
+(192,747,462 bytes), preserving the reviewed builds as `*-before-followup2.win`.
+Both passed all texture/font invariants (26 upscaled pages, 34 total pages,
+1,264 TPAG items, 10 unchanged fonts) and `cgfmm verify`: **1,834 code entries**
+each decompile and compile with valid references. Texture residency remains
+1,760 MiB versus 536 MiB originally; application-surface storage is additional
+(about 13.2 MiB RGBA8 at 2400x1440), while no MSAA target is requested.
+
+Solution and ModMaker Release builds passed with **0 warnings, 0 errors** using
+`-m:1 --disable-build-servers`. The exact `dotnet build -c Release` invocation
+still fails under the sandbox's MSBuild restrictions. Tests were attempted and
+aborted because the test platform cannot create its TCP listener; they did not
+pass. Logs use the `out/phase6b/followup2-` prefix. `git diff --check` passed.
+
+The input SHA-256 matches the previous follow-up baseline:
+`dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1`.
+This run used the file read-only, with no game installation or launch,
+and made no commits, pushes, or git configuration changes. Runtime FPS recovery,
+one Draw dispatch per enabled real view, GUI/HUD mouse hits, minimap/sonar,
+room transitions, F11/resize/alt-tab and black bars still need in-game review.
+
+## Follow-up 3
+
+The reported 1880x1440 back-buffer screenshot does not establish that the
+2400x1440 application surface is clipped. Debug now saves
+`jamm_hd_surface_windowed.png` and `jamm_hd_surface_fullscreen.png` using
+`surface_save(application_surface, ...)`, alongside the existing `screen_save`
+images. All runtime captures and logs remain under `out/phase6b/` in the runner
+save sandbox. Each capture logs actual surface, window, display and GUI sizes
+plus k in `jamm_hd_sizes.txt`. The original delayed capture sequence and
+ten timing samples remain.
+
+Mode changes and surface resizes schedule a capture after the following frame
+has drawn (a two-Draw-GUI-End countdown). Further resizes restart that countdown.
+F11 and the automated mode switches schedule captures too, including restoration
+of the configured mode. Files are overwritten with the latest capture for each
+mode; the sizes log appends a record for each capture.
+
+Begin Step continues checking window dimensions every frame, indefinitely after
+fullscreen changes. End Step now checks again after F11, covering dimensions
+that changed during Step. Both checks also compare actual surface dimensions
+with the target, repairing a surface reset/recreation even when window dimensions
+stay unchanged. Unchanged dimensions cause no renderer mutations. This addresses
+the possible transition timing gap; a real clipping defect has not been
+demonstrated without new runtime captures.
+
+Rebuilt `hd.win` and `hd-debug.win`; the incoming archives are preserved as
+`*-before-followup3.win`. Texture/font verification passes for both. Solution
+and ModMaker Release builds with `-m:1 --disable-build-servers` pass with
+**0 warnings, 0 errors**. The default parallel solution build again exits
+unsuccessfully in this sandbox without compiler errors. Build/archive/check logs
+use the `followup3-*` prefix under `out/phase6b/`.
+No game installation, commits, pushes, or git configuration changes were made.
+
+Runtime review is still required at 3440x1440: inspect the complete title in the
+2400x1440 surface capture, compare it with the back-buffer image, and exercise
+F11 and window resizing. The application-surface capture isolates surface
+content; it does not prove final back-buffer presentation or GUI compositing.
+
+Both final archives pass `cgfmm verify`: all 1,834 code entries decompile and
+compile, and references are valid. The original's SHA-256 is unchanged from
+`original-before.sha256`.
