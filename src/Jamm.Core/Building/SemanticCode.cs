@@ -99,7 +99,7 @@ internal sealed class SemanticCode
         {
             string name = code.Name.Content;
             string text = selected.TryGetValue(name, out var choice) ? choice.Gml!
-                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && CatalogRuntime.Scripts.TryGetValue(name[11..], out var runtime) ? runtime : Base[name].Text;
+                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && CatalogRuntime.Scripts.TryGetValue(name[11..], out var runtime) ? runtime : name.StartsWith("gml_Script_", StringComparison.Ordinal) && HudRuntime.Scripts.TryGetValue(name[11..], out var hud) ? hud : Base[name].Text;
             var references = SemanticReferences.Resolve(text, name, union);
             foreach (var reference in references)
                 if (!mergedNames[reference.Family].Contains(reference.Name, StringComparer.Ordinal))

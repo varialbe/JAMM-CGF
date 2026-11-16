@@ -1,4 +1,5 @@
 {
+  "jamm_hud_set_font": {"family": "fonts", "argument": 0, "reason": "JAMM legacy draw-state wrapper forwards the font asset to draw_set_font."},
   "object": {"family": "objects", "reason": "Catalog and boat array values resolve to the objects named by the adjacent catalog or boat fields."},
   "disp": {"family": "sprites", "reason": "Boat and lure shop display arrays resolve to matching boat icons and lure sprites."},
   "PATH": {"family": "paths", "reason": "Fish movement assignments select existing paths passed to path_start."},
