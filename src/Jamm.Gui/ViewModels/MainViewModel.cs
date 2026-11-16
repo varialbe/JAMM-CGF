@@ -37,11 +37,11 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Enables order editing once a profile has been selected.</summary>
     public bool CanEditProfile => CanEdit && SelectedProfile is not null;
     /// <summary>Enables conflict checks for a nonempty selection.</summary>
-    public bool CanCheck => !IsBusy && SelectedProfile is not null && Order.Any(m => m.Enabled);
+    public bool CanCheck => !IsBusy && PendingCount == 0 && SelectedProfile is not null && Order.Any(m => m.Enabled);
     /// <summary>Installation requires a known game and an enabled selection.</summary>
     public bool CanInstall => CanCheck && knownGame;
     /// <summary>Play uses the same checked installation workflow.</summary>
-    public bool CanPlay => !IsBusy && SelectedProfile is not null && knownGame;
+    public bool CanPlay => !IsBusy && (SelectedProfile is not null || PendingCount > 0) && knownGame;
     /// <summary>Restore is available only for a recognized game with a backup.</summary>
     public bool CanRestore => !IsBusy && knownGame && canRestore;
     /// <summary>Cancellation is unavailable during the short atomic installation/restore stage.</summary>
@@ -63,7 +63,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void NotifyButtons()
     {
-        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy) }) OnPropertyChanged(property);
+        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy), nameof(PendingCount), nameof(CanUndo), nameof(StatusTitle), nameof(StatusExplanation) }) OnPropertyChanged(property);
     }
     private double operationProgress;
     private bool operationIndeterminate = true;
@@ -86,7 +86,7 @@ public sealed partial class MainViewModel : ObservableObject
             || message.StartsWith("Verifying") ? "Verifying the merged game" : message.StartsWith("Writing") ? "Saving merged game" : message;
         if (count.Success) OperationStep += " · " + count.Value;
     }
-    private void Message(string message) { Status = message; Log += message + Environment.NewLine; UpdateOperation(message); }
+    private void Message(string message) { Status = message; OnPropertyChanged(nameof(StatusTitle)); Log += message + Environment.NewLine; UpdateOperation(message); }
 
     /// <summary>Runs one serialized operation, surfaces a friendly error, and restores button states on every exit.</summary>
     public async Task RunAsync(string label, Func<CancellationToken, IProgress<string>, Task> action, bool supportsCancellation = true)
@@ -130,14 +130,18 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task ReloadAsync()
     {
+        var pending = Mods.Where(m => m.IsPending).ToDictionary(m => m.Id, m => m.Enabled);
+        string? previousProfile = SelectedProfile;
         var data = await Task.Run(() => (Mods: new ModLibrary(store).List(), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
+        string? currentBaseHash = data.Config.Base is { } configuredBase && File.Exists(configuredBase)
+            ? await Task.Run(() => BuildFiles.Hash(configuredBase)) : null;
         var summaries = await Task.Run(() => data.Mods.ToDictionary(m => m.Mod.Id, m =>
         {
             try
             {
                 var patch = new ModLibrary(store).Patch(m.Mod);
                 string factsPath = Path.Combine(store.Root, "analysis", $"{m.Mod.Sha256}-{m.Mod.BaseSha256}-{ModFactAnalyzer.Version}.json");
-                var facts = File.Exists(factsPath) ? System.Text.Json.JsonSerializer.Deserialize<ModFacts>(File.ReadAllText(factsPath),
+                var facts = currentBaseHash == m.Mod.BaseSha256 && File.Exists(factsPath) ? System.Text.Json.JsonSerializer.Deserialize<ModFacts>(File.ReadAllText(factsPath),
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) : null;
                 string[] adds = facts?.Adds ?? ModFactAnalyzer.Extract(patch, []);
                 string verdict = facts is null ? "? " + m.Compatibility : (facts.Compatibility == "Compatible" ? "✓ " : facts.Compatibility == "Incompatible" ? "✕ " : "? ") + facts.Compatibility + ": " + facts.Reason;
@@ -168,18 +172,20 @@ public sealed partial class MainViewModel : ObservableObject
             foreach (var row in Mods)
             {
                 if (!Order.Contains(row)) Order.Add(row);
-                row.PropertyChanged += async (_, e) => { if (e.PropertyName == nameof(ModRow.Enabled) && !loading && !IsBusy) await SaveOrderAsync(); };
+                row.AcceptChanges();
+                if (previousProfile == SelectedProfile && pending.TryGetValue(row.Id, out bool staged)) row.Enabled = staged;
+                row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModRow.Enabled) && !loading) { Conflicts.Clear(); NotifyButtons(); } };
             }
             knownGame = data.State.Known; canRestore = data.State.CanRestore; GameStatus = data.State.Message;
             OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(NeedsSetup)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         }
         finally { loading = false; }
         await Browse.UpdateMembershipAsync();
-        await Browse.LoadLocalIconsAsync(cancellation?.Token ?? CancellationToken.None);
+        await Browse.ApplyAutomaticFactsAsync(cancellation?.Token ?? CancellationToken.None);
     }
     internal void RefreshLocalIcons()
     {
-        foreach (var row in Mods) row.Icon = Browse.CatalogIcon(row.CatalogId);
+        foreach (var row in Mods) row.Icon = ModIconResolver.Load(row.CatalogId, row.Name) ?? Browse.CatalogIcon(row.CatalogId);
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
     public Task AddAsync(IEnumerable<string> paths)
@@ -219,30 +225,47 @@ public sealed partial class MainViewModel : ObservableObject
     public Task SaveOrderAsync() => RunAsync("Saving load order", async (_, _) =>
     {
         if (SelectedProfile is null) throw new ArgumentException("Create or select a profile before enabling mods.");
-        var ids = Order.Select(m => m.Id).ToArray(); var disabled = Order.Where(m => !m.Enabled).Select(m => m.Id).ToArray();
+        var ids = Order.Select(m => m.Id).ToArray(); var disabled = Order.Where(m => !m.SavedEnabled).Select(m => m.Id).ToArray();
         await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile, ids, disabled));
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons(); Message("Load order saved. Check again to review conflicts.");
     }, false);
-    /// <summary>Toggles a library mod, creating the default profile when needed.</summary>
-    public Task ToggleModAsync(string id) => RunAsync("Updating enabled mods", async (_, _) =>
+    /// <summary>Stages enablement without building, installing or persisting the selection.</summary>
+    public Task ToggleModAsync(string id)
     {
-        await Task.Run(() =>
+        if (!IsBusy && Mods.FirstOrDefault(m => m.Id == id) is { } row) row.Enabled = !row.Enabled;
+        return Task.CompletedTask;
+    }
+    /// <summary>Number of switches waiting to be applied.</summary>
+    public int PendingCount => Mods.Count(m => m.IsPending);
+    /// <summary>Whether staged changes can be discarded.</summary>
+    public bool CanUndo => !IsBusy && PendingCount > 0;
+    /// <summary>Plain-language heading, independent of technical build messages.</summary>
+    public string StatusTitle => IsBusy ? (Status.Contains("install", StringComparison.OrdinalIgnoreCase) ? "Installing…" : "Working…") : PendingCount > 0 ? $"{PendingCount} change{(PendingCount == 1 ? "" : "s")} waiting" : "Ready to play";
+    /// <summary>Explains the next player action.</summary>
+    public string StatusExplanation => IsBusy ? "Please wait while JAMM prepares your game." : PendingCount > 0
+        ? "Press Play to apply your changes and start the game." : "Choose your mods, then press Play to start the game.";
+    /// <summary>Restores the saved enablement without touching game files.</summary>
+    public void UndoChanges()
+    {
+        if (!CanUndo) return;
+        foreach (var row in Mods) row.UndoChanges();
+        NotifyButtons();
+    }
+    private async Task ApplyPendingAsync()
+    {
+        if (PendingCount == 0) return;
+        if (SelectedProfile is null)
         {
             var profiles = new ProfileLibrary(store);
-            string? name = SelectedProfile;
-            if (name is null)
-            {
-                name = profiles.List().FirstOrDefault()?.Name;
-                if (name is null) { name = "default"; profiles.CreateEmpty(name); }
-                profiles.Use(name);
-            }
-            var profile = profiles.Get(name);
-            bool enabled = profile.EnabledMods.Contains(id);
-            string[] ids = profile.Mods.Contains(id) ? profile.Mods : [.. profile.Mods, id];
-            profiles.Update(name, ids, enabled ? profile.DisabledMods.Append(id) : profile.DisabledMods.Where(m => m != id));
-        });
-        await ReloadAsync();
-    }, false);
+            string name = profiles.List().FirstOrDefault()?.Name ?? "default";
+            if (!profiles.List().Any(p => p.Name == name)) profiles.CreateEmpty(name);
+            profiles.Use(name); SelectedProfile = name;
+            if (!Profiles.Contains(name)) Profiles.Add(name);
+        }
+        await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile!, Order.Select(m => m.Id), Order.Where(m => !m.Enabled).Select(m => m.Id)));
+        foreach (var row in Mods) row.AcceptChanges();
+        NotifyButtons();
+    }
     /// <summary>Moves a mod to an absolute position for drag/drop and keyboard buttons.</summary>
     public async Task MoveAsync(int from, int to)
     {
@@ -372,6 +395,7 @@ public sealed partial class MainViewModel : ObservableObject
     public Task PlayAsync(Func<string, Task<bool>> confirm) => RunAsync("Preparing play", async (token, progress) =>
     {
         var command = await Task.Run(() => { var c = GameLauncher.Create(store.Config(), store.Root); GameLauncher.Validate(c); return c; }, token);
+        await ApplyPendingAsync();
         if (Order.Any(m => m.Enabled))
         {
             await InstallInternalAsync(confirm, token, progress);

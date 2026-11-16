@@ -92,6 +92,7 @@ public sealed partial class MainWindow : Window
     private void CancelSetupClick(object? sender, RoutedEventArgs e) => Model?.CancelSetup();
     private async void UseDetectedClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.UseDetectedGameAsync(); }
     private async void CopyDepotClick(object? sender, RoutedEventArgs e) { if (Clipboard is { } clipboard) await clipboard.SetTextAsync(Jamm.Core.Management.SteamGameDetection.LegacyCommand); }
+    private void UndoChangesClick(object? sender, RoutedEventArgs e) => Model?.UndoChanges();
     private async void ToggleModClick(object? sender, RoutedEventArgs e) { if (Model is { CanEdit: true } vm && sender is Control { DataContext: ModRow row }) await vm.ToggleModAsync(row.Id); }
     private async void BrowseFileChanged(object? sender, SelectionChangedEventArgs e) { if (Model is { } vm && e.AddedItems.Count > 0) await vm.Browse.SelectFileAsync(); }
     private void BrowseCancelClick(object? sender, RoutedEventArgs e) => Model?.Browse.CancelReads();

@@ -9,8 +9,8 @@ namespace Jamm.Gui.ViewModels;
 /// <summary>Native catalog row with an optional bounded thumbnail.</summary>
 public sealed class CatalogRow(CatalogMod mod) : ObservableObject
 {
-    private Bitmap? icon;
-    private string adds = "Checking on selection…", compatibility = "?", reason = "Unsure: select this mod to check its content.", color = "#D6A500";
+    private Avalonia.Media.IImage? icon;
+    private string adds = "Content summary unavailable. Select to check.", compatibility = "?", reason = "Unsure: select this mod to check its content.", color = "#D6A500";
     /// <summary>Proven resource counts.</summary>
     public string Adds { get => adds; internal set => SetProperty(ref adds, value); }
     /// <summary>Accessible compatibility symbol.</summary>
@@ -30,11 +30,11 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
     /// <summary>Short plain-text description.</summary>
     public string Excerpt => Mod.Description.Length > 180 ? Mod.Description[..180] + "…" : Mod.Description;
     /// <summary>Optional catalog thumbnail, never game data extracted locally.</summary>
-    public Bitmap? Icon { get => icon; internal set => SetProperty(ref icon, value); }
+    public Avalonia.Media.IImage? Icon { get => icon; internal set => SetProperty(ref icon, value); }
 }
 
 /// <summary>Discovery state is independent of local management; writes delegate to the owner's operation guard.</summary>
-public sealed class BrowseViewModel : ObservableObject, IDisposable
+public sealed partial class BrowseViewModel : ObservableObject, IDisposable
 {
     private readonly MainViewModel owner;
     private readonly ManagerStore store;
@@ -103,7 +103,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     /// <summary>Raises derived command states after any manager operation.</summary>
     public void NotifyActions() { OnPropertyChanged(nameof(CanDownload)); OnPropertyChanged(nameof(CanDownloadInstall)); }
 
-    internal Bitmap? CatalogIcon(string? id) => all.FirstOrDefault(r => r.Mod.Id == id)?.Icon
+    internal Avalonia.Media.IImage? CatalogIcon(string? id) => all.FirstOrDefault(r => r.Mod.Id == id)?.Icon
         ?? (id is not null ? localArtwork.GetValueOrDefault(id) : null);
     internal async Task LoadLocalIconsAsync(CancellationToken token)
     {
@@ -161,8 +161,9 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
         {
             var snapshot = await catalog.LoadAsync(current.Token);
             if (reading != current) return;
-            foreach (var row in all) row.Icon?.Dispose();
-            all = snapshot.Mods.Select(m => new CatalogRow(m)).ToArray(); owner.RefreshLocalIcons();
+            foreach (var row in all) (row.Icon as IDisposable)?.Dispose();
+            all = snapshot.Mods.Select(m => new CatalogRow(m) { Icon = ModIconResolver.Load(m.Id, m.Name) }).ToArray();
+            await ApplyAutomaticFactsAsync(current.Token); owner.RefreshLocalIcons();
             Categories.Clear(); Categories.Add("All categories");
             foreach (string name in all.SelectMany(r => r.Mod.Categories).Distinct().Order()) Categories.Add(name);
             category = "All categories"; OnPropertyChanged(nameof(Category)); Filter();
@@ -173,7 +174,7 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
             foreach (var row in all.Take(60))
             {
                 current.Token.ThrowIfCancellationRequested(); if (budget <= 0) break;
-                if (row.Mod.IconUrl is not { } url) continue;
+                if (row.Icon is not null || row.Mod.IconUrl is not { } url) continue;
                 try
                 {
                     var bytes = await http.ReadAsync(url, Math.Min(256 * 1024, budget), current.Token); budget -= bytes.Length;
@@ -389,5 +390,5 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     /// <summary>Cancels selection analysis and catalog requests.</summary>
     public void CancelReads() => reading?.Cancel();
     /// <summary>Cancels discovery reads without affecting local manager operations.</summary>
-    public void Dispose() { reading?.Cancel(); foreach (var row in all) row.Icon?.Dispose(); foreach (var icon in localArtwork.Values) icon.Dispose(); foreach (var image in Images) image.Dispose(); http.Dispose(); }
+    public void Dispose() { reading?.Cancel(); foreach (var row in all) (row.Icon as IDisposable)?.Dispose(); foreach (var icon in localArtwork.Values) icon.Dispose(); foreach (var image in Images) image.Dispose(); http.Dispose(); }
 }

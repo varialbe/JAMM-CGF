@@ -9,9 +9,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Jamm.Core/Jamm.Core.csproj" />
+    <PackageReference Include="Avalonia.Svg.Skia" Version="11.2.7" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.23" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.23" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.23" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <Content Include="Assets/ModIcons/*.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -68,17 +68,14 @@ public sealed class Phase9bTests
         await vm.InitializeAsync(); await vm.AddAsync([files.Mod("Toggle", "x = 1;\n")]);
         string id = Assert.Single(vm.Mods).Id;
         await vm.ToggleModAsync(id);
-        Assert.Equal("default", vm.SelectedProfile);
-        Assert.Contains(id, new ProfileLibrary(files.Store).Get("default").EnabledMods);
+        Assert.Null(vm.SelectedProfile);
+        Assert.True(Assert.Single(vm.Order).IsPending);
+        Assert.Empty(new ProfileLibrary(files.Store).List());
         var installer = new ProfileInstaller(files.Store);
-        Assert.False(installer.IsInstalled());
-        await vm.InstallAsync(_ => Task.FromResult(true)); Assert.True(installer.IsInstalled());
-        await vm.InstallAsync(_ => throw new Exception("Unchanged selection must not prepare/confirm again")); Assert.True(installer.IsInstalled());
-        await vm.ToggleModAsync(id); Assert.Empty(new ProfileLibrary(files.Store).Get("default").EnabledMods);
-        Assert.False(installer.IsInstalled()); Assert.True(vm.CanPlay);
-        Assert.Equal("Enable", Assert.Single(vm.Order).ToggleLabel);
+        Assert.False(new ManagerOperations(files.Store).Status().CanRestore);
+        vm.UndoChanges(); Assert.False(Assert.Single(vm.Order).Enabled);
         await vm.ToggleModAsync(id); Assert.True(Assert.Single(vm.Order).Enabled);
-        Assert.Equal("Disable", Assert.Single(vm.Order).ToggleLabel);
+        await vm.ToggleModAsync(id); Assert.False(Assert.Single(vm.Order).IsPending);
         vm.Browse.Dispose();
     }
     [Theory]
