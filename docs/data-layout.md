@@ -52,7 +52,7 @@ the selection; it does not alter the installed game or delete backups.
 | --- | --- | --- |
 | `base` | `base` | Required, read-only original archive used for all patches/builds |
 | `gameDir` | `gameDir` | Required, complete legacy game folder to install/run |
-| `wine.mode` | `wine.mode` | `wine`; alternatively `proton` |
+| `wine.mode` | `wine.mode` | `wine`; alternatively `proton` or `proton-flatpak` |
 | `wine.prefix` | `wine.prefix` | Optional `WINEPREFIX`; otherwise runner default |
 | `wine.binary` | `wine.binary` | `wine` on PATH, or a runner executable path |
 | `proton.path` | `proton.path` | Folder containing the executable `proton` script |
@@ -124,3 +124,6 @@ When first-run GUI settings default `base` to the game folder's own archive, a
 successful GUI install selects the retained, hash-verified manager backup as the
 base for future checks and restore. A separately configured original base stays
 selected. CLI apply retains its explicit base configuration behavior.
+
+For Flatpak Steam detection, path overrides and sandbox access, see the
+[Flatpak setup](user-guide.md#flatpak-steam).

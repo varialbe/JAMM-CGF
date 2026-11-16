@@ -27,7 +27,7 @@ spaces must be quoted, including the entire comma-separated `--mods` value.
 Management commands return 0 on success, 1 for errors or declined installation.
 
 `wine.mode` accepts `wine`, `proton`, or `proton-flatpak`. For Flatpak Steam, start
-Steam first; see the [Flatpak Steam setup](../README.md#flatpak-steam) for defaults
+Steam first; see the [Flatpak Steam setup](user-guide.md#flatpak-steam) for defaults
 and sandbox-visible game and compatibility directories.
 
 ## Archive and analysis commands
