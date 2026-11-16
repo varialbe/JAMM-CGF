@@ -59,6 +59,11 @@ public sealed partial class BrowseViewModel
             if (local.Length == 1 && Cached(local[0]) is { } cached && (facts is null || facts.FileHash != local[0].Sha256))
             { facts = cached; localFacts = true; }
             if (facts is not null) ShowFacts(row, facts, checks.Length == 1 && !localFacts ? "checked by JAMM server" : "checked on this PC");
+            if (local.Length == 1 && row.RemovedPerformanceCount == 0 && owner.Mods.FirstOrDefault(m => m.Id == local[0].Id) is { HasSanitizedInfo: true } localRow)
+            {
+                row.RemovedPerformanceCount = localRow.RemovedPerformanceCount;
+                row.SanitizedDetails = localRow.SanitizedDetails;
+            }
         }
     }
 }

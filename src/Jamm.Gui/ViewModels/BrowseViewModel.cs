@@ -31,6 +31,16 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
     public string Excerpt => Mod.Description.Length > 180 ? Mod.Description[..180] + "…" : Mod.Description;
     /// <summary>Optional catalog thumbnail, never game data extracted locally.</summary>
     public Avalonia.Media.IImage? Icon { get => icon; internal set => SetProperty(ref icon, value); }
+    private int removedPerformanceCount;
+    private string sanitizedDetails = "";
+    /// <summary>Number of third-party performance changes removed by JAMM's sanitizer.</summary>
+    public int RemovedPerformanceCount { get => removedPerformanceCount; internal set { if (SetProperty(ref removedPerformanceCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
+    /// <summary>True when JAMM removed at least one third-party performance change from this mod.</summary>
+    public bool HasSanitizedInfo => RemovedPerformanceCount > 0;
+    /// <summary>Short summary line for removed performance changes.</summary>
+    public string SanitizedLine => RemovedPerformanceCount <= 0 ? "" : $"JAMM removed {RemovedPerformanceCount} performance changes";
+    /// <summary>Detailed list of removed performance changes for the info flyout.</summary>
+    public string SanitizedDetails { get => sanitizedDetails; internal set => SetProperty(ref sanitizedDetails, value); }
 }
 
 /// <summary>Discovery state is independent of local management; writes delegate to the owner's operation guard.</summary>
@@ -251,6 +261,9 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         row.CompatibilityIcon = facts.Compatibility == "Compatible" ? "✓" : facts.Compatibility == "Incompatible" ? "✕" : "?";
         row.CompatibilityColor = facts.Compatibility == "Compatible" ? "#259D50" : facts.Compatibility == "Incompatible" ? "#D74040" : "#D6A500";
         row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason + " · " + source;
+        var removed = facts.RemovedPerformanceChanges ?? [];
+        row.RemovedPerformanceCount = removed.Count;
+        row.SanitizedDetails = removed.Count == 0 ? "" : string.Join("\n", removed.Select(r => $"[{r.Category}] {r.Entry}: {r.Summary}"));
         DetailStatus = facts.Reason;
     }
     /// <summary>Checks an explicitly chosen advanced release without changing the catalog selection.</summary>

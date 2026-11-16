@@ -136,4 +136,57 @@ public sealed class Phase14HeadlessTests
             vm.Browse.Dispose();
         }
     }
+
+    [AvaloniaFact]
+    public async Task SanitizedModRowShowsRemovedPerformanceCountInfoFlyoutAndAdvancedKeepSwitch()
+    {
+        using var files = new TestFiles();
+        files.Store.Set("useSharedCompatibilityResults", "false");
+        string modPath = files.Mod("ThirdPartyPerf", "time_scalar = 0.00006;\nx = 2;\n");
+        var added = new ModLibrary(files.Store).Add(modPath).Mod;
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
+        await vm.InitializeAsync();
+        var window = new MainWindow(false) { DataContext = vm };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var modRow = Assert.Single(vm.Mods);
+            Assert.Equal(1, modRow.RemovedPerformanceCount);
+            Assert.Equal("JAMM removed 1 performance changes", modRow.SanitizedLine);
+            Assert.Contains("[timing]", modRow.SanitizedDetails);
+
+            var rowControl = window.GetVisualDescendants().OfType<ModListRow>().First(r => r.DataContext == modRow && r.IsEffectivelyVisible);
+            var infoButton = rowControl.FindControl<Button>("SanitizedInfoButton")!;
+            Assert.True(infoButton.IsEffectivelyVisible);
+            var flyout = Assert.IsType<Flyout>(infoButton.Flyout);
+            flyout.ShowAt(infoButton);
+            Dispatcher.UIThread.RunJobs();
+            var scroll = Assert.IsType<ScrollViewer>(flyout.Content);
+            var text = Assert.IsType<SelectableTextBlock>(scroll.Content);
+            Assert.Equal(modRow.SanitizedDetails, text.Text);
+            flyout.Hide();
+
+            vm.AdvancedMode = true;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            rowControl = window.GetVisualDescendants().OfType<ModListRow>().First(r => r.DataContext == modRow && r.IsEffectivelyVisible);
+            rowControl.IsExpanded = true;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var keepCheck = rowControl.FindControl<CheckBox>("KeepAuthorPerfCheck")!;
+            Assert.True(keepCheck.IsEffectivelyVisible);
+            Assert.False(modRow.KeepAuthorPerformanceChanges);
+            modRow.KeepAuthorPerformanceChanges = true;
+            while (vm.IsBusy) await Task.Delay(10);
+            Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorPerformanceChanges);
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+            vm.Browse.Dispose();
+        }
+    }
 }

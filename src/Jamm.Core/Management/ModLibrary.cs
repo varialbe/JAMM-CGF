@@ -9,10 +9,45 @@ namespace Jamm.Core.Management;
 public sealed class ModLibrary(ManagerStore store)
 {
     internal string Archive(ManagedMod mod) => store.Path("mods", ManagerStore.Name(mod.Id), "data.win");
-    internal string PatchPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".cgfmm-patch.json");
+    /// <summary>Returns the path to the raw unsanitized patch file for a library mod.</summary>
+    public string PatchPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".cgfmm-patch.json");
+    /// <summary>Returns the path to the sanitized patch file stored alongside the raw patch.</summary>
+    public string SanitizedPatchPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".sanitized.cgfmm-patch.json");
+    /// <summary>Returns the path to the sanitizer report file stored alongside the raw patch.</summary>
+    public string SanitizerReportPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".sanitizer.json");
 
-    /// <summary>Verifies archive identities and atomically refreshes cached patches from older analysis revisions.</summary>
+    /// <summary>Verifies archive identities, refreshes outdated caches, and returns the active (sanitized by default) patch.</summary>
     public ModPatch Patch(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var (raw, sanitized, _) = EnsurePatches(mod, progress, cancellationToken);
+        bool keepAuthor = mod.KeepAuthorPerformanceChanges;
+        string metaPath = store.Path("mods", ManagerStore.Name(mod.Id), "mod.json");
+        if (File.Exists(metaPath))
+        {
+            try { keepAuthor = ReadMod(mod.Id).KeepAuthorPerformanceChanges; }
+            catch (InvalidDataException) { }
+        }
+        return keepAuthor ? raw : sanitized;
+    }
+
+    /// <summary>Returns the verified unsanitized patch for a library mod.</summary>
+    public ModPatch RawPatch(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default) =>
+        EnsurePatches(mod, progress, cancellationToken).Raw;
+
+    /// <summary>Returns the cached or freshly computed sanitizer report for a library mod.</summary>
+    public ModSanitizerReport SanitizerReport(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default) =>
+        EnsurePatches(mod, progress, cancellationToken).Report;
+
+    /// <summary>Toggles whether a mod keeps its author's performance changes instead of using JAMM's sanitized patch.</summary>
+    public ManagedMod SetKeepAuthorPerformanceChanges(string query, bool keep)
+    {
+        var mod = Find(query);
+        var updated = mod with { KeepAuthorPerformanceChanges = keep };
+        store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
+        return updated;
+    }
+
+    private (ModPatch Raw, ModPatch Sanitized, ModSanitizerReport Report) EnsurePatches(ManagedMod mod, Action<string>? progress, CancellationToken cancellationToken)
     {
         var patch = PatchJson.Deserialize(File.ReadAllText(PatchPath(mod)));
         cancellationToken.ThrowIfCancellationRequested();
@@ -40,7 +75,32 @@ public sealed class ModLibrary(ManagerStore store)
             patch = refreshed;
             progress?.Invoke($"Refreshed cached patch for {mod.Name}.");
         }
-        return patch;
+        string sanitizedPath = SanitizedPatchPath(mod);
+        string reportPath = SanitizerReportPath(mod);
+        if (File.Exists(sanitizedPath) && File.Exists(reportPath))
+        {
+            try
+            {
+                var cachedReport = store.Read<ModSanitizerReport>(reportPath);
+                var cachedSanitized = PatchJson.Deserialize(File.ReadAllText(sanitizedPath));
+                if (cachedReport.SanitizerVersion == ModSanitizer.Version
+                    && cachedReport.ModSha256 == mod.Sha256
+                    && cachedReport.BaseSha256 == mod.BaseSha256
+                    && cachedSanitized.Base.Sha256 == mod.BaseSha256
+                    && cachedSanitized.Mod.Sha256 == mod.Sha256
+                    && cachedSanitized.Mod.Name == mod.Name
+                    && cachedSanitized.AssetTypesVersion == PatchJson.AssetTypesVersion)
+                {
+                    return (patch, cachedSanitized, cachedReport);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException) { }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var sanitizedResult = ModSanitizer.Sanitize(patch);
+        store.WriteText(sanitizedPath, PatchJson.Serialize(sanitizedResult.Patch));
+        store.Write(reportPath, sanitizedResult.Report);
+        return (patch, sanitizedResult.Patch, sanitizedResult.Report);
     }
 
     internal IReadOnlyList<ManagedMod> All() => Directory.EnumerateDirectories(store.Path("mods"))
@@ -86,7 +146,7 @@ public sealed class ModLibrary(ManagerStore store)
         string stage = store.Path("mods", ".import-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
         string copy = Path.Combine(stage, "data.win");
-        string? publishedPatch = null;
+        string? publishedPatch = null, publishedSanitized = null, publishedReport = null;
         try
         {
             if (source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(source, copy, cancellationToken);
@@ -124,20 +184,30 @@ public sealed class ModLibrary(ManagerStore store)
             patch = patch with { Mod = patch.Mod with { FileName = source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? "data.win" : sourceName } };
             if (BuildFiles.Hash(basePath) != patch.Base.Sha256 || hash != patch.Mod.Sha256)
                 throw new IOException("An input changed during import. Retry with stable copies.");
+            var sanitized = ModSanitizer.Sanitize(patch);
             var entry = new ManagedMod(hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
                 patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode) { Origins = origin is null ? [] : [origin] };
             store.Write(store.Path("mods", Path.GetFileName(stage), "mod.json"), entry);
             string patchPath = PatchPath(entry);
             if (File.Exists(patchPath)) throw new IOException("An orphaned patch already exists for this mod. Remove it from the data directory and retry.");
             publishedPatch = patchPath;
+            publishedSanitized = SanitizedPatchPath(entry);
+            publishedReport = SanitizerReportPath(entry);
             store.WriteText(publishedPatch, PatchJson.Serialize(patch));
+            store.WriteText(publishedSanitized, PatchJson.Serialize(sanitized.Patch));
+            store.Write(publishedReport, sanitized.Report);
             cancellationToken.ThrowIfCancellationRequested();
             Directory.Move(stage, store.Path("mods", entry.Id));
             return new(entry, notices.Concat(patch.Warnings).Distinct(StringComparer.Ordinal).ToArray(), false);
         }
         catch
         {
-            if (publishedPatch is not null && Directory.Exists(stage) && File.Exists(publishedPatch)) File.Delete(publishedPatch);
+            if (Directory.Exists(stage))
+            {
+                if (publishedPatch is not null && File.Exists(publishedPatch)) File.Delete(publishedPatch);
+                if (publishedSanitized is not null && File.Exists(publishedSanitized)) File.Delete(publishedSanitized);
+                if (publishedReport is not null && File.Exists(publishedReport)) File.Delete(publishedReport);
+            }
             throw;
         }
         finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
@@ -179,6 +249,8 @@ public sealed class ModLibrary(ManagerStore store)
             if (Directory.Exists(path)) throw new IOException($"Mod '{mod.Name}' contains an unexpected directory. Move it out of the library entry before removing the mod.");
         }
         File.Delete(PatchPath(mod));
+        if (File.Exists(SanitizedPatchPath(mod))) File.Delete(SanitizedPatchPath(mod));
+        if (File.Exists(SanitizerReportPath(mod))) File.Delete(SanitizerReportPath(mod));
         Directory.Delete(directory, true);
     }
 
