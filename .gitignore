@@ -17,3 +17,8 @@ TestResults/
 
 # Generated patches contain copyrighted decompiled game code
 *.cgfmm-patch.json
+
+# Installation backups and interrupted builds also contain local game data
+*.win.cgfmm-original
+*.win.cgfmm-build.json
+.cgfmm-*.tmp

@@ -5,7 +5,7 @@
 
 Cat Goes Fishing mods usually replace the entire `data.win`, so only one can run at a
 time. JAMM-CGF aims to compare each mod against the original, identify conflicts and
-build one merged `data.win`. Phase 2 provides read-only inspection, reusable semantic JSON patches and conflict checks with three-way GML previews.
+build one merged `data.win`. Phase 3 provides semantic patches, conflict checks, merged archive builds, verification and guarded installation/restore.
 
 > **Important: you need the legacy bytecode version.** The inspected August 2024 Steam
 > build is YYC and contains no bytecode. Known mods target GameMaker 1.4 bytecode 16 and
@@ -20,13 +20,14 @@ build one merged `data.win`. Phase 2 provides read-only inspection, reusable sem
 | Phase 0 | Done | Inspect files, fingerprint assets, compare bases and report feasibility |
 | Phase 1 | Done | GML/asset diffs, cached JSON patches and unified diffs |
 | Phase 2 | Done | Conflict detection, three-way code previews and reusable resolution choices |
-| Phase 3 | Planned | Build a merged `data.win` |
-| Phase 4 | Planned | Install with backups and launch |
+| Phase 3 | Done | Build and verify merged archives; install with verified backups and restore |
+| Phase 4 | Planned | Launch the legacy game |
 | GUI | Later | Graphical mod management |
 
-See the [Phase 0 findings](docs/reports/phase0.md), [Phase 0 verification](docs/reports/phase0-verification.md)
-and [Phase 2 verification](docs/reports/phase2-verification.md).
-Writing a merged game archive and installation are not available yet.
+See the [Phase 0 findings](docs/reports/phase0.md), [Phase 0 verification](docs/reports/phase0-verification.md),
+[Phase 2 verification](docs/reports/phase2-verification.md) and
+[Phase 3 verification](docs/reports/phase3-verification.md).
+Archive verification passes locally; an in-game desktop test is still required.
 
 ## Requirements and build
 
@@ -91,7 +92,7 @@ string values: **keep them local and never commit or redistribute them**. Binary
 payloads are content hashes referencing the mod archive. See [patch format](docs/patch-format.md)
 for field meanings, identities, caching and future merge/build requirements.
 
-Check mods in load order (later entries win by default in the future builder):
+Check mods in load order (later participating entries win by default when building):
 
 ```sh
 dotnet run --project src/Jamm.Cli -- check \
@@ -128,6 +129,32 @@ conflict markers or base/mod field values. All patches must match the selected
 base's complete SHA-256. Reports include merged text and per-hunk choices for Phase 3.
 Keep reports local: they can include game code and strings. See [conflict rules and
 limitations](docs/conflicts.md). Checking does not build or install a merged archive.
+
+Build, verify, install into a separate copy of the legacy game folder, and restore:
+
+```sh
+cgfmm build --base original.win --order abyss.win,cave.win,colour.win --out build/merged.win
+cgfmm build --base original.win --order abyss.win,cave.win --dry-run
+cgfmm verify build/merged.win
+cgfmm build --base original.win --order abyss.win,cave.win --out build/installed.win \
+  --resolve resolutions.json --install legacy-game-copy
+cgfmm restore --game legacy-game-copy
+```
+
+`--order` also accepts patch files, provided the exact mod `.win` payloads are available
+beside the patches or in `JAMM_MODS_DIR`. `--out` defaults to `./build/data.win`; a previous output can be replaced. Inputs,
+installed archives and original backups are protected. Normal
+builds publish only after the temporary archive reloads and passes reference and GML
+decompile/compile checks. A dry run compiles in memory and writes nothing.
+
+Resolutions are a JSON object mapping `family/name` (or an unambiguous bare asset name) to a winning mod display name, or
+`"keep-both"` for code insertion conflicts, for example
+`{"example_object":"cave-expansion","example_code_entry":"keep-both"}`. Later mods
+win other overlaps; disjoint changes combine. Every conflict decision is printed.
+Installation verifies a permanent `data.win.cgfmm-original` backup before replacement
+and accepts only the exact base or a previous build with matching marker hashes.
+Restore verifies its copy and retains the backup. See [building details, safety rules
+and known limitations](docs/building.md).
 
 Run inspection and comparisons together and write a Markdown report:
 
@@ -173,8 +200,8 @@ Unsupported textures, Spine/SWF sprites and invalid texture regions warn and use
 
 ## Tests
 
-Synthetic tests run without game files. Opt into the read-only real-file test by setting
-both environment variables:
+Synthetic tests run without game files. Opt into real-file tests by setting both
+environment variables. Inputs stay read-only; builds and installation tests use temporary directories:
 
 ```sh
 JAMM_ORIGINAL="$HOME/Games/CatGoesFishing-legacy/2023-08-16_manifest-9039707068725406600/data.win" \
@@ -188,7 +215,7 @@ Never commit game archives, extracted game content or personal absolute paths.
 
 | Path | Purpose |
 | --- | --- |
-| `src/Jamm.Core/` | Read-only loader, fingerprints, semantic patches, line/field merges and conflict analysis; no console output |
+| `src/Jamm.Core/` | Loading, patches, conflict analysis, building, verification and guarded installation; no console output |
 | `src/Jamm.Cli/` | `cgfmm` commands and text/JSON reports |
 | `tests/Jamm.Core.Tests/` | Synthetic regressions and opt-in real-file checks |
 | `external/UndertaleModTool/` | Pinned dependency; do not edit |

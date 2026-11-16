@@ -14,14 +14,7 @@ internal static class OutputFile
             throw new ArgumentException($"Refusing to write '{Path.GetFileName(path)}': use a separate path from game inputs; reports cannot be .win files and build outputs must be new files.");
     }
 
-    // Resolve parent-directory links too, so an aliased input path cannot become a report target.
-    private static string Resolve(string path)
-    {
-        var parent = Path.GetDirectoryName(path);
-        if (parent is not null && parent != path) path = Path.Combine(Resolve(parent), Path.GetFileName(path));
-        FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
-        return info.LinkTarget is null ? path : info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? path;
-    }
+    private static string Resolve(string path) => Jamm.Core.Building.BuildFiles.Resolve(path);
 
     internal static void Write(string path, string contents, IEnumerable<string> inputs)
     {

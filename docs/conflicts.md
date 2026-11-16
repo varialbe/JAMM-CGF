@@ -4,7 +4,7 @@
 archives and patches, writes a report if requested, and leaves every game file alone.
 Use the legacy August 2023 bytecode build described in [legacy-version.md](legacy-version.md).
 A successful check is a compatibility preview, not a guarantee that the combined game
-will run correctly. Building and playing the combination belong to later phases.
+will run correctly. The Phase 3 builder applies choices; playing the combination still requires desktop testing.
 
 ```sh
 cgfmm check abyss.win cave.win colour.win --base original.win --json out/check.json
@@ -13,7 +13,7 @@ cgfmm check patches/abyss.cgfmm-patch.json patches/cave.cgfmm-patch.json \
 ```
 
 The argument order is the load order. Later mods are the default choice for binary
-conflicts in the future builder. `check` never silently resolves a reported conflict.
+conflicts when building. `check` never silently resolves a reported conflict.
 Mod inputs create or reuse patches in `./patches/`, or `patches/` beside the JSON
 report. `--patches-dir <directory>` overrides this location. Existing patches need
 only the base file for SHA-256 verification; their mod archives are not opened.
@@ -123,7 +123,8 @@ reusable decisions for Phase 3. Field previews apply changes in load order and
 explicitly mark assets requiring a decision; they must not be used as approved
 build results. Field findings preserve alternatives, including absent/null values.
 
-Phase 3 will provide the selection workflow and build a new `data.win` from verified
-base/mod hashes. It will locate binary payloads in those exact local mod archives,
-apply selected code and field resolutions, and preserve addition order. Neither
-writing a merged archive nor installing or launching it is implemented in Phase 2.
+Phase 3 provides the selection workflow and builds a new `data.win` from verified
+base/mod hashes. It locates binary payloads in those exact local mod archives,
+applies selected code and field resolutions, and preserves addition order. See
+[building and installation](building.md) for commands, decisions and safety checks.
+`check` itself remains read-only; launching belongs to Phase 4.

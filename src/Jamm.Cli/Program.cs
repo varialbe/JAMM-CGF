@@ -31,9 +31,12 @@ int Run(string[] arguments)
     if (arguments.Length == 0 || arguments[0] is "--help" or "-h" or "help")
     {
         Console.WriteLine("""
-            JAMM-CGF — inspection, semantic patches and conflict checks
+            JAMM-CGF — inspect, diff, check, build, install and restore
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--verbose]
+            cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
+            cgfmm restore --game <game dir> [--verbose]
+            cgfmm verify <data.win> [--verbose]
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
             cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]
@@ -42,6 +45,7 @@ int Run(string[] arguments)
         return 0;
     }
     string command = arguments[0];
+    if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..]);
     if (command == "check") return CheckCommand.Run(arguments[1..]);
     if (command == "diff") return DiffCommand.Run(arguments[1..]);
     List<string> positional = [];
