@@ -10,8 +10,10 @@ and network access to NuGet. The submodule remains pinned to its recorded commit
 On Linux install `dpkg-dev` and `zip`; `lintian` is optional. Run scripts from any
 working directory. All outputs go to `out/packages/` (ignored by Git).
 The version is read from `dotnet msbuild src/Jamm.Gui/Jamm.Gui.csproj -getProperty:Version`;
-currently the SDK default is **1.0.0**. Set an explicit repository version property
-before a future release, rather than renaming artifacts independently.
+manual builds use the project version (the SDK default is **1.0.0** unless overridden).
+Set the `Version` environment variable to override filenames and package metadata:
+`Version=0.9.0 bash scripts/package-deb.sh`. The Windows package script accepts the
+same override. Tag builds set this variable automatically.
 
 ```sh
 bash scripts/package-deb.sh
@@ -68,13 +70,40 @@ After extracting the zip to `out/payload`, compile in PowerShell:
 & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.0.0 "/DPayloadDir=$pwd\out\payload" "/DOutputDir=$pwd\out\packages" packaging/windows/jamm-cgf.iss
 ```
 
-`.github/workflows/packaging.yml` runs manually or for `v*` tags. It builds the
-portable packages on Ubuntu, then compiles `jamm-cgf_<version>_win-x64_setup.exe`
-on `windows-latest` using its Inno Setup installation. The installer adds a Start
-menu shortcut and uninstaller without administrator privileges. It does not add
-PATH entries or remove user profiles/game files. CI uploads artifacts only; it
-neither publishes releases nor pushes an image. CI has not been run merely by
-adding this workflow.
+The installer adds a Start menu shortcut and uninstaller without administrator
+privileges. It does not add PATH entries or remove user profiles/game files.
+
+## Release process
+
+The Packaging workflow supports manual `workflow_dispatch` builds and `v*` tag
+pushes. Manual runs use the project version, upload packages as workflow artifacts,
+and build and smoke-test Docker locally without publishing.
+
+For a release, prepare `docs/release-notes/vX.Y.Z.md` (include the full suffix in
+the filename when applicable), review the changes, and have the release
+orchestrator push a tag such as `v0.9.0` or `v1.0.0-rc.1` on the intended commit.
+Tags must follow `vX.Y.Z` with an optional `-suffix`. CI strips the leading `v`
+and passes `Version` to both package scripts, so filenames and metadata match.
+The Ubuntu job builds the `.deb` and Windows x64 zip; the Windows job downloads
+the zip and compiles `jamm-cgf_<version>_win-x64_setup.exe`, installing Inno Setup
+through Chocolatey if needed.
+
+After both package jobs succeed, CI creates a GitHub release titled
+`JAMM-CGF vX.Y.Z` (including any suffix) and attaches all three packages. It uses
+the matching release-notes file when present, otherwise GitHub-generated notes.
+Major version zero and any suffixed tag are prereleases; these are explicitly
+excluded from GitHub's latest release selection. Use a new tag/version for a
+correction: release creation does not overwrite an existing release.
+
+The Docker job builds an image with OCI source, GPL-3.0 license and description
+labels and runs `--help` as a smoke test before publishing on tag pushes. It uses
+`GITHUB_TOKEN` to push `ghcr.io/<lowercase-repository-owner>/jamm-cgf:X.Y.Z`
+(including any suffix). Only stable releases also update `:latest`; preview
+releases such as `v0.9.0` do not. The release job has `contents: write`, and the
+Docker job has `packages: write`; repository/organization policy must allow these
+token permissions. Inspect the workflow run to verify both release assets and
+image publication. Windows packaging in CI does not establish real-hardware
+compatibility.
 
 ## Headless Docker CLI and scanner
 
