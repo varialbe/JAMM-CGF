@@ -17,6 +17,22 @@ public sealed class ContentFingerprints
     private readonly Dictionary<UndertaleTexturePageItem, string> regions = [];
     private readonly Dictionary<UndertaleTexturePageItem, string> pixels = [];
     private readonly Action<string>? warning;
+    private readonly object warningGate = new();
+    private void Warn(string message) { lock (warningGate) warning?.Invoke(message); }
+    internal bool RetainRegionHashes { get; init; }
+    internal sealed record RegionFingerprint(int Index, string Region, string? Pixels);
+    internal RegionFingerprint[] CaptureRegions(UndertaleData data) => data.TexturePageItems.Select((item, index) =>
+        regions.TryGetValue(item, out var region) ? new RegionFingerprint(index, region, pixels.GetValueOrDefault(item)) : null)
+        .OfType<RegionFingerprint>().ToArray();
+    internal void RestoreRegions(UndertaleData data, IEnumerable<RegionFingerprint> snapshots)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            var item = data.TexturePageItems[snapshot.Index];
+            regions[item] = snapshot.Region;
+            if (snapshot.Pixels is not null) pixels[item] = snapshot.Pixels;
+        }
+    }
 
     /// <summary>Optionally receives notices about incomplete texture regions.</summary>
     public ContentFingerprints(Action<string>? warning = null) => this.warning = warning;
@@ -77,7 +93,7 @@ public sealed class ContentFingerprints
 
     private string Unsupported(string reason, string? asset)
     {
-        warning?.Invoke($"Fingerprint: '{asset ?? "<unnamed>"}' is unsupported ({reason}); content was not compared.");
+        Warn($"Fingerprint: '{asset ?? "<unnamed>"}' is unsupported ({reason}); content was not compared.");
         return $"unsupported:{reason}";
     }
 
@@ -145,8 +161,9 @@ public sealed class ContentFingerprints
     }
 
     /// <summary>Snapshots supported families. YYC skips code-dependent families; strings use value hashes.</summary>
-    public IReadOnlyDictionary<AssetKind, IReadOnlyList<AssetFingerprint>> Snapshot(UndertaleData data, bool skipBytecode = false)
+    public IReadOnlyDictionary<AssetKind, IReadOnlyList<AssetFingerprint>> Snapshot(UndertaleData data, bool skipBytecode = false, AnalysisOptions? options = null)
     {
+        options ??= AnalysisOptions.Default;
         decodedPage = null;
         decodedPixels = null;
         regions.Clear();
@@ -160,13 +177,16 @@ public sealed class ContentFingerprints
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { throw new AssetAnalysisException($"{kind.Label()} '{name}'", ex); }
         }
-        var codeHashes = skipBytecode ? new Dictionary<UndertaleCode, string>()
-            : (data.Code ?? []).ToDictionary(x => x, x => Checked(AssetKind.Code, Name(x) ?? "<unnamed>", () => Code(x)));
+        var entries = skipBytecode ? [] : (data.Code ?? []).ToArray();
+        var hashes = new string[entries.Length];
+        AnalysisWork.For(entries.Length, options, i =>
+            hashes[i] = Checked(AssetKind.Code, Name(entries[i]) ?? "<unnamed>", () => Code(entries[i])));
+        var codeHashes = entries.Select((entry, i) => (entry, hashes[i])).ToDictionary(x => x.entry, x => x.Item2);
         string? CodeHash(UndertaleCode? code)
         {
             if (code is null) return null;
             if (codeHashes.TryGetValue(code, out string? hash)) return hash;
-            warning?.Invoke($"Fingerprint: script code '{Name(code)}' is missing from the CODE table; using a missing-code marker.");
+            Warn($"Fingerprint: script code '{Name(code)}' is missing from the CODE table; using a missing-code marker.");
             return "unsupported:missing code entry";
         }
         IReadOnlyList<AssetFingerprint> Named<T>(AssetKind kind, IEnumerable<T>? assets, Func<T, string> fingerprint)
@@ -214,8 +234,11 @@ public sealed class ContentFingerprints
         {
             decodedPage = null;
             decodedPixels = null;
-            regions.Clear();
-            pixels.Clear();
+            if (!RetainRegionHashes)
+            {
+                regions.Clear();
+                pixels.Clear();
+            }
         }
     }
 

@@ -19,14 +19,15 @@ public static class ArchiveBuilder
 {
     /// <summary>Compiles a merged working copy; publishes only after the temporary output passes verification.</summary>
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
-        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null, CancellationToken cancellationToken = default)
+        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
     {
+        options ??= AnalysisOptions.Default;
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
         cancellationToken.ThrowIfCancellationRequested();
         string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath)];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
-        using var original = GameFileLoader.Load(basePath, progress);
+        using var original = GameFileLoader.Load(basePath, progress, cancellationToken, options);
         foreach (var input in inputs)
         {
             if (input.Patch.Base.Sha256 != original.Inspection.Sha256)
@@ -39,22 +40,23 @@ public static class ArchiveBuilder
         {
             foreach (var input in inputs)
             {
-                var source = GameFileLoader.Load(input.ArchivePath, progress);
+                var source = GameFileLoader.Load(input.ArchivePath, progress, cancellationToken, options);
                 sources.Add(source);
                 if (source.Inspection.Sha256 != input.Patch.Mod.Sha256) throw new IOException("A mod archive changed during loading. Retry with stable input copies.");
                 PatchBuilder.Validate(original.Inspection, source.Inspection);
             }
-            var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress);
+            var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
             var plan = BuildPlan.Create(patches, resolutions, baseReferences);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
-            using var working = GameFileLoader.Load(basePath);
+            using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
             var data = working.Data;
-            Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
+            using (new AnalysisPhase(options, "build/compile"))
+                Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
             var expectedReferences = semantics.Expected(plan, data);
-            ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken);
+            ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options);
             var remapped = semantics.Remapped(patches, data);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
@@ -67,9 +69,12 @@ public static class ArchiveBuilder
             try
             {
                 progress?.Invoke("Writing temporary merged archive");
+                using (new AnalysisPhase(options, "write"))
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     UndertaleIO.Write(stream, data);
-                var verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress, expectedReferences, cancellationToken);
+                VerificationResult verification;
+                using (new AnalysisPhase(options, "verify"))
+                    verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress, expectedReferences, cancellationToken, options);
                 BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
                 cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporary, destination, overwrite: true);

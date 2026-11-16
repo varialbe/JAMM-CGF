@@ -81,7 +81,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         string hash = BuildFiles.Hash(selection.Config.Base!);
         string output = store.Path("builds", $"{Guid.NewGuid():N}.win");
         GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
-        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, selection.Profile.Resolutions, progress: progress, cancellationToken: cancellationToken);
+        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, selection.Profile.Resolutions, progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root });
         return new(selection.Profile, selection.Config, selection.Signature, output, hash, result);
     }
 

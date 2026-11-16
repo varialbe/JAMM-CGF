@@ -25,8 +25,9 @@ public sealed class LoadedGameFile : IDisposable
 public static class GameFileLoader
 {
     /// <summary>Loads a live model. The caller must dispose the result; load errors are thrown.</summary>
-    public static LoadedGameFile Load(string path, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    public static LoadedGameFile Load(string path, Action<string>? progress = null, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
     {
+        using var timing = options is null ? null : new AnalysisPhase(options, "load");
         path = Path.GetFullPath(path);
         List<string> warnings = [];
         using var stream = new CancellableGameStream(path, cancellationToken);
