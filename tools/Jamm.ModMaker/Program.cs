@@ -8,7 +8,7 @@ public static class Program
     public static int Main(string[] args)
     {
         try { return Run(args); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex)
         {
             Console.Error.WriteLine($"Mod creation failed: {ex.Message} Check the input file and choose a writable new output path.");
             if (args.Contains("--verbose")) Console.Error.WriteLine(ex);
@@ -25,7 +25,7 @@ public static class Program
                   inspect <original.win>
                   perf    <original.win> <out.win>
                   smooth  <original.win> <out.win> [--debug]
-                  hd      <original.win> <out.win> [--upscaled-pages <dir>]
+                  hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -88,7 +88,12 @@ public static class Program
                 Profiler.Apply(data); Save(data, output!); return 0;
             case "hd":
                 string? pages = OptionValue(args, "--upscaled-pages");
-                HdMod.Apply(data, pages, args.Contains("--debug")); Save(data, output!); return 0;
+                if (output is null || args[2].StartsWith("--"))
+                    throw new ArgumentException("hd needs <original.win> <out.win>; choose a new output path.");
+                var baseline = TexturePages.Capture(data);
+                HdMod.Apply(data, pages, args.Contains("--debug"));
+                Save(data, output, saved => TexturePages.VerifyHd(baseline, saved, pages is not null));
+                return 0;
             default: Console.Error.WriteLine($"Unknown command '{command}'."); return 1;
         }
     }
@@ -96,7 +101,10 @@ public static class Program
     private static string? OptionValue(string[] args, string name)
     {
         int index = Array.IndexOf(args, name);
-        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+        if (index < 0) return null;
+        if (index + 1 >= args.Length || args[index + 1].StartsWith("--"))
+            throw new ArgumentException($"{name} needs a directory path.");
+        return args[index + 1];
     }
 
     private static UndertaleData Load(string path)
@@ -105,12 +113,24 @@ public static class Program
         return UndertaleIO.Read(stream, (warning, _) => { }, _ => { });
     }
 
-    private static void Save(UndertaleData data, string path)
+    private static void Save(UndertaleData data, string path, Action<UndertaleData>? verify = null)
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (File.Exists(path)) throw new IOException($"Output '{path}' already exists. Choose a new output path.");
         string temp = path + ".tmp";
-        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write))
+        // CreateNew also rejects an existing symlink/hardlink at the temporary output path.
+        using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write))
             UndertaleIO.Write(stream, data);
-        File.Move(temp, path, overwrite: true);
+        try
+        {
+            if (verify is not null)
+            {
+                using var saved = Load(temp);
+                verify(saved);
+            }
+            File.Move(temp, path, overwrite: false);
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
         Console.WriteLine($"Wrote {path} ({new FileInfo(path).Length:N0} bytes).");
     }
 }
