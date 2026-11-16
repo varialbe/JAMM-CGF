@@ -40,6 +40,12 @@ public static class ArchiveVerifier
         var names = SemanticReferences.Names(loaded.Data);
         var entries = CodeDecompiler.ReadAll(loaded.Data, Path.GetFileName(path), warnings.Add, AssetSymbols.Ambiguous([names]), options,
             message => { cancellationToken.ThrowIfCancellationRequested(); progress?.Invoke(message); });
+        if (plan?.FirstOrDefault(a => a.Family == "code" && a.Name == CatalogMerge.Create)?.Gml is { } catalog && catalog.Contains("jamm_catalog_legacy", StringComparison.Ordinal))
+        {
+            string actual = SemanticReferences.NameTypedLiterals(entries[CatalogMerge.Create].Text, CatalogMerge.Create, names);
+            int fish = CatalogMerge.Validate(catalog, actual);
+            progress?.Invoke($"Catalog verification passed: {fish} fish, zero inconsistent slots");
+        }
         var compiler = new CompileGroup(loaded.Data);
         int count = 0;
         foreach (var code in loaded.Data.Code.Where(c => c.ParentEntry is null))
@@ -59,12 +65,14 @@ public static class ArchiveVerifier
         return new(loaded.Inspection, count, warnings, expectedReferences?.Count ?? 0);
     }
 
-    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
+    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default, AnalysisOptions? options = null, string? expectedCatalog = null)
     {
         options ??= AnalysisOptions.Default;
         var entries = CodeDecompiler.ReadAll(data, "merged archive", _ => { }, AssetSymbols.Ambiguous([SemanticReferences.Names(data)]), options,
             _ => cancellationToken.ThrowIfCancellationRequested());
         var names = SemanticReferences.Names(data);
+        if (expectedCatalog?.Contains("jamm_catalog_legacy", StringComparison.Ordinal) == true)
+            CatalogMerge.Validate(expectedCatalog, SemanticReferences.NameTypedLiterals(entries[CatalogMerge.Create].Text, CatalogMerge.Create, names));
         foreach (var code in data.Code.Where(c => c.ParentEntry is null))
         {
             cancellationToken.ThrowIfCancellationRequested();

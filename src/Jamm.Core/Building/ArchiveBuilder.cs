@@ -48,7 +48,7 @@ public static class ArchiveBuilder
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
-            var plan = BuildPlan.Create(patches, resolutions, baseReferences);
+            var plan = CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
@@ -56,7 +56,7 @@ public static class ArchiveBuilder
             using (new AnalysisPhase(options, "build/compile"))
                 Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
             var expectedReferences = semantics.Expected(plan, data);
-            ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options);
+            ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
@@ -221,6 +221,7 @@ public static class ArchiveBuilder
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
         ReassignRoomIds(data, ancestor);
+        CatalogRuntime.Inject(data, recompile);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
         var finalNames = SemanticReferences.Names(data);

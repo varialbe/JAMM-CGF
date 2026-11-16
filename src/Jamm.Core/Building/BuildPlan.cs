@@ -11,6 +11,9 @@ public sealed record PlannedAsset(string Family, string Name, int Source, AssetP
 /// <summary>Deterministic asset choices and human-readable decisions for a build.</summary>
 public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<string> Decisions)
 {
+    /// <summary>Object identities and deterministic catalog relocations for this build.</summary>
+    public IReadOnlyList<CatalogMapping> Catalog { get; init; } = [];
+
     /// <summary>Combines patches against one exact ancestor, resolving conflicts in load order.</summary>
     public static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions = null,
         IReadOnlyList<AssetReference>? baseReferences = null)
@@ -19,12 +22,16 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         resolutions ??= new Dictionary<string, string>();
         if (resolutions.Any(r => string.IsNullOrWhiteSpace(r.Key) || string.IsNullOrWhiteSpace(r.Value)))
             throw new ArgumentException("Resolution keys and winning mod names must be nonempty strings.");
+        var catalog = CatalogMerge.Prepare(patches);
+        patches = catalog.Patches;
         // Analyze a single patch twice to reuse exactly the Phase 2 ancestor merge, too.
         var report = ConflictAnalyzer.Analyze(patches.Count == 1 ? [patches[0], patches[0]] : patches);
         string[] names = patches.Select(p => p.Mod.Name ?? Path.GetFileNameWithoutExtension(p.Mod.FileName)).ToArray();
         if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
             throw new ArgumentException("Build mod names must be unique. Relabel duplicate names with diff --name.");
         List<string> decisions = [];
+        if (catalog.Mapping.Length > 0)
+            decisions.Add($"Catalog API: retained base entries and registered {catalog.Mapping.Select(m => m.Object).Distinct(StringComparer.Ordinal).Count()} mod fish by object identity; legacy ambiguous progress is retained without guessing.");
         for (int i = 0; i < patches.Count; i++)
             foreach (var family in patches[i].Changes.Where(c => CgfAssetTypes.IndexedFamilies.Contains(c.Key, StringComparer.Ordinal)))
                 foreach (string asset in family.Value.Removed)
@@ -195,7 +202,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                     ?? throw new InvalidDataException($"Missing GML for '{name}'. Regenerate the patch."))).ToArray();
                 MergeResult merge = ordered[0].Asset!.BaseCode is { Format: "gml" } ancestor
                     ? ThreeWayMerge.Merge(ancestor.Text, texts) : ThreeWayMerge.Added(texts);
-                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, choice, $"code/{name}", resolutions, used, decisions);
+                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", resolutions, used, decisions);
             }
             else if (choice == "keep-both") throw new ArgumentException($"keep-both is only valid for code insertion conflicts ('{family}/{name}').");
             return new(family, name, last.Index, last.Asset, snapshot, gml);
@@ -211,7 +218,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 decisions.Add($"{item.Kind} {item.Family}/{item.Asset}: {decision}" +
                     (item.Kind == "index" ? " (literal slot overlap; runtime execution order still requires an in-game check)" : ""));
             }
-        return new(assets, decisions);
+        return new(assets, decisions) { Catalog = catalog.Mapping };
     }
 
     private sealed record Version(int Index, string Family, string Name, AssetPatch? Asset);
@@ -239,7 +246,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 decisions.Add($"{key}: explicit {explicitChoice} resolution.");
             }
             text.Append(string.Concat(lines[cursor..hunk.Start]));
-            text.Append(hunk.Status == "CONFLICT" && hunkChoice == "keep-both" ? hunk.KeepBoth
+            bool catalogUnion = asset.StartsWith("code/gml_Object_CatalogData_", StringComparison.Ordinal)
+                && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null && CatalogMerge.DisjointWrites(hunk.Versions.Select(v => v.Text));
+            text.Append(hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion) ? hunk.KeepBoth
                 : hunk.Versions.LastOrDefault(v => v.Name == hunkChoice)?.Text ?? hunk.Versions[^1].Text);
             cursor = hunk.Start + hunk.Length;
         }

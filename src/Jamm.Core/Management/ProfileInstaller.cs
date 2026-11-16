@@ -29,7 +29,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             // Invalidate installation records made before numeric-reference verification.
-            Builder = "phase3b", profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Builder = "phase16", profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);
@@ -110,7 +110,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         bool rebase = retainIndependentBase && BuildFiles.SamePath(BuildFiles.Resolve(prepared.Config.Base!),
             BuildFiles.Resolve(Path.Combine(prepared.Config.GameDir!, "data.win")));
         GameInstaller.Install(prepared.OutputPath, prepared.Config.GameDir!, prepared.BaseSha256,
-            selection.Inputs.Select(i => i.ArchivePath), prepared.Config.Base);
+            selection.Inputs.Select(i => i.ArchivePath), prepared.Config.Base, prepared.Build.Plan.Catalog);
         // First-run desktop setup may choose the game's own archive. Once installed,
         // keep subsequent checks bound to the verified ancestor rather than the replacement.
         if (rebase)

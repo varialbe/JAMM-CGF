@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace Jamm.Core.Building;
 
 /// <summary>Content identities that allow replacing only the base or a recognized previous build.</summary>
-public sealed record BuildMarker(int FormatVersion, string BaseSha256, string BuildSha256, string BackupSha256);
+public sealed record BuildMarker(int FormatVersion, string BaseSha256, string BuildSha256, string BackupSha256,
+    IReadOnlyList<CatalogMapping>? Catalog = null);
 
 /// <summary>Installs and restores ordinary copies in a game directory, retaining the first verified backup.</summary>
 public static class GameInstaller
@@ -39,7 +40,8 @@ public static class GameInstaller
     }
 
     /// <summary>Backs up once, verifies all copies by SHA-256 and records the installed build's identity.</summary>
-    public static void Install(string mergedPath, string gameDirectory, string baseHash, IEnumerable<string>? protectedInputs = null, string? basePath = null)
+    public static void Install(string mergedPath, string gameDirectory, string baseHash, IEnumerable<string>? protectedInputs = null, string? basePath = null,
+        IReadOnlyList<CatalogMapping>? catalog = null)
     {
         string[] inputs = [mergedPath, .. protectedInputs ?? []];
         Validate(gameDirectory, baseHash, inputs, basePath);
@@ -55,7 +57,7 @@ public static class GameInstaller
         if (backupHash != baseHash) throw new IOException("The verified backup does not match the base. Installation stopped before replacing data.win.");
         Validate(gameDirectory, baseHash, inputs, basePath);
         CopyVerified(mergedPath, current, buildHash, overwrite: true);
-        WriteMarker(marker, new(1, baseHash, buildHash, backupHash));
+        WriteMarker(marker, new(1, baseHash, buildHash, backupHash, catalog));
     }
 
     /// <summary>Restores the retained original and verifies the result; never deletes or overwrites the backup.</summary>

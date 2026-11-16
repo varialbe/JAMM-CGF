@@ -20,7 +20,7 @@ The desktop window and CLI use the same data directory and settings. Pass `--dat
 
 The GUI groups **CONFLICT**, **AUTO**, **INFO**, and **WARNING** findings. Independent code edits and structured fields combine automatically; overlapping edits offer a mod choice. List insertion hunks also offer **keep-both**, even when another hunk in the same entry needs a single winner. Details shows read-only local GML with conflict markers. Changing order or enablement clears previous choices so you can review them again.
 
-Keeping both statements does not allocate new gameplay slots. Mods that write the same fish catalog or boat slot can still overwrite one another at runtime. [Conflict rules](conflicts.md).
+JAMM automatically allocates distinct slots for supported fish catalog additions; no manual CatalogData Create winner is needed. General keep-both choices do not allocate other gameplay slots. Boat definitions can still conflict. [Catalog API and save migration](catalog-api.md), [conflict rules](conflicts.md).
 
 ## Safety and recovery
 
@@ -139,7 +139,7 @@ See the [complete CLI reference](cli.md), [patch format](patch-format.md), and [
 
 **Why does Colour Expansion show a different-base warning?** It targets 15 August 2023; the common base is 16 August. The patch includes those differences. Matching timestamps alone never replace the complete archive hash check.
 
-**Does verification guarantee the mods work together?** No. Dynamic resource lookups, inherited texture warnings, and shared gameplay catalog slots need an in-game check. The Abyss and Cave Expansion share boat slot 8 and fish catalog slots from `[2,58]`; automatic slot renumbering is future work.
+**Does verification guarantee the mods work together?** No. Dynamic resource lookups, inherited texture warnings and boat definitions need an in-game check. Fish catalog collisions are relocated automatically, including Abyss and Cave additions from `[2,58]`. Their same-name boat 8 implementations still need a conflict choice. [Save compatibility](catalog-api.md#saves-and-changing-profiles).
 
 **How do I remove a mod used by a profile?** Delete profiles that reference it first, then remove it from the library. Disabling a mod retains its place in that profile. Source files and backups are kept.
 

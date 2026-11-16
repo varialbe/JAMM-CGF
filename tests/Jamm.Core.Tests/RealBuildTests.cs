@@ -32,7 +32,7 @@ public sealed class RealBuildTests
                 var build = ArchiveBuilder.Build(basePath, [inputs[^1]], output);
                 Assert.NotNull(build.Verification);
                 using var result = GameFileLoader.Load(output);
-                foreach (var kind in mod.Inspection.Counts.Keys.Except(new[] { AssetKind.Strings, AssetKind.Variables, AssetKind.Functions, AssetKind.Objects }))
+                foreach (var kind in mod.Inspection.Counts.Keys.Except(new[] { AssetKind.Strings, AssetKind.Variables, AssetKind.Functions, AssetKind.Objects, AssetKind.Code, AssetKind.Scripts }))
                     Assert.Equal(mod.Inspection.Counts[kind], result.Inspection.Counts[kind]);
                 Assert.Equal(original.Data.GameObjects.Select(o => o.Name.Content).Union(mod.Data.GameObjects.Select(o => o.Name.Content)).Count(), result.Data.GameObjects.Count);
                 AssertBaseIndices(original, result);
@@ -50,6 +50,7 @@ public sealed class RealBuildTests
                 var codeByName = result.Data.Code.ToDictionary(c => c.Name.Content);
                 foreach (var code in mod.Data.Code.Where(c => c.ParentEntry is null))
                 {
+                    if (code.Name.Content == "gml_Object_CatalogData_Create_0" || code.Name.Content.StartsWith("gml_Object_SaveManager_", StringComparison.Ordinal)) continue;
                     string expected = LineDiff.Normalize(new DecompileContext(expectedContext, code).DecompileToString());
                     string actual = LineDiff.Normalize(new DecompileContext(actualContext, codeByName[code.Name.Content]).DecompileToString());
                     // Avoid including copyrighted GML in assertion output.
@@ -64,9 +65,10 @@ public sealed class RealBuildTests
             using (var merged = GameFileLoader.Load(reverse))
             { AssertBaseIndices(original, merged); AssertCatalog(merged, "Overbite", "Overbite"); AssertCatalog(merged, "Bombat", "Bombat"); }
             using (var merged = GameFileLoader.Load(forward))
-            { AssertBaseIndices(original, merged); AssertCatalog(merged, "Bombat", "Bombat"); }
-            // These mods claim identical catalog slots. An explicit Cave decision exercises
-            // its first added fish in a three-mod build, independently of the default winner.
+            { AssertBaseIndices(original, merged); AssertCatalog(merged, "Bombat", "Bombat"); AssertCatalog(merged, "Overbite", "Overbite"); AssertCatalog(merged, "Fatneck", "Fatneck"); }
+            AssertAllCatalogFish(original, paths, forward);
+            AssertAllCatalogFish(original, paths, reverse);
+            // Legacy named resolutions remain accepted; all mods now retain their fish.
             string caveChosen = Path.Combine(directory, "cave-chosen.win");
             Assert.NotNull(ArchiveBuilder.Build(basePath, inputs, caveChosen,
                 new Dictionary<string, string> { ["code/gml_Object_CatalogData_Create_0"] = "cave-expansion" }).Verification);
@@ -92,6 +94,27 @@ public sealed class RealBuildTests
             Assert.Equal(hashes, new[] { basePath }.Concat(paths).Select(BuildFiles.Hash).ToArray());
         }
     }
+    private static void AssertAllCatalogFish(LoadedGameFile original, string[] paths, string output)
+    {
+        const string create = "gml_Object_CatalogData_Create_0";
+        var expected = new HashSet<string>(StringComparer.Ordinal);
+        var pattern = new Regex(@"^object\[\d+, \d+\] = (\w+);", RegexOptions.Multiline);
+        foreach (string path in paths)
+        {
+            using var mod = GameFileLoader.Load(path);
+            foreach (Match match in pattern.Matches(PatchBuilder.ReadCode(mod, create).Text)) expected.Add(match.Groups[1].Value);
+        }
+        string baseline = PatchBuilder.ReadCode(original, create).Text;
+        foreach (Match match in pattern.Matches(baseline)) expected.Add(match.Groups[1].Value);
+        using var merged = GameFileLoader.Load(output);
+        string text = PatchBuilder.ReadCode(merged, create).Text;
+        var actual = pattern.Matches(text).Select(m => m.Groups[1].Value).ToArray();
+        Assert.Equal(expected.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
+        Assert.Equal(actual.Length, actual.Distinct(StringComparer.Ordinal).Count());
+        // Every original literal assignment remains in the original prefix, including map order.
+        Assert.StartsWith(baseline.TrimEnd(), text.TrimEnd());
+    }
+
     private static void AssertBaseIndices(LoadedGameFile original, LoadedGameFile merged)
     {
         Assert.Equal(original.Data.GameObjects.Select(o => o.Name.Content), merged.Data.GameObjects.Take(original.Data.GameObjects.Count).Select(o => o.Name.Content));
