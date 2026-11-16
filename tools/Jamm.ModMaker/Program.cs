@@ -21,7 +21,7 @@ public static class Program
         }
         string command = args[0];
         string original = Path.GetFullPath(args[1]);
-        string? output = command is not ("dump" or "names" or "rooms") && args.Length > 2 ? Path.GetFullPath(args[2]) : null;
+        string? output = command is not ("dump" or "names" or "rooms" or "census") && args.Length > 2 ? Path.GetFullPath(args[2]) : null;
         if (output is not null && output == original)
         {
             Console.Error.WriteLine("Output must be a different file than the original.");
@@ -33,12 +33,25 @@ public static class Program
             case "inspect": Inspector.Run(data); return 0;
             case "dump": Dump.Run(data, args.Skip(2)); return 0;
             case "names": foreach (var c in data.Code) Console.WriteLine(c.Name.Content); return 0;
+            case "census":
+                {
+                    var room = data.Rooms.ByName(args.Length > 2 ? args[2] : "NewWorld")!;
+                    int drawType = (int)UndertaleModLib.Models.EventType.Draw;
+                    bool HasDraw(UndertaleModLib.Models.UndertaleGameObject? o) { for (; o is not null; o = o.ParentId) if (o.Events[drawType].Count > 0) return true; return false; }
+                    string Chain(UndertaleModLib.Models.UndertaleGameObject? o) { var l = new List<string>(); for (; o is not null; o = o.ParentId) l.Add(o.Name.Content); return string.Join(">", l); }
+                    foreach (var g in room.GameObjects.GroupBy(i => i.ObjectDefinition).OrderByDescending(g => g.Count()).Take(30))
+                        Console.WriteLine($"{g.Count(),5} {Chain(g.Key)} draw={(HasDraw(g.Key) ? "code" : "default")} sprite={g.Key?.Sprite?.Name.Content} visible={g.Key?.Visible}");
+                    return 0;
+                }
             case "rooms":
                 foreach (var r in data.Rooms)
                     Console.WriteLine($"{r.Name.Content}: {r.GameObjects.Count} instances; mod instances: {string.Join(", ", r.GameObjects.Select((g, i) => (g, i)).Where(p => p.g.ObjectDefinition?.Name.Content.StartsWith("obj_jamm") == true).Select(p => $"{p.g.ObjectDefinition.Name.Content}@{p.i} id {p.g.InstanceID}"))}");
                 return 0;
             case "export-pages": TexturePages.Export(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
+            case "profile":
+                // Profiles a (possibly modded) data.win: instruments all object events.
+                Profiler.Apply(data); Save(data, output!); return 0;
             case "hd":
                 string? pages = OptionValue(args, "--upscaled-pages");
                 HdMod.Apply(data, pages, args.Contains("--debug")); Save(data, output!); return 0;

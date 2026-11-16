@@ -20,13 +20,13 @@ public static class SmoothMod
     {
         var compiler = new CompileGroup(data);
         var controller = ModObjects.Create(data, ObjectName, persistent: true);
-        Queue(compiler, data, controller, EventType.Create, 0, Create(debug));
+        Queue(compiler, data, controller, EventType.Create, 0, Create(debug, PureFish(data)));
         Queue(compiler, data, controller, EventType.Other, (uint)EventSubtypeOther.RoomStart, RoomStart);
         Queue(compiler, data, controller, EventType.Step, (uint)EventSubtypeStep.BeginStep, BeginStep);
         Queue(compiler, data, controller, EventType.Step, (uint)EventSubtypeStep.EndStep, EndStep);
-        Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.PreDraw, PreDraw);
+        Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.PreDraw, PreDraw(data));
         Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, Toast);
-        Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, GuiEnd(debug));
+        Queue(compiler, data, controller, EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, GuiEnd(debug, data.GameObjects.ByName("Fish") is not null));
         if (debug)
         {
             var probe = ModObjects.Create(data, ProbeName, persistent: true);
@@ -49,10 +49,44 @@ public static class SmoothMod
             ModObjects.PlaceInstance(data, room, controller, first: true);
     }
 
+    /// <summary>
+    /// Fish types whose only draw code is Fish's own (inherited, not overridden): their draw has no
+    /// lasting side effect except frames_since_last_flip++, which is emulated when they are culled.
+    /// </summary>
+    private static string[] PureFish(UndertaleData data)
+    {
+        var fish = data.GameObjects.ByName("Fish");
+        if (fish is null) return [];
+        var drawType = (int)EventType.Draw;
+        var result = new List<string>();
+        foreach (var obj in data.GameObjects)
+        {
+            bool descends = false, pure = true;
+            for (var o = obj; o is not null; o = o.ParentId)
+            {
+                if (o == fish) { descends = true; break; }
+                if (o.Events[drawType].Count > 0) { pure = false; break; }
+            }
+            if (descends && pure && fish.Events[drawType].All(e => e.EventSubtype == 0))
+                result.Add(obj.Name.Content);
+        }
+        return result.ToArray();
+    }
+
+    /// <summary>Object types that draw only their sprite (no draw code anywhere in their parent chain).</summary>
+    private static string[] DefaultDrawn(UndertaleData data)
+    {
+        int drawType = (int)EventType.Draw;
+        bool HasDraw(UndertaleGameObject? o) { for (; o is not null; o = o.ParentId) if (o.Events[drawType].Count > 0) return true; return false; }
+        var placed = data.Rooms.SelectMany(r => r.GameObjects).Select(i => i.ObjectDefinition).Where(o => o is not null).ToHashSet();
+        return data.GameObjects.Where(o => o.Sprite is not null && placed.Contains(o) && !HasDraw(o) && !o.Name.Content.StartsWith("obj_jamm"))
+            .Select(o => o.Name.Content).ToArray();
+    }
+
     private static void Queue(CompileGroup compiler, UndertaleData data, UndertaleGameObject obj, EventType type, uint subtype, string gml)
         => compiler.QueueCodeReplace(obj.EventHandlerFor(type, subtype, data), gml);
 
-    private static string Create(bool debug) => $$"""
+    private static string Create(bool debug, string[] pureFish) => $$"""
         if (instance_number(object_index) > 1)
         {
             instance_destroy();
@@ -65,7 +99,7 @@ public static class SmoothMod
         ini_open("jamm_smooth.ini");
         jamm_target = ini_read_real("Smooth", "TargetFPS", jamm_target);
         ini_close();
-        jamm_margin = 400;
+        jamm_margin = 900;
         jamm_logic = 30;
         jamm_room_base = 30;
         jamm_elapsed = 0;
@@ -79,6 +113,23 @@ public static class SmoothMod
         jamm_moving = ds_list_create();
         jamm_restore = ds_list_create();
         jamm_known = ds_map_create();
+        jamm_cull = ds_list_create();
+        jamm_cull_fish = ds_list_create();
+        jamm_cand = ds_list_create();
+        jamm_scan_age = 99;
+        jamm_scan_vx = 0;
+        jamm_scan_vy = 0;
+        global.jamm_pure = ds_map_create();
+        {{string.Concat(pureFish.Select(n => $"ds_map_add(global.jamm_pure, {n}, 1);\n"))}}
+        global.jamm_rn = 0;
+        global.jamm_fn = 0;
+        global.jamm_sn = 0;
+        jamm_hidden = ds_list_create();
+        jamm_fish_on = ds_list_create();
+        jamm_render = 0;
+        jamm_now = get_timer();
+        jamm_tick_time = jamm_now;
+        jamm_tick_span = 33333;
         jamm_rn = 0;
         for (jamm_i = 0; jamm_i < 8; jamm_i += 1)
         {
@@ -106,6 +157,8 @@ public static class SmoothMod
         jamm_dbg_slow = 0;
         jamm_dbg_redeact = 0;
         jamm_dbg_shots = 0;
+        jamm_dbg_maxdt = 0;
+        jamm_dbg_long = 0;
         jamm_dbg_awake = 0;
         jamm_tm_map = 0;
         jamm_tm_act = 0;
@@ -128,6 +181,13 @@ public static class SmoothMod
         ds_list_clear(jamm_moving);
         ds_list_clear(jamm_restore);
         ds_list_clear(jamm_frozen_list);
+        ds_list_clear(jamm_cull);
+        ds_list_clear(jamm_cull_fish);
+        ds_list_clear(jamm_cand);
+        jamm_scan_age = 99;
+        ds_list_clear(jamm_hidden);
+        ds_list_clear(jamm_fish_on);
+        jamm_render = 0;
         jamm_frozen = 0;
                 jamm_tick_now = 1;
         jamm_elapsed = 0;
@@ -146,6 +206,9 @@ public static class SmoothMod
     // so pressed/released events are never swallowed.
     private const string BeginStep = """
         jamm_last_dt = delta_time;
+        jamm_dbg_maxdt = max(jamm_dbg_maxdt, delta_time);
+        if (delta_time > 12000)
+            jamm_dbg_long += 1;
         if (!jamm_prev_tick)
             jamm_render_dt = (jamm_render_dt * 0.9) + (min(delta_time, 100000) * 0.1);
         jamm_elapsed += delta_time;
@@ -209,12 +272,91 @@ public static class SmoothMod
         }
         """;
 
-    private static readonly string PreDraw = $$"""
+    // Families whose Draw only draws the instance itself (checked by reading their draw code), so they
+    // can be skipped while off-screen during render-only frames.
+    private static readonly string[] CullFamilies = ["Fish", "SceneItem"];
+
+    private static string PreDraw(UndertaleData data)
+    {
+        string[] families = CullFamilies.Where(n => data.GameObjects.ByName(n) is not null).ToArray();
+        bool fish = families.Contains("Fish");
+        string cullRecord = (families.Contains("SceneItem") ? """
+                    with (SceneItem)
+                    {
+                        if (visible)
+                        {
+                            jamm_in = 0;
+                            for (jamm_k = 0; jamm_k < global.jamm_sn && !jamm_in; jamm_k += 1)
+                            {
+                                if (bbox_right >= global.jamm_sl[jamm_k] && bbox_left <= global.jamm_sr[jamm_k] && bbox_bottom >= global.jamm_st[jamm_k] && bbox_top <= global.jamm_sb[jamm_k])
+                                    jamm_in = 1;
+                            }
+                            if (!jamm_in)
+                                ds_list_add(other.jamm_cull, id);
+                        }
+                    }
+
+            """ : "") + (fish ? """
+                    with (Fish)
+                    {
+                        if (visible)
+                        {
+                            jamm_in = 0;
+                            for (jamm_k = 0; jamm_k < global.jamm_fn && !jamm_in; jamm_k += 1)
+                            {
+                                if (bbox_right >= global.jamm_fl[jamm_k] && bbox_left <= global.jamm_fr[jamm_k] && bbox_bottom >= global.jamm_ft[jamm_k] && bbox_top <= global.jamm_fb[jamm_k])
+                                    jamm_in = 1;
+                            }
+                            if (jamm_in)
+                                ds_list_add(other.jamm_fish_on, id);
+                            else if (ds_map_exists(global.jamm_pure, object_index))
+                                ds_list_add(other.jamm_cull_fish, id);
+                        }
+                    }
+
+            """ : "") + string.Concat(DefaultDrawn(data).Select(o => $$"""
+                    with ({{o}})
+                    {
+                        if (visible && object_index == {{o}})
+                        {
+                            jamm_in = 0;
+                            for (jamm_k = 0; jamm_k < global.jamm_rn && !jamm_in; jamm_k += 1)
+                            {
+                                if (bbox_right >= global.jamm_rl[jamm_k] && bbox_left <= global.jamm_rr[jamm_k] && bbox_bottom >= global.jamm_rt[jamm_k] && bbox_top <= global.jamm_rb[jamm_k])
+                                    jamm_in = 1;
+                            }
+                            if (!jamm_in)
+                                ds_list_add(other.jamm_cull, id);
+                        }
+                    }
+
+            """));
+        // Fish draw code has side effects (flip counter, flip, angle, frame, alpha). On render-only
+        // frames they are saved here and put back at the end of the frame, so fish behave exactly as
+        // with one draw per logic tick.
+        string fishSave = fish ? """
+                jamm_n = ds_list_size(jamm_fish_on);
+                for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+                {
+                    with (ds_list_find_value(jamm_fish_on, jamm_i))
+                    {
+                        jamm_s_flip = frames_since_last_flip;
+                        jamm_s_ys = image_yscale;
+                        jamm_s_ii = image_index;
+                        jamm_s_al = image_alpha;
+                        jamm_s_an = image_angle;
+                    }
+                }
+        """ : "";
+        return $$"""
         jamm_t0 = get_timer();
+        jamm_now = get_timer();
         if (jamm_tick_now)
         {
             if (room_speed > 0)
                 jamm_logic = room_speed;
+            jamm_tick_span = clamp(jamm_now - jamm_tick_time, 4000, 100000);
+            jamm_tick_time = jamm_now;
             // Particle systems advance once per logic tick, not once per rendered frame.
             for (jamm_i = 0; jamm_i < 64; jamm_i += 1)
             {
@@ -224,31 +366,77 @@ public static class SmoothMod
                     part_system_update(jamm_i);
                 }
             }
-            // Regions that can be seen: every visible view, plus a margin.
-            jamm_rn = 0;
-            for (jamm_i = 0; jamm_i < 8; jamm_i += 1)
+            // Rescan which instances are near a camera every 4 ticks, or at once when the main camera
+            // moved far; the wide margin covers anything that can move between two scans.
+            jamm_scan_age += 1;
+            if (jamm_scan_age >= 4 || abs(view_xview[0] - jamm_scan_vx) > 250 || abs(view_yview[0] - jamm_scan_vy) > 250)
             {
-                if (view_enabled && view_visible[jamm_i])
+                jamm_scan_age = 0;
+                jamm_scan_vx = view_xview[0];
+                jamm_scan_vy = view_yview[0];
+                // Regions that can be seen (plus a margin), in globals for fast access inside with().
+                // Fish draw in every view but 3, scenery in every view but 2.
+                global.jamm_rn = 0;
+                global.jamm_fn = 0;
+                global.jamm_sn = 0;
+                for (jamm_i = 0; jamm_i < 8; jamm_i += 1)
                 {
-                    jamm_rl[jamm_rn] = view_xview[jamm_i] - jamm_margin;
-                    jamm_rt[jamm_rn] = view_yview[jamm_i] - jamm_margin;
-                    jamm_rr[jamm_rn] = view_xview[jamm_i] + view_wview[jamm_i] + jamm_margin;
-                    jamm_rb[jamm_rn] = view_yview[jamm_i] + view_hview[jamm_i] + jamm_margin;
-                    jamm_rn += 1;
+                    if (view_enabled && view_visible[jamm_i])
+                    {
+                        jamm_l = view_xview[jamm_i] - jamm_margin;
+                        jamm_tp = view_yview[jamm_i] - jamm_margin;
+                        jamm_r = view_xview[jamm_i] + view_wview[jamm_i] + jamm_margin;
+                        jamm_b = view_yview[jamm_i] + view_hview[jamm_i] + jamm_margin;
+                        global.jamm_rl[global.jamm_rn] = jamm_l;
+                        global.jamm_rt[global.jamm_rn] = jamm_tp;
+                        global.jamm_rr[global.jamm_rn] = jamm_r;
+                        global.jamm_rb[global.jamm_rn] = jamm_b;
+                        global.jamm_rn += 1;
+                        if (jamm_i != 3)
+                        {
+                            global.jamm_fl[global.jamm_fn] = jamm_l;
+                            global.jamm_ft[global.jamm_fn] = jamm_tp;
+                            global.jamm_fr[global.jamm_fn] = jamm_r;
+                            global.jamm_fb[global.jamm_fn] = jamm_b;
+                            global.jamm_fn += 1;
+                        }
+                        if (jamm_i != 2)
+                        {
+                            global.jamm_sl[global.jamm_sn] = jamm_l;
+                            global.jamm_st[global.jamm_sn] = jamm_tp;
+                            global.jamm_sr[global.jamm_sn] = jamm_r;
+                            global.jamm_sb[global.jamm_sn] = jamm_b;
+                            global.jamm_sn += 1;
+                        }
+                    }
+                }
+                ds_list_clear(jamm_cand);
+                with (all)
+                {
+                    jamm_in = global.jamm_rn == 0;
+                    for (jamm_k = 0; jamm_k < global.jamm_rn && !jamm_in; jamm_k += 1)
+                    {
+                        if (x >= global.jamm_rl[jamm_k] && x <= global.jamm_rr[jamm_k] && y >= global.jamm_rt[jamm_k] && y <= global.jamm_rb[jamm_k])
+                            jamm_in = 1;
+                    }
+                    if (jamm_in)
+                        ds_list_add(other.jamm_cand, id);
+                }
+                ds_list_clear(jamm_cull);
+                ds_list_clear(jamm_cull_fish);
+                ds_list_clear(jamm_fish_on);
+                if (global.jamm_rn > 0)
+                {
+        {{cullRecord}}
                 }
             }
             jamm_old = jamm_known;
             jamm_known = ds_map_create();
             ds_list_clear(jamm_moving);
-            with (all)
+            jamm_n = ds_list_size(jamm_cand);
+            for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
             {
-                jamm_in = other.jamm_rn == 0;
-                for (jamm_k = 0; jamm_k < other.jamm_rn && !jamm_in; jamm_k += 1)
-                {
-                    if (x >= other.jamm_rl[jamm_k] && x <= other.jamm_rr[jamm_k] && y >= other.jamm_rt[jamm_k] && y <= other.jamm_rb[jamm_k])
-                        jamm_in = 1;
-                }
-                if (jamm_in)
+                with (ds_list_find_value(jamm_cand, jamm_i))
                 {
                     if (ds_map_exists(other.jamm_old, id))
                     {
@@ -281,10 +469,44 @@ public static class SmoothMod
         }
         jamm_tm_record += get_timer() - jamm_t0;
         jamm_t0 = get_timer();
-        jamm_interval = 1000000 / jamm_logic;
-        jamm_t = clamp((jamm_since + jamm_render_dt) / jamm_interval, 0, 1);
+        // Show the state between the last two ticks by the real time since the newest one (one tick
+        // of latency, but every frame lands exactly where it belongs in time).
+        jamm_t = clamp((jamm_now - jamm_tick_time) / jamm_tick_span, 0, 1);
         if (jamm_target <= jamm_logic)
             jamm_t = 1;
+        jamm_render = !jamm_tick_now;
+        ds_list_clear(jamm_hidden);
+        // Off-screen scenery and plain fish are not drawn at all (their draw would produce no pixels).
+        jamm_n = ds_list_size(jamm_cull);
+        for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+        {
+            with (ds_list_find_value(jamm_cull, jamm_i))
+            {
+                if (visible)
+                {
+                    visible = false;
+                    ds_list_add(other.jamm_hidden, id);
+                }
+            }
+        }
+        jamm_n = ds_list_size(jamm_cull_fish);
+        for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+        {
+            with (ds_list_find_value(jamm_cull_fish, jamm_i))
+            {
+                if (visible)
+                {
+                    visible = false;
+                    ds_list_add(other.jamm_hidden, id);
+                    if (!other.jamm_render)
+                        frames_since_last_flip += global.jamm_fn;
+                }
+            }
+        }
+        if (jamm_render)
+        {
+        {{fishSave}}
+        }
         ds_list_clear(jamm_restore);
         jamm_n = ds_list_size(jamm_moving);
         for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
@@ -303,6 +525,9 @@ public static class SmoothMod
                     jamm_ix = x;
                     jamm_iy = y;
                     jamm_ia = image_angle;
+                    // Keep the movement vector that draw code derives directions from.
+                    xprevious += x - jamm_rx;
+                    yprevious += y - jamm_ry;
                     ds_list_add(other.jamm_restore, id);
                 }
             }
@@ -323,22 +548,49 @@ public static class SmoothMod
         }
         jamm_tm_interp += get_timer() - jamm_t0;
         """;
+    }
 
-    // End of the frame: undo the interpolation (keeping any change the draw code made), then decide
-    // by real time whether the next frame runs a logic tick or only renders.
-    private static string GuiEnd(bool debug) => $$"""
+    // End of the frame: undo interpolation, fish draw side effects and culling, then decide by real
+    // time whether the next frame runs a logic tick or only renders.
+    private static string GuiEnd(bool debug, bool fish) => $$"""
         {{(debug ? DebugShots : "")}}
         jamm_n = ds_list_size(jamm_restore);
         for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
         {
             with (ds_list_find_value(jamm_restore, jamm_i))
             {
+                xprevious -= jamm_ix - jamm_rx;
+                yprevious -= jamm_iy - jamm_ry;
                 x = jamm_rx + (x - jamm_ix);
                 y = jamm_ry + (y - jamm_iy);
                 image_angle = jamm_ra + (image_angle - jamm_ia);
             }
         }
         ds_list_clear(jamm_restore);
+        jamm_n = ds_list_size(jamm_hidden);
+        for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+        {
+            with (ds_list_find_value(jamm_hidden, jamm_i))
+                visible = true;
+        }
+        ds_list_clear(jamm_hidden);
+        if (jamm_render)
+        {
+        {{(fish ? """
+            jamm_n = ds_list_size(jamm_fish_on);
+            for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+            {
+                with (ds_list_find_value(jamm_fish_on, jamm_i))
+                {
+                    frames_since_last_flip = jamm_s_flip;
+                    image_yscale = jamm_s_ys;
+                    image_index = jamm_s_ii;
+                    image_alpha = jamm_s_al;
+                    image_angle = jamm_s_an;
+                }
+            }
+        """ : "")}}
+        }
         for (jamm_i = 0; jamm_i < 8; jamm_i += 1)
         {
             if (jamm_vset[jamm_i])
@@ -389,13 +641,15 @@ public static class SmoothMod
         if ((current_time - jamm_dbg_time) >= 1000)
         {
             jamm_f = file_text_open_append("jamm_smooth_log.txt");
-            file_text_write_string(jamm_f, "t=" + string(current_time) + " fps=" + string(fps) + " slow=" + string(jamm_dbg_slow) + " frames=" + string(jamm_dbg_frames) + " ticks=" + string(jamm_dbg_ticks) + " probe b/s/e/d=" + string(global.jamm_probe_begin) + "/" + string(global.jamm_probe_step) + "/" + string(global.jamm_probe_end) + "/" + string(global.jamm_probe_draw) + " awake=" + string(jamm_dbg_awake) + " redeact=" + string(jamm_dbg_redeact) + " ms map/act/redeact/record/interp=" + string(jamm_tm_map div 1000) + "/" + string(jamm_tm_act div 1000) + "/" + string(jamm_tm_redeact div 1000) + "/" + string(jamm_tm_record div 1000) + "/" + string(jamm_tm_interp div 1000) + " moving=" + string(ds_list_size(jamm_moving)) + " logic=" + string(jamm_logic) + " target=" + string(jamm_target) + " delta=" + string(global.jamm_tick_delta) + " render_dt=" + string(jamm_render_dt) + " room=" + room_get_name(room));
+            file_text_write_string(jamm_f, "t=" + string(current_time) + " fps=" + string(fps) + " frames>12ms=" + string(jamm_dbg_long) + " max_dt=" + string(jamm_dbg_maxdt div 1000) + " cull=" + string(ds_list_size(jamm_cull)) + "+" + string(ds_list_size(jamm_cull_fish)) + " fish_on=" + string(ds_list_size(jamm_fish_on)) + " frames=" + string(jamm_dbg_frames) + " ticks=" + string(jamm_dbg_ticks) + " probe b/s/e/d=" + string(global.jamm_probe_begin) + "/" + string(global.jamm_probe_step) + "/" + string(global.jamm_probe_end) + "/" + string(global.jamm_probe_draw) + " awake=" + string(jamm_dbg_awake) + " redeact=" + string(jamm_dbg_redeact) + " ms map/act/redeact/record/interp=" + string(jamm_tm_map div 1000) + "/" + string(jamm_tm_act div 1000) + "/" + string(jamm_tm_redeact div 1000) + "/" + string(jamm_tm_record div 1000) + "/" + string(jamm_tm_interp div 1000) + " moving=" + string(ds_list_size(jamm_moving)) + " logic=" + string(jamm_logic) + " target=" + string(jamm_target) + " delta=" + string(global.jamm_tick_delta) + " render_dt=" + string(jamm_render_dt) + " room=" + room_get_name(room));
             file_text_writeln(jamm_f);
             file_text_close(jamm_f);
             jamm_dbg_time = current_time;
             jamm_dbg_ticks = 0;
             jamm_dbg_frames = 0;
             jamm_dbg_slow = 0;
+            jamm_dbg_maxdt = 0;
+            jamm_dbg_long = 0;
             jamm_dbg_redeact = 0;
             jamm_tm_map = 0;
             jamm_tm_act = 0;
