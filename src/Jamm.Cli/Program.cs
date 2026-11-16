@@ -5,10 +5,10 @@ using Jamm.Cli;
 using Jamm.Core;
 
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-bool verbose = args.Contains("--verbose", StringComparer.Ordinal);
+bool verbose = false;
 try
 {
-    return Run(args.Where(x => x != "--verbose").ToArray());
+    return Run(args);
 }
 catch (Exception ex)
 {
@@ -28,6 +28,25 @@ catch (Exception ex)
 
 int Run(string[] arguments)
 {
+    string? dataDirectory = null;
+    List<string> filtered = [];
+    for (int i = 0; i < arguments.Length; i++)
+    {
+        if (arguments[i] == "--") { filtered.AddRange(arguments[i..]); break; }
+        if (arguments[i] == "--verbose") { verbose = true; continue; }
+        // Preserve management option values even when they look like global options.
+        if (arguments[i] is "--name" or "--mods" or "--profile")
+        {
+            filtered.Add(arguments[i]);
+            if (i + 1 < arguments.Length) filtered.Add(arguments[++i]);
+            continue;
+        }
+        if (arguments[i] != "--data-dir") { filtered.Add(arguments[i]); continue; }
+        if (dataDirectory is not null) throw new ArgumentException("--data-dir was given twice.");
+        if (++i == arguments.Length) throw new ArgumentException("--data-dir needs a directory.");
+        dataDirectory = arguments[i];
+    }
+    arguments = filtered.ToArray();
     if (arguments.Length == 0 || arguments[0] is "--help" or "-h" or "help")
     {
         Console.WriteLine("""
@@ -35,7 +54,18 @@ int Run(string[] arguments)
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--verbose]
             cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
-            cgfmm restore --game <game dir> [--verbose]
+            cgfmm config show [--json] | config set <key> <value>
+            cgfmm add <file.win|file.zip> [--name <name>]
+            cgfmm list [--json] | remove <mod ID or name>
+            cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
+            cgfmm profile resolve <name> <asset> <mod|keep-both>
+            cgfmm apply [--profile <name>] [--yes]
+            cgfmm play [--profile <name>] [--yes]
+            cgfmm restore [--game <game dir>] [--verbose]
+            Management storage: --data-dir <dir>, then CGFMM_DATA_DIR, then $XDG_DATA_HOME/cgfmm.
+            Config keys: base, gameDir, wine.mode (wine|proton), wine.prefix, wine.binary, proton.path,
+                         proton.compatDataPath, proton.clientInstallPath, steam.appId.
+            --verbose works with every command; --yes skips the apply/play install confirmation.
             cgfmm verify <data.win> [--verbose]
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
@@ -45,6 +75,9 @@ int Run(string[] arguments)
         return 0;
     }
     string command = arguments[0];
+    if (command is "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
+        || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
+        return ManagementCommand.Run(command, arguments[1..], dataDirectory);
     if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..]);
     if (command == "check") return CheckCommand.Run(arguments[1..]);
     if (command == "diff") return DiffCommand.Run(arguments[1..]);

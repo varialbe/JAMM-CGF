@@ -5,7 +5,7 @@
 
 Cat Goes Fishing mods usually replace the entire `data.win`, so only one can run at a
 time. JAMM-CGF aims to compare each mod against the original, identify conflicts and
-build one merged `data.win`. Phase 3 provides semantic patches, conflict checks, merged archive builds, verification and guarded installation/restore.
+build one merged `data.win`. Phase 4 provides a local mod library, ordered profiles, conflict choices, verified builds, guarded installation/restore, and Wine/Proton launch commands.
 
 > **Important: you need the legacy bytecode version.** The inspected August 2024 Steam
 > build is YYC and contains no bytecode. Known mods target GameMaker 1.4 bytecode 16 and
@@ -21,12 +21,13 @@ build one merged `data.win`. Phase 3 provides semantic patches, conflict checks,
 | Phase 1 | Done | GML/asset diffs, cached JSON patches and unified diffs |
 | Phase 2 | Done | Conflict detection, three-way code previews and reusable resolution choices |
 | Phase 3 | Done | Build and verify merged archives; install with verified backups and restore |
-| Phase 4 | Planned | Launch the legacy game |
+| Phase 4 | Done | Mod library, configuration, profiles, apply/restore and Wine/Proton launch |
 | GUI | Later | Graphical mod management |
 
 See the [Phase 0 findings](docs/reports/phase0.md), [Phase 0 verification](docs/reports/phase0-verification.md),
 [Phase 2 verification](docs/reports/phase2-verification.md) and
-[Phase 3 verification](docs/reports/phase3-verification.md).
+[Phase 3 verification](docs/reports/phase3-verification.md) and
+[Phase 4 verification](docs/reports/phase4-verification.md).
 Archive verification passes locally; an in-game desktop test is still required.
 
 ## Requirements and build
@@ -34,6 +35,7 @@ Archive verification passes locally; an in-game desktop test is still required.
 - Linux and the **.NET 10 SDK**.
 - Git with submodule support.
 - Your own legal game copy and mod files, stored outside the repository.
+- For desktop play: Steam and an installed Wine or Proton runner.
 
 ```sh
 git clone --recursive <repository-url> JAMM-CGF
@@ -47,7 +49,96 @@ dotnet test
 UndertaleModLib is a project reference to the unmodified UndertaleModTool submodule,
 pinned to release **0.9.2.0**. Current UndertaleModLib requires .NET 10; .NET 8 is not supported.
 
-## Commands
+## From Steam purchase to a modded game in 6 steps
+
+1. Buy/install Cat Goes Fishing on Steam. Keep your game and mod files outside this checkout.
+2. Download the complete legacy **16 August 2023** folder through Steam's console:
+   `download_depot 343780 343782 9039707068725406600`.
+   Follow [the legacy build guide](docs/legacy-version.md) for download locations and ownership requirements.
+3. Keep that folder as your untouched original, and copy the **whole folder**, including
+   `Cat Goes Fishing.exe`, DLLs and music, to a separate location for modded play:
+
+   ```sh
+   cp -a "$HOME/Games/CGF-legacy-original" "$HOME/Games/CGF-modded"
+   ```
+
+4. Build with the instructions above and configure the manager. Here `cgfmm` means
+   the built executable (`src/Jamm.Cli/bin/Release/net10.0/cgfmm`), or use
+   `dotnet run --project src/Jamm.Cli --` before each command:
+
+   ```sh
+   cgfmm config set base "$HOME/Games/CGF-legacy-original/data.win"
+   cgfmm config set gameDir "$HOME/Games/CGF-modded"
+   cgfmm config set wine.mode wine
+   cgfmm config set wine.binary wine
+   # Optional isolated Wine prefix:
+   cgfmm config set wine.prefix "$HOME/.local/share/cgfmm/wine-prefix"
+   ```
+
+5. Add your mods (`.win` or a zip containing one nested `data.win`), create their
+   load order, and select the profile. Each import computes its semantic patch:
+
+   ```sh
+   cgfmm add "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" --name Abyss
+   cgfmm add "$HOME/Cat-Goes-Fishing-Mods/cave-expansion.win" --name Cave
+   cgfmm add "$HOME/Cat-Goes-Fishing-Mods/colour-expansion.win" --name Colour
+   cgfmm list
+   cgfmm profile create combined --mods Abyss,Cave,Colour
+   cgfmm profile use combined
+   ```
+
+6. Apply, review the printed conflict choices, and accept installation. Then launch:
+
+   ```sh
+   cgfmm apply                  # prompts after the verified build; --yes automates acceptance
+   cgfmm play                   # skips rebuilding if this exact profile is still installed
+   # Return to the original later:
+   cgfmm restore
+   ```
+
+   Later participating mods win overlaps by default. `profile resolve` records explicit
+   asset choices; static verification still needs an in-game desktop check.
+
+For Proton instead of Wine, configure these existing installation directories:
+
+```sh
+cgfmm config set wine.mode proton
+cgfmm config set proton.path "$HOME/.steam/steam/steamapps/common/Proton - Experimental"
+# Optional override; otherwise use STEAM_COMPAT_CLIENT_INSTALL_PATH or a standard Steam folder:
+cgfmm config set proton.clientInstallPath "$HOME/.steam/steam"
+# Optional existing directory; default compatibility data stays under the manager data directory:
+cgfmm config set proton.compatDataPath /path/to/compatdata/343780
+```
+
+## Management command reference
+
+All commands support `--verbose`. Select isolated storage with `--data-dir <dir>`
+anywhere on the command line, or `CGFMM_DATA_DIR`; the default is
+`$XDG_DATA_HOME/cgfmm` (`~/.local/share/cgfmm`). See [data layout](docs/data-layout.md)
+for schemas, compatibility reporting, backups and all launch settings.
+
+| Command | Behavior |
+| --- | --- |
+| `config show [--json]` | Show configuration |
+| `config set <key> <value>` | Set `base`, `gameDir`, `wine.mode`, `wine.prefix`, `wine.binary`, `proton.path`, `proton.compatDataPath`, `proton.clientInstallPath`, or `steam.appId` |
+| `add <file.win or file.zip> [--name <name>]` | Copy into the library and immediately compute a patch; warn about source build differences |
+| `list [--json]` | Show IDs, names, base hash/timestamp/version compatibility and patch cache validity |
+| `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
+| `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
+| `profile list [--json]` | List profiles and mark the active selection in text output |
+| `profile show <name> [--json]` | Show order and resolution choices |
+| `profile use <name>` | Select a profile for apply/play |
+| `profile delete <name>` | Delete a profile, clearing the active selection if needed |
+| `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
+| `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
+| `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
+| `restore` | Restore the configured game directory and retain all original backups |
+
+Use full IDs or unique case-sensitive names/source stems for `<mod>`. Names containing
+spaces must be quoted, including the entire comma-separated `--mods` value.
+Management commands return 0 on success, 1 for errors or declined installation.
+
+## Archive and analysis commands
 
 The CLI executable/assembly is named **`cgfmm`**. These examples run it from the checkout;
 `cgfmm <command>` works when the built executable is on your command path.
@@ -197,6 +288,33 @@ When either input is YYC, code, scripts, variables and functions are skipped. Th
 says `NOT COMPARABLE: <file> is YYC (no bytecode)` and omits unchanged percentages.
 Unsupported textures, Spine/SWF sprites and invalid texture regions warn and use
 `unsupported:<reason>` markers; identical markers do not prove identical content.
+
+## FAQ
+
+**Why does my current Steam game not work?** The inspected modern build is YYC;
+its code lives in the executable. Known mods need the legacy VM archive **and its
+matching legacy executable**. See [legacy-version.md](docs/legacy-version.md).
+
+**Why does Colour warn about its base?** It targets the 15 August 2023 build,
+while the common merge base is 16 August. Import reports its expected manifest
+and includes the differences against your configured base in the patch. Version
+incompatibility or unavailable bytecode is an error.
+
+**Where are my backups?** Installation retains `data.win.cgfmm-original` in the
+game directory and an exact-base copy under the manager's `backups/` directory.
+Both are verified by SHA-256 before replacement and never automatically deleted.
+Keep `base` pointing to an untouched original outside the modded game folder.
+
+**How do I undo the installation?** Run `cgfmm restore`, or
+`cgfmm restore --game <legacy game folder>` for the explicit Phase 3 command.
+The original is verified and restored; backups stay. A subsequent `play` can
+apply the selected profile again. Modified installed archives are refused during
+apply; restore first. See [building.md](docs/building.md) for recovery details.
+
+**Does a verified merge guarantee compatible gameplay?** No. Verification reloads,
+checks references and decompiles/compiles code. Dynamic resource lookups, runtime
+catalog conflicts and inherited texture warnings still need desktop testing.
+Launch command construction is tested here; actual Wine/Proton gameplay is not.
 
 ## Tests
 

@@ -1,0 +1,171 @@
+using System.Text.Json;
+using Jamm.Core.Management;
+
+namespace Jamm.Cli;
+
+internal static class ManagementCommand
+{
+    internal static int Run(string command, string[] arguments, string? dataDirectory)
+    {
+        var store = new ManagerStore(dataDirectory);
+        var library = new ModLibrary(store);
+        var profiles = new ProfileLibrary(store);
+        var installer = new ProfileInstaller(store);
+        List<string> positional = [];
+        Dictionary<string, string> options = new(StringComparer.Ordinal);
+        HashSet<string> flags = new(StringComparer.Ordinal);
+        string[] allowedOptions = command switch
+        {
+            "add" => ["--name"], "profile" => ["--mods"], "apply" or "play" => ["--profile"], _ => []
+        };
+        string[] allowedFlags = command switch
+        {
+            "list" or "profile" or "config" => ["--json"], "apply" or "play" => ["--yes"], _ => []
+        };
+        for (int i = 0; i < arguments.Length; i++)
+        {
+            string arg = arguments[i];
+            if (arg == "--") { positional.AddRange(arguments[(i + 1)..]); break; }
+            if (allowedFlags.Contains(arg, StringComparer.Ordinal))
+            { if (!flags.Add(arg)) throw new ArgumentException($"{arg} was given twice."); }
+            else if (allowedOptions.Contains(arg, StringComparer.Ordinal))
+            {
+                if (++i == arguments.Length) throw new ArgumentException($"{arg} needs a value.");
+                if (!options.TryAdd(arg, arguments[i])) throw new ArgumentException($"{arg} was given twice.");
+            }
+            else if (arg.StartsWith('-')) throw new ArgumentException($"Unknown option '{arg}'.");
+            else positional.Add(arg);
+        }
+        void Count(int count)
+        {
+            if (positional.Count != count) throw new ArgumentException($"Invalid arguments for {command}. See 'cgfmm --help'.");
+        }
+        void Json<T>(T value) => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
+        bool json = flags.Contains("--json");
+        switch (command)
+        {
+            case "config":
+                if (positional.Count == 1 && positional[0] == "show")
+                {
+                    if (json) Json(store.Config());
+                    else
+                    {
+                        var config = store.Config();
+                        Console.WriteLine($"Data directory: {store.Root}");
+                        foreach (var (key, value) in new (string, string?)[]
+                        {
+                            ("base", config.Base), ("gameDir", config.GameDir),
+                            ("wine.mode", config.Wine.Mode), ("wine.prefix", config.Wine.Prefix), ("wine.binary", config.Wine.Binary),
+                            ("proton.path", config.Proton.Path), ("proton.compatDataPath", config.Proton.CompatDataPath),
+                            ("proton.clientInstallPath", config.Proton.ClientInstallPath), ("steam.appId", config.Steam.AppId),
+                            ("activeProfile", config.ActiveProfile)
+                        }) Console.WriteLine($"{key} = {value ?? "(unset)"}");
+                    }
+                }
+                else if (positional.Count == 3 && positional[0] == "set" && !json)
+                { store.Set(positional[1], positional[2]); Console.WriteLine($"Set {positional[1]}."); }
+                else throw new ArgumentException("Use config show [--json] or config set <key> <value>.");
+                break;
+            case "add":
+                Count(1);
+                var added = library.Add(positional[0], options.GetValueOrDefault("--name"), Progress);
+                Console.WriteLine($"{(added.AlreadyAdded ? "Already added" : "Added")} {added.Mod.Name} ({added.Mod.Id}). Patch cached.");
+                foreach (string warning in added.Warnings) Console.Error.WriteLine($"WARNING: {warning}");
+                break;
+            case "list":
+                Count(0);
+                var list = library.List();
+                if (json) Json(list);
+                else if (list.Count == 0) Console.WriteLine("No mods yet. Use 'cgfmm add <file.win or file.zip>'.");
+                else foreach (var entry in list)
+                    Console.WriteLine($"{entry.Mod.Id}  {entry.Mod.Name}: {entry.Compatibility}; patch {(entry.PatchCached ? "cached" : "missing or stale")}.");
+                break;
+            case "remove":
+                Count(1); library.Remove(positional[0]); Console.WriteLine($"Removed '{positional[0]}' from the library. Backups retained."); break;
+            case "profile":
+                if (positional.Count == 0) throw new ArgumentException("Use profile create/list/show/use/delete/resolve. See 'cgfmm --help'.");
+                string action = positional[0];
+                if (options.Count > 0 && action != "create" || json && action is not "show" and not "list")
+                    throw new ArgumentException("--mods is for profile create; --json is for profile show/list.");
+                switch (action)
+                {
+                    case "create":
+                        Count(2);
+                        if (!options.TryGetValue("--mods", out string? mods)) throw new ArgumentException("profile create needs --mods a,b,c in load order.");
+                        profiles.Create(positional[1], mods.Split(',', StringSplitOptions.TrimEntries));
+                        Console.WriteLine($"Created profile '{positional[1]}'. Use 'profile use {positional[1]}' to select it."); break;
+                    case "list":
+                        Count(1);
+                        var all = profiles.List();
+                        if (json) Json(all);
+                        else if (all.Count == 0) Console.WriteLine("No profiles yet. Use profile create <name> --mods a,b,c.");
+                        else foreach (var p in all) Console.WriteLine($"{(store.Config().ActiveProfile == p.Name ? "*" : " ")} {p.Name}: {string.Join(", ", p.Mods.Select(id => library.Find(id).Name))}");
+                        break;
+                    case "show":
+                        Count(2);
+                        var profile = profiles.Get(positional[1]);
+                        if (json) Json(profile);
+                        else
+                        {
+                            Console.WriteLine($"Profile {profile.Name} (later participating mods win overlaps):");
+                            foreach (string id in profile.Mods) Console.WriteLine($"  {library.Find(id).Name} ({id})");
+                            foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
+                        }
+                        break;
+                    case "use": Count(2); profiles.Use(positional[1]); Console.WriteLine($"Active profile: {positional[1]}."); break;
+                    case "delete": Count(2); profiles.Delete(positional[1]); Console.WriteLine($"Deleted profile '{positional[1]}'."); break;
+                    case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3]); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
+                    default: throw new ArgumentException($"Unknown profile action '{action}'. See 'cgfmm --help'.");
+                }
+                break;
+            case "restore":
+                Count(0); Console.WriteLine($"Restored data.win (SHA-256 {installer.Restore()}). Original backups retained."); break;
+            case "apply":
+            case "play":
+                Count(0);
+                string? selected = options.GetValueOrDefault("--profile");
+                GameLaunchCommand? launch = command == "play" ? GameLauncher.Create(store.Config(), store.Root) : null;
+                if (launch is not null) GameLauncher.Validate(launch);
+                if (installer.IsInstalled(selected))
+                {
+                    if (selected is not null) profiles.Use(selected);
+                    Console.WriteLine("Selected profile is already installed; archive and backup hashes verified.");
+                }
+                else
+                {
+                    var prepared = installer.Prepare(selected, Progress);
+                    try
+                    {
+                        foreach (string decision in prepared.Build.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
+                        foreach (string warning in prepared.Build.Verification!.Warnings) Console.Error.WriteLine($"WARNING: {warning}");
+                        Console.WriteLine($"Built and verified profile '{prepared.Profile.Name}' ({prepared.Build.SizeBytes:N0} bytes). Install into '{prepared.Config.GameDir}'?");
+                        if (!flags.Contains("--yes"))
+                        {
+                            Console.Write("Install this build? [y/N] ");
+                            string? answer = Console.ReadLine()?.Trim();
+                            if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase)
+                                && !string.Equals(answer, "yes", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Console.WriteLine("Installation cancelled. The temporary build will be removed; the game is unchanged."); return 1;
+                            }
+                        }
+                        installer.Install(prepared);
+                        Console.WriteLine($"Installed profile '{prepared.Profile.Name}'. Verified original backups retained.");
+                    }
+                    finally { installer.Discard(prepared); }
+                }
+                if (launch is not null)
+                {
+                    if (store.Config().Wine.Mode == "proton" && store.Config().Proton.CompatDataPath is null)
+                        store.EnsureProtonDataDirectory();
+                    GameLauncher.Launch(launch);
+                    Console.WriteLine($"Launched from '{launch.WorkingDirectory}': {launch.Display()}");
+                }
+                break;
+        }
+        return 0;
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
+    private static void Progress(string message) => Console.Error.WriteLine(message);
+}

@@ -80,6 +80,9 @@ cgfmm compare  ~/Games/CatGoesFishing-legacy/2023-08-16_manifest-903970706872540
 
 ## Running it
 
-The old `Cat Goes Fishing.exe` runs through Proton/Wine. Launch instructions follow with `cgfmm play` (Phase 4).
+The old `Cat Goes Fishing.exe` runs through Proton/Wine. Set the legacy `base` and
+`gameDir`, import your mods, select a profile, then run `cgfmm apply` and `cgfmm play`.
+See the [six-step quick start](../README.md#from-steam-purchase-to-a-modded-game-in-6-steps)
+and [runner settings](data-layout.md) for Wine/Proton configuration.
 
 Do not redistribute game files or depot downloads. Only use builds you own.

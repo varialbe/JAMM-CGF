@@ -28,6 +28,14 @@ working directory and the `.win` files in `JAMM_MODS_DIR`. It accepts a candidat
 its entire-file SHA-256 equals `mod.sha256`. Renaming a file does not bypass verification.
 Patches contain GML and strings but no binary payloads. Keep patches and logs local.
 
+For the managed workflow, use `config set base`, `config set gameDir`, `add`,
+`profile create/use`, and `apply` instead of specifying every archive on each build.
+`apply` builds and verifies before asking for installation confirmation (`--yes`
+automates acceptance). `play` ensures the selected profile is installed before
+starting Wine/Proton; `restore` without `--game` uses the configured game directory.
+Managed installs also retain an exact-base copy in the data directory's `backups/`.
+See [data-layout.md](data-layout.md) for paths, profiles, runner settings and cache checks.
+
 ## Conflict choices
 
 Later participating mods win by default. Non-overlapping GML hunks and object/room fields
