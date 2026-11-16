@@ -18,6 +18,12 @@ public static class SmoothMod
 
     public static void Apply(UndertaleData data, bool debug = false)
     {
+        var questBegin = data.Code.ByName("gml_Object_QuestEngine_Step_1")
+            ?? throw new InvalidDataException("QuestEngine Begin Step is missing: unsupported game version. Use the original legacy 2023 data.win.");
+        string questReset = string.Concat(ModObjects.Decompile(data, questBegin).Where(c => !char.IsWhiteSpace(c)));
+        if (questReset != "quest_counter=0;")
+            throw new InvalidDataException("QuestEngine Begin Step must contain exactly quest_counter = 0; for Smooth's render-only reset. Unsupported game version or modified input; use the original legacy 2023 data.win.");
+
         var compiler = new CompileGroup(data);
         var controller = ModObjects.Create(data, ObjectName, persistent: true);
         Queue(compiler, data, controller, EventType.Create, 0, Create(debug, PureFish(data)));
@@ -527,6 +533,10 @@ public static class SmoothMod
         }
         if (jamm_render)
         {
+            // WHY: frozen Begin Step cannot reset the counter consumed by Quest Draw; without
+            // this reset each extra render frame pushes the quest labels farther upwards.
+            if (instance_exists(QuestEngine))
+                QuestEngine.quest_counter = 0;
         {{fishSave}}
         }
         ds_list_clear(jamm_restore);
