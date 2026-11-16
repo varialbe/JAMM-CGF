@@ -1,0 +1,53 @@
+name: Packaging
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: bash scripts/package-deb.sh
+      - run: bash scripts/package-windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: out/packages/*
+  installer:
+    needs: portable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: out/packages
+      - shell: pwsh
+        run: |
+          $archive = Get-Item out/packages/*_win-x64.zip
+          $version = $archive.BaseName -replace '^jamm-cgf_', '' -replace '_win-x64$', ''
+          Expand-Archive $archive.FullName out/payload
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw 'Inno Setup 6 is required on the Windows runner.' }
+          & $iscc "/DAppVersion=$version" "/DPayloadDir=$pwd\out\payload" "/DOutputDir=$pwd\out\packages" packaging/windows/jamm-cgf.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: out/packages/*_setup.exe
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - run: docker build -t jamm-cgf:local .
+      - run: docker run --rm jamm-cgf:local --help

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=JAMM-CGF
+Comment=Mod manager for legacy Cat Goes Fishing
+Exec=cgfmm-gui
+Icon=jamm-cgf
+Terminal=false
+Categories=Game;
+Keywords=mods;fishing;
