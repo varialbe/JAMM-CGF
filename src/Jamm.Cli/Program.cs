@@ -51,6 +51,7 @@ int Run(string[] arguments)
     {
         Console.WriteLine("""
             JAMM-CGF — inspect, diff, check, build, install and restore
+            cgfmm compat-scan --base <data.win> --db <compat.db> --export <directory>
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
@@ -64,7 +65,7 @@ int Run(string[] arguments)
             cgfmm restore [--game <game dir>] [--verbose]
             Management storage: --data-dir <dir>, then CGFMM_DATA_DIR, then $XDG_DATA_HOME/cgfmm.
             Config keys: base, gameDir, wine.mode (wine|proton|proton-flatpak), wine.prefix, wine.binary, proton.path,
-                         proton.compatDataPath, proton.clientInstallPath, steam.appId.
+                         proton.compatDataPath, proton.clientInstallPath, steam.appId, useSharedCompatibilityResults.
             --verbose works with every command; --yes skips the apply/play install confirmation.
             cgfmm verify <data.win> [--verbose]
             cgfmm inspect <data.win> [--verbose]
@@ -75,6 +76,7 @@ int Run(string[] arguments)
         return 0;
     }
     string command = arguments[0];
+    if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
     if (command is "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory);

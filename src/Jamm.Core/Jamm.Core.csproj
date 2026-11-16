@@ -2,9 +2,13 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Building/cgf-asset-types.json" />
-    <EmbeddedResource Include="../../external/UndertaleModTool/UndertaleModLib/GameSpecificData/Underanalyzer/gamemaker.json"
-                      LogicalName="Jamm.Core.Building.gamemaker.json" />
+    <EmbeddedResource Include="../../external/UndertaleModTool/UndertaleModLib/GameSpecificData/Underanalyzer/gamemaker.json" LogicalName="Jamm.Core.Building.gamemaker.json" />
     <ProjectReference Include="..\..\external\UndertaleModTool\UndertaleModLib\UndertaleModLib.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
 
   <PropertyGroup>

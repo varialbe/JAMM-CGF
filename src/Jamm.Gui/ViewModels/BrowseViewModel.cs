@@ -212,6 +212,9 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
     }
     private async Task CheckFactsAsync(CatalogRow row, ModDownloadFile chosen, CancellationToken token)
     {
+        string baseHash = await Task.Run(() => Jamm.Core.Building.BuildFiles.Hash(store.Config().Base!), token);
+        var remote = await new SharedCompatibility(store, http).FindAsync(baseHash, chosen, null, token);
+        if (remote is not null) { ShowFacts(row, remote.Facts, $"checked by JAMM server on {remote.CheckedUtc:yyyy-MM-dd HH:mm} UTC"); return; }
         row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
         row.CompatibilityReason = "Unsure: checking selected file.";
         row.Adds = "Checking content…";
@@ -222,10 +225,14 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
         IProgress<string> steps = new Progress<string>(m => { if (!token.IsCancellationRequested) { owner.ReportProcessingStep(m); DetailStatus = owner.OperationStep; IsIndeterminate = owner.OperationIndeterminate; Progress = owner.OperationProgress; } });
         var facts = await Task.Run(() => new ModFactAnalyzer(store).Analyze(archive, token, steps.Report), token);
         token.ThrowIfCancellationRequested();
+        ShowFacts(row, facts, "checked on this PC");
+    }
+    private void ShowFacts(CatalogRow row, ModFacts facts, string source)
+    {
         row.Adds = facts.Adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", facts.Adds);
         row.CompatibilityIcon = facts.Compatibility == "Compatible" ? "✓" : facts.Compatibility == "Incompatible" ? "✕" : "?";
         row.CompatibilityColor = facts.Compatibility == "Compatible" ? "#259D50" : facts.Compatibility == "Incompatible" ? "#D74040" : "#D6A500";
-        row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason;
+        row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason + " · " + source;
         DetailStatus = facts.Reason;
     }
     /// <summary>Checks an explicitly chosen advanced release without changing the catalog selection.</summary>
@@ -302,6 +309,11 @@ public sealed class BrowseViewModel : ObservableObject, IDisposable
                     owner.UpdateOperation(p.Total > 0 ? $"Downloading {p.Received}/{p.Total.Value} bytes" : transferState);
                     }
                 }), token);
+                string baseHash = await Task.Run(() => Jamm.Core.Building.BuildFiles.Hash(store.Config().Base!), token);
+                string archiveHash = await Task.Run(() => Jamm.Core.Building.BuildFiles.Hash(path), token);
+                var shared = await new SharedCompatibility(store, http).FindAsync(baseHash, file, archiveHash, token);
+                var verifiedFacts = shared?.Facts ?? await Task.Run(() => new ModFactAnalyzer(store).Analyze(path, token, progressText.Report), token);
+                ShowFacts(Selected!, verifiedFacts, shared is null ? "checked on this PC" : $"checked by JAMM server on {shared.CheckedUtc:yyyy-MM-dd HH:mm} UTC");
                 lock (transferGate) transferring = 0;
                 transferState = "Importing"; RefreshMembership(); IsIndeterminate = true;
                 var origin = new ModOrigin("litterbox", mod.Id, file.SourceUrl, file.Provider, file.Id, file.ReleaseId, file.Version);

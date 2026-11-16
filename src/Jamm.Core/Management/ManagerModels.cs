@@ -3,6 +3,8 @@ namespace Jamm.Core.Management;
 /// <summary>Persistent paths, selected profile and Wine/Proton settings.</summary>
 public sealed record ManagerConfig
 {
+    /// <summary>Allows anonymous read-only shared compatibility lookups.</summary>
+    public bool UseSharedCompatibilityResults { get; init; } = true;
     /// <summary>Shows expert controls when explicitly enabled.</summary>
     public bool AdvancedMode { get; init; }
     /// <summary>Game copy whose concrete replacement and backup paths were approved.</summary>

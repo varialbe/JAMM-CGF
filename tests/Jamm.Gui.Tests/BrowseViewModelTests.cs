@@ -19,7 +19,11 @@ public sealed class BrowseViewModelTests
     private sealed class Handler(Func<CancellationToken, Task<byte[]>> bytes) : HttpMessageHandler
     { protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(await bytes(token)) }; }
     private static MainViewModel Create(TestFiles files, Func<CancellationToken, Task<byte[]>> bytes, params CatalogMod[] mods)
-        => new(files.Store, new ModHttp(new Handler(bytes)), new Catalog(mods.Length == 0 ? [Example()] : mods), new Resolver());
+    {
+        // These exercise the local pipeline; shared lookups have dedicated SharedBrowseTests.
+        files.Store.Set("useSharedCompatibilityResults", "false");
+        return new(files.Store, new ModHttp(new Handler(bytes)), new Catalog(mods.Length == 0 ? [Example()] : mods), new Resolver());
+    }
     private static async Task Select(MainViewModel vm)
     {
         await vm.InitializeAsync(); await vm.Browse.RefreshAsync(); vm.Browse.Selected = vm.Browse.Mods[0]; await vm.Browse.SelectAsync();

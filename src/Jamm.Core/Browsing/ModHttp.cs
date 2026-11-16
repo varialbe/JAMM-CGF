@@ -58,17 +58,20 @@ public sealed class ModHttp : IDisposable
     public Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken token, string? apiKey = null, bool lookupPost = false)
         => SendRangeAsync(uri, token, apiKey, lookupPost);
 
-    internal async Task<HttpResponseMessage> SendRangeAsync(Uri uri, CancellationToken token, string? apiKey = null, bool lookupPost = false, long? rangeStart = null, string? ifRange = null)
+    internal async Task<HttpResponseMessage> SendRangeAsync(Uri uri, CancellationToken token, string? apiKey = null, bool lookupPost = false, long? rangeStart = null, string? ifRange = null, string? etag = null, DateTimeOffset? modified = null)
     {
         for (int hop = 0; hop < 6; hop++)
         {
             PublicUri(uri.AbsoluteUri);
             using var request = new HttpRequestMessage(lookupPost ? HttpMethod.Post : HttpMethod.Get, uri);
             if (rangeStart > 0) { request.Headers.Range = new(rangeStart, null); if (ifRange is not null) request.Headers.TryAddWithoutValidation("If-Range", ifRange); }
+            if (etag is not null) request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+            if (modified is not null) request.Headers.IfModifiedSince = modified;
             request.Headers.UserAgent.ParseAdd("JAMM-CGF/1.0");
             if (apiKey is not null) request.Headers.Add("apikey", apiKey);
             if (lookupPost) request.Content = new StringContent("{\"forceDownload\":true}", System.Text.Encoding.UTF8, "application/json");
             var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+            if (response.StatusCode == HttpStatusCode.NotModified) return response;
             if ((int)response.StatusCode is >= 300 and <= 399)
             {
                 var location = response.Headers.Location;

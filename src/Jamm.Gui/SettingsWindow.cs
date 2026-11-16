@@ -37,9 +37,11 @@ public sealed class SettingsWindow : Window
         Add("proton.compatDataPath", "Proton compatibility directory (optional)", config.Proton.CompatDataPath, true);
         Add("proton.clientInstallPath", "Steam installation directory (optional)", config.Proton.ClientInstallPath, true);
         Add("steam.appId", "Steam App ID", config.Steam.AppId);
+        var shared = new CheckBox { Content = "Use shared compatibility results (no account, no cookies)", IsChecked = config.UseSharedCompatibilityResults };
+        panel.Children.Add(shared);
         var save = new Button { Content = "Validate & save settings", HorizontalAlignment = HorizontalAlignment.Left };
         save.Bind(IsEnabledProperty, new Binding(nameof(MainViewModel.CanEdit)));
-        save.Click += async (_, _) => await model.SaveSettingsAsync(fields.ToDictionary(p => p.Key, p => p.Value.Text ?? ""));
+        save.Click += async (_, _) => { var values = fields.ToDictionary(p => p.Key, p => p.Value.Text ?? ""); values["useSharedCompatibilityResults"] = (shared.IsChecked == true).ToString(); await model.SaveSettingsAsync(values); };
         panel.Children.Add(save);
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap }; status.Bind(TextBlock.TextProperty, new Binding(nameof(MainViewModel.Status))); panel.Children.Add(status);
         Content = new ScrollViewer { Content = panel };

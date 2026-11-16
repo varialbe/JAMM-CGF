@@ -106,6 +106,7 @@ public sealed class ManagerStore
         string Full() => System.IO.Path.GetFullPath(value);
         config = key switch
         {
+            "useSharedCompatibilityResults" when bool.TryParse(value, out _) => config with { UseSharedCompatibilityResults = bool.Parse(value) },
             "advancedMode" when bool.TryParse(value, out _) => config with { AdvancedMode = bool.Parse(value) },
             "base" => config with { Base = Full() },
             "confirmedInstallDirectory" => config with { ConfirmedInstallDirectory = Full() },
