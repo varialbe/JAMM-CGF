@@ -32,14 +32,23 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
     /// <summary>Optional catalog thumbnail, never game data extracted locally.</summary>
     public Avalonia.Media.IImage? Icon { get => icon; internal set => SetProperty(ref icon, value); }
     private int removedPerformanceCount;
+    private int removedHudCount;
     private string sanitizedDetails = "";
     /// <summary>Number of third-party performance changes removed by JAMM's sanitizer.</summary>
     public int RemovedPerformanceCount { get => removedPerformanceCount; internal set { if (SetProperty(ref removedPerformanceCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
-    /// <summary>True when JAMM removed at least one third-party performance change from this mod.</summary>
-    public bool HasSanitizedInfo => RemovedPerformanceCount > 0;
-    /// <summary>Short summary line for removed performance changes.</summary>
-    public string SanitizedLine => RemovedPerformanceCount <= 0 ? "" : $"JAMM removed {RemovedPerformanceCount} performance changes";
-    /// <summary>Detailed list of removed performance changes for the info flyout.</summary>
+    /// <summary>Number of third-party HUD/UI asset changes reverted by JAMM's sanitizer.</summary>
+    public int RemovedHudCount { get => removedHudCount; internal set { if (SetProperty(ref removedHudCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
+    /// <summary>True when JAMM removed at least one third-party performance or HUD change from this mod.</summary>
+    public bool HasSanitizedInfo => RemovedPerformanceCount > 0 || RemovedHudCount > 0;
+    /// <summary>Short summary line for removed performance and/or HUD changes.</summary>
+    public string SanitizedLine => (RemovedPerformanceCount, RemovedHudCount) switch
+    {
+        ( > 0, 0) => $"JAMM removed {RemovedPerformanceCount} performance changes",
+        (0, > 0) => $"JAMM removed {RemovedHudCount} HUD changes",
+        ( > 0, > 0) => $"JAMM removed {RemovedPerformanceCount} performance changes, {RemovedHudCount} HUD changes",
+        _ => ""
+    };
+    /// <summary>Detailed list of removed performance and HUD changes for the info flyout.</summary>
     public string SanitizedDetails { get => sanitizedDetails; internal set => SetProperty(ref sanitizedDetails, value); }
 }
 
@@ -262,7 +271,8 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         row.CompatibilityColor = facts.Compatibility == "Compatible" ? "#259D50" : facts.Compatibility == "Incompatible" ? "#D74040" : "#D6A500";
         row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason + " · " + source;
         var removed = facts.RemovedPerformanceChanges ?? [];
-        row.RemovedPerformanceCount = removed.Count;
+        row.RemovedPerformanceCount = removed.Count(r => r.Category != Jamm.Core.Patching.ModSanitizer.HudStyle);
+        row.RemovedHudCount = removed.Count(r => r.Category == Jamm.Core.Patching.ModSanitizer.HudStyle);
         row.SanitizedDetails = removed.Count == 0 ? "" : string.Join("\n", removed.Select(r => $"[{r.Category}] {r.Entry}: {r.Summary}"));
         DetailStatus = facts.Reason;
     }

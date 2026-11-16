@@ -20,14 +20,22 @@ public sealed class ModLibrary(ManagerStore store)
     public ModPatch Patch(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var (raw, sanitized, _) = EnsurePatches(mod, progress, cancellationToken);
-        bool keepAuthor = mod.KeepAuthorPerformanceChanges;
+        bool keepPerf = mod.KeepAuthorPerformanceChanges;
+        bool keepHud = mod.KeepAuthorHudDesign;
         string metaPath = store.Path("mods", ManagerStore.Name(mod.Id), "mod.json");
         if (File.Exists(metaPath))
         {
-            try { keepAuthor = ReadMod(mod.Id).KeepAuthorPerformanceChanges; }
+            try
+            {
+                var stored = ReadMod(mod.Id);
+                keepPerf = stored.KeepAuthorPerformanceChanges;
+                keepHud = stored.KeepAuthorHudDesign;
+            }
             catch (InvalidDataException) { }
         }
-        return keepAuthor ? raw : sanitized;
+        if (!keepPerf && !keepHud) return sanitized;
+        if (keepPerf && keepHud) return raw;
+        return ModSanitizer.Sanitize(raw, keepPerformanceChanges: keepPerf, keepHudDesign: keepHud).Patch;
     }
 
     /// <summary>Returns the verified unsanitized patch for a library mod.</summary>
@@ -43,6 +51,15 @@ public sealed class ModLibrary(ManagerStore store)
     {
         var mod = Find(query);
         var updated = mod with { KeepAuthorPerformanceChanges = keep };
+        store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
+        return updated;
+    }
+
+    /// <summary>Toggles whether a mod keeps its author's HUD design instead of reverting HUD assets to the base game.</summary>
+    public ManagedMod SetKeepAuthorHudDesign(string query, bool keep)
+    {
+        var mod = Find(query);
+        var updated = mod with { KeepAuthorHudDesign = keep };
         store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
         return updated;
     }

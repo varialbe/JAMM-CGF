@@ -26,7 +26,7 @@ public static class HdMod
         var compiler = new CompileGroup(data);
         var hd = ModObjects.Create(data, ObjectName, persistent: true);
         compiler.QueueCodeReplace(hd.EventHandlerFor(EventType.Create, 0u, data), Create(debug));
-        compiler.QueueCodeReplace(hd.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), Toast);
+        compiler.QueueCodeReplace(hd.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), Toast(data));
         compiler.QueueCodeReplace(hd.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), Step(debug));
         compiler.QueueCodeReplace(hd.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), Resize);
         compiler.QueueCodeReplace(hd.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.RoomStart, data), RoomStart);
@@ -93,9 +93,10 @@ public static class HdMod
         {{(debug ? "directory_create(\"out\"); directory_create(\"out/phase6b\"); window_set_fullscreen(false);" : "")}}
         """;
 
-    private const string Toast = """
+    private static string Toast(UndertaleData data) => $$"""
         if (current_time < jamm_hd_toast_until)
         {
+            {{(data.Fonts.ByName("fnt_babySmall") is not null ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);")}}
             draw_set_halign(fa_left);
             draw_set_valign(fa_top);
             draw_set_alpha(min(1, (jamm_hd_toast_until - current_time) / 500));

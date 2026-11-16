@@ -138,7 +138,8 @@ public static class ArchiveBuilder
             }
         }
         bool useCompleteAtlas = sources.Count == 1 && new[] { "sprites", "fonts", "backgrounds", "sounds" }
-            .All(f => tables[f].Cast<object>().All(a => ResourceCatalog.Find(sourceTables[0][f], ResourceCatalog.Name(a)) is not null));
+            .All(f => tables[f].Cast<object>().All(a => ResourceCatalog.Find(sourceTables[0][f], ResourceCatalog.Name(a)) is not null))
+            && !HasSanitizedHudDifference(ancestor, sources[0], plan);
         if (useCompleteAtlas)
         {
             // Semantically unchanged binary assets can use the verified mod's atlas as well.
@@ -197,6 +198,11 @@ public static class ArchiveBuilder
                 ?? throw new InvalidDataException($"Missing {asset.Family}/{asset.Name} in verified source archive.");
             object target = ResourceCatalog.Find(tables[asset.Family], asset.Name)!;
             if (asset.Family is "objects" or "rooms" or "scripts" or "paths" or "timelines") structured.Apply(target, asset.Snapshot!.Value, asset.Source);
+            else if (target is UndertaleSprite targetSprite && sourceAsset is UndertaleSprite sourceSprite
+                && TryApplyHybridSpriteFrames(targetSprite, sourceSprite, asset, importers[asset.Source]))
+            {
+                continue;
+            }
             else
             {
                 importers[asset.Source].Populate(sourceAsset, target, skipFontTexture: target is UndertaleFont);
@@ -252,6 +258,91 @@ public static class ArchiveBuilder
         data.GeneralInfo.LastObj = nextInstance; data.GeneralInfo.LastTile = nextTile;
         static string InstanceKey(UndertaleRoom.GameObject i) => AssetFields.Json(new object?[] { i.ObjectDefinition?.Name.Content, i.X, i.Y }).GetRawText();
         static string TileKey(UndertaleRoom.Tile i) => AssetFields.Tiles([i]).Keys.Single();
+    }
+
+    private static bool HasSanitizedHudDifference(UndertaleData ancestor, UndertaleData source, BuildPlan plan)
+    {
+        var plannedSprites = plan.Assets.Where(a => a.Family == "sprites" && a.Patch is not null)
+            .ToDictionary(a => a.Name, a => a, StringComparer.Ordinal);
+        foreach (string hudName in ModSanitizer.HudSprites)
+        {
+            var baseSprite = ancestor.Sprites.FirstOrDefault(s => s.Name.Content == hudName);
+            var modSprite = source.Sprites.FirstOrDefault(s => s.Name.Content == hudName);
+            if (baseSprite is null || modSprite is null) continue;
+            if (plannedSprites.TryGetValue(hudName, out var planned))
+            {
+                if (planned.Patch?.Base is { ValueKind: System.Text.Json.JsonValueKind.Object } bSnap
+                    && planned.Snapshot is { ValueKind: System.Text.Json.JsonValueKind.Object } mSnap
+                    && bSnap.TryGetProperty("frames", out var bf) && mSnap.TryGetProperty("frames", out var mf)
+                    && bf.ValueKind == System.Text.Json.JsonValueKind.Array && mf.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && mf.GetArrayLength() > bf.GetArrayLength())
+                {
+                    return true;
+                }
+                continue;
+            }
+            if (!SpritesHaveSameGeometryAndFrames(baseSprite, modSprite))
+                return true;
+        }
+        var plannedFonts = plan.Assets.Where(a => a.Family == "fonts" && a.Patch is not null)
+            .Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (string fontName in ModSanitizer.HudFonts)
+        {
+            if (plannedFonts.Contains(fontName)) continue;
+            var baseFont = ancestor.Fonts.FirstOrDefault(f => f.Name.Content == fontName);
+            var modFont = source.Fonts.FirstOrDefault(f => f.Name.Content == fontName);
+            if (baseFont is null || modFont is null) continue;
+            if (baseFont.EmSize != modFont.EmSize || baseFont.DisplayName?.Content != modFont.DisplayName?.Content
+                || baseFont.Glyphs.Count != modFont.Glyphs.Count)
+                return true;
+        }
+        return false;
+    }
+
+    private static bool SpritesHaveSameGeometryAndFrames(UndertaleSprite a, UndertaleSprite b)
+    {
+        if (a.Width != b.Width || a.Height != b.Height || a.Textures.Count != b.Textures.Count) return false;
+        var aSnap = new AssetFields(_ => { }).Snapshot(a);
+        var bSnap = new AssetFields(_ => { }).Snapshot(b);
+        return System.Text.Json.JsonElement.DeepEquals(aSnap, bSnap);
+    }
+
+    private static bool TryApplyHybridSpriteFrames(UndertaleSprite targetSprite, UndertaleSprite sourceSprite, PlannedAsset asset, ResourceImporter importer)
+    {
+        if (asset.Patch?.Base is not { ValueKind: System.Text.Json.JsonValueKind.Object } baseSnap
+            || asset.Snapshot is not { ValueKind: System.Text.Json.JsonValueKind.Object } modSnap
+            || !baseSnap.TryGetProperty("frames", out var bfElem)
+            || !modSnap.TryGetProperty("frames", out var mfElem)
+            || bfElem.ValueKind != System.Text.Json.JsonValueKind.Array
+            || mfElem.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            return false;
+        }
+        var baseFrames = bfElem.EnumerateArray().ToArray();
+        var modFrames = mfElem.EnumerateArray().ToArray();
+        if (modFrames.Length <= baseFrames.Length || targetSprite.Textures.Count < baseFrames.Length || sourceSprite.Textures.Count < modFrames.Length)
+            return false;
+        bool keepsAllBaseFrames = true;
+        for (int i = 0; i < baseFrames.Length; i++)
+        {
+            if (!System.Text.Json.JsonElement.DeepEquals(baseFrames[i], modFrames[i]))
+            {
+                keepsAllBaseFrames = false;
+                break;
+            }
+        }
+        if (!keepsAllBaseFrames)
+            return false;
+
+        // Keep base frames 0..baseFrames.Length-1 already present on targetSprite, and append mod frames baseFrames.Length..modFrames.Length-1.
+        while (targetSprite.Textures.Count > baseFrames.Length)
+            targetSprite.Textures.RemoveAt(targetSprite.Textures.Count - 1);
+        for (int i = baseFrames.Length; i < modFrames.Length; i++)
+        {
+            var copiedEntry = (UndertaleSprite.TextureEntry)importer.Copy(sourceSprite.Textures[i]);
+            targetSprite.Textures.Add(copiedEntry);
+        }
+        return true;
     }
 
     private static IReadOnlyDictionary<AssetKind, int> Counts(UndertaleData data)

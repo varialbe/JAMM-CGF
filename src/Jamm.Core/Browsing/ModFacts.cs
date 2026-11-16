@@ -14,7 +14,7 @@ public sealed record ModFacts(string FileHash, string BaseHash, int AnalyzerVers
 public sealed class ModFactAnalyzer(ManagerStore store, AnalysisOptions? options = null)
 {
     /// <summary>Invalidates cached facts when extraction, sanitizer or compatibility rules change.</summary>
-    public const int Version = 5;
+    public const int Version = 6;
 
     /// <summary>Computes facts without importing or enabling a mod.</summary>
     public ModFacts Analyze(string archive, CancellationToken token) => Analyze(archive, token, null);

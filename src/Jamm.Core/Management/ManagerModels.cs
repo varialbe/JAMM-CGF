@@ -60,8 +60,10 @@ public sealed record ManagedMod(string Id, string Name, string SourceFileName, s
 {
     /// <summary>Exact-byte online provenance; absent in older/manual imports. Hashes identify bytes, not trusted authorship.</summary>
     public ModOrigin[] Origins { get; init; } = [];
-    /// <summary>Expert per-mod opt-out that uses the original unsanitized patch instead of JAMM's sanitized patch.</summary>
+    /// <summary>Expert per-mod opt-out that uses the original unsanitized performance changes instead of JAMM's sanitized patch.</summary>
     public bool KeepAuthorPerformanceChanges { get; init; }
+    /// <summary>Expert per-mod opt-out that keeps the author's HUD/UI asset replacements instead of reverting to base HUD art.</summary>
+    public bool KeepAuthorHudDesign { get; init; }
 }
 
 /// <summary>Public source identity recorded only after successful local import/hash deduplication.</summary>

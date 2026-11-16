@@ -179,9 +179,11 @@ public sealed partial class MainViewModel : ObservableObject
                     Summary = info.Summary,
                     CatalogId = m.Mod.Origins.FirstOrDefault(o => o.Catalog == "litterbox")?.ModId,
                     IsJammMod = info.Report?.IsJammMod ?? false,
-                    RemovedPerformanceCount = info.Report?.Removed.Count ?? 0,
+                    RemovedPerformanceCount = info.Report?.RemovedPerformanceCount ?? 0,
+                    RemovedHudCount = info.Report?.RemovedHudCount ?? 0,
                     SanitizedDetails = info.Report?.FormatDetails() ?? "",
-                    KeepAuthorPerformanceChanges = m.Mod.KeepAuthorPerformanceChanges
+                    KeepAuthorPerformanceChanges = m.Mod.KeepAuthorPerformanceChanges,
+                    KeepAuthorHudDesign = m.Mod.KeepAuthorHudDesign
                 });
             }
             RefreshLocalIcons();
@@ -205,6 +207,7 @@ public sealed partial class MainViewModel : ObservableObject
                     if (loading) return;
                     if (e.PropertyName == nameof(ModRow.Enabled)) { Conflicts.Clear(); NotifyButtons(); }
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorPerformanceChanges)) await SetKeepAuthorPerformanceChangesAsync(row);
+                    else if (e.PropertyName == nameof(ModRow.KeepAuthorHudDesign)) await SetKeepAuthorHudDesignAsync(row);
                 };
             }
             knownGame = data.State.Known; canRestore = data.State.CanRestore; GameStatus = data.State.Message;
@@ -272,6 +275,13 @@ public sealed partial class MainViewModel : ObservableObject
         await Task.Run(() => new ModLibrary(store).SetKeepAuthorPerformanceChanges(row.Id, row.KeepAuthorPerformanceChanges));
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         Message($"{row.Name}: {(row.KeepAuthorPerformanceChanges ? "keeping the author's performance changes" : "using JAMM's sanitized patch")}.");
+    }, false);
+    /// <summary>Persists the Advanced per-mod opt-out to keep or strip the author's HUD design.</summary>
+    public Task SetKeepAuthorHudDesignAsync(ModRow row) => RunAsync("Updating HUD design setting", async (_, _) =>
+    {
+        await Task.Run(() => new ModLibrary(store).SetKeepAuthorHudDesign(row.Id, row.KeepAuthorHudDesign));
+        Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
+        Message($"{row.Name}: {(row.KeepAuthorHudDesign ? "keeping the author's HUD design" : "protecting base HUD design")}.");
     }, false);
     /// <summary>Number of switches waiting to be applied.</summary>
     public int PendingCount => Mods.Count(m => m.IsPending);
