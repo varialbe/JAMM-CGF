@@ -6,6 +6,9 @@ namespace Jamm.Core.Management;
 public sealed record GameLaunchCommand(string FileName, string[] Arguments, string WorkingDirectory,
     IReadOnlyDictionary<string, string> Environment)
 {
+    /// <summary>Compatibility directory to create for a Flatpak launch.</summary>
+    public string? FlatpakCompatDataPath { get; init; }
+
     /// <summary>Creates a shell-free, nonblocking process start request.</summary>
     public ProcessStartInfo ToStartInfo()
     {
@@ -16,7 +19,7 @@ public sealed record GameLaunchCommand(string FileName, string[] Arguments, stri
     }
 
     /// <summary>Formats a readable command for display only; execution never uses a shell.</summary>
-    public string Display() => string.Join(" ", Environment.Select(p => p.Key + "=" + Quote(p.Value))
+    public string Display() => FlatpakCompatDataPath is not null ? $"flatpak enter Steam: {WorkingDirectory}" : string.Join(" ", Environment.Select(p => p.Key + "=" + Quote(p.Value))
         .Concat(new[] { FileName }.Concat(Arguments).Select(Quote)));
 
     private static string Quote(string text) => "'" + text.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
@@ -25,8 +28,8 @@ public sealed record GameLaunchCommand(string FileName, string[] Arguments, stri
 /// <summary>Constructs and validates legacy game launches without waiting for the runner to exit.</summary>
 public static class GameLauncher
 {
-    /// <summary>Constructs Wine or Proton arguments and environment; performs no process execution or file writes.</summary>
-    public static GameLaunchCommand Create(ManagerConfig config, string dataDirectory)
+    /// <summary>Constructs runner arguments and environment; Flatpak mode queries Steam and sandbox visibility without writing files.</summary>
+    public static GameLaunchCommand Create(ManagerConfig config, string dataDirectory, FlatpakLaunchHost? flatpakHost = null)
     {
         string game = Path.GetFullPath(config.GameDir ?? throw new ArgumentException("Set gameDir before playing."));
         string executable = Path.Combine(game, "Cat Goes Fishing.exe");
@@ -36,7 +39,9 @@ public static class GameLauncher
             if (config.Wine.Prefix is not null) environment["WINEPREFIX"] = config.Wine.Prefix;
             return new(config.Wine.Binary, [executable], game, environment);
         }
-        if (config.Wine.Mode != "proton") throw new ArgumentException("wine.mode must be 'wine' or 'proton'.");
+        if (config.Wine.Mode == "proton-flatpak")
+            return FlatpakSteamLauncher.Create(config, game, flatpakHost ?? new FlatpakLaunchHost());
+        if (config.Wine.Mode != "proton") throw new ArgumentException("wine.mode must be 'wine', 'proton' or 'proton-flatpak'.");
         if (config.Proton.Path is null)
             throw new ArgumentException("Proton needs 'proton.path' (folder containing proton). Set it with config set.");
         environment["STEAM_COMPAT_DATA_PATH"] = config.Proton.CompatDataPath ?? Path.Combine(Path.GetFullPath(dataDirectory), "proton", config.Steam.AppId);
@@ -87,6 +92,7 @@ public static class GameLauncher
     public static void Launch(GameLaunchCommand command)
     {
         Validate(command);
+        if (command.FlatpakCompatDataPath is not null) Directory.CreateDirectory(command.FlatpakCompatDataPath);
         var resolved = command with { FileName = FindRunner(command.FileName)! };
         using var process = Process.Start(resolved.ToStartInfo()) ?? throw new IOException("The game runner could not be started. Check its executable and prefix settings.");
     }

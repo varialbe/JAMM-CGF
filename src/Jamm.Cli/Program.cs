@@ -63,7 +63,7 @@ int Run(string[] arguments)
             cgfmm play [--profile <name>] [--yes]
             cgfmm restore [--game <game dir>] [--verbose]
             Management storage: --data-dir <dir>, then CGFMM_DATA_DIR, then $XDG_DATA_HOME/cgfmm.
-            Config keys: base, gameDir, wine.mode (wine|proton), wine.prefix, wine.binary, proton.path,
+            Config keys: base, gameDir, wine.mode (wine|proton|proton-flatpak), wine.prefix, wine.binary, proton.path,
                          proton.compatDataPath, proton.clientInstallPath, steam.appId.
             --verbose works with every command; --yes skips the apply/play install confirmation.
             cgfmm verify <data.win> [--verbose]

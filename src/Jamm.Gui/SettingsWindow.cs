@@ -30,7 +30,7 @@ public sealed class SettingsWindow : Window
         var guide = new Button { Content = "How to get the legacy build ↗" };
         guide.Click += async (_, _) => { if (Launcher is { } launcher) await launcher.LaunchUriAsync(new Uri("https://github.com/varialbe/JAMM-CGF/blob/experimental/docs/legacy-version.md")); };
         panel.Children.Add(guide);
-        Add("wine.mode", "Runner: wine or proton", config.Wine.Mode);
+        Add("wine.mode", "Runner: wine, proton or proton-flatpak", config.Wine.Mode);
         Add("wine.binary", "Wine executable (PATH name or path)", config.Wine.Binary);
         Add("wine.prefix", "Wine prefix (optional)", config.Wine.Prefix, true);
         Add("proton.path", "Proton directory (optional)", config.Proton.Path, true);

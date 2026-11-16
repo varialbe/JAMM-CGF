@@ -26,6 +26,10 @@ Use full IDs or unique case-sensitive names/source stems for `<mod>`. Names cont
 spaces must be quoted, including the entire comma-separated `--mods` value.
 Management commands return 0 on success, 1 for errors or declined installation.
 
+`wine.mode` accepts `wine`, `proton`, or `proton-flatpak`. For Flatpak Steam, start
+Steam first; see the [Flatpak Steam setup](../README.md#flatpak-steam) for defaults
+and sandbox-visible game and compatibility directories.
+
 ## Archive and analysis commands
 
 The CLI executable/assembly is named **`cgfmm`**. These examples run it from the checkout;

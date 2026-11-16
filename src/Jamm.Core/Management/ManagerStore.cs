@@ -58,7 +58,7 @@ public sealed class ManagerStore
     {
         var config = File.Exists(Path("config.json")) ? Read<ManagerConfig>(Path("config.json")) : new();
         if (config.Wine is null || config.Proton is null || config.Steam is null
-            || config.Wine.Mode is not "wine" and not "proton" || string.IsNullOrWhiteSpace(config.Wine.Binary)
+            || config.Wine.Mode is not "wine" and not "proton" and not "proton-flatpak" || string.IsNullOrWhiteSpace(config.Wine.Binary)
             || !uint.TryParse(config.Steam.AppId, out uint id) || id == 0)
             throw new InvalidDataException("Configuration 'config.json' has invalid runner settings. Repair the JSON or remove it and use config set to configure again.");
         return config;
@@ -108,14 +108,14 @@ public sealed class ManagerStore
         {
             "base" => config with { Base = Full() },
             "gameDir" => config with { GameDir = Full() },
-            "wine.mode" when value is "wine" or "proton" => config with { Wine = config.Wine with { Mode = value } },
+            "wine.mode" when value is "wine" or "proton" or "proton-flatpak" => config with { Wine = config.Wine with { Mode = value } },
             "wine.prefix" => config with { Wine = config.Wine with { Prefix = Full() } },
             "wine.binary" => config with { Wine = config.Wine with { Binary = value.IndexOfAny([System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar]) >= 0 ? Full() : value } },
             "proton.path" => config with { Proton = config.Proton with { Path = Full() } },
             "proton.compatDataPath" => config with { Proton = config.Proton with { CompatDataPath = Full() } },
             "proton.clientInstallPath" => config with { Proton = config.Proton with { ClientInstallPath = Full() } },
             "steam.appId" when uint.TryParse(value, out uint id) && id > 0 => config with { Steam = config.Steam with { AppId = value } },
-            "wine.mode" => throw new ArgumentException("wine.mode must be 'wine' or 'proton'."),
+            "wine.mode" => throw new ArgumentException("wine.mode must be 'wine', 'proton' or 'proton-flatpak'."),
             "steam.appId" => throw new ArgumentException("steam.appId must be a positive number."),
             _ => throw new ArgumentException($"Unknown configuration key '{key}'. See config in 'cgfmm --help'.")
         };

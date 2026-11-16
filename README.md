@@ -105,6 +105,35 @@ cgfmm config set proton.clientInstallPath "$HOME/.steam/steam"
 cgfmm config set proton.compatDataPath /path/to/compatdata/343780
 ```
 
+## Flatpak Steam
+
+If Steam is installed as `com.valvesoftware.Steam`, start Steam before pressing Play
+and select the Flatpak runner in GUI Settings or run:
+
+```sh
+cgfmm config set wine.mode proton-flatpak
+cgfmm play
+```
+
+JAMM detects Steam at
+`~/.var/app/com.valvesoftware.Steam/.local/share/Steam` and uses
+`steamapps/common/Proton - Experimental/proton` there. Install Proton - Experimental
+through Steam if it is missing. Compatibility data defaults to that Steam directory's
+`steamapps/compatdata/343780`, which is visible inside the sandbox.
+
+The runner enters the lowest-PID running Steam instance and restores its `steam.sh`
+environment before starting Proton with Python. Flatpak must be on PATH and Steam
+must already be running. No wrapper script is needed.
+
+`proton.path`, `proton.clientInstallPath`, and `proton.compatDataPath` override these
+defaults. If switching from a wrapper or host Proton setup, clear these optional
+fields in GUI Settings to restore automatic detection, or set them to Flatpak-visible
+locations with `config set`. Keep the whole legacy game folder in a location Steam
+can access, such as under its Flatpak data directory or an allowed `/run/media`
+location, and set `gameDir` accordingly. JAMM checks visibility from inside Steam
+before installing a profile; an inaccessible folder produces instructions to move
+it or grant Steam access.
+
 ## CLI at a glance
 
 | Command | Purpose |

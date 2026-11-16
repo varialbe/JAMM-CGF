@@ -20,7 +20,7 @@ public sealed record ManagerConfig
 /// <summary>Wine runner settings.</summary>
 public sealed record WineSettings
 {
-    /// <summary>Either wine or proton.</summary>
+    /// <summary>Either wine, proton or proton-flatpak.</summary>
     public string Mode { get; init; } = "wine";
     /// <summary>Optional absolute Wine prefix.</summary>
     public string? Prefix { get; init; }
@@ -33,9 +33,9 @@ public sealed record ProtonSettings
 {
     /// <summary>Directory containing the proton script.</summary>
     public string? Path { get; init; }
-    /// <summary>STEAM_COMPAT_DATA_PATH; defaults inside the manager data directory.</summary>
+    /// <summary>STEAM_COMPAT_DATA_PATH; defaults inside manager storage, or Flatpak Steam storage in proton-flatpak mode.</summary>
     public string? CompatDataPath { get; init; }
-    /// <summary>Steam installation; defaults to STEAM_COMPAT_CLIENT_INSTALL_PATH or a standard Steam directory.</summary>
+    /// <summary>Steam installation; defaults to the Flatpak data directory in proton-flatpak mode, otherwise the environment or standard Steam directories.</summary>
     public string? ClientInstallPath { get; init; }
 }
 
