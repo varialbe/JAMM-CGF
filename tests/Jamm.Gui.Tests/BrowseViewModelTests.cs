@@ -1,3 +1,6 @@
+using Avalonia.Headless.XUnit;
+using Avalonia.Svg.Skia;
+using Avalonia.Threading;
 using System.Net;
 using Jamm.Core.Browsing;
 using Jamm.Core.Building;
@@ -112,7 +115,27 @@ public sealed class BrowseViewModelTests
         Assert.Empty(Directory.GetFiles(Path.Combine(files.Store.Root, "downloads")));
         await vm.RestoreAsync(); Assert.Equal(before, BuildFiles.Hash(game)); vm.Browse.Dispose();
     }
-    [Fact]
+    [AvaloniaFact]
+    public async Task CompletedOperationIgnoresQueuedProgress()
+    {
+        using var files = new TestFiles();
+        var vm = Create(files, _ => throw new Exception());
+        try
+        {
+            await vm.RunAsync("Checking", (_, progress) =>
+            {
+                progress.Report("Stale processing step");
+                return Task.CompletedTask;
+            });
+            Assert.Equal("Checking complete.", vm.Status);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Checking complete.", vm.Status);
+            Assert.DoesNotContain("Stale processing step", vm.Log);
+        }
+        finally { vm.Browse.Dispose(); }
+    }
+
+    [AvaloniaFact]
     public async Task NewOverlapsRequireExistingConflictUiBeforeInstallation()
     {
         using var files = new TestFiles(); string source = files.Mod("Online", "x = 2;\n");
@@ -121,6 +144,7 @@ public sealed class BrowseViewModelTests
         var vm = Create(files, _ => Task.FromResult(File.ReadAllBytes(source))); await Select(vm);
         string game = Path.Combine(files.Store.Config().GameDir!, "data.win"), before = BuildFiles.Hash(game);
         await vm.Browse.DownloadAsync(true, _ => throw new Exception("Conflicts must be reviewed first"));
+        Dispatcher.UIThread.RunJobs(); // Deliver queued progress before checking the final outcome.
         Assert.Equal(before, BuildFiles.Hash(game)); Assert.Equal(2, profiles.Get("combined").EnabledMods.Length);
         Assert.Contains(vm.Conflicts, c => c.CanChoose); Assert.Contains("Review conflicts", vm.Status);
         foreach (var row in vm.Conflicts.Where(c => c.CanChoose)) await vm.ResolveAsync(row.Key, row.Choices[0]);
@@ -158,11 +182,19 @@ public sealed class BrowseViewModelTests
     public async Task OversizedOptionalThumbnailDoesNotClaimCatalogFailed()
     {
         using var files = new TestFiles();
-        var vm = Create(files, _ => Task.FromResult(new byte[300000]), Example() with { IconUrl = "https://example.com/huge.png" });
+        int thumbnailRequests = 0;
+        var vm = Create(files, _ => { thumbnailRequests++; return Task.FromResult(new byte[300000]); },
+            Example() with { IconUrl = "https://example.com/huge.png" });
         await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
         Assert.Single(vm.Browse.Mods); Assert.Contains("Last successful fetch", vm.Browse.Status);
         Assert.DoesNotContain("Could not load", vm.Browse.Status);
-        Assert.Null(vm.Browse.Mods[0].Icon); vm.Browse.Dispose();
+        var row = Assert.Single(vm.Browse.Mods);
+        Assert.Equal(Path.Combine(AppContext.BaseDirectory, "Assets", "ModIcons", "litterbox-40.svg"),
+            ModIconResolver.Resolve(row.Mod.Id, row.Mod.Name));
+        Assert.NotNull(Assert.IsType<SvgImage>(row.Icon).Source); // The oversized raster must never replace the bundled SVG.
+        Assert.False(vm.Browse.IsLoading);
+        Assert.Equal(0, thumbnailRequests); // Bundled artwork takes precedence over the optional oversized download.
+        vm.Browse.Dispose();
     }
     private sealed class OfflineCatalog : IModCatalogProvider
     { public Task<CatalogSnapshot> LoadAsync(CancellationToken token) => throw new HttpRequestException("Offline; check your connection and Retry."); }

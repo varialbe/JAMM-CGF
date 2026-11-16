@@ -9,6 +9,9 @@ using Jamm.Core.Management;
 using Jamm.Core.Browsing;
 using Jamm.Gui.ViewModels;
 
+// Avalonia application, dispatcher, focus and rendering services are process-wide.
+// Plain view-model tests also load SVG artwork through those services.
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 [assembly: AvaloniaTestApplication(typeof(Jamm.Gui.Tests.HeadlessApp))]
 
 namespace Jamm.Gui.Tests;

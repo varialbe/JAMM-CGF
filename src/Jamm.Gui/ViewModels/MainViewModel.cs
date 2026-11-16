@@ -96,11 +96,23 @@ public sealed partial class MainViewModel : ObservableObject
         cancellation = new();
         IsBusy = true;
         Message(label);
-        var progress = new Progress<string>(Message);
+        // Progress posts asynchronously; queued reports must not overwrite a completed
+        // operation's outcome or a later operation's status.
+        object progressGate = new();
+        bool reporting = true;
+        var progress = new Progress<string>(message =>
+        {
+            lock (progressGate)
+                if (reporting) Message(message);
+        });
         try { await action(cancellation.Token, progress); if (Status == label) Message(label + " complete."); }
         catch (OperationCanceledException) { Message("Cancelled. The game was not replaced."); }
         catch (Exception ex) { ReportError("Could not complete " + label.ToLowerInvariant() + ": " + ex.Message + " Check the selected file or folder and try again."); }
-        finally { cancellation.Dispose(); cancellation = null; IsBusy = false; }
+        finally
+        {
+            lock (progressGate) reporting = false;
+            cancellation.Dispose(); cancellation = null; IsBusy = false;
+        }
     }
     /// <summary>Requests cancellation at the next safe Core checkpoint.</summary>
     public void Cancel() { if (CanCancel) { cancellation?.Cancel(); Status = "Cancelling at the next safe checkpoint…"; } }
