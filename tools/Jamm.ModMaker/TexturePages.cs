@@ -21,6 +21,7 @@ public static class TexturePages
         Console.WriteLine($"Exported {data.EmbeddedTextures.Count} pages to {directory}; {info.Count(p => p.Upscale)} can be upscaled.");
     }
 
+    /// <summary>Page dimensions, usage counts, and eligibility for source-only scaling.</summary>
     public sealed record PageInfo(int Index, int Width, int Height, int Items, int Fonts, int TileBackgrounds, int Backgrounds, bool Upscale);
 
     /// <summary>
@@ -41,5 +42,63 @@ public static class TexturePages
             result.Add(new(i, page.TextureData.Image.Width, page.TextureData.Image.Height, items.Count, fonts, tiles, bgs, fonts == 0 && tiles == 0));
         }
         return result;
+    }
+    /// <summary>Original texture layout and font metadata used to check the serialized HD archive.</summary>
+    public sealed record HdBaseline(List<PageInfo> Pages, int[][] Items, string[] PageHashes, string[] Fonts);
+
+    /// <summary>Captures only metadata and hashes; no extracted game assets are written.</summary>
+    public static HdBaseline Capture(UndertaleData data) => new(Describe(data),
+        data.TexturePageItems.Select(t => Rectangle(data, t)).ToArray(),
+        data.EmbeddedTextures.Select(t => ImageHash(t)).ToArray(), FontSignatures(data));
+
+    private static int[] Rectangle(UndertaleData data, UndertaleTexturePageItem t) =>
+        [data.EmbeddedTextures.IndexOf(t.TexturePage), t.SourceX, t.SourceY, t.SourceWidth, t.SourceHeight,
+            t.TargetX, t.TargetY, t.TargetWidth, t.TargetHeight, t.BoundingWidth, t.BoundingHeight];
+
+    private static string ImageHash(UndertaleEmbeddedTexture page)
+    {
+        using var stream = new MemoryStream();
+        page.TextureData.Image.SavePng(stream);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream.ToArray()));
+    }
+
+    private static string[] FontSignatures(UndertaleData data) => data.Fonts.Select(f => JsonSerializer.Serialize(new
+    {
+        Name = f.Name?.Content, DisplayName = f.DisplayName?.Content,
+        f.EmSizeIsFloat, f.EmSize, f.Bold, f.Italic, f.RangeStart, f.RangeEnd, f.Charset, f.AntiAliasing,
+        Texture = data.TexturePageItems.IndexOf(f.Texture), f.ScaleX, f.ScaleY, f.Ascender, f.AscenderOffset,
+        f.SDFSpread, f.LineHeight, f.Glyphs
+    })).ToArray();
+
+    /// <summary>Checks every saved page, TPAG rectangle, and font; reports uncompressed RGBA8 memory.</summary>
+    public static void VerifyHd(HdBaseline original, UndertaleData output, bool upscaled)
+    {
+        var pages = Describe(output);
+        if (pages.Count != original.Pages.Count || output.TexturePageItems.Count != original.Items.Length)
+            throw new InvalidDataException("HD verification failed: page or TPAG count changed.");
+        long before = 0, after = 0;
+        foreach (var page in original.Pages)
+        {
+            int factor = upscaled && page.Upscale ? 2 : 1;
+            if (pages[page.Index].Width != page.Width * factor || pages[page.Index].Height != page.Height * factor)
+                throw new InvalidDataException($"HD verification failed: page {page.Index} has an unexpected size.");
+            if (factor == 1 && ImageHash(output.EmbeddedTextures[page.Index]) != original.PageHashes[page.Index])
+                throw new InvalidDataException($"HD verification failed: protected page {page.Index} changed.");
+            before += (long)page.Width * page.Height * 4;
+            after += (long)pages[page.Index].Width * pages[page.Index].Height * 4;
+        }
+        for (int i = 0; i < original.Items.Length; i++)
+        {
+            var expected = (int[])original.Items[i].Clone();
+            int factor = upscaled && original.Pages[expected[0]].Upscale ? 2 : 1;
+            for (int j = 1; j <= 4; j++) expected[j] *= factor;
+            if (!expected.SequenceEqual(Rectangle(output, output.TexturePageItems[i])))
+                throw new InvalidDataException($"HD verification failed: TPAG item {i} source, target or bounding rectangle differs.");
+        }
+        if (!original.Fonts.SequenceEqual(FontSignatures(output)))
+            throw new InvalidDataException("HD verification failed: font metadata or glyphs changed.");
+        Console.WriteLine($"HD offline verification passed: {pages.Count} pages, {original.Items.Length} TPAG items, {original.Fonts.Length} fonts unchanged.");
+        Console.WriteLine($"RGBA8 texture residency: {before / 1048576.0:F0} -> {after / 1048576.0:F0} MiB (+{(after - before) / 1048576.0:F0} MiB). " +
+            "Budget the same again if the runner retains decoded CPU copies; excludes MSAA, back buffers, audio and other game memory.");
     }
 }
