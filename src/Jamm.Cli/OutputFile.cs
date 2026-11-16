@@ -9,9 +9,12 @@ internal static class OutputFile
         if ((!allowNewWin && (string.Equals(Path.GetExtension(destination), ".win", StringComparison.OrdinalIgnoreCase)
             || string.Equals(Path.GetExtension(resolved), ".win", StringComparison.OrdinalIgnoreCase)))
             || (allowNewWin && (File.Exists(destination) || Directory.Exists(destination) || new FileInfo(destination).LinkTarget is not null))
+            || new[] { destination, resolved }.Any(p => p.EndsWith(".cgfmm-original", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith(".cgfmm-build.json", StringComparison.OrdinalIgnoreCase)
+                || File.Exists(p + ".cgfmm-original") || File.Exists(p + ".cgfmm-build.json"))
             || inputs.Any(x => string.Equals(Resolve(Path.GetFullPath(x)), resolved,
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
-            throw new ArgumentException($"Refusing to write '{Path.GetFileName(path)}': use a separate path from game inputs; reports cannot be .win files and build outputs must be new files.");
+            throw new ArgumentException($"Refusing to write '{Path.GetFileName(path)}': use a separate path from game inputs, installed archives, original backups and installation markers; reports cannot be .win files and build outputs must be new files.");
     }
 
     private static string Resolve(string path) => Jamm.Core.Building.BuildFiles.Resolve(path);

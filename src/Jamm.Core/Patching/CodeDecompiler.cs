@@ -7,7 +7,7 @@ using UndertaleModLib.Models;
 
 namespace Jamm.Core.Patching;
 
-internal sealed class CodeDecompiler(UndertaleData data, string fileName, Action<string> warning)
+internal sealed class CodeDecompiler(UndertaleData data, string fileName, Action<string> warning, IReadOnlySet<string>? ambiguous = null)
 {
     private GlobalDecompileContext? global;
     private readonly Dictionary<UndertaleCode, (string Text, string Format)> sources = [];
@@ -26,7 +26,11 @@ internal sealed class CodeDecompiler(UndertaleData data, string fileName, Action
         string text, format;
         try
         {
-            global ??= new GlobalDecompileContext(data);
+            if (global is null)
+            {
+                Building.CgfAssetTypes.Register(data);
+                global = ambiguous is null ? new GlobalDecompileContext(data) : new Building.AssetSymbols.Context(data, ambiguous);
+            }
             text = new DecompileContext(global, code).DecompileToString();
             format = "gml";
         }

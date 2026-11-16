@@ -91,8 +91,10 @@ public class PatchingTests
         using var unchanged = Model();
         var empty = PatchBuilder.Create(unchanged, unchanged, Base, Mod with { Name = "Other" });
         var report = ConflictAnalyzer.Analyze([patch, empty]);
-        Assert.Equal(3, report.ExitCode);
-        Assert.Contains(report.Findings, f => f.Asset == "swf" && f.Kind == "binary" && f.Severity == "CONFLICT");
+        Assert.Equal(0, report.ExitCode);
+        Assert.Contains(report.Findings, f => f.Asset == "swf" && f.Kind == "binary" && f.Severity == "WARNING");
+        Assert.Contains(ConflictAnalyzer.Analyze([patch, patch with { Mod = patch.Mod with { Name = "Other" } }]).Findings,
+            f => f.Asset == "swf" && f.Kind == "binary" && f.Severity == "CONFLICT");
     }
 
     [Fact]
@@ -323,6 +325,9 @@ public class PatchingTests
             Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath, "--force"]));
             var forced = PatchJson.Deserialize(File.ReadAllText(patchPath));
             Assert.Equal(first, PatchJson.Serialize(forced with { CreatedUtc = PatchJson.Deserialize(first).CreatedUtc }));
+            File.WriteAllText(patchPath, PatchJson.Serialize(forced with { AssetTypesVersion = 0 }));
+            var refreshed = Jamm.Cli.DiffCommand.Obtain(basePath, modPath, patchPath, null, false, [basePath, modPath], out bool reused);
+            Assert.False(reused); Assert.Equal(PatchJson.AssetTypesVersion, refreshed.AssetTypesVersion);
             File.WriteAllText(patchPath, PatchJson.Serialize(forced with { FormatVersion = 1 }));
             Assert.Equal(0, Jamm.Cli.DiffCommand.Run([basePath, modPath, "--out", patchPath]));
             Assert.Equal(PatchJson.FormatVersion, PatchJson.Deserialize(File.ReadAllText(patchPath)).FormatVersion);
@@ -378,7 +383,7 @@ public class PatchingTests
     }
 
     [RealFilesFact]
-    public void RealPatchCountsMatchCompareForEachMod()
+    public void RealPatchesIncludeComparedChangesAndSemanticOnlyCodeChangesForEachMod()
     {
         using var a = GameFileLoader.Load(Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!);
         var original = GameFileAnalyzer.Fingerprint(a);
@@ -394,7 +399,15 @@ public class PatchingTests
             {
                 var expected = compare.AssetTypes.Single(x => x.AssetType.ToString().Equals(kind, StringComparison.OrdinalIgnoreCase));
                 var actual = patch.Changes[kind];
-                Assert.Equal((expected.Added, expected.Changed, expected.Removed), (actual.Added.Count, actual.Changed.Count, actual.Removed.Count));
+                if (kind == "code")
+                {
+                    Assert.Equal((expected.Added, expected.Removed), (actual.Added.Count, actual.Removed.Count));
+                    Assert.Subset(actual.Changed.Select(a => a.Name).ToHashSet(StringComparer.Ordinal),
+                        expected.Assets.Where(a => a.Classification == AssetClassification.Changed).Select(a => a.Name).ToHashSet(StringComparer.Ordinal));
+                    Assert.All(actual.Changed, a => Assert.False(JsonElement.DeepEquals(JsonSerializer.SerializeToElement(a.BaseCode), JsonSerializer.SerializeToElement(a.ModCode))
+                        && a.Base is { } before && JsonElement.DeepEquals(before, a.Mod), $"Code '{a.Name}' must have a semantic or metadata change."));
+                }
+                else Assert.Equal((expected.Added, expected.Changed, expected.Removed), (actual.Added.Count, actual.Changed.Count, actual.Removed.Count));
             }
             Assert.All(patch.Changes["code"].Added.Concat(patch.Changes["code"].Changed), x => Assert.NotNull(x.ModCode));
             string json = PatchJson.Serialize(patch);

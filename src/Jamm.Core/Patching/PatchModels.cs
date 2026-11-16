@@ -6,7 +6,8 @@ namespace Jamm.Core.Patching;
 /// <summary>A portable diff. These records have no UndertaleModLib dependencies.</summary>
 public sealed record ModPatch(int FormatVersion, string Tool, DateTimeOffset CreatedUtc,
     PatchFile Mod, PatchFile Base, IReadOnlyList<string> Warnings, SortedDictionary<string, AssetChanges> Changes,
-    SortedDictionary<string, string[]>? BaseAssets = null, IReadOnlyList<AssetReference>? References = null);
+    SortedDictionary<string, string[]>? BaseAssets = null, IReadOnlyList<AssetReference>? References = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int AssetTypesVersion = 0);
 
 /// <summary>Content-addressed source identity; no personal source paths are saved.</summary>
 public sealed record PatchFile(string FileName, string Sha256, ulong Gen8Timestamp,
@@ -38,6 +39,9 @@ public static class PatchJson
 {
     /// <summary>The current on-disk schema version.</summary>
     public const int FormatVersion = 2;
+
+    /// <summary>Decompiler container-definition revision used to invalidate older analysis caches.</summary>
+    public const int AssetTypesVersion = 2;
 
     /// <summary>Writes deterministic JSON for an already ordered patch.</summary>
     public static string Serialize(ModPatch patch) => JsonSerializer.Serialize(patch, PatchJsonContext.Default.ModPatch) + "\n";

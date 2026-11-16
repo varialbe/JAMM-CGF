@@ -3,6 +3,7 @@ using Jamm.Core.Diffing;
 using Jamm.Core.Patching;
 using Underanalyzer.Decompiler;
 using UndertaleModLib.Decompiler;
+using System.Text.RegularExpressions;
 
 namespace Jamm.Core.Tests;
 
@@ -31,8 +32,15 @@ public sealed class RealBuildTests
                 var build = ArchiveBuilder.Build(basePath, [inputs[^1]], output);
                 Assert.NotNull(build.Verification);
                 using var result = GameFileLoader.Load(output);
-                foreach (var kind in mod.Inspection.Counts.Keys.Except(new[] { AssetKind.Strings, AssetKind.Variables, AssetKind.Functions }))
+                foreach (var kind in mod.Inspection.Counts.Keys.Except(new[] { AssetKind.Strings, AssetKind.Variables, AssetKind.Functions, AssetKind.Objects }))
                     Assert.Equal(mod.Inspection.Counts[kind], result.Inspection.Counts[kind]);
+                Assert.Equal(original.Data.GameObjects.Select(o => o.Name.Content).Union(mod.Data.GameObjects.Select(o => o.Name.Content)).Count(), result.Data.GameObjects.Count);
+                AssertBaseIndices(original, result);
+                Assert.True(build.SemanticEntries > 0);
+                CgfAssetTypes.Register(mod.Data); CgfAssetTypes.Register(result.Data);
+                if (Path.GetFileName(path) == "the-abyss-beta.win") AssertCatalog(result, "Overbite", "Overbite");
+                if (Path.GetFileName(path) == "cave-expansion.win") AssertCatalog(result, "Fatneck", "Fatneck");
+                AssertCatalog(result, "Bombat", "Bombat");
                 // Definition tables have set semantics and retain base entries. Compare identities,
                 // not duplicates, local compiler bookkeeping or removed strings.
                 Assert.Subset(result.Data.Strings.Select(s => s.Content).ToHashSet(), original.Data.Strings.Select(s => s.Content).ToHashSet());
@@ -49,8 +57,20 @@ public sealed class RealBuildTests
                 }
             }
             string forward = Path.Combine(directory, "forward.win"), reverse = Path.Combine(directory, "reverse.win");
-            Assert.NotNull(ArchiveBuilder.Build(basePath, inputs, forward).Verification);
-            Assert.NotNull(ArchiveBuilder.Build(basePath, inputs.AsEnumerable().Reverse().ToArray(), reverse).Verification);
+            var forwardBuild = ArchiveBuilder.Build(basePath, inputs, forward);
+            var reverseBuild = ArchiveBuilder.Build(basePath, inputs.AsEnumerable().Reverse().ToArray(), reverse);
+            Assert.Equal(forwardBuild.SemanticEntries, forwardBuild.Verification!.SemanticEntries);
+            Assert.Equal(reverseBuild.SemanticEntries, reverseBuild.Verification!.SemanticEntries);
+            using (var merged = GameFileLoader.Load(reverse))
+            { AssertBaseIndices(original, merged); AssertCatalog(merged, "Overbite", "Overbite"); AssertCatalog(merged, "Bombat", "Bombat"); }
+            using (var merged = GameFileLoader.Load(forward))
+            { AssertBaseIndices(original, merged); AssertCatalog(merged, "Bombat", "Bombat"); }
+            // These mods claim identical catalog slots. An explicit Cave decision exercises
+            // its first added fish in a three-mod build, independently of the default winner.
+            string caveChosen = Path.Combine(directory, "cave-chosen.win");
+            Assert.NotNull(ArchiveBuilder.Build(basePath, inputs, caveChosen,
+                new Dictionary<string, string> { ["code/gml_Object_CatalogData_Create_0"] = "cave-expansion" }).Verification);
+            using (var merged = GameFileLoader.Load(caveChosen)) AssertCatalog(merged, "Fatneck", "Fatneck");
             Assert.NotNull(ArchiveVerifier.Verify(forward)); Assert.NotNull(ArchiveVerifier.Verify(reverse));
             string game = Path.Combine(directory, "game");
             string legacy = Path.GetDirectoryName(basePath)!;
@@ -72,4 +92,20 @@ public sealed class RealBuildTests
             Assert.Equal(hashes, new[] { basePath }.Concat(paths).Select(BuildFiles.Hash).ToArray());
         }
     }
+    private static void AssertBaseIndices(LoadedGameFile original, LoadedGameFile merged)
+    {
+        Assert.Equal(original.Data.GameObjects.Select(o => o.Name.Content), merged.Data.GameObjects.Take(original.Data.GameObjects.Count).Select(o => o.Name.Content));
+        Assert.Equal(original.Data.Sprites.Select(o => o.Name.Content), merged.Data.Sprites.Take(original.Data.Sprites.Count).Select(o => o.Name.Content));
+    }
+
+    private static void AssertCatalog(LoadedGameFile file, string displayName, string objectName)
+    {
+        string text = PatchBuilder.ReadCode(file, "gml_Object_CatalogData_Create_0").Text;
+        var name = Regex.Matches(text, @"name\[([^\]]+)\] = ""([^""]+)"";").Cast<Match>().Last(m => m.Groups[2].Value == displayName);
+        string slot = name.Groups[1].Value;
+        var value = Regex.Matches(text, @"object\[" + Regex.Escape(slot) + @"\] = (\w+);").Cast<Match>().Last();
+        Assert.Equal(objectName, value.Groups[1].Value);
+        Assert.Contains(file.Data.GameObjects, o => o.Name.Content == objectName);
+    }
+
 }

@@ -14,6 +14,8 @@ public static class ConflictAnalyzer
     public static ConflictReport Analyze(IReadOnlyList<ModPatch> patches)
     {
         if (patches.Count < 2) throw new ArgumentException("check needs at least two mods or patches.");
+        if (patches.Select(p => p.AssetTypesVersion).Distinct().Count() > 1)
+            throw new InvalidDataException("Patches use different asset-type definition revisions. Regenerate every patch with diff --force before checking them together.");
         string baseHash = patches[0].Base.Sha256;
         if (patches.Any(p => p.Base.Sha256 != baseHash))
             throw new InvalidDataException("Mods target different bases: " + string.Join("; ", patches.Select(p => $"{Name(p)} targets {p.Base.FileName} (SHA-256 {p.Base.Sha256})")) + ". Recompute every patch against the same --base archive.");
@@ -43,7 +45,7 @@ public static class ConflictAnalyzer
                 if (family == "code") Code(asset, versions);
                 else if (versions.Count > 1) CompareAssets(family, asset, versions);
                 else if (versions[0].Asset is { } unknown && unknown.Mod.GetRawText().Contains("unsupported:", StringComparison.Ordinal))
-                    findings.Add(new("CONFLICT", "binary", family, asset, [names[versions[0].Mod]],
+                    findings.Add(new("WARNING", "binary", family, asset, [names[versions[0].Mod]],
                         "Unsupported content cannot prove equality; inspect or choose a complete asset version.",
                         [new("", unknown.Base, [new(names[versions[0].Mod], unknown.Mod)])]));
                 if (family is "objects" or "rooms" or "scripts" or "functions" && versions.All(v => !v.Removed))

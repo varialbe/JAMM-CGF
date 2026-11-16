@@ -16,6 +16,11 @@ model/context source independently of UndertaleModLib.
   versions; regenerate with `--force`. Breaking changes to identities, field meanings,
   or required data require a new version. Additional optional fields may be introduced
   compatibly; readers should ignore unknown fields.
+- `assetTypesVersion`: optional decompiler type-definition revision (absent means 0).
+  Current generation uses 2, including code whose bytecode is unchanged but whose
+  asset indices now name different resources. Cache lookup refreshes older revisions; portable checks
+  reject mixed revisions with a request to regenerate all patches. The build normalizes
+  earlier v2 code using verified source archives.
 - `tool`: `cgfmm` and assembly version.
 - `createdUtc`: UTC creation time, the only volatile field in forced reruns.
 - `base`, `mod`: `fileName` (no directory), lowercase SHA-256 of the complete archive,
@@ -97,7 +102,7 @@ still require the verified source archive.
 
 ## Cache and determinism
 
-An existing output is reusable only when `formatVersion`, `base.sha256` and
+An existing output is reusable only when `formatVersion`, `assetTypesVersion`, `base.sha256` and
 `mod.sha256` match. Cache lookup hashes files read-only without loading UTML or
 decompiling. `--force` recomputes. Invalid/unsupported caches are recomputed.
 `--name` can relabel a matching cache without reanalysis. Other than `createdUtc`,
@@ -134,3 +139,16 @@ The portable patch models, field/line diffs and `Merging/` sources can be compil
 without UndertaleModLib. See [conflict rules](conflicts.md) for limitations and the
 report's reusable hunk/resolution data. Generated reports contain game content and
 must stay local, just like patches.
+
+## Building with typed asset references (Phase 3b)
+
+CGF container definitions make decompiled code use asset names where the original
+bytecode contains plain integer asset IDs. The builder reads each hash-verified
+source archive, normalizes cached v2 code in its source index space, and detects
+semantic code differences even when raw bytecode is unchanged. No patch schema
+change is needed. Indexed base resources remain at their original indices.
+Private family-qualified symbols disambiguate cross-family names during building;
+they are linked to final indices and are never stored in the archive as variables.
+Semantic verification compares the selected hunk reference stream with the compiled
+and reloaded archive. Unknown computed IDs remain subject to the literal audit and
+in-game checks.

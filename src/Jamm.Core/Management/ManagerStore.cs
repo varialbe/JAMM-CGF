@@ -16,7 +16,7 @@ public sealed class ManagerStore
         string? configured = dataDirectory ?? Environment.GetEnvironmentVariable("CGFMM_DATA_DIR");
         string xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
         Root = System.IO.Path.GetFullPath(configured ?? System.IO.Path.Combine(xdg, "cgfmm"));
-        BuildFiles.RefuseLink(Root);
+        BuildFiles.RefuseStorageLink(Root);
         Directory.CreateDirectory(Root);
         foreach (string name in new[] { "mods", "patches", "backups", "profiles", "builds" }) Directory.CreateDirectory(Path(name));
     }
@@ -26,13 +26,13 @@ public sealed class ManagerStore
         string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(new[] { Root }.Concat(parts).ToArray()));
         if (!path.StartsWith(Root.TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal))
             throw new IOException("Managed path escapes the data directory. Choose a simple mod or profile name.");
-        BuildFiles.RefuseLink(path);
+        BuildFiles.RefuseStorageLink(path);
         return path;
     }
 
     internal T Read<T>(string path)
     {
-        BuildFiles.RefuseLink(path);
+        BuildFiles.RefuseStorageLink(path);
         try { return JsonSerializer.Deserialize<T>(File.ReadAllText(path), JsonOptions) ?? throw new JsonException("Empty document."); }
         catch (JsonException ex) { throw new InvalidDataException($"Cannot read '{System.IO.Path.GetFileName(path)}'. Repair or remove the invalid JSON file and retry.", ex); }
     }
@@ -41,13 +41,13 @@ public sealed class ManagerStore
 
     internal void WriteText(string path, string content)
     {
-        BuildFiles.RefuseLink(path);
+        BuildFiles.RefuseStorageLink(path);
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
         string temp = Path($".cgfmm-json-{Guid.NewGuid():N}.tmp");
         try
         {
             File.WriteAllText(temp, content);
-            BuildFiles.RefuseLink(path);
+            BuildFiles.RefuseStorageLink(path);
             File.Move(temp, path, true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }

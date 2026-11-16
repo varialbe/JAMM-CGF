@@ -8,14 +8,15 @@ using UndertaleModLib.Models;
 namespace Jamm.Core.Building;
 
 /// <summary>A successfully reloaded and validated archive.</summary>
-public sealed record VerificationResult(GameInspection Inspection, int DecompiledEntries, IReadOnlyList<string> Warnings);
+public sealed record VerificationResult(GameInspection Inspection, int DecompiledEntries, IReadOnlyList<string> Warnings, int SemanticEntries = 0);
 
 /// <summary>Reloads archives, validates references and round-trips every root GML entry through the compiler in memory.</summary>
 public static class ArchiveVerifier
 {
     /// <summary>Verifies an archive; throws a contextual error if a load, reference or code check fails.</summary>
     public static VerificationResult Verify(string path, GameInspection? expected = null,
-        IReadOnlyList<PlannedAsset>? plan = null, Action<string>? progress = null)
+        IReadOnlyList<PlannedAsset>? plan = null, Action<string>? progress = null,
+        IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>>? expectedReferences = null)
     {
         progress?.Invoke($"Verifying {Path.GetFileName(path)}: reload, references, decompile and compile");
         using var loaded = GameFileLoader.Load(path);
@@ -29,19 +30,43 @@ public static class ArchiveVerifier
                 if ((ResourceCatalog.Find(tables[asset.Family], asset.Name) is not null) != (asset.Patch is not null))
                     throw new InvalidDataException($"Build plan mismatch in '{Path.GetFileName(path)}': {asset.Family}/{asset.Name} has the wrong presence.");
         }
+        if (expectedReferences is not null)
+            foreach (string missing in expectedReferences.Keys.Except(loaded.Data.Code.Where(c => c.ParentEntry is null).Select(c => c.Name.Content), StringComparer.Ordinal))
+                throw new InvalidDataException($"Semantic reference verification failed: code '{missing}' is missing after archive reload. No output was published.");
         List<string> warnings = [.. loaded.Warnings];
         ValidateReferences(loaded.Data, warnings.Add);
-        var reader = new CodeDecompiler(loaded.Data, Path.GetFileName(path), warnings.Add);
+        var names = SemanticReferences.Names(loaded.Data);
+        var reader = new CodeDecompiler(loaded.Data, Path.GetFileName(path), warnings.Add, AssetSymbols.Ambiguous([names]));
         var compiler = new CompileGroup(loaded.Data);
         int count = 0;
         foreach (var code in loaded.Data.Code.Where(c => c.ParentEntry is null))
         {
             var text = reader.Read(code);
             if (text.Format != "gml") throw new InvalidDataException($"Verification failed for '{Path.GetFileName(path)}', code '{code.Name.Content}': GML decompilation failed. No verified build is available.");
-            compiler.QueueCodeReplace(code, text.Text); count++;
+            if (expectedReferences is not null)
+            {
+                if (!expectedReferences.TryGetValue(code.Name.Content, out var references))
+                    throw new InvalidDataException($"Unexpected code '{code.Name.Content}' after archive reload. No output was published.");
+                SemanticReferences.Verify(code.Name.Content, references, SemanticReferences.Resolve(text.Text, code.Name.Content, names));
+            }
+            compiler.QueueCodeReplace(code, AssetSymbols.Link(text.Text, code.Name.Content, names)); count++;
         }
         Compile(compiler, Path.GetFileName(path));
-        return new(loaded.Inspection, count, warnings);
+        return new(loaded.Inspection, count, warnings, expectedReferences?.Count ?? 0);
+    }
+
+    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected)
+    {
+        var reader = new CodeDecompiler(data, "merged archive", _ => { }, AssetSymbols.Ambiguous([SemanticReferences.Names(data)]));
+        var names = SemanticReferences.Names(data);
+        foreach (var code in data.Code.Where(c => c.ParentEntry is null))
+        {
+            if (!expected.TryGetValue(code.Name.Content, out var references))
+                throw new InvalidDataException($"Missing semantic expectations for code '{code.Name.Content}'. No output was published.");
+            var text = reader.Read(code);
+            if (text.Format != "gml") throw new InvalidDataException($"Cannot verify references in code '{code.Name.Content}': decompilation failed.");
+            SemanticReferences.Verify(code.Name.Content, references, SemanticReferences.Resolve(text.Text, code.Name.Content, names));
+        }
     }
 
     internal static void Compile(CompileGroup compiler, string context)

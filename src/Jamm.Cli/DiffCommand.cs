@@ -70,7 +70,8 @@ internal static class DiffCommand
             try
             {
                 var candidate = PatchJson.Deserialize(File.ReadAllText(output));
-                if (candidate.Base.Sha256 == baseHash && candidate.Mod.Sha256 == modHash)
+                if (candidate.Base.Sha256 == baseHash && candidate.Mod.Sha256 == modHash
+                    && candidate.AssetTypesVersion == PatchJson.AssetTypesVersion)
                 { patch = candidate; reused = true; }
             }
             catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)

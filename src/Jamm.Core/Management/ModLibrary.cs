@@ -140,7 +140,7 @@ public sealed class ModLibrary(ManagerStore store)
         // Refuse linked contents before recursive deletion, too.
         foreach (string path in Directory.EnumerateFileSystemEntries(directory))
         {
-            BuildFiles.RefuseLink(path);
+            BuildFiles.RefuseStorageLink(path);
             if (Directory.Exists(path)) throw new IOException($"Mod '{mod.Name}' contains an unexpected directory. Move it out of the library entry before removing the mod.");
         }
         File.Delete(PatchPath(mod));

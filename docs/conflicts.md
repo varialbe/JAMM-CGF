@@ -33,7 +33,9 @@ against the common 16 August base.
 The exit code is **0** when no conflicts were found, **3** when analysis succeeded
 and found conflicts, and **1** for an input, output or usage error. Findings are
 grouped by severity and sorted consistently. Counts refer to findings, not unique
-assets: one code entry can contain multiple conflicting hunks, and a three-mod
+assets: one code entry can contain multiple conflicting hunks (grouped into one
+terminal row at its highest reported severity, with a total hunk count; JSON and
+`--details` retain each hunk), and a three-mod
 field overlap can produce a finding for each pair. The per-mod totals count patch
 additions, changes and removals; they are independent of finding counts.
 
@@ -77,8 +79,9 @@ retain numeric base identities. Atlas repacking can produce many existing-page
 conflicts even when some sprite pixels are unchanged; inspect the sprite findings
 too. Texture placement geometry is included in comparisons.
 SWF and Spine payloads are hashed when available. Unknown or incomplete payloads
-remain explicit unresolved asset changes, including when their exposed metadata is
-identical or only one mod touches the asset.
+remain explicit findings even when exposed metadata is identical. A single mod
+changing an unsupported payload produces a WARNING; multiple competing versions
+produce a CONFLICT because equality cannot be established.
 
 Same-name additions of named assets are prominent conflicts when their definitions
 differ. Strings, variables and function additions form a union. Changed function
@@ -105,6 +108,17 @@ shared fish catalog. This is a **CONFLICT (list)** with a suggested **keepBoth**
 choice: keep distinct insertions in load order. It remains a conflict until someone
 chooses that option; the inserted code might have order dependencies.
 
+The Abyss and Cave Expansion both use boat slot 8 and fish catalog slots starting
+at `[2,58]`. `keep-both` keeps inserted statements, but two writes to the same slot
+still overwrite each other when executed. The later mod wins overlapping slots in
+the merged handler unless you select another mod. Keeping both fish in distinct
+catalog slots requires manual edits today; automatic slot renumbering is future work.
+A default choice selects an entire overlapping insertion hunk, which may contain
+several slots; inspect `--details` before choosing which insertion to keep.
+This slot conflict is separate from asset IDs: Phase 3b preserves base indices and
+links typed mod IDs to the intended named assets, but does not allocate new gameplay
+slots or coordinate execution order across different handlers.
+
 Literal writes such as `catalog[42] = ...`, `ds_list_set(catalog, 42, ...)` and
 `ds_map_add(catalog, "key", ...)` are checked across code entries. Two mods writing
 the same named container and literal index/key produce a **CONFLICT (index)**,
@@ -128,3 +142,13 @@ base/mod hashes. It locates binary payloads in those exact local mod archives,
 applies selected code and field resolutions, and preserves addition order. See
 [building and installation](building.md) for commands, decisions and safety checks.
 `check` itself remains read-only; launching belongs to Phase 4.
+
+## Auditing numeric asset references
+
+`cgfmm check cave.win --base original.win --asset-literals --json local-audit.json`
+reports untyped integer candidates across all mod root code entries after known
+CGF containers and built-in argument types have been resolved. Each candidate lists
+its source entry, container, line, value and possible added/shifted asset families.
+It returns 0 when the audit completes; these are review hints, not conflicts or
+proof that ordinary numbers are asset IDs. Patch inputs in this mode also require
+the exact local mod archive. Keep audit JSON local.

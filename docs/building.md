@@ -28,6 +28,9 @@ working directory and the `.win` files in `JAMM_MODS_DIR`. It accepts a candidat
 its entire-file SHA-256 equals `mod.sha256`. Renaming a file does not bypass verification.
 Patches contain GML and strings but no binary payloads. Keep patches and logs local.
 
+Managed installation signatures include the builder revision. Installations produced
+before Phase 3b require rebuilding even if their archive hashes still match.
+
 For the managed workflow, use `config set base`, `config set gameDir`, `add`,
 `profile create/use`, and `apply` instead of specifying every archive on each build.
 `apply` builds and verifies before asking for installation confirmation (`--yes`
@@ -82,14 +85,22 @@ The builder copies verified source texture pages/items, masks and embedded audio
 translating named resource references into the merged tables. It keeps the source atlas
 placement rather than repacking. Multi-mod builds can contain additional texture pages
 and page items so that unchanged base sprites and selected mod sprites keep their own
-pixels. A single-mod build uses that mod's complete binary tables and matches its page,
-page-item and named-asset counts.
+pixels. A single-mod build uses that mod's complete binary tables when it contains all
+base sprites, fonts, backgrounds and sounds. Assets removed by a mod are retained at their base indices, so counts may
+exceed the mod's counts. If a retained asset needs the base atlas, its payload remains
+available too.
 
 New named assets retain their mod's original addition order. Collision event targets
 are resolved by object name after building the final object table. Room instance/tile
-IDs preserve base identities and allocate fresh IDs for additions. Removing indexed
-assets triggers recompilation of surviving base code as well as changed, merged and
-added GML, so the compiler can link resource names to the resulting indices. Compiler
+IDs preserve base identities and allocate fresh IDs for additions. Indexed base assets
+(including objects, sprites, sounds, paths, scripts and rooms) are never deleted or reordered. Each retained removal is reported as INFO, keeping
+unchanged base numeric references valid. Changed, merged and added mod GML is
+decompiled in its source archive with CGF container types, then merged using asset
+names. The compiler resolves those names in the merged tables. Names shared by
+different families use private typed symbols during merging and explicit final
+indices during compilation, avoiding the GM1.4 compiler's shared symbol namespace.
+Unchanged bytecode is also compared semantically: a source index that acquired a
+different meaning becomes a code change. Compiler
 errors name the entry and stop before writing an output archive.
 
 A normal build writes a temporary archive, reloads it through UndertaleModLib, checks
@@ -97,6 +108,12 @@ the GameMaker/bytecode version and the plan's asset presence, validates resource
 and texture-page references, decompiles every root code entry, and recompiles all that
 GML in memory. Only a passing temporary file becomes the output. `verify` performs the
 same reload/reference/decompile/compile checks on a supplied file without rewriting it.
+During a build, resolved asset references in the chosen mod hunks and unchanged
+base entries must also match after compilation and after serialization/reload. A
+missing target or wrong family/name stops publication and identifies the code entry
+and container. Conflict alternatives intentionally discarded by the printed decisions
+are excluded from the selected reference stream. Standalone `verify` cannot compare
+origins without the base, mods and build plan; rebuild to repeat that semantic check.
 Both commands return 1 on failure and 0 on success. `--verbose` includes diagnostic
 exception details; normal errors omit stack traces.
 
@@ -116,7 +133,8 @@ cgfmm restore --game legacy-game-copy
 Before replacement, installation accepts only the exact selected base or a recognized
 previous cgfmm build. The marker `data.win.cgfmm-build.json` records the base, build and
 backup SHA-256 values. Modified builds, mismatched backups, unrecognized archives and
-symbolic-link installation paths are refused.
+links at `data.win`, the backup or marker are refused. Linked parent directories are
+resolved and supported; input-alias protection still applies.
 
 The first installation copies `data.win` to `data.win.cgfmm-original` and verifies the
 copy by SHA-256 **before** replacing anything. The backup is never overwritten or
@@ -139,6 +157,14 @@ Some supplied mods already contain out-of-bounds sprite rectangles and an empty 
 texture item. Empty placeholders are valid; out-of-bounds source geometry is preserved
 and reported as a warning. Missing non-null texture/resource references fail verification.
 These warnings require visual checks in the game.
+
+`cgfmm check --asset-literals` scans all mod code for remaining untyped integers in
+added/shifted asset ranges. It supports one or more mod/patch inputs with `--base`;
+`--json` stores candidates with mod, entry, container, line and possible families.
+Known types are in `src/Jamm.Core/Building/cgf-asset-types.json`. These ranges also
+contain prices, distances, array slots and other ordinary numbers: candidates require
+review and are never rewritten based on their numeric value alone. Dynamic handles,
+computed IDs and mixed-type containers remain outside the static guarantee.
 
 A verified archive can still have gameplay conflicts: decompiled code is not a full
 runtime specification, dynamic resource names and numeric IDs may evade lexical checks,

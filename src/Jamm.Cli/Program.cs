@@ -52,7 +52,7 @@ int Run(string[] arguments)
         Console.WriteLine("""
             JAMM-CGF — inspect, diff, check, build, install and restore
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
-            cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--verbose]
+            cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm add <file.win|file.zip> [--name <name>]

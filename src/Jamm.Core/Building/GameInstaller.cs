@@ -43,6 +43,7 @@ public static class GameInstaller
     {
         string[] inputs = [mergedPath, .. protectedInputs ?? []];
         Validate(gameDirectory, baseHash, inputs, basePath);
+        gameDirectory = BuildFiles.Resolve(gameDirectory);
         string current = Path.Combine(gameDirectory, Archive), backup = Path.Combine(gameDirectory, Backup), marker = Path.Combine(gameDirectory, Marker);
         string currentHash = BuildFiles.Hash(current), buildHash = BuildFiles.Hash(mergedPath);
         if (!File.Exists(backup))
@@ -62,6 +63,8 @@ public static class GameInstaller
     {
         string current = Path.Combine(gameDirectory, Archive), backup = Path.Combine(gameDirectory, Backup), marker = Path.Combine(gameDirectory, Marker);
         foreach (string path in new[] { current, backup, marker }) BuildFiles.RefuseLink(path);
+        gameDirectory = BuildFiles.Resolve(gameDirectory);
+        current = Path.Combine(gameDirectory, Archive); backup = Path.Combine(gameDirectory, Backup); marker = Path.Combine(gameDirectory, Marker);
         if (!File.Exists(backup)) throw new FileNotFoundException($"Cannot restore: '{Backup}' is missing in '{Path.GetFileName(gameDirectory)}'. Select the game folder where cgfmm installed the build.");
         string hash = BuildFiles.Hash(backup);
         if (File.Exists(marker))

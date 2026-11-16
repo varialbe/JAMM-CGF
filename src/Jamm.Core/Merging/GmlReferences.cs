@@ -11,7 +11,7 @@ public sealed record IndexWrite(string Container, string Index, string Kind, int
 /// <summary>A small lexical scanner for GML identifiers and literal container writes; strings/comments are never code.</summary>
 public static class GmlReferences
 {
-    private sealed record Token(string Value, char Kind, int Line, int EndLine);
+    internal sealed record Token(string Value, char Kind, int Line, int EndLine, int Start = 0, int Length = 0);
 
     /// <summary>Finds identifiers, excluding string literals and both comment forms.</summary>
     public static IReadOnlyList<string> Identifiers(string text) => Tokens(text).Where(t => t.Kind == 'i')
@@ -130,7 +130,7 @@ public static class GmlReferences
         }
     }
 
-    private static List<Token> Tokens(string text)
+    internal static List<Token> Tokens(string text)
     {
         List<Token> tokens = [];
         int line = 1;
@@ -147,7 +147,7 @@ public static class GmlReferences
                 { if (text[i++] == '\n') line++; }
                 i = Math.Min(text.Length, i + 2); continue;
             }
-            int startLine = line;
+            int startLine = line, tokenStart = i;
             bool raw = c == '@' && i + 1 < text.Length && text[i + 1] is '\'' or '"';
             if (raw) c = text[++i];
             if (c is '\'' or '"')
@@ -166,23 +166,23 @@ public static class GmlReferences
                     }
                     value.Append(c);
                 }
-                tokens.Add(new(value.ToString(), 's', startLine, line)); continue;
+                tokens.Add(new(value.ToString(), 's', startLine, line, tokenStart, i - tokenStart)); continue;
             }
             int start = i++;
             if (char.IsLetter(c) || c == '_')
             {
                 while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
-                tokens.Add(new(text[start..i], 'i', line, line));
+                tokens.Add(new(text[start..i], 'i', line, line, start, i - start));
             }
             else if (char.IsDigit(c) || c == '$')
             {
                 while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '.')) i++;
-                tokens.Add(new(text[start..i], 'n', line, line));
+                tokens.Add(new(text[start..i], 'n', line, line, start, i - start));
             }
             else
             {
                 if (i < text.Length && text[i] == '=' && "=+-*/!<>".Contains(c)) i++;
-                tokens.Add(new(text[start..i], 'p', line, line));
+                tokens.Add(new(text[start..i], 'p', line, line, start, i - start));
             }
         }
         return tokens;

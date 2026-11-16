@@ -50,7 +50,14 @@ public static class BuildFiles
 
     internal static void RefuseLink(string path)
     {
-        if (!SamePath(Resolve(path), path) || new FileInfo(path).LinkTarget is not null)
+        if (new FileInfo(path).LinkTarget is not null)
             throw new IOException($"Refusing linked installation path '{Path.GetFileName(path)}'. Use a separate real game directory with ordinary files.");
     }
+    internal static void RefuseStorageLink(string path)
+    {
+        RefuseLink(path);
+        if (!SamePath(Resolve(path), path))
+            throw new IOException($"Refusing linked managed-storage path '{Path.GetFileName(path)}'. Use an ordinary data directory.");
+    }
+
 }

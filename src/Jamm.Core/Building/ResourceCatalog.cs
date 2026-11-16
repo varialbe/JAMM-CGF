@@ -11,7 +11,7 @@ internal static class ResourceCatalog
         ["code"] = (IList)d.Code, ["scripts"] = (IList)d.Scripts, ["objects"] = (IList)d.GameObjects,
         ["rooms"] = (IList)d.Rooms, ["sprites"] = (IList)d.Sprites, ["sounds"] = (IList)d.Sounds,
         ["fonts"] = (IList)d.Fonts, ["backgrounds"] = (IList)d.Backgrounds, ["paths"] = (IList)d.Paths,
-        ["timelines"] = (IList)d.Timelines
+        ["timelines"] = (IList)d.Timelines, ["shaders"] = (IList)d.Shaders
     };
     internal static string Name(object asset) => ((UndertaleNamedResource)asset).Name.Content;
     internal static object? Find(IList table, string name) => table.Cast<object>().SingleOrDefault(x => Name(x) == name);

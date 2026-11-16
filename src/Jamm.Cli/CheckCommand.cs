@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Jamm.Core;
+using Jamm.Core.Building;
 using Jamm.Core.Merging;
 using Jamm.Core.Patching;
 
@@ -10,11 +12,13 @@ internal static class CheckCommand
     internal static int Run(string[] arguments)
     {
         List<string> paths = [];
+        bool assetLiterals = false;
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         for (int i = 0; i < arguments.Length; i++)
         {
             string arg = arguments[i];
             if (arg == "--verbose") continue;
+            if (arg == "--asset-literals") { assetLiterals = true; continue; }
             if (arg is "--base" or "--json" or "--details" or "--patches-dir")
             {
                 if (++i == arguments.Length || arguments[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{arg} needs a value.");
@@ -23,9 +27,25 @@ internal static class CheckCommand
             else if (arg.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"Unknown option '{arg}'.");
             else paths.Add(arg);
         }
-        if (paths.Count < 2 || !options.TryGetValue("--base", out string? basePath))
+        if (paths.Count < (assetLiterals ? 1 : 2) || !options.TryGetValue("--base", out string? basePath))
             throw new ArgumentException("check needs at least two mods or patches and --base <data.win>.");
-        string[] inputs = [basePath, .. paths];
+        List<string> inputs = [basePath, .. paths];
+        Dictionary<int, ModPatch> supplied = [];
+        Dictionary<int, string> archives = [];
+        // Discover every audit payload before writing reports or generating any caches.
+        for (int i = 0; i < paths.Count; i++)
+        {
+            if (!IsPatch(paths[i])) continue;
+            ModPatch patch;
+            try { patch = PatchJson.Deserialize(File.ReadAllText(paths[i])); }
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)
+            { throw new InvalidDataException($"Cannot read patch '{Path.GetFileName(paths[i])}': {ex.Message} Regenerate it with diff --force.", ex); }
+            supplied[i] = patch;
+            if (!assetLiterals) continue;
+            string archive = BuildCommand.Locate(paths[i], patch);
+            archives[i] = archive;
+            inputs.Add(archive);
+        }
         string? output = options.GetValueOrDefault("--json");
         if (output is not null) OutputFile.Validate(output, inputs);
         string cacheDir = options.GetValueOrDefault("--patches-dir", Path.Combine(output is null ? "." : Path.GetDirectoryName(Path.GetFullPath(output))!, "patches"));
@@ -46,9 +66,7 @@ internal static class CheckCommand
             ModPatch patch;
             if (IsPatch(paths[i]))
             {
-                try { patch = PatchJson.Deserialize(File.ReadAllText(paths[i])); }
-                catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)
-                { throw new InvalidDataException($"Cannot read patch '{Path.GetFileName(paths[i])}': {ex.Message} Regenerate it with diff --force.", ex); }
+                patch = supplied[i];
             }
             else
             {
@@ -61,6 +79,24 @@ internal static class CheckCommand
             throw new InvalidDataException($"Selected --base '{Path.GetFileName(basePath)}' has SHA-256 {hash}. "
                 + string.Join("; ", patches.Select(p => $"{p.Mod.Name ?? p.Mod.FileName} targets {p.Base.FileName} (SHA-256 {p.Base.Sha256})"))
                 + ". Recompute patches against this same base or choose their exact base archive.");
+        if (assetLiterals)
+        {
+            using var original = GameFileLoader.Load(basePath);
+            List<AssetLiteralFinding> literals = [];
+            for (int i = 0; i < paths.Count; i++)
+            {
+                string archive = archives.GetValueOrDefault(i, paths[i]);
+                using var mod = GameFileLoader.Load(archive);
+                if (mod.Inspection.Sha256 != patches[i].Mod.Sha256)
+                    throw new InvalidDataException($"Mod '{Path.GetFileName(archive)}' differs from its patch. Regenerate the patch.");
+                literals.AddRange(AssetLiteralAudit.Analyze(original, mod));
+            }
+            if (output is not null) OutputFile.Write(output, JsonSerializer.Serialize(new { assetLiterals = literals }, JsonOptions) + "\n", inputs);
+            foreach (var item in literals)
+                Console.WriteLine($"WARNING: {item.Mod} / {item.Code}:{item.Line} container {item.Container}, untyped {item.Value}; candidate families: {string.Join(", ", item.CandidateFamilies)}");
+            Console.WriteLine($"Asset literal audit: {literals.Count} untyped candidates. Numeric ranges are hints, not proof of an asset reference; no numbers were rewritten.");
+            return 0;
+        }
         var report = ConflictAnalyzer.Analyze(patches);
         timer.Stop();
         if (output is not null)
@@ -81,12 +117,23 @@ internal static class CheckCommand
             var mod = report.LoadOrder[i];
             Console.WriteLine($"  {i + 1}. {mod.Name}: +{mod.Added} changed {mod.Changed} removed {mod.Removed}; warnings {mod.Warnings}");
         }
-        foreach (string status in new[] { "CONFLICT", "AUTO", "INFO", "WARNING" })
+        string[] severities = ["CONFLICT", "AUTO", "INFO", "WARNING"];
+        bool IsHunk(ConflictItem f) => f.Family == "code" && f.Kind is "code" or "list" or "addition" or "removal"
+            && report.CodeMerges.ContainsKey(f.Asset);
+        var rows = report.Findings.GroupBy(f => (Severity: IsHunk(f) ? "" : f.Severity,
+            f.Family, f.Asset, Kind: IsHunk(f) ? "code hunks" : f.Kind)).ToArray();
+        foreach (string status in severities)
         {
             Console.WriteLine($"\n{status} ({report.Counts[status]} findings)");
             Console.WriteLine($"{"Kind",-12} {"Family",-14} {"Asset",-48} Mods / explanation");
-            foreach (var item in report.Findings.Where(f => f.Severity == status))
-                Console.WriteLine($"{item.Kind,-12} {item.Family,-14} {item.Asset,-48} {string.Join(" + ", item.Mods)}: {item.Message}");
+            foreach (var group in rows.Where(g => g.OrderBy(f => Array.IndexOf(severities, f.Severity)).First().Severity == status))
+            {
+                var item = group.First();
+                string message = group.Key.Kind == "code hunks"
+                    ? $"{report.CodeMerges[item.Asset].Hunks.Count} hunks ({report.CodeMerges[item.Asset].Hunks.Count(h => h.Status == "CONFLICT")} conflicts); use --details for all versions."
+                    : group.Count() > 1 ? $"{group.Count()} findings; use --details for all versions." : item.Message;
+                Console.WriteLine($"{group.Key.Kind,-12} {item.Family,-14} {item.Asset,-48} {string.Join(" + ", group.SelectMany(f => f.Mods).Distinct())}: {message}");
+            }
         }
         Console.WriteLine($"\n{string.Join("; ", report.Counts.Select(c => $"{c.Key}: {c.Value}"))}; elapsed {elapsed:F3} s.");
         Console.WriteLine(report.ExitCode == 3 ? "Decisions required. Use --details <asset> to inspect a finding. No game files were written." : "No conflicts found. No game files were written.");

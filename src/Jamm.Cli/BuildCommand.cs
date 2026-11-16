@@ -97,6 +97,9 @@ internal static class BuildCommand
         if (install is not null) GameInstaller.Validate(install, baseHash, [.. protectedPaths.Skip(1), output], basePath);
         var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress);
         foreach (string decision in result.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
+        foreach (var item in result.RemappedReferences ?? new Dictionary<string, int>())
+            Console.WriteLine($"Remapped references: {item.Key}: {item.Value} (changed/added source alternatives; conflict selections verified separately)");
+        Console.WriteLine($"Semantic reference verification: PASS ({result.SemanticEntries} code entries; selected mod hunks and unchanged base).");
         Counts(result.Counts);
         if (dryRun)
             Console.WriteLine($"Dry run: merge and compilation passed; would write '{Path.GetFullPath(output)}'" +
@@ -115,7 +118,7 @@ internal static class BuildCommand
         return 0;
     }
 
-    private static string Locate(string patchPath, ModPatch patch)
+    internal static string Locate(string patchPath, ModPatch patch)
     {
         string directory = Path.GetDirectoryName(Path.GetFullPath(patchPath))!;
         if (Path.GetFileName(patch.Mod.FileName) != patch.Mod.FileName) throw new InvalidDataException("Patch mod.fileName must be a filename without directories.");

@@ -11,7 +11,8 @@ public sealed record BuildInput(ModPatch Patch, string ArchivePath);
 
 /// <summary>A completed build or an in-memory dry run, including decisions and archive counts.</summary>
 public sealed record BuildResult(BuildPlan Plan, GameInspection Base, VerificationResult? Verification,
-    IReadOnlyDictionary<AssetKind, int> Counts, long SizeBytes);
+    IReadOnlyDictionary<AssetKind, int> Counts, long SizeBytes,
+    IReadOnlyDictionary<string, int>? RemappedReferences = null, int SemanticEntries = 0);
 
 /// <summary>Builds a new archive from an exact base and verified local mod payloads.</summary>
 public static class ArchiveBuilder
@@ -30,7 +31,6 @@ public static class ArchiveBuilder
             if (!File.Exists(input.ArchivePath) || BuildFiles.Hash(input.ArchivePath) != input.Patch.Mod.Sha256)
                 throw new InvalidDataException($"Missing or different mod archive '{input.Patch.Mod.FileName}' (required SHA-256 {input.Patch.Mod.Sha256}). Put the exact .win beside the patch or in JAMM_MODS_DIR.");
         }
-        var plan = BuildPlan.Create(inputs.Select(i => i.Patch).ToArray(), resolutions);
         List<LoadedGameFile> sources = [];
         try
         {
@@ -41,14 +41,22 @@ public static class ArchiveBuilder
                 if (source.Inspection.Sha256 != input.Patch.Mod.Sha256) throw new IOException("A mod archive changed during loading. Retry with stable input copies.");
                 PatchBuilder.Validate(original.Inspection, source.Inspection);
             }
+            var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress);
+            var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
+            var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
+            var plan = BuildPlan.Create(patches, resolutions, baseReferences);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
             var data = working.Data;
-            Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), inputs.Select(i => i.Patch).ToArray(), plan, progress);
+            Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
+            var expectedReferences = semantics.Expected(plan, data);
+            ArchiveVerifier.ValidateSemantics(data, expectedReferences);
+            var remapped = semantics.Remapped(patches, data);
+            progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
             var counts = Counts(data);
-            if (dryRun) return new(plan, original.Inspection, null, counts, 0);
+            if (dryRun) return new(plan, original.Inspection, null, counts, 0, remapped, expectedReferences.Count);
             string destination = Path.GetFullPath(output);
             string directory = Path.GetDirectoryName(destination)!;
             Directory.CreateDirectory(directory);
@@ -58,10 +66,10 @@ public static class ArchiveBuilder
                 progress?.Invoke("Writing temporary merged archive");
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     UndertaleIO.Write(stream, data);
-                var verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress);
+                var verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress, expectedReferences);
                 BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
                 File.Move(temporary, destination, overwrite: true);
-                return new(plan, original.Inspection, verification, counts, new FileInfo(destination).Length);
+                return new(plan, original.Inspection, verification, counts, new FileInfo(destination).Length, remapped, expectedReferences.Count);
             }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
@@ -72,21 +80,11 @@ public static class ArchiveBuilder
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
-        // Capture ancestor code before deleting indexed resources. Such deletions require recompiling
-        // unchanged code as well, so embedded numeric asset references can be linked afresh.
         Dictionary<string, string> recompile = new(StringComparer.Ordinal);
-        if (plan.Assets.Any(a => a.Patch is null && tables.ContainsKey(a.Family) && a.Family != "code"))
-        {
-            var reader = new CodeDecompiler(ancestor, "base", _ => { });
-            foreach (var code in ancestor.Code.Where(c => c.ParentEntry is null))
-            {
-                var text = reader.Read(code);
-                if (text.Format != "gml") throw new InvalidDataException($"Cannot relink removed asset references: base code '{code.Name.Content}' cannot be decompiled.");
-                recompile[code.Name.Content] = text.Text;
-            }
-        }
         foreach (var asset in plan.Assets.Where(a => a.Patch is null && tables.ContainsKey(a.Family)))
         {
+            if (CgfAssetTypes.IndexedFamilies.Contains(asset.Family, StringComparer.Ordinal))
+                throw new InvalidDataException($"Cannot remove indexed base asset {asset.Family}/{asset.Name}. Regenerate the build plan with stable base indices.");
             var table = tables[asset.Family];
             if (ResourceCatalog.Find(table, asset.Name) is { } removed) table.Remove(removed);
             if (asset.Family == "code")
@@ -117,7 +115,7 @@ public static class ArchiveBuilder
                     return (i, added.OriginalIndex ?? int.MaxValue);
             return (asset.Source, asset.Patch!.OriginalIndex ?? int.MaxValue);
         }
-        // Preserve collision targets by name when removing objects shifts OBJT indices.
+        // Base collision targets retain their names and indices; imported events resolve by name.
         foreach (var obj in data.GameObjects)
         {
             var old = ancestor.GameObjects.FirstOrDefault(o => o.Name.Content == obj.Name.Content);
@@ -130,14 +128,16 @@ public static class ArchiveBuilder
                 collision.EventSubtype = (uint)index;
             }
         }
-        if (sources.Count == 1)
+        bool useCompleteAtlas = sources.Count == 1 && new[] { "sprites", "fonts", "backgrounds", "sounds" }
+            .All(f => tables[f].Cast<object>().All(a => ResourceCatalog.Find(sourceTables[0][f], ResourceCatalog.Name(a)) is not null));
+        if (useCompleteAtlas)
         {
             // Semantically unchanged binary assets can use the verified mod's atlas as well.
             // This keeps a single-mod build's page/item/audio counts equal to its source.
             data.EmbeddedTextures.Clear(); data.TexturePageItems.Clear(); data.EmbeddedAudio.Clear();
         }
         var importers = sources.Select(s => new ResourceImporter(s, data)).ToArray();
-        if (sources.Count == 1)
+        if (useCompleteAtlas)
         {
             var importer = importers[0];
             foreach (var page in sources[0].EmbeddedTextures) importer.Copy(page);
@@ -214,11 +214,12 @@ public static class ArchiveBuilder
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
+        var finalNames = SemanticReferences.Names(data);
         foreach (var (name, gml) in recompile)
         {
             var code = data.Code.SingleOrDefault(c => c.Name.Content == name)
                 ?? throw new InvalidDataException($"Cannot compile code '{name}' in the merged archive: its code entry is missing. Keep the entry in --resolve or regenerate the patches.");
-            compiler.QueueCodeReplace(code, gml);
+            compiler.QueueCodeReplace(code, AssetSymbols.Link(gml, name, finalNames));
         }
         ArchiveVerifier.Compile(compiler, "merged archive");
     }

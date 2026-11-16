@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Jamm.Core.Building;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
@@ -65,8 +66,12 @@ public static class PatchBuilder
         var rightHashes = new ContentFingerprints(warnings.Add).Snapshot(mod);
         var leftFields = new AssetFields(warnings.Add, original);
         var rightFields = new AssetFields(warnings.Add, mod);
-        var leftSource = new CodeDecompiler(original, baseFile.FileName, warnings.Add);
-        var rightSource = new CodeDecompiler(mod, modFile.FileName, warnings.Add);
+        var leftNames = SemanticReferences.Names(original);
+        var rightNames = SemanticReferences.Names(mod);
+        bool assetIndicesChanged = leftNames.Any(t => !t.Value.SequenceEqual(rightNames[t.Key], StringComparer.Ordinal));
+        var ambiguous = AssetSymbols.Ambiguous([leftNames, rightNames]);
+        var leftSource = new CodeDecompiler(original, baseFile.FileName, warnings.Add, ambiguous);
+        var rightSource = new CodeDecompiler(mod, modFile.FileName, warnings.Add, ambiguous);
         SortedDictionary<string, AssetChanges> changes = new(StringComparer.Ordinal);
         foreach (var kind in leftHashes.Keys.Union(rightHashes.Keys).Order())
         {
@@ -100,6 +105,7 @@ public static class PatchBuilder
                 var left = Assets(original, kind);
                 var right = Assets(mod, kind);
                 var differences = classification.Assets.Where(x => x.Classification != AssetClassification.Identical
+                    || kind == AssetKind.Code && assetIndicesChanged // Identical bytes can change meaning after table edits.
                     || x.OriginalFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) == true
                     || x.ModFingerprint?.StartsWith("unsupported:", StringComparison.Ordinal) == true).ToArray();
                 int completed = 0, total = differences.Count(x => x.Classification != AssetClassification.Removed);
@@ -115,7 +121,9 @@ public static class PatchBuilder
                         progress?.Invoke($"Decompiling {modFile.FileName} {++completed}/{total}: {key}");
                         if (before is not null) baseCode = leftSource.Read((UndertaleCode)left[key]);
                         modCode = rightSource.Read((UndertaleCode)right[key]);
-                        // Fingerprints are a cheap candidate filter. GML and metadata decide actual code changes.
+                        if (baseCode is { Format: "gml" }) baseCode = Normalize(baseCode, key, leftNames);
+                        if (modCode.Format == "gml") modCode = Normalize(modCode, key, rightNames);
+                        // Named semantic references and metadata decide actual code changes.
                         if (baseCode is not null && JsonElement.DeepEquals(AssetFields.Json(baseCode), AssetFields.Json(modCode))
                             && before is { } originalFields && JsonElement.DeepEquals(originalFields, after)) continue;
                     }
@@ -152,13 +160,16 @@ public static class PatchBuilder
             warnings.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), changes,
             new SortedDictionary<string, string[]>(Enum.GetValues<AssetKind>().Where(k => k != AssetKind.TexturePages && k != AssetKind.Strings && k != AssetKind.TexturePageItems)
                 .ToDictionary(k => k.ToString()[..1].ToLowerInvariant() + k.ToString()[1..], k => AssetsList(original, k).Cast<UndertaleNamedResource>().Select(x => x.Name.Content).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()), StringComparer.Ordinal),
-            ReferenceSnapshots(mod, rightFields));
+            ReferenceSnapshots(mod, rightFields), AssetTypesVersion: PatchJson.AssetTypesVersion);
+
+        CodeText Normalize(CodeText code, string entry, IReadOnlyDictionary<string, string[]> tables) => code with
+        { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(code.Text, entry, tables), entry, tables, ambiguous) };
     }
 
     private static int DefinitionIndex(UndertaleData data, AssetKind kind, string key) => AssetsList(data, kind).ToList().FindIndex(x =>
         (kind == AssetKind.Variables ? AssetFields.Json(new object[] { ((UndertaleVariable)x).Name.Content, ((UndertaleVariable)x).InstanceType.ToString() }).GetRawText() : ((UndertaleNamedResource)x).Name.Content) == key);
 
-    private static IReadOnlyList<AssetReference> ReferenceSnapshots(UndertaleData data, AssetFields fields)
+    internal static IReadOnlyList<AssetReference> ReferenceSnapshots(UndertaleData data, AssetFields fields)
     {
         List<AssetReference> result = [];
         foreach (var kind in new[] { AssetKind.Objects, AssetKind.Rooms, AssetKind.Scripts, AssetKind.Timelines })

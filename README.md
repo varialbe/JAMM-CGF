@@ -312,9 +312,18 @@ apply the selected profile again. Modified installed archives are refused during
 apply; restore first. See [building.md](docs/building.md) for recovery details.
 
 **Does a verified merge guarantee compatible gameplay?** No. Verification reloads,
-checks references and decompiles/compiles code. Dynamic resource lookups, runtime
+checks references and decompiles/compiles code. Builds also compare resolved asset
+references with the selected source code. Dynamic resource lookups, runtime
 catalog conflicts and inherited texture warnings still need desktop testing.
 Launch command construction is tested here; actual Wine/Proton gameplay is not.
+
+The Abyss and Cave Expansion both claim boat slot 8 and fish catalog slots from
+`[2,58]` onward. Keeping both code insertions cannot give two fish the same slot:
+the later mod wins those overlapping slots unless you pick another mod. Automatic
+slot renumbering is future work. Builds preserve base asset indices and remap known
+mod asset references separately; see [conflict choices](docs/conflicts.md) and
+[building](docs/building.md). Use `cgfmm check --asset-literals` to audit untyped
+numeric candidates when adding support for another mod.
 
 ## Tests
 

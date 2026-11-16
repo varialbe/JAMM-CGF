@@ -62,7 +62,7 @@ public sealed partial class BuildingTests
     }
 
     [Fact]
-    public void ReferenceRetentionPreservesEarlierEditsAndWinningDeletionsFailBeforeCompilation()
+    public void IndexedBaseRetentionPreservesEarlierEditsEvenWhenDeletionWins()
     {
         using var temp = new TemporaryDirectory();
         string basePath = temp.PathFor("base.win"), editedPath = temp.PathFor("edited.win"), deletedPath = temp.PathFor("deleted.win"), referencePath = temp.PathFor("reference.win");
@@ -80,10 +80,11 @@ public sealed partial class BuildingTests
         Assert.Contains("fish", Assert.Single(r.Changes["code"].Changed).ModCode!.Text);
         var plan = BuildPlan.Create([e, d, r]);
         Assert.Equal(15, plan.Assets.Single(a => a.Family == "objects" && a.Name == "fish").Snapshot!.Value.GetProperty("depth").GetInt32());
-        var error = Assert.Throws<InvalidDataException>(() => BuildPlan.Create([r, d]));
-        Assert.Contains("objects/fish", error.Message); Assert.Contains("code/test_code", error.Message);
-        Assert.Contains("deleted.win", error.Message); Assert.Contains("--resolve", error.Message);
-        Assert.Throws<InvalidDataException>(() => BuildPlan.Create([d, r], new Dictionary<string, string> { ["objects/fish"] = "deleted" }));
+        foreach (var retained in new[] { BuildPlan.Create([r, d]), BuildPlan.Create([d, r], new Dictionary<string, string> { ["objects/fish"] = "deleted" }) })
+        {
+            Assert.DoesNotContain(retained.Assets, a => a.Family == "objects" && a.Patch is null);
+            Assert.Contains(retained.Decisions, message => message.Contains("retained objects/fish", StringComparison.Ordinal));
+        }
     }
 
     [Fact]
@@ -96,7 +97,8 @@ public sealed partial class BuildingTests
         a.Changes["sprites"] = new([], [], ["removed_sprite"]);
         b.BaseAssets!["objects"] = ["fish"];
         var plan = BuildPlan.Create([a, b], new Dictionary<string, string> { ["objects/fish"] = "B" });
-        Assert.Contains(plan.Assets, x => x.Family == "sprites" && x.Patch is null);
+        Assert.DoesNotContain(plan.Assets, x => x.Family == "sprites" && x.Patch is null);
+        Assert.Contains(plan.Decisions, x => x.Contains("retained sprites/removed_sprite", StringComparison.Ordinal));
         Assert.DoesNotContain(plan.Assets, x => x.Family == "objects");
     }
 

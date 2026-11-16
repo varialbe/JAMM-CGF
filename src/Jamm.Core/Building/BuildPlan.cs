@@ -12,7 +12,8 @@ public sealed record PlannedAsset(string Family, string Name, int Source, AssetP
 public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<string> Decisions)
 {
     /// <summary>Combines patches against one exact ancestor, resolving conflicts in load order.</summary>
-    public static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions = null)
+    public static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions = null,
+        IReadOnlyList<AssetReference>? baseReferences = null)
     {
         if (patches.Count == 0) throw new ArgumentException("build needs at least one mod.");
         resolutions ??= new Dictionary<string, string>();
@@ -24,6 +25,10 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
             throw new ArgumentException("Build mod names must be unique. Relabel duplicate names with diff --name.");
         List<string> decisions = [];
+        for (int i = 0; i < patches.Count; i++)
+            foreach (var family in patches[i].Changes.Where(c => CgfAssetTypes.IndexedFamilies.Contains(c.Key, StringComparer.Ordinal)))
+                foreach (string asset in family.Value.Removed)
+                    decisions.Add($"INFO: retained {family.Key}/{asset} (removed by {names[i]}) so numeric indices stay valid");
         List<PlannedAsset> assets = [];
         HashSet<string> used = new(StringComparer.Ordinal);
         var versions = patches.SelectMany((p, i) => p.Changes.SelectMany(c =>
@@ -63,12 +68,14 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             {
                 var references = ReferencesTo(removed);
                 int winner = references.Select(r => r.Mod).DefaultIfEmpty(-1).Max();
-                if (choices.ContainsKey((removed.Family, removed.Name)) || winner <= removed.Source) continue;
+                bool requiredCode = removed.Family == "code" && references.Any(r => r.Structured);
+                if (!requiredCode && (choices.ContainsKey((removed.Family, removed.Name)) || winner <= removed.Source)) continue;
                 var surviving = versions[(removed.Family, removed.Name)].Where(v => v.Asset is not null).ToList();
                 assets.Remove(removed);
                 if (surviving.Count > 0) assets.Add(Select(removed.Family, removed.Name, surviving, null)!);
-                referenceChoices[(removed.Family, removed.Name)] = names[winner];
-                decisions.Add($"reference {removed.Family}/{removed.Name}: {names[winner]} retains the base asset and surviving edits required by a surviving reference.");
+                string reason = requiredCode ? $"surviving {references.First(r => r.Structured).Source}" : names[winner];
+                referenceChoices[(removed.Family, removed.Name)] = reason;
+                decisions.Add($"reference {removed.Family}/{removed.Name}: {reason} retains the base asset and surviving edits required by a surviving reference.");
                 retained = true;
             }
         } while (retained);
@@ -79,13 +86,14 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 throw new InvalidDataException($"Cannot delete {removed.Family}/{removed.Name} selected by '{patches[removed.Source].Mod.FileName}': surviving {references[0].Source} still references it. Keep the target using --resolve or remove the reference in the referring asset.");
         }
 
-        List<(int Mod, string Source)> ReferencesTo(PlannedAsset removed)
+        List<(int Mod, string Source, bool Structured)> ReferencesTo(PlannedAsset removed)
         {
             var selectedAssets = assets.ToDictionary(a => (a.Family, a.Name));
             var sources = patches.SelectMany(p => p.References ?? []).Select(r => (r.Family, r.Asset))
+                .Concat((baseReferences ?? []).Select(r => (r.Family, r.Asset)))
                 .Concat(versions.Keys.Where(k => k.Family is "code" or "objects" or "rooms" or "scripts" or "timelines")
                     .Select(k => (k.Family, Asset: k.Name))).Distinct();
-            List<(int Mod, string Source)> result = [];
+            List<(int Mod, string Source, bool Structured)> result = [];
             foreach (var source in sources)
             {
                 var selected = selectedAssets.GetValueOrDefault((source.Family, source.Asset));
@@ -98,7 +106,10 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 {
                     // An explicit unchanged choice restores the ancestor, not a mod's snapshot.
                     var ancestor = entries?.FirstOrDefault(v => v.Asset?.Base is not null)?.Asset;
-                    references = ancestor is not null
+                    references = baseReferences is not null && source.Family != "code"
+                        ? baseReferences.Any(r => r.Family == source.Family && r.Asset == source.Asset
+                            && r.TargetFamily == removed.Family && r.Target == removed.Name)
+                        : ancestor is not null
                         ? Refers(source.Family, source.Asset, ancestor.Base, ancestor.BaseCode?.Text, removed)
                         : patches.Where(p => !ChangesSource(p, source.Family, source.Asset))
                             .SelectMany(p => p.References ?? []).Any(r => r.Family == source.Family && r.Asset == source.Asset
@@ -114,7 +125,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                         || (patches[i].References ?? []).Any(r => r.Family == source.Family && r.Asset == source.Asset
                             && r.TargetFamily == removed.Family && r.Target == removed.Name)) winner = i;
                 }
-                result.Add((winner, $"{source.Family}/{source.Asset}"));
+                result.Add((winner, $"{source.Family}/{source.Asset}", source.Family is "objects" or "rooms" or "scripts" or "timelines"));
             }
             return result;
         }
@@ -154,12 +165,20 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             var last = ordered[^1];
             if (last.Asset is null)
             {
+                if (CgfAssetTypes.IndexedFamilies.Contains(family, StringComparer.Ordinal))
+                {
+                    var surviving = ordered.Where(v => v.Asset is not null).ToList();
+                    return surviving.Count == 0 ? null : Select(family, name, surviving, null);
+                }
                 if (family is "strings" or "variables" or "functions")
                 { decisions.Add($"INFO {family}/{name}: retain base definition; bytecode may reference it."); return null; }
                 return new(family, name, last.Index, null, null, null);
             }
-            // A deletion resets this asset's load-order history. Later edits still merge.
-            ordered = ordered.Skip(ordered.FindLastIndex(v => v.Asset is null) + 1).ToList();
+            // Indexed removals are ignored completely, including their position in edit history.
+            // Code and other non-indexed deletions still reset their load-order history.
+            ordered = CgfAssetTypes.IndexedFamilies.Contains(family, StringComparer.Ordinal)
+                ? ordered.Where(v => v.Asset is not null).ToList()
+                : ordered.Skip(ordered.FindLastIndex(v => v.Asset is null) + 1).ToList();
             JsonElement snapshot = last.Asset.Mod;
             if (family is "objects" or "rooms" or "scripts" or "functions" or "paths" or "timelines" or "fonts"
                 && ordered.All(v => v.Asset?.Base is not null))

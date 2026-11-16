@@ -155,7 +155,7 @@ public sealed partial class BuildingTests
         using var original = GameFileLoader.Load(basePath); using var a = GameFileLoader.Load(aPath); using var b = GameFileLoader.Load(bPath);
         var pa = PatchBuilder.Create(original, a, "A"); var pb = PatchBuilder.Create(original, b, "B");
         var result = ArchiveBuilder.Build(basePath, [new(pa, aPath), new(pb, bPath)], temp.PathFor("result.win"));
-        Assert.Contains(result.Plan.Decisions, d => d.Contains("retains the base asset", StringComparison.Ordinal));
+        Assert.Contains(result.Plan.Decisions, d => d.Contains("retained objects/fish", StringComparison.Ordinal));
         using var merged = GameFileLoader.Load(temp.PathFor("result.win"));
         Assert.Single(merged.Data.GameObjects); Assert.Single(merged.Data.Rooms[0].GameObjects);
         var chosen = BuildPlan.Create([pb, pa], new Dictionary<string, string> { ["fish"] = "B" });
