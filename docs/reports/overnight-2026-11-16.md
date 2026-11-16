@@ -18,6 +18,8 @@ This file is updated regularly during the night; the pipeline's own status lines
     2026-11-16 02:56:51  pipeline started (phases 3b 5)
     2026-11-16 02:56:52  phase 3b: implementation started
     2026-11-16 03:45:45  phase 3b: agy unavailable -> review by a second Codex instance
+    2026-11-16 04:16:14  phase 3b: DONE - committed and pushed to experimental (a4e0703 Phase 3b (pipeline): Implemented Phase 3b on `experimental`. No commit, push, or git-config changes.)
+    2026-11-16 04:16:14  phase 5: implementation started
 
 ## Orchestrator notes
 - 00:20 Took over; Phase 2 implementation running.
@@ -28,3 +30,4 @@ This file is updated regularly during the night; the pipeline's own status lines
 - 03:01 Phase 4 reviewed: quick start walkthrough with temp data dir and temp game folder works end to end (config, add x3 with base compatibility, list, profile, apply --yes in 68 s, restore to original hash, no leftover builds). Minor: keep-both cannot be applied to an entry that also has an overlapping hunk (F4.1). Started pipeline for 3b (blocker fix) then 5 (GUI).
 - 03:46 Phase 3b implementation passed the gate: 160 tests with real files, 2,133 semantic code checks pass in both orders, 4 base objects retained. agy review failed (prompt > 128 KB argv limit), Codex fallback reviewing.
 - 03:47 Independent check of 3b: catalog consistency (name[a,i] vs object at object[a,i]) — old merge 171/234 slots wrong, new forward 0/234, reverse 0/266. Fix confirmed. Remaining limit: catalog slot collisions are winner-takes-all (renumbering is future work).
+- 04:21 Phase 3b committed (a4e0703) and re-verified from the commit: both orders build + verify, catalog 0 wrong slots, game files unchanged. Test builds with instructions staged locally in out/test-builds (gitignored). Phase 5 (GUI) started 04:16.
