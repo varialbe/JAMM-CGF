@@ -23,7 +23,8 @@ public static class Program
             Console.Error.WriteLine("""
                 jamm-modmaker — builds example mods for JAMM-CGF from YOUR original data.win
                   inspect <original.win>
-                  perf    <original.win> <out.win>
+                  perf    <original.win> <out.win> [--debug]
+                  perf-census <original.win>
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   export-pages <original.win> <dir>
@@ -33,28 +34,18 @@ public static class Program
         }
         string command = args[0];
         string original = Path.GetFullPath(args[1]);
-        string? output = command is not ("dump" or "names" or "rooms" or "census") && args.Length > 2 ? Path.GetFullPath(args[2]) : null;
-        if (output is not null && output == original)
-        {
-            Console.Error.WriteLine("Output must be a different file than the original.");
-            return 1;
-        }
-        if (command is "perf" or "smooth" or "hd" or "profile")
-        {
-            if (output is null)
-            {
-                Console.Error.WriteLine($"'{command}' requires an original file and a new output file path.");
-                return 1;
-            }
-            if (File.Exists(output))
-            {
-                Console.Error.WriteLine($"Output '{output}' already exists. Choose a new path to protect existing game files.");
-                return 1;
-            }
-        }
+        bool needsOutput = command is "perf" or "smooth" or "hd" or "profile" or "export-pages";
+        if (needsOutput && (args.Length < 3 || args[2].StartsWith("--", StringComparison.Ordinal)))
+            throw new ArgumentException($"'{command}' requires an original file and a new output path before options.");
+        string? output = needsOutput ? Path.GetFullPath(args[2]) : null;
+        if (output == original)
+            throw new ArgumentException("Output must be a different file than the original.");
+        if (needsOutput && File.Exists(output))
+            throw new IOException($"Output '{output}' already exists. Choose a new path to protect existing game files.");
         UndertaleData data = Load(original);
         switch (command)
         {
+            case "perf-census": PerfMode.Census(data); return 0;
             case "inspect": Inspector.Run(data); return 0;
             case "dump": Dump.Run(data, args.Skip(2)); return 0;
             case "names": foreach (var c in data.Code) Console.WriteLine(c.Name.Content); return 0;
@@ -78,7 +69,7 @@ public static class Program
                     "gml_Script_fish_avoid_fish", "gml_Object_SceneItem_Step_2",
                     "gml_Object_Magmer_Draw_0", "gml_Object_Volteen_Other_13", "gml_Object_Volteen_Other_10"];
                 var before = changed.ToDictionary(n => n, n => data.Code.ByName(n)?.Instructions.Count ?? 0);
-                PerfMod.Apply(data);
+                PerfMod.Apply(data, args.Contains("--debug"));
                 foreach (string name in changed)
                     Console.WriteLine($"{name}: {before[name]} -> {data.Code.ByName(name)!.Instructions.Count} instructions (static size, not executed work).");
                 Save(data, output!); return 0;
