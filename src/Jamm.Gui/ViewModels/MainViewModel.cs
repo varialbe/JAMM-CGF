@@ -21,7 +21,12 @@ public sealed partial class MainViewModel : ObservableObject
     private IReadOnlyDictionary<string, string> conflictResolutions = new Dictionary<string, string>();
     /// <summary>Creates a manager model without opening game archives on the calling thread.</summary>
     public MainViewModel(ManagerStore store, ModHttp? browseHttp = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null, Func<CancellationToken, IProgress<string>, DetectedGame[]>? gameSearch = null)
-    { this.store = store; searchGames = gameSearch ?? ((token, progress) => SteamGameDetection.Detect(token, progress).Concat(GameFolderSearch.Scan(GameFolderSearch.Roots(), token, progress)).DistinctBy(g => g.Archive).ToArray()); Browse = new BrowseViewModel(this, store, browseHttp, catalog, resolver); }
+    {
+        this.store = store;
+        searchGames = gameSearch ?? ((token, progress) => SteamGameDetection.Detect(token, progress).Concat(GameFolderSearch.Scan(GameFolderSearch.Roots(), token, progress)).DistinctBy(g => g.Archive).ToArray());
+        Browse = new BrowseViewModel(this, store, browseHttp, catalog, resolver);
+        OtherGames.CollectionChanged += (_, _) => { OnPropertyChanged(nameof(HasOtherGames)); OnPropertyChanged(nameof(OtherGamesHeader)); };
+    }
     /// <summary>Current library rows.</summary>
     public ObservableCollection<ModRow> Mods { get; } = [];
     /// <summary>Active profile order, including disabled mods.</summary>

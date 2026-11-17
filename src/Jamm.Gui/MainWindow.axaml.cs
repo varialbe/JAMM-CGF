@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using Jamm.Gui.ViewModels;
@@ -11,6 +12,47 @@ namespace Jamm.Gui;
 /// <summary>The desktop shell; delegates all state changes and archive work to its view model.</summary>
 public sealed partial class MainWindow : Window
 {
+    /// <summary>Calculates window size and position clamped and centered within the target screen working area.</summary>
+    public static (double Width, double Height, PixelPoint Position) CalculateBounds(
+        PixelRect workingArea, double scaling, double requestedWidth, double requestedHeight, double minWidth = 960, double minHeight = 560)
+    {
+        scaling = scaling > 0 ? scaling : 1.0;
+        double workWidth = workingArea.Width / scaling;
+        double workHeight = workingArea.Height / scaling;
+        if (workWidth <= 0 || workHeight <= 0)
+            return (requestedWidth, requestedHeight, new PixelPoint(0, 0));
+
+        double effectiveMinWidth = Math.Min(minWidth, workWidth);
+        double effectiveMinHeight = Math.Min(minHeight, workHeight);
+
+        double targetWidth = requestedWidth > 0 ? requestedWidth : 1200;
+        double targetHeight = requestedHeight > 0 ? requestedHeight : 800;
+
+        double clampedWidth = Math.Clamp(targetWidth, effectiveMinWidth, workWidth);
+        double clampedHeight = Math.Clamp(targetHeight, effectiveMinHeight, workHeight);
+
+        int pixelWidth = (int)Math.Round(clampedWidth * scaling);
+        int pixelHeight = (int)Math.Round(clampedHeight * scaling);
+        int posX = workingArea.X + Math.Max(0, (workingArea.Width - pixelWidth) / 2);
+        int posY = workingArea.Y + Math.Max(0, (workingArea.Height - pixelHeight) / 2);
+
+        return (clampedWidth, clampedHeight, new PixelPoint(posX, posY));
+    }
+
+    /// <summary>Clamps the window size to fit the screen's working area and centers it.</summary>
+    public void ClampToScreen(Screen? screen = null)
+    {
+        screen ??= Screens.ScreenFromWindow(this) ?? Screens.Primary ?? Screens.All.FirstOrDefault();
+        if (screen is null) return;
+
+        var (w, h, pos) = CalculateBounds(screen.WorkingArea, screen.Scaling, Width, Height, MinWidth, MinHeight);
+        if (MinWidth > w) MinWidth = w;
+        if (MinHeight > h) MinHeight = h;
+        Width = w;
+        Height = h;
+        Position = pos;
+    }
+
     private async void BuiltinToggleClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm && sender is Avalonia.Controls.ToggleSwitch { DataContext: BuiltinRow row })
@@ -28,6 +70,7 @@ public sealed partial class MainWindow : Window
     public MainWindow(bool initializeOnOpen)
     {
         InitializeComponent();
+        ClampToScreen();
         MainViewModel? errorModel = null;
         DataContextChanged += (_, _) =>
         {
@@ -61,6 +104,7 @@ public sealed partial class MainWindow : Window
         }, RoutingStrategies.Bubble, true);
         Opened += async (_, _) =>
         {
+            ClampToScreen();
             if (!initializeOnOpen || initialized || Model is null) return;
             initialized = true;
             await Model.InitializeAsync();

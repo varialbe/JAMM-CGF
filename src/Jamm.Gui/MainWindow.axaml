@@ -1,5 +1,5 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Jamm.Gui.MainWindow" xmlns:local="using:Jamm.Gui"
-        Title="JAMM · Cat Goes Fishing Mod Manager" Width="1320" Height="860" MinWidth="1040" MinHeight="680" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+        Title="JAMM · Cat Goes Fishing Mod Manager" Width="1200" Height="800" MinWidth="960" MinHeight="560" WindowStartupLocation="CenterScreen" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
   <Window.Styles>
     <Style Selector="ListBox.modRows > ListBoxItem">
       <Setter Property="KeyboardNavigation.TabNavigation" Value="Continue"/>
@@ -237,65 +237,76 @@
       <Grid RowDefinitions="Auto,*" Height="150"><Button Content="Copy log" Click="CopyLogClick" HorizontalAlignment="Right"/><TextBox Grid.Row="1" Text="{Binding Log, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="monospace" FontSize="11" TextWrapping="Wrap"/></Grid>
     </Expander>
         <Border Grid.Row="1" Grid.RowSpan="3" ZIndex="9" Background="#55000000" IsVisible="{Binding SetupOpen}"/>
-        <Border Margin="16" MaxWidth="1100" CornerRadius="12" BorderBrush="#9CA3AF" Grid.Row="1" Grid.RowSpan="3" ZIndex="10" VerticalAlignment="Center" HorizontalAlignment="Stretch" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" IsVisible="{Binding SetupOpen}" BorderThickness="1" Padding="16">
-          <ScrollViewer MaxHeight="520"><StackPanel Spacing="8">
-            <StackPanel IsVisible="{Binding IsSetupDetecting}" Spacing="6">
-              <TextBlock Text="Set up your legacy game" FontWeight="Bold"/>
-              <TextBlock Text="{Binding SetupMessage}" TextWrapping="Wrap"/>
-              <ListBox ItemsSource="{Binding DetectedGames}" SelectedItem="{Binding DetectedLegacy, Mode=TwoWay}" MaxHeight="140" IsEnabled="{Binding CanEdit}">
-                <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" Classes="muted"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
-              </ListBox>
-              <Expander Header="Other folders found (not usable)">
-                <ItemsControl ItemsSource="{Binding OtherGames}"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="4"><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-              </Expander>
-              <TextBlock Text="Separate modded copy:"/>
-              <TextBlock Text="{Binding ModdedDirectory}" TextWrapping="Wrap"/>
-              <TextBox IsVisible="{Binding AdvancedMode}" Text="{Binding ModdedDirectory}" Watermark="Modded folder destination"/>
-              <WrapPanel>
-                <Button Content="Use this" IsEnabled="{Binding HasDetectedLegacy}" Click="UseDetectedClick" Margin="0,0,8,4"/>
-                <Button Content="Choose folder…" IsEnabled="{Binding CanEdit}" Click="ChooseGameClick" Margin="0,0,8,4"/>
-                <Button Content="Check again" IsEnabled="{Binding CanEdit}" Click="CheckGamesClick" Margin="0,0,8,4"/>
-                <Button Content="Cancel setup" Click="CancelSetupClick"/>
-              </WrapPanel>
-              <TextBlock Text="Steam console command (downloads the legacy Windows build):" TextWrapping="Wrap"/>
-              <TextBlock Text="download_depot 343780 343782 9039707068725406600" TextWrapping="Wrap"/>
-              <WrapPanel>
-                <Button Content="Copy legacy download command" Click="CopyDepotClick" Margin="0,0,8,4"/>
-                <Button Content="Open Steam console" Click="OpenSteamConsoleClick" IsVisible="{Binding IsLinux}" Margin="0,0,8,4"/>
-              </WrapPanel>
-            </StackPanel>
-            <StackPanel IsVisible="{Binding IsSetupExtras}" Spacing="8">
-              <TextBlock Text="Optional JAMM extras" FontWeight="Bold" FontSize="16"/>
-              <TextBlock Text="JAMM includes four built-in enhancements that you can enable with one click (default off). These mods run without external downloads or SDK, and can also be toggled later in the Manager tab." TextWrapping="Wrap"/>
-              <ItemsControl ItemsSource="{Binding Builtins}" IsEnabled="{Binding CanEdit}">
-                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate><DataTemplate>
-                  <Border Classes="card" Margin="4" Padding="10" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" CornerRadius="6">
+        <Border Margin="16" MaxWidth="1100" MaxHeight="520" CornerRadius="12" BorderBrush="#9CA3AF" Grid.Row="1" Grid.RowSpan="3" ZIndex="10" VerticalAlignment="Center" HorizontalAlignment="Stretch" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" IsVisible="{Binding SetupOpen}" BorderThickness="1" Padding="16">
+          <Grid RowDefinitions="*,Auto">
+            <ScrollViewer MaxHeight="430">
+              <StackPanel Spacing="8">
+                <StackPanel IsVisible="{Binding IsSetupDetecting}" Spacing="6">
+                  <TextBlock Text="Set up your legacy game" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding SetupMessage}" TextWrapping="Wrap"/>
+                  <ListBox ItemsSource="{Binding DetectedGames}" SelectedItem="{Binding DetectedLegacy, Mode=TwoWay}" MaxHeight="140" IsEnabled="{Binding CanEdit}">
+                    <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" Classes="muted"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+                  </ListBox>
+                  <Expander IsVisible="{Binding HasOtherGames}" Header="{Binding OtherGamesHeader}">
+                    <ItemsControl ItemsSource="{Binding OtherGames}"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="4"><TextBlock Text="{Binding Display}" Foreground="{Binding Color}" TextWrapping="Wrap"/><TextBlock Text="{Binding Reason}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                  </Expander>
+                  <StackPanel IsVisible="{Binding HasModdedDirectory}" Spacing="2">
+                    <TextBlock Text="Separate modded copy:" FontWeight="SemiBold"/>
+                    <TextBlock Text="JAMM installs mods into this copy; your original game stays untouched." Classes="muted" TextWrapping="Wrap" FontSize="12"/>
+                    <TextBlock Text="{Binding ModdedDirectory}" TextWrapping="Wrap"/>
+                    <TextBox IsVisible="{Binding AdvancedMode}" Text="{Binding ModdedDirectory}" Watermark="Modded folder destination"/>
+                  </StackPanel>
+                  <TextBlock Text="Steam console command (downloads the legacy Windows build):" TextWrapping="Wrap"/>
+                  <TextBlock Text="download_depot 343780 343782 9039707068725406600" TextWrapping="Wrap"/>
+                  <WrapPanel>
+                    <Button Content="Copy legacy download command" Click="CopyDepotClick" Margin="0,0,8,4"/>
+                    <Button Content="Open Steam console" Click="OpenSteamConsoleClick" IsVisible="{Binding IsLinux}" Margin="0,0,8,4"/>
+                  </WrapPanel>
+                </StackPanel>
+                <StackPanel IsVisible="{Binding IsSetupExtras}" Spacing="8">
+                  <TextBlock Text="Optional JAMM extras" FontWeight="Bold" FontSize="16"/>
+                  <TextBlock Text="JAMM includes four built-in enhancements that you can enable with one click (default off). These mods run without external downloads or SDK, and can also be toggled later in the Manager tab." TextWrapping="Wrap"/>
+                  <ItemsControl ItemsSource="{Binding Builtins}" IsEnabled="{Binding CanEdit}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate>
+                      <Border Classes="card" Margin="4" Padding="10" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" CornerRadius="6">
+                        <StackPanel Spacing="4">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ToggleSwitch Width="48" MinWidth="0" OnContent="" OffContent="" IsChecked="{Binding Enabled, Mode=OneWay}" Click="BuiltinToggleClick" AutomationProperties.Name="{Binding Name}"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                          </StackPanel>
+                          <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Classes="muted" FontSize="12"/>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate></ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Border Classes="card" Margin="4,4,4,4" Padding="10" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" CornerRadius="6">
                     <StackPanel Spacing="4">
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ToggleSwitch Width="48" MinWidth="0" OnContent="" OffContent="" IsChecked="{Binding Enabled, Mode=OneWay}" Click="BuiltinToggleClick" AutomationProperties.Name="{Binding Name}"/>
-                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                      </StackPanel>
-                      <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Classes="muted" FontSize="12"/>
+                      <TextBlock Text="In-game hotkeys &amp; console commands" FontWeight="SemiBold" FontSize="13"/>
+                      <SelectableTextBlock Text="{Binding HotkeysHelpText}" TextWrapping="Wrap" Classes="muted" FontSize="11" FontFamily="monospace"/>
                     </StackPanel>
                   </Border>
-                </DataTemplate></ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <Border Classes="card" Margin="4,4,4,4" Padding="10" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" CornerRadius="6">
-                <StackPanel Spacing="4">
-                  <TextBlock Text="In-game hotkeys &amp; console commands" FontWeight="SemiBold" FontSize="13"/>
-                  <SelectableTextBlock Text="{Binding HotkeysHelpText}" TextWrapping="Wrap" Classes="muted" FontSize="11" FontFamily="monospace"/>
+                  <ProgressBar Value="{Binding OperationProgress}" IsIndeterminate="{Binding OperationIndeterminate}" IsVisible="{Binding IsBusy}" Height="6"/>
+                  <TextBlock Text="{Binding Status}" IsVisible="{Binding IsBusy}" Classes="muted" FontSize="12"/>
                 </StackPanel>
-              </Border>
-              <ProgressBar Value="{Binding OperationProgress}" IsIndeterminate="{Binding OperationIndeterminate}" IsVisible="{Binding IsBusy}" Height="6"/>
-              <TextBlock Text="{Binding Status}" IsVisible="{Binding IsBusy}" Classes="muted" FontSize="12"/>
-              <WrapPanel Margin="0,4,0,0">
-                <Button Content="Done" Click="FinishSetupClick" Margin="0,0,8,4" Background="#2563EB" Foreground="White" IsEnabled="{Binding CanEdit}"/>
-                <Button Content="Skip" Click="SkipSetupClick" Margin="0,0,8,4" IsEnabled="{Binding CanEdit}"/>
-                <Button Content="← Back to game folder" Click="BackToGameSetupClick" IsEnabled="{Binding CanEdit}"/>
-              </WrapPanel>
-            </StackPanel>
-          </StackPanel></ScrollViewer>
+              </StackPanel>
+            </ScrollViewer>
+            <Border Grid.Row="1" Margin="0,12,0,0" Padding="0,10,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="0,1,0,0">
+              <StackPanel>
+                <WrapPanel IsVisible="{Binding IsSetupDetecting}">
+                  <Button Content="Use this" IsEnabled="{Binding HasDetectedLegacy}" Click="UseDetectedClick" Margin="0,0,8,4"/>
+                  <Button Content="Choose folder…" IsEnabled="{Binding CanEdit}" Click="ChooseGameClick" Margin="0,0,8,4"/>
+                  <Button Content="Check again" IsEnabled="{Binding CanEdit}" Click="CheckGamesClick" Margin="0,0,8,4"/>
+                  <Button Content="Cancel setup" Click="CancelSetupClick" Margin="0,0,8,4"/>
+                </WrapPanel>
+                <WrapPanel IsVisible="{Binding IsSetupExtras}">
+                  <Button Content="Done" Click="FinishSetupClick" Margin="0,0,8,4" Background="#2563EB" Foreground="White" IsEnabled="{Binding CanEdit}"/>
+                  <Button Content="Skip" Click="SkipSetupClick" Margin="0,0,8,4" IsEnabled="{Binding CanEdit}"/>
+                  <Button Content="← Back to game folder" Click="BackToGameSetupClick" Margin="0,0,8,4" IsEnabled="{Binding CanEdit}"/>
+                </WrapPanel>
+              </StackPanel>
+            </Border>
+          </Grid>
         </Border>
   </Grid>
 </Window>
