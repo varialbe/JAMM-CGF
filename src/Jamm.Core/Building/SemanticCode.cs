@@ -9,6 +9,7 @@ internal sealed class SemanticCode
 {
     internal Dictionary<string, CodeText> Base { get; }
     internal IReadOnlyList<Dictionary<string, CodeText>> Mods { get; }
+    internal IReadOnlyDictionary<string, string[]> BaseNames => baseNames;
     private readonly Dictionary<string, string[]> baseNames;
     private readonly Dictionary<string, string[]>[] modNames;
     private readonly HashSet<string> ambiguous;
@@ -99,7 +100,10 @@ internal sealed class SemanticCode
         {
             string name = code.Name.Content;
             string text = selected.TryGetValue(name, out var choice) ? choice.Gml!
-                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && CatalogRuntime.Scripts.TryGetValue(name[11..], out var runtime) ? runtime : name.StartsWith("gml_Script_", StringComparison.Ordinal) && HudRuntime.Scripts.TryGetValue(name[11..], out var hud) ? hud : Base[name].Text;
+                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && CatalogRuntime.Scripts.TryGetValue(name[11..], out var runtime) ? runtime
+                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && HudRuntime.Scripts.TryGetValue(name[11..], out var hud) ? hud
+                : name.StartsWith("gml_Script_", StringComparison.Ordinal) && ItemsRuntimeScripts.DefaultScripts.TryGetValue(name[11..], out var items) ? items
+                : Base[name].Text;
             var references = SemanticReferences.Resolve(text, name, union);
             foreach (var reference in references)
                 if (!mergedNames[reference.Family].Contains(reference.Name, StringComparer.Ordinal))

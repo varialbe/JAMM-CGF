@@ -48,7 +48,12 @@ public static class ArchiveBuilder
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
-            var plan = HudRuntime.PreparePlan(CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base), semantics.Base);
+            var plan = ItemsRuntime.PreparePlan(
+                HudRuntime.PreparePlan(
+                    CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base),
+                    semantics.Base),
+                semantics.Base,
+                semantics.BaseNames);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
@@ -229,6 +234,7 @@ public static class ArchiveBuilder
         ReassignRoomIds(data, ancestor);
         CatalogRuntime.Inject(data, recompile);
         HudRuntime.Inject(data, recompile);
+        ItemsRuntime.Inject(data, recompile);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
         var finalNames = SemanticReferences.Names(data);
