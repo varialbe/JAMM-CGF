@@ -87,7 +87,7 @@ public sealed class BuiltinModTests : IDisposable
         service.Add("console", progress.Add);
         Assert.Contains(progress, p => p.StartsWith("Generating"));
         // A previous generator version is never used as a cache hit.
-        File.Move(cached, cached.Replace("-1-", "-old-"));
+        File.Move(cached, cached.Replace($"-{BuiltinMods.GeneratorVersion}-", "-old-"));
         progress.Clear(); service.Add("console", progress.Add);
         Assert.Contains(progress, p => p.StartsWith("Generating"));
         WriteBase(original, 1774);

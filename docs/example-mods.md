@@ -35,12 +35,19 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
   remains in effect. The experimental mode measured slower in the tested scene.
 - **Console** adds an optional in-game command console (`obj_jamm_console`).
   Press **F12** (or the backtick/grave key `` ` ``) to open or close the console
-  overlay, use **Up/Down** for command history, and type `help` or `unlockall`.
-  `unlockall` unlocks every upgrade, rod, lure, boat, tool/gear, hat, HUD shop
-  menu icon, and the nightfall flag (without adding money or modifying the fish
-  catalog), prints a summary of what was unlocked, and warns that the next
-  autosave (or opening the Esc save menu) persists the unlocks to your save file.
-  There is no hotkey cheat outside the console.
+  overlay, use **Up/Down** for command history, and type `help` to list commands:
+  - `unlockall`: unlocks every upgrade, rod, lure, boat, tool/gear, hat, HUD
+    shop menu icon, and the nightfall flag, sets level to max, and marks all
+    catalog fish (including mod fish) as caught (does not change money).
+  - `unlockgear`: unlocks equipment, upgrades, hats, HUD icons, and nightfall only.
+  - `maxlevel` / `level <n>`: sets level (clamped to `[0, max_level]`).
+  - `catalog all` (alias `unlockfish`): marks every catalog fish as caught.
+  - `money <n>` / `money +<n>`: sets or adds dollars (clamped to `0..999999999`).
+  - `clear`, `close` / `exit`: clears the console log or closes the overlay.
+  Commands that change game state warn that the next autosave (or opening the
+  Esc save menu) persists changes to your save file. Switching save slots
+  automatically resets the persistent console unlock flag. There is no hotkey
+  cheat outside the console.
 
 Optional `--debug` adds diagnostic logging/controllers; it is useful for local
 measurements and may affect performance. See the implementation reports for
