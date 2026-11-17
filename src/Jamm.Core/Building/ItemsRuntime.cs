@@ -27,6 +27,13 @@ internal static class ItemsRuntime
 
         var assets = plan.Assets.ToList();
         var decisions = plan.Decisions.ToList();
+        string[] saveEvents = ["gml_Object_SaveManager_Other_13", "gml_Object_SaveManager_Other_14", "gml_Object_SaveManager_Other_15"];
+        if (!saveEvents.Any(e => baseline.ContainsKey(e) || assets.Any(a => a.Family == "code" && a.Name == e)))
+        {
+            // Not a full Cat Goes Fishing archive (no save system): registrations keep their placeholders.
+            decisions.Add("Items API skipped: the archive has no SaveManager save/load events, so items could not be saved.");
+            return plan with { Decisions = decisions };
+        }
         var (availableObjects, availableScripts) = ResolveAvailableAssets(assets, baseNames);
 
         ItemsRuntimePatches.Apply(assets, baseline, availableObjects);

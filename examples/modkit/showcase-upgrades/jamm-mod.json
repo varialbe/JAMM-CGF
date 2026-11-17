@@ -1,0 +1,74 @@
+{
+  "id": "showcase-upgrades",
+  "name": "Showcase Upgrades",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Five idempotent example rod upgrades: Turbo Reel, Deep Diver, Iron Line, Fish Magnet, and Golden Touch.",
+  "upgrades": [
+    {
+      "key": "turbo",
+      "name": "Turbo Reel",
+      "description": "Increases reel speed by +2.0 per stack. Stacks up to 3 times.",
+      "description2": "Faster reeling.",
+      "cost": 0.35,
+      "icon": "art/turbo.png",
+      "maxStacks": 3,
+      "hooks": {
+        "apply": "hooks/turbo_apply.gml",
+        "step": null
+      }
+    },
+    {
+      "key": "diver",
+      "name": "Deep Diver",
+      "description": "Increases lure sink speed by +1.5 per stack without slowing your reel. Stacks up to 3 times.",
+      "description2": "Lure sinks faster.",
+      "cost": 0.25,
+      "icon": "art/diver.png",
+      "maxStacks": 3,
+      "hooks": {
+        "apply": "hooks/diver_apply.gml",
+        "step": null
+      }
+    },
+    {
+      "key": "iron",
+      "name": "Iron Line",
+      "description": "Raises maximum line tension (+240 MAX_TENSION per stack). Stacks up to 3 times.",
+      "description2": "Stronger line tension.",
+      "cost": 0.30,
+      "icon": "art/iron.png",
+      "maxStacks": 3,
+      "hooks": {
+        "apply": "hooks/iron_apply.gml",
+        "step": null
+      }
+    },
+    {
+      "key": "magnet",
+      "name": "Fish Magnet",
+      "description": "Increases lure attraction range for all fish (+25% lunge mod and +25 range per stack). Stacks up to 2 times.",
+      "description2": "All fish lunge more eagerly.",
+      "cost": 0.65,
+      "icon": "art/magnet.png",
+      "maxStacks": 2,
+      "hooks": {
+        "apply": "hooks/magnet_apply.gml",
+        "step": null
+      }
+    },
+    {
+      "key": "golden",
+      "name": "Golden Touch",
+      "description": "Increases caught fish sale value by +25% per stack. Stacks up to 2 times.",
+      "description2": "Caught fish sell for more.",
+      "cost": 0.80,
+      "icon": "art/golden.png",
+      "maxStacks": 2,
+      "hooks": {
+        "apply": null,
+        "step": "hooks/golden_step.gml"
+      }
+    }
+  ]
+}
