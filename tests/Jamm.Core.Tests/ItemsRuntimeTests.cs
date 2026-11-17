@@ -326,7 +326,7 @@ public sealed class ItemsRuntimeTests
         Assert.Contains("jamm_default_unlocked", loadScript);
         Assert.Contains("jamm_default_upg", loadScript);
         Assert.Contains("asset_get_index", loadScript);
-        Assert.Contains("gear_equip()", loadScript);
+        Assert.Contains("asset_get_index(\"gear_equip\")", loadScript);
     }
 
     [Fact]

@@ -123,6 +123,18 @@ public sealed class BuiltinModTests : IDisposable
         }
         var list = Run("builtin", "list"); Assert.Equal(0, list.Exit);
         foreach (var item in BuiltinMods.Catalog) Assert.Contains(item.Name, list.Text);
+        Assert.Contains("Hotkeys:", list.Text);
+        Assert.Contains("F8", list.Text);
+        Assert.Contains("F7", list.Text);
+        Assert.Contains("F11", list.Text);
+        Assert.Contains("F12 or backtick", list.Text);
+        Assert.Contains("Console commands:", list.Text);
+        Assert.Contains("unlockall", list.Text);
+        Assert.Contains("unlockgear", list.Text);
+        Assert.Contains("maxlevel", list.Text);
+        Assert.Contains("level <n>", list.Text);
+        Assert.Contains("catalog all", list.Text);
+        Assert.Contains("money <n>", list.Text);
         Assert.Equal(0, Run("builtin", "add", "console").Exit);
         Assert.Equal(0, Run("builtin", "add", "console").Exit);
         Assert.Equal(1, Run("builtin", "add", "invalid").Exit);

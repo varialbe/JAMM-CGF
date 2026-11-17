@@ -26,6 +26,12 @@ public sealed partial class MainViewModel
     /// <summary>Whether a configured base makes bundled mods available.</summary>
     public bool HasBuiltins => Config.Base is not null;
 
+    /// <summary>Formatted hotkeys and console commands help text.</summary>
+    public string HotkeysHelpText => BuiltinMods.HotkeysHelpText;
+
+    /// <summary>Single source of truth for in-game hotkeys and console commands.</summary>
+    public IReadOnlyList<BuiltinHotkey> Hotkeys => BuiltinMods.Hotkeys;
+
     /// <summary>Shows the wide group above the simple mod list.</summary>
     public bool ShowBuiltinHeader => HasBuiltins && !AdvancedMode;
 

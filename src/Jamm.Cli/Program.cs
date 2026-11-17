@@ -57,7 +57,10 @@ int Run(string[] arguments)
             cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
-            cgfmm add <file.win|file.zip> [--name <name>]
+            cgfmm add <file.win|file.zip|modkit dir> [--name <name>]
+            cgfmm modkit new <dir> [--template fish|upgrade|boat|hat]
+            cgfmm modkit check <dir>
+            cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>]
             cgfmm list [--json] | remove <mod ID or name>
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
             cgfmm profile resolve <name> <asset> <mod|keep-both>
@@ -77,6 +80,7 @@ int Run(string[] arguments)
         return 0;
     }
     string command = arguments[0];
+    if (command == "modkit") return ModKitCommand.Run(arguments[1..], dataDirectory);
     if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))

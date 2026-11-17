@@ -784,9 +784,12 @@ internal static class ItemsRuntimeScripts
         }
         if (hasGirl && hasGearData)
         {
+            // gear_equip is resolved at runtime so the script compiles even in archives without it.
             string equipCall = hasGearEquip
                 ? """
-                    with (jamm_g) { gear_equip(); }
+                    var jamm_ge = asset_get_index("gear_equip");
+                    if (jamm_ge > -1) { with (jamm_g) { script_execute(jamm_ge); } }
+                    else { jamm_g.state = 2; Girl.gear = jamm_g; Girl.gear_id = jamm_hi; with (Girl) { event_perform(ev_other, ev_user0); } }
                     """
                 : """
                     jamm_g.state = 2;
