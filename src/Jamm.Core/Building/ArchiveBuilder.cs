@@ -50,7 +50,9 @@ public static class ArchiveBuilder
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
             var plan = ItemsRuntime.PreparePlan(
                 HudRuntime.PreparePlan(
-                    CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base),
+                    MenuRuntime.PreparePlan(
+                        CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base),
+                        semantics.Base, original.Data),
                     semantics.Base),
                 semantics.Base,
                 semantics.BaseNames);
@@ -234,6 +236,7 @@ public static class ArchiveBuilder
         ReassignRoomIds(data, ancestor);
         CatalogRuntime.Inject(data, recompile);
         HudRuntime.Inject(data, recompile);
+        MenuRuntime.Inject(data, recompile);
         ItemsRuntime.Inject(data, recompile);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
