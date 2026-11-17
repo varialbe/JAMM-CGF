@@ -287,4 +287,23 @@ Generated archives are cached under the manager's `builtin/` directory by base S
 and generator version. Built-ins use the same merge and conflict checks as other mods.
 CLI users can run `cgfmm builtin list` and `cgfmm builtin add console` (or `perf`,
 `smooth`, `hd-lite`), then select the imported mod in a profile.
-The [ModMaker instructions](example-mods.md) are intended for developers.
+See [example mods](example-mods.md) for full console command behavior and developer ModMaker variants.
+
+## API mods and scrollable menus
+
+Mods built with the **JAMM ModKit** or **JAMM GML API** add new fish, boats, hats,
+upgrades, rods, lures, and tools without editing shared game objects, so you can
+combine many of them in one profile with zero conflicts:
+
+- **Installing**: Add `.win`/`.zip` API mods as usual in the GUI or CLI, or import a
+  ModKit folder directly with `cgfmm add <folder>`. Want to make your own? Start with the
+  [Modding guide](modding/README.md).
+- **Scrollable menus**: When mods add more boats, rods, lures, tools, or rod upgrades
+  than fit on one screen, JAMM automatically adds paging controls (**mouse wheel**,
+  **Up/Down arrow keys**, or clickable **▲ / ▼** buttons with **`Page x/y`**) to those
+  menus. Single-page shops keep the standard layout. See [scrollable menus](modding/menus.md).
+- **Saves across profile changes**: API mods store unlocked items, equipped gear, rod
+  upgrades, and Fishalog records by stable name (`[JAMM_Items]` and `[JAMM_Catalog]`),
+  so reordering or temporarily removing a mod won't scramble your gear. Always empty your
+  boat and reel in your lure before switching profiles, and keep a backup of your save
+  folder. Details: [how saves work](modding/saves.md).
