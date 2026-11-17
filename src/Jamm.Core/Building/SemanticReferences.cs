@@ -111,7 +111,7 @@ public static class SemanticReferences
             var token = tokens[i];
             if (token.Value is ";" or "{") container = "named reference";
             if (token.Kind != 'i') continue;
-            if (CgfAssetTypes.Family(token.Value, entry) is not null || CgfAssetTypes.ArgumentFamily(token.Value, 0) is not null) container = token.Value;
+            if (CgfAssetTypes.Family(token.Value, entry) is not null || CgfAssetTypes.HasTypedArguments(token.Value)) container = token.Value;
             if (i > 0 && tokens[i - 1].Value == ".") continue; // member names are not global asset symbols
             if (AssetSymbols.Parse(token.Value, out string symbolFamily, out string symbolName))
             { result.Add(new(container, symbolFamily, symbolName)); continue; }

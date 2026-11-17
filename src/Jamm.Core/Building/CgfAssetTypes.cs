@@ -10,6 +10,15 @@ public static class CgfAssetTypes
     private sealed record Definition(string Family, string Reason, string[]? Entries, int? Argument, int? ArgumentCount);
     private static readonly Dictionary<string, Definition> Definitions = Read();
     internal static readonly string[] IndexedFamilies = ["objects", "sprites", "sounds", "backgrounds", "paths", "scripts", "fonts", "timelines", "rooms", "shaders"];
+    private static readonly IReadOnlyDictionary<string, (int MinArgs, int MaxArgs, (int Arg, string Family)[] Typed)> ApiFunctions =
+        new Dictionary<string, (int, int, (int, string)[])>(StringComparer.Ordinal)
+        {
+            ["jamm_boat_register"] = (6, 7, [(3, "sprites"), (4, "objects")]),
+            ["jamm_rod_register"] = (9, 11, [(8, "sprites")]),
+            ["jamm_lure_register"] = (6, 7, [(3, "objects"), (4, "sprites")]),
+            ["jamm_tool_register"] = (8, 9, [(4, "objects"), (5, "objects"), (6, "sprites")]),
+            ["jamm_hat_register"] = (6, 9, [(1, "objects")])
+        };
     private static Dictionary<string, Definition> Read()
     {
         using var stream = typeof(CgfAssetTypes).Assembly.GetManifestResourceStream("Jamm.Core.Building.cgf-asset-types.json")!;
@@ -32,6 +41,20 @@ public static class CgfAssetTypes
         })
             registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(function,
                 new FunctionArgsMacroType([registry.FindType(type)]));
+        foreach (var (function, (minArgs, maxArgs, typed)) in ApiFunctions)
+        {
+            List<IMacroType> signatures = [];
+            for (int count = minArgs; count <= maxArgs; count++)
+            {
+                IMacroType?[] args = new IMacroType?[count];
+                foreach (var (arg, family) in typed)
+                    if (arg < count)
+                        args[arg] = registry.FindType("Asset." + (family == "sprites" ? "Sprite" : "Object"));
+                signatures.Add(new FunctionArgsMacroType(args));
+            }
+            registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(function,
+                signatures.Count == 1 ? signatures[0] : new UnionMacroType(signatures));
+        }
         Dictionary<string, NameMacroTypeResolver> scopes = new(StringComparer.Ordinal);
         foreach (var (container, definition) in Definitions)
         {
@@ -65,6 +88,17 @@ public static class CgfAssetTypes
     private static string? DefinedFamily(string container, string entry) => Definitions.TryGetValue(container, out var definition)
         && definition.Argument is null && (definition.Entries is null || definition.Entries.Contains(entry, StringComparer.Ordinal)) ? definition.Family : null;
 
-    internal static string? ArgumentFamily(string function, int argument) => Definitions.TryGetValue(function, out var definition)
-        && definition.Argument == argument ? definition.Family : null;
+    internal static bool HasTypedArguments(string function) => ApiFunctions.ContainsKey(function)
+        || Definitions.TryGetValue(function, out var definition) && definition.Argument is not null;
+
+    internal static string? ArgumentFamily(string function, int argument)
+    {
+        if (ApiFunctions.TryGetValue(function, out var api))
+        {
+            foreach (var (arg, family) in api.Typed)
+                if (arg == argument) return family;
+            return null;
+        }
+        return Definitions.TryGetValue(function, out var definition) && definition.Argument == argument ? definition.Family : null;
+    }
 }
