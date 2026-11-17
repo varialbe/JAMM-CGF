@@ -240,7 +240,7 @@ public sealed class UpgradesRuntimeTests
         Assert.Contains("jamm_max_stacks", ensureBase);
 
         string umAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text;
-        Assert.Contains("UpgradeData.nItems", umAlarm);
+        Assert.Contains("array_length_1d(UpgradeData.unlocks)", umAlarm);
     }
 
     [Fact]
@@ -272,7 +272,7 @@ public sealed class UpgradesRuntimeTests
         Assert.DoesNotContain("<= 18", PatchBuilder.ReadCode(merged, "gml_Object_SaveManager_Other_13").Text);
         Assert.DoesNotContain("< 7", PatchBuilder.ReadCode(merged, "gml_Object_SaveManager_Other_13").Text);
         Assert.Contains("UpgradeData.jamm_max_stacks", PatchBuilder.ReadCode(merged, "gml_Object_UpgradeCard_Other_10").Text);
-        Assert.Contains("UpgradeData.nItems", PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text);
+        Assert.Contains("array_length_1d(UpgradeData.unlocks)", PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text);
     }
 
     [Fact]

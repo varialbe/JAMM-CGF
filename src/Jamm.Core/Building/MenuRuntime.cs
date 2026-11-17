@@ -17,7 +17,6 @@ internal static class MenuRuntime
     internal const string UpgradeMenuAlarm = "gml_Object_UpgradeMenu_Alarm_0";
     internal const string UpgradeMenuStep = "gml_Object_UpgradeMenu_Step_0";
     internal const string UpgradeMenuDraw = "gml_Object_UpgradeMenu_Draw_0";
-    internal const string UpgradeDataCreate = "gml_Object_UpgradeData_Create_0";
 
     internal static BuildPlan PreparePlan(BuildPlan plan, IReadOnlyDictionary<string, CodeText> baseline, UndertaleData? original = null)
     {
@@ -141,16 +140,6 @@ internal static class MenuRuntime
 
         AppendOrPut(assets, baseline, UpgradeMenuStep, BuildStepGml("UpgradeCard"));
         AppendOrPut(assets, baseline, UpgradeMenuDraw, BuildDrawGml(hasSmallFont));
-
-        if (HasCode(assets, baseline, UpgradeDataCreate))
-        {
-            string upgradeData = Current(assets, baseline, UpgradeDataCreate);
-            if (!upgradeData.Contains("nItems", StringComparison.Ordinal))
-            {
-                RequireAnchor(UpgradeDataCreate, upgradeData, "unlocks[1] = 1;");
-                Put(assets, baseline, UpgradeDataCreate, upgradeData.TrimEnd() + "\nnItems = array_length_1d(unlocks);\n");
-            }
-        }
     }
 
     private static string BuildCardHandlerAlarmGml() => BuildWindowedAlarmGml(
@@ -174,11 +163,11 @@ internal static class MenuRuntime
     private static string BuildUpgradeMenuAlarmGml() => BuildWindowedAlarmGml(
         extraLocals: ", jamm_id",
         initPrefix: """
-                for (jamm_i = array_length_1d(spawn_order); jamm_i < UpgradeData.nItems; jamm_i += 1)
+                for (jamm_i = array_length_1d(spawn_order); jamm_i < array_length_1d(UpgradeData.unlocks); jamm_i += 1)
                 {
                     spawn_order[jamm_i] = jamm_i;
                 }
-                for (jamm_i = 0; jamm_i < UpgradeData.nItems; jamm_i += 1)
+                for (jamm_i = 0; jamm_i < array_length_1d(UpgradeData.unlocks); jamm_i += 1)
                 {
                     jamm_id = spawn_order[jamm_i];
                     if (UpgradeData.unlocks[jamm_id])
@@ -244,7 +233,7 @@ internal static class MenuRuntime
         {
             var jamm_delta, jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_next;
             jamm_delta = 0;
-            jamm_bx = ORIGIN_X + (card_width * X_GAP) + 12;
+            jamm_bx = min(ORIGIN_X + (card_width * X_GAP) + 12, (view_xview[0] + view_wview[0]) - 48);
             jamm_by_up = ORIGIN_Y + 80;
             jamm_bw = 36;
             jamm_bh = 28;
@@ -300,7 +289,7 @@ internal static class MenuRuntime
         {
             var jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_cx;
             var jamm_bg, jamm_fg, jamm_dim;
-            jamm_bx = ORIGIN_X + (card_width * X_GAP) + 12;
+            jamm_bx = min(ORIGIN_X + (card_width * X_GAP) + 12, (view_xview[0] + view_wview[0]) - 48);
             jamm_by_up = ORIGIN_Y + 80;
             jamm_bw = 36;
             jamm_bh = 28;
