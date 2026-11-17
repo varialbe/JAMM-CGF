@@ -96,6 +96,9 @@ public sealed partial class MainWindow : Window
     }
     private async void CheckGamesClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.SearchGamesAsync(); }
     private void CancelSetupClick(object? sender, RoutedEventArgs e) => Model?.CancelSetup();
+    private void FinishSetupClick(object? sender, RoutedEventArgs e) => Model?.FinishSetup();
+    private void SkipSetupClick(object? sender, RoutedEventArgs e) => Model?.SkipSetup();
+    private void BackToGameSetupClick(object? sender, RoutedEventArgs e) => Model?.BackToGameSetup();
     private async void UseDetectedClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.UseDetectedGameAsync(); }
     private async void CopyDepotClick(object? sender, RoutedEventArgs e) { if (Clipboard is { } clipboard) await clipboard.SetTextAsync(Jamm.Core.Management.SteamGameDetection.LegacyCommand); }
     private async void OpenSteamConsoleClick(object? sender, RoutedEventArgs e) { if (Clipboard is { } clipboard) await clipboard.SetTextAsync(Jamm.Core.Management.SteamGameDetection.LegacyCommand); Model?.OpenSteamConsole(); }

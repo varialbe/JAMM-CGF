@@ -103,7 +103,7 @@ get_legacy_game() {
         echo '     - Flatpak:      flatpak run com.valvesoftware.Steam steam://open/console  (or add -console)'
         echo '     - Snap:         snap run steam steam://open/console  (or add -console)'
         printf '  2. In the Steam "Console" tab, paste and run:\n     %s\n' "$depot_cmd"
-        echo '  3. Wait for "Depot download complete", then open JAMM-CGF (or run "install.sh --get-game").'
+        echo '  3. Wait for "Depot download complete", then open JAMM-CGF (or run "'"$src"'/scripts/install.sh --get-game").'
     }
 
     local found_dir=""
@@ -205,7 +205,7 @@ get_legacy_game() {
         echo 'Skipped waiting for depot download.'
         return 0
     fi
-    echo 'Timed out after 30 minutes waiting for the legacy depot. Run "install.sh --get-game" when the download finishes.'
+    echo 'Timed out after 30 minutes waiting for the legacy depot. Run "'"$src"'/scripts/install.sh --get-game" when the download finishes.'
     return 0
 }
 
@@ -270,6 +270,7 @@ Categories=Game;Utility;
 ENTRY
 printf 'Installed. Open JAMM-CGF from your applications menu or run "%s/cgfmm-gui".\n' "$bin"
 printf 'For terminal commands, add %s to PATH if needed. Re-run this installer to update.\n' "$bin"
+printf 'To re-check or wait for the legacy depot download, run "%s/scripts/install.sh --get-game".\n' "$src"
 trap - ERR
 if [[ "$mode" == "no-game" ]]; then
     get_legacy_game --no-game || true

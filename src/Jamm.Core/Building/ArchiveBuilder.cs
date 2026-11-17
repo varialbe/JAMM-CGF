@@ -48,7 +48,18 @@ public static class ArchiveBuilder
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
-            var plan = HudRuntime.PreparePlan(MenuRuntime.PreparePlan(CatalogRuntime.PreparePlan(FishRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base, original.Data), semantics.Base), semantics.Base, original.Data), semantics.Base);
+            // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
+            // jamm_api_init when no items runtime was injected.
+            var plan = FishRuntime.PreparePlan(
+                ItemsRuntime.PreparePlan(
+                    HudRuntime.PreparePlan(
+                        MenuRuntime.PreparePlan(
+                            CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base),
+                            semantics.Base, original.Data),
+                        semantics.Base),
+                    semantics.Base,
+                    semantics.BaseNames),
+                semantics.Base, original.Data);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
@@ -228,9 +239,10 @@ public static class ArchiveBuilder
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
         ReassignRoomIds(data, ancestor);
         CatalogRuntime.Inject(data, recompile);
-        FishRuntime.Inject(data, recompile);
         HudRuntime.Inject(data, recompile);
         MenuRuntime.Inject(data, recompile);
+        ItemsRuntime.Inject(data, recompile);
+        FishRuntime.Inject(data, recompile);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
         var finalNames = SemanticReferences.Names(data);

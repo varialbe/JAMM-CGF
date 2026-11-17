@@ -3,6 +3,15 @@ using Jamm.Core.Management;
 
 namespace Jamm.Gui.ViewModels;
 
+/// <summary>Step within the first-run setup flow.</summary>
+public enum SetupStep
+{
+    /// <summary>Detecting or choosing the legacy game folder.</summary>
+    DetectGame,
+    /// <summary>Optional bundled JAMM extras (Perf, Smooth, HD Lite, Console).</summary>
+    Extras
+}
+
 public sealed partial class MainViewModel
 {
     /// <summary>Opens first-run setup and defers a requested action until setup succeeds.</summary>
@@ -18,6 +27,7 @@ public sealed partial class MainViewModel
         if (!checkedSetup) return;
         if (!NeedsSetup) { await action(); return; }
         pendingAction = action;
+        SetupStep = SetupStep.DetectGame;
         SetupOpen = true;
         SetupMessage = "First choose the legacy game so JAMM can read your mods. Your requested action will continue after Use this.";
         if (DetectedGames.Count == 0) await SearchGamesAsync();
@@ -26,6 +36,24 @@ public sealed partial class MainViewModel
     private bool setupOpen;
     /// <summary>Whether setup is currently expanded.</summary>
     public bool SetupOpen { get => setupOpen; set => SetProperty(ref setupOpen, value); }
+    private SetupStep setupStep = SetupStep.DetectGame;
+    /// <summary>Active step in the setup dialog.</summary>
+    public SetupStep SetupStep
+    {
+        get => setupStep;
+        set
+        {
+            if (SetProperty(ref setupStep, value))
+            {
+                OnPropertyChanged(nameof(IsSetupDetecting));
+                OnPropertyChanged(nameof(IsSetupExtras));
+            }
+        }
+    }
+    /// <summary>Whether setup is currently on the legacy game detection step.</summary>
+    public bool IsSetupDetecting => SetupStep == SetupStep.DetectGame;
+    /// <summary>Whether setup is currently on the optional JAMM extras step.</summary>
+    public bool IsSetupExtras => SetupStep == SetupStep.Extras;
     /// <summary>Read-only classified search results.</summary>
     public ObservableCollection<DetectedGame> DetectedGames { get; } = [];
     /// <summary>Unusable results displayed in a collapsed group.</summary>
@@ -72,6 +100,7 @@ public sealed partial class MainViewModel
     public Task SearchGamesAsync() => RunAsync("Searching for legacy game", SearchGamesInternalAsync);
     private async Task SearchGamesInternalAsync(CancellationToken token, IProgress<string> progress)
     {
+        SetupStep = SetupStep.DetectGame;
         SetupOpen = true;
         SetupMessage = "Searching Steam libraries and mounted drives… You can cancel this search or choose a folder afterwards.";
         bool searching = true;
@@ -89,6 +118,7 @@ public sealed partial class MainViewModel
     /// <summary>Validates a manually chosen whole game folder using the same inspector.</summary>
     public Task ChooseGameFolderAsync(string folder) => RunAsync("Checking game folder", async (token, _) =>
     {
+        SetupStep = SetupStep.DetectGame;
         SetupOpen = true;
         string archive = Path.Combine(folder, "data.win");
         if (!File.Exists(Path.Combine(folder, "Cat Goes Fishing.exe"))) throw new IOException($"'{folder}' has no Cat Goes Fishing.exe. Choose the complete legacy game folder.");
@@ -104,7 +134,7 @@ public sealed partial class MainViewModel
         SetupMessage = game.Reason;
         if (!game.Usable) throw new IOException($"Cannot use '{folder}': {game.Reason} Choose the legacy depot folder instead.");
     });
-    /// <summary>Creates a safe copy and resumes the action that requested setup.</summary>
+    /// <summary>Creates a safe copy, configures the base game, and advances to optional extras.</summary>
     public async Task UseDetectedGameAsync()
     {
         if (!HasDetectedLegacy || IsBusy) return;
@@ -112,14 +142,28 @@ public sealed partial class MainViewModel
         {
             await Task.Run(() => SteamGameDetection.Use(store, DetectedLegacy!, token, ModdedDirectory), token);
             await ReloadAsync();
-            SetupOpen = false;
-            SetupMessage = "Separate modded game ready. Press Play after enabling your mods.";
+            RefreshBuiltins();
+            SetupStep = SetupStep.Extras;
+            SetupMessage = "Separate modded game ready. Choose optional JAMM extras below or click Done/Skip to continue.";
             Message(Config.Wine.Mode != "direct" && Config.Proton.Path is null
                 ? "Game copy ready. Install Proton - Experimental in Steam, then select its Proton folder in Settings before Play."
                 : $"Game copy ready: {Config.GameDir}. Runner: {Config.Wine.Mode}. Add or download mods, then press Play.");
         });
         if (!NeedsSetup && pendingAction is { } resume) { pendingAction = null; await resume(); }
     }
+    /// <summary>Completes the first-run setup flow and closes the setup panel.</summary>
+    public void FinishSetup()
+    {
+        SetupOpen = false;
+        SetupStep = SetupStep.DetectGame;
+    }
+    /// <summary>Skips optional extras and closes the setup panel.</summary>
+    public void SkipSetup() => FinishSetup();
+    /// <summary>Returns from the optional extras step back to the game detection step.</summary>
+    public void BackToGameSetup()
+    {
+        SetupStep = SetupStep.DetectGame;
+    }
     /// <summary>Closes setup and discards the pending action.</summary>
-    public void CancelSetup() { Cancel(); pendingAction = null; SetupOpen = false; }
+    public void CancelSetup() { Cancel(); pendingAction = null; SetupOpen = false; SetupStep = SetupStep.DetectGame; }
 }

@@ -7,6 +7,9 @@ namespace Jamm.Core.Management;
 /// <summary>A bundled generator and its player-facing controls.</summary>
 public sealed record BuiltinMod(string Id, string Name, string Description);
 
+/// <summary>Help entry for an in-game hotkey or console command.</summary>
+public sealed record BuiltinHotkey(string Key, string Description, bool IsCommand = false);
+
 /// <summary>Generates bundled mods from the configured read-only base and imports them normally.</summary>
 public sealed class BuiltinMods(ManagerStore store)
 {
@@ -20,6 +23,37 @@ public sealed class BuiltinMods(ManagerStore store)
         new BuiltinMod("hd-lite", "JAMM HD Lite", "Fullscreen rendering with original textures. F11 toggles fullscreen."),
         new BuiltinMod("console", "JAMM Console", "F12 or backtick opens the console. Type help for commands; unlockall unlocks everything (equipment, max level, full catalog).")
     });
+
+    /// <summary>Single source of truth for in-game hotkeys and console commands.</summary>
+    public static IReadOnlyList<BuiltinHotkey> Hotkeys { get; } = Array.AsReadOnly(new BuiltinHotkey[]
+    {
+        new("F8", "Perf overlay (switches modes)"),
+        new("F7", "Smooth (cycles 60/120/off)"),
+        new("F11", "HD Lite fullscreen (toggles fullscreen)"),
+        new("F12 or backtick", "Console (opens in-game console; ` also toggles)"),
+        new("help", "list commands", IsCommand: true),
+        new("unlockall", "unlock gear, max level, and full fish catalog", IsCommand: true),
+        new("unlockgear", "unlock equipment, upgrades, hats, HUD, nightfall", IsCommand: true),
+        new("maxlevel", "set level to max", IsCommand: true),
+        new("level <n>", "set level to n (0..max)", IsCommand: true),
+        new("catalog all", "mark all fish caught (alias: unlockfish)", IsCommand: true),
+        new("money <n>", "set dollars (0..999999999); money +<n> adds", IsCommand: true),
+        new("clear", "clear console log", IsCommand: true),
+        new("close/exit", "close console", IsCommand: true)
+    });
+
+    /// <summary>Hotkey shortcuts for built-in mods.</summary>
+    public static IEnumerable<BuiltinHotkey> HotkeyEntries => Hotkeys.Where(h => !h.IsCommand);
+
+    /// <summary>Console commands supported by the in-game console mod.</summary>
+    public static IEnumerable<BuiltinHotkey> ConsoleCommands => Hotkeys.Where(h => h.IsCommand);
+
+    /// <summary>Formatted summary of hotkeys and console commands for UI and help displays.</summary>
+    public static string HotkeysHelpText { get; } =
+        "Hotkeys:\n" +
+        string.Join("\n", Hotkeys.Where(h => !h.IsCommand).Select(h => $"  {h.Key,-16} : {h.Description}")) +
+        "\n\nConsole commands:\n" +
+        string.Join("\n", Hotkeys.Where(h => h.IsCommand).Select(h => $"  {h.Key,-16} : {h.Description}"));
 
     /// <summary>Generates or reuses a cache entry, then imports it with a stable library ID.</summary>
     public AddModResult Add(string id, Action<string>? progress = null, CancellationToken cancellationToken = default)
