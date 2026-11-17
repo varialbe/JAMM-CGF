@@ -14,9 +14,9 @@ install -m644 packaging/debian/jamm-cgf.desktop "$stage/usr/share/applications/"
 install -m644 packaging/jamm-cgf.svg "$stage/usr/share/icons/hicolor/scalable/apps/"
 install -m644 packaging/debian/copyright "$stage/usr/share/doc/jamm-cgf/copyright"
 # Modder documentation and the ModKit example packages (our own art; no game data).
-install -d "$stage/usr/share/doc/jamm-cgf/examples"
-cp -r examples/modkit "$stage/usr/share/doc/jamm-cgf/examples/modkit"
-cp -r docs/modding "$stage/usr/share/doc/jamm-cgf/modding"
+install -d "$stage/usr/share/jamm-cgf/examples"
+cp -r examples/modkit "$stage/usr/share/jamm-cgf/examples/modkit"
+cp -r docs/modding "$stage/usr/share/jamm-cgf/modding"
 sed "1s/(1.0.0)/($version)/" packaging/debian/changelog | gzip -n -9 -c > "$stage/usr/share/doc/jamm-cgf/changelog.gz"
 size=$(du -sk "$stage/opt" | cut -f1)
 cat > "$stage/DEBIAN/control" <<CONTROL

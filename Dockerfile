@@ -10,8 +10,8 @@ RUN dotnet publish src/Jamm.Cli/Jamm.Cli.csproj -c Release -r linux-x64 \
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
 COPY --from=build /publish/ /opt/jamm-cgf/
 COPY LICENSE /usr/share/doc/jamm-cgf/LICENSE
-COPY examples/modkit /usr/share/doc/jamm-cgf/examples/modkit
-COPY docs/modding /usr/share/doc/jamm-cgf/modding
+COPY examples/modkit /usr/share/jamm-cgf/examples/modkit
+COPY docs/modding /usr/share/jamm-cgf/modding
 RUN ln -s /opt/jamm-cgf/cgfmm /usr/local/bin/cgfmm \
     && mkdir /data && chown app:app /data
 ENV HOME=/home/app

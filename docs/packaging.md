@@ -157,8 +157,8 @@ The .deb, the Windows zip/installer and the Docker image contain the CLI and GUI
 mods (Perf, Smooth, HD Lite, Console; they are generated locally from your own legacy game on first use, so no
 game data is shipped), the modder guide (`docs/modding`) and the ModKit example packages
 (`examples/modkit`: `example-fish`, `showcase-upgrades`, with original art). Locations: `.deb`
-`/usr/share/doc/jamm-cgf/{modding,examples/modkit}`; Windows `docs\modding`, `examples\modkit` next to the
-executables; Docker `/usr/share/doc/jamm-cgf/`.
+`/usr/share/jamm-cgf/{modding,examples/modkit}`; Windows `docs\modding`, `examples\modkit` next to the
+executables; Docker `/usr/share/jamm-cgf/`.
 
 ## Windows installer on Linux (Inno Setup under Wine)
 
