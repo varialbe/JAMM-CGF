@@ -24,7 +24,8 @@ the `exp/*` sub-branches, all pushed.
 | `exp/packaging` | packages ship modder docs + ModKit examples; `package-windows.sh` builds the **Inno Setup installer** when `ISCC` is set (works under Wine) | see Packages |
 
 Final state of `experimental`: `dotnet build -c Release` 0 warnings; Core tests 341 passed / 9 skipped
-(opt-in real-file), GUI tests 124 passed / 1 skipped. Opt-in real-file run: see the end of this report.
+(opt-in real-file), GUI tests 124 passed / 1 skipped. Opt-in real-file run (`JAMM_ORIGINAL` = legacy base, `JAMM_MODS_DIR` = Abyss/Cave/Colour): **349/350**; the one
+failure is `RealSevenModSet…`, which needs the PC-only fixture `jamm-hd-lite.win` (not on the VPS) — run it on the PC.
 
 ## unlockall diagnosis (task 1)
 
@@ -43,6 +44,10 @@ the game then grants level-gated unlocks itself. Catalog: every valid entry gets
 * Items runtime skipped (with a decision) for archives without SaveManager save events; `gear_equip` resolved at
   runtime so the load script always compiles; a fish-only standalone init no longer triggers the items injection.
 * Console tests adapted to the decompiler (`false` → `0`).
+* Found by the opt-in real-file suite: paging appended `nItems` to `UpgradeData_Create`, which Abyss edits, so the
+  single-mod build no longer reproduced Abyss's code. Now the menu counts upgrades at runtime and leaves that entry
+  untouched; the real-build test skips only the menu handlers that paging patches on purpose. Paging arrows are
+  clamped to the visible view (Abyss widens the boat menu to 5 columns).
 
 ## Packages (task E)
 
