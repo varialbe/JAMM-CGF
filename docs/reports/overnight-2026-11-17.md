@@ -19,10 +19,12 @@ the `exp/*` sub-branches, all pushed.
 | `exp/api-upgrades` | Phase 22c: `jamm_upgrade_register` (icon, price, max stacks, apply hook on Rod recompute, step hook via `obj_jamm_api`), `jamm_upgrade_stacks`, saved by key; Pondweed-safe (it already adds upgrade 18) | real build examples + user mods; merged archive checked: 5 real registrations, apply calls in `Rod_Other_10`, `obj_jamm_api` |
 | `exp/modding-docs` | Phase 22e: `docs/modding/` (index, getting started, ModKit reference, GML API reference, saves, menus, cookbook, troubleshooting), README "Make your own mods", user guide, CLI docs | reviewed; spec-vs-code differences documented in `docs/reports/phase22e-docs.md` |
 | `exp/ux-polish` | Phase 23b: window fits 1280 px screens, setup buttons in a fixed footer, no confusing "(not usable)" default, explained "modded copy" | Xvfb screenshot at 1280×720 |
+| `exp/modkit-boats-hats` | Phase 24: third ModKit example `harbor-pack` — boats Paddle Raft + Comet Cruiser (10 boats in vanilla → boat shop page 2), hats Fisher's Beanie + Lucky Captain Hat (+15 % sale value via the Gear effect hook), original art | real build harbor + example-fish + showcase-upgrades + Pondweed + Colour + Console verified |
+| `exp/gui-modkit` | Phase 25: GUI "Add mod folder (ModKit)…", drag & drop of package folders, ModKit badge with name/version/author, Rebuild action (keeps the mod id, so profiles stay valid) | 7 GUI + 4 Core tests (the Avalonia folder dialog itself was not driven under Xvfb) |
 | `exp/packaging` | packages ship modder docs + ModKit examples; `package-windows.sh` builds the **Inno Setup installer** when `ISCC` is set (works under Wine) | see Packages |
 
-Final state of `experimental`: `dotnet build -c Release` 0 warnings; Core tests 337 passed / 9 skipped
-(opt-in real-file), GUI tests 117 passed / 1 skipped.
+Final state of `experimental`: `dotnet build -c Release` 0 warnings; Core tests 341 passed / 9 skipped
+(opt-in real-file), GUI tests 124 passed / 1 skipped. Opt-in real-file run: see the end of this report.
 
 ## unlockall diagnosis (task 1)
 
@@ -75,7 +77,7 @@ The GUI executables were not exercised on Windows/Wine; the Linux GUI was exerci
 1. **In-game test on the PC** (nothing GML-side ran in a real game tonight; everything is compile-, semantics- and
    build-verified only). Suggested 20-minute pass with Pondweed + Colour + Console + both ModKit examples:
    console `help`/`unlockall`/`level 30`/`catalog all`/`money +5000`, switch slots (unlocks must not leak);
-   boat shop paging with Abyss or Cave (9+ boats); upgrade menu with the 5 showcase upgrades (icons, stack limits,
+   boat shop paging (harbor-pack alone gives 10 boats; or Abyss/Cave); upgrade menu with the 5 showcase upgrades (icons, stack limits,
    effects, Golden Touch value); catch Goldie (day, shallow) and Glowfin (night); save, reload, switch profile.
 2. Merge order suggestion: `experimental` as a whole (sub-branches are already integrated and tested together).
 3. Version number for a release (packages tonight use `0.10.0-exp.20261117`).

@@ -51,6 +51,8 @@ public sealed class RealBuildTests
                 foreach (var code in mod.Data.Code.Where(c => c.ParentEntry is null))
                 {
                     if (code.Name.Content == "gml_Object_CatalogData_Create_0" || code.Name.Content.StartsWith("gml_Object_SaveManager_", StringComparison.Ordinal)) continue;
+                    // Menu paging (MenuRuntime) intentionally patches the shared card/upgrade menu handlers in every build.
+                    if (code.Name.Content.StartsWith("gml_Object_CardHandler_", StringComparison.Ordinal) || code.Name.Content.StartsWith("gml_Object_UpgradeMenu_", StringComparison.Ordinal) || code.Name.Content == "gml_Object_RodMenu_Draw_0") continue;
                     string expected = LineDiff.Normalize(new DecompileContext(expectedContext, code).DecompileToString());
                     if (code.Name.Content == "gml_Object_Quest_Draw_0") continue;
                     expected = LineDiff.Normalize(Jamm.Core.Building.HudRuntime.TrackDrawState(expected));

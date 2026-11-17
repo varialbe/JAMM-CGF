@@ -75,8 +75,8 @@ public sealed class MenuRuntimeTests
         string rodDraw = PatchBuilder.ReadCode(merged, MenuRuntime.RodMenuDraw).Text;
         Assert.Contains("event_inherited()", rodDraw);
 
-        string upgData = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeDataCreate).Text;
-        Assert.Contains("nItems = array_length_1d(unlocks)", upgData);
+        // UpgradeData Create stays untouched (mods edit it); the menu counts upgrades at runtime.
+        Assert.DoesNotContain("nItems", PatchBuilder.ReadCode(merged, "gml_Object_UpgradeData_Create_0").Text);
 
         string umCreate = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuCreate).Text;
         Assert.Contains("ORIGIN_Y = y", umCreate);
@@ -84,7 +84,7 @@ public sealed class MenuRuntimeTests
         Assert.Contains("visible_rows = 9", umCreate);
 
         string umAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text;
-        Assert.Contains("UpgradeData.nItems", umAlarm);
+        Assert.Contains("array_length_1d(UpgradeData.unlocks)", umAlarm);
         Assert.Contains("spawn_order[jamm_i] = jamm_i", umAlarm);
         Assert.Contains("UpgradeData.unlocks[jamm_id]", umAlarm);
         Assert.Contains("visible_items[window_pos]", umAlarm);
