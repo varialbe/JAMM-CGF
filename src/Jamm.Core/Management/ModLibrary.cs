@@ -65,6 +65,29 @@ public sealed class ModLibrary(ManagerStore store)
         return updated;
     }
 
+    /// <summary>Stores or updates the ModKit source folder path in the mod's metadata.</summary>
+    public ManagedMod SetSourceFolder(string query, string sourceFolder)
+    {
+        var mod = Find(query);
+        var updated = mod with { SourceFolder = Path.GetFullPath(sourceFolder), IsModKit = true };
+        store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
+        return updated;
+    }
+
+    /// <summary>Rebuilds a ModKit folder mod from its source folder, updating its library copy and cached patch.</summary>
+    public AddModResult Rebuild(string query, string? sourceFolder = null, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var mod = Find(query);
+        string? folder = sourceFolder ?? mod.SourceFolder;
+        if (string.IsNullOrWhiteSpace(folder))
+            throw new InvalidOperationException($"Mod '{mod.Name}' does not have a stored ModKit source folder.");
+        if (!Directory.Exists(folder))
+            throw new DirectoryNotFoundException($"The ModKit source folder for '{mod.Name}' was not found: '{folder}'.");
+        if (!File.Exists(Path.Combine(folder, ModKitPackage.ManifestFileName)))
+            throw new FileNotFoundException($"Missing '{ModKitPackage.ManifestFileName}' in '{folder}'. Add a jamm-mod.json manifest or fix the folder path.");
+        return Add(folder, progress: progress, cancellationToken: cancellationToken, stableId: mod.Id);
+    }
+
     private (ModPatch Raw, ModPatch Sanitized, ModSanitizerReport Report) EnsurePatches(ManagedMod mod, Action<string>? progress, CancellationToken cancellationToken)
     {
         var patch = PatchJson.Deserialize(File.ReadAllText(PatchPath(mod)));
@@ -162,6 +185,7 @@ public sealed class ModLibrary(ManagerStore store)
         string sourceName = isModKitFolder ? $"{modKitManifest!.Id}.win" : Path.GetFileName(trimmedSource);
         string displayName = name ?? (modKitManifest?.Name ?? Path.GetFileNameWithoutExtension(trimmedSource));
         description ??= modKitManifest?.Description;
+        string? sourceFolder = isModKitFolder ? Path.GetFullPath(trimmedSource) : null;
         if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("The mod needs a nonempty name.");
         if (displayName.Contains(',') || displayName.Any(char.IsControl))
             throw new ArgumentException("Mod names cannot contain commas or control characters. Use --name with a readable name so it can be selected with --mods.");
@@ -191,9 +215,27 @@ public sealed class ModLibrary(ManagerStore store)
                 Patch(existing, progress, cancellationToken);
                 if (existing.BaseSha256 != BuildFiles.Hash(basePath))
                     throw new InvalidDataException($"'{existing.Name}' was patched against another base. Restore that base configuration, or remove this mod from its profiles and re-add it.");
+                bool updatedMeta = false;
                 if (origin is not null && !existing.Origins.Contains(origin))
                 {
                     existing = existing with { Origins = [.. existing.Origins, origin] };
+                    updatedMeta = true;
+                }
+                if (isModKitFolder && (existing.SourceFolder != sourceFolder || !existing.IsModKit || existing.Version != modKitManifest?.Version || existing.Author != modKitManifest?.Author || existing.Description != description || existing.Name != displayName))
+                {
+                    existing = existing with
+                    {
+                        Name = displayName,
+                        SourceFolder = sourceFolder,
+                        IsModKit = true,
+                        Author = modKitManifest?.Author ?? existing.Author,
+                        Version = modKitManifest?.Version ?? existing.Version,
+                        Description = description ?? existing.Description
+                    };
+                    updatedMeta = true;
+                }
+                if (updatedMeta)
+                {
                     cancellationToken.ThrowIfCancellationRequested();
                     store.Write(store.Path("mods", existing.Id, "mod.json"), existing);
                 }
@@ -213,7 +255,15 @@ public sealed class ModLibrary(ManagerStore store)
                 throw new IOException("An input changed during import. Retry with stable copies.");
             var sanitized = ModSanitizer.Sanitize(patch);
             var entry = new ManagedMod(stableId ?? hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
-                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode) { Origins = origin is null ? [] : [origin], Description = description };
+                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode)
+            {
+                Origins = origin is null ? [] : [origin],
+                Description = description,
+                SourceFolder = sourceFolder,
+                Author = modKitManifest?.Author,
+                Version = modKitManifest?.Version,
+                IsModKit = isModKitFolder
+            };
             store.Write(store.Path("mods", Path.GetFileName(stage), "mod.json"), entry);
             string patchPath = PatchPath(entry);
             if (stableId is null && File.Exists(patchPath)) throw new IOException("An orphaned patch already exists for this mod. Remove it from the data directory and retry.");

@@ -14,6 +14,11 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     private int removedHudCount;
     private string sanitizedDetails = "";
     private bool isJammMod;
+    private bool isModKit;
+    private string? sourceFolder;
+    private string? packageVersion;
+    private string? author;
+    private string? description;
     /// <summary>Whether enablement differs from the saved selection.</summary>
     public bool IsPending => Enabled != baseline;
     /// <summary>Accessible switch label.</summary>
@@ -69,4 +74,24 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     public string ToggleLabel => Enabled ? "Disable" : "Enable";
     /// <summary>Green enabled and grey disabled state.</summary>
     public string ToggleColor => Enabled ? "#258549" : "#656565";
+    /// <summary>Whether this mod was built or imported from a ModKit package.</summary>
+    public bool IsModKit { get => isModKit; set => SetProperty(ref isModKit, value); }
+    /// <summary>Source folder path on disk for ModKit folder mods.</summary>
+    public string? SourceFolder { get => sourceFolder; set => SetProperty(ref sourceFolder, value); }
+    /// <summary>Package version from jamm-mod.json.</summary>
+    public string? PackageVersion { get => packageVersion; set => SetProperty(ref packageVersion, value); }
+    /// <summary>Package author from jamm-mod.json.</summary>
+    public string? Author { get => author; set => SetProperty(ref author, value); }
+    /// <summary>Package description from jamm-mod.json.</summary>
+    public string? Description { get => description; set => SetProperty(ref description, value); }
+    /// <summary>True when Author is non-empty.</summary>
+    public bool HasAuthor => !string.IsNullOrWhiteSpace(Author);
+    /// <summary>True when Description is non-empty.</summary>
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+    /// <summary>Formatted version line for ModKit mods.</summary>
+    public string ModKitVersionLine => !string.IsNullOrWhiteSpace(PackageVersion) ? $"v{PackageVersion}" : "";
+    /// <summary>Formatted author line for ModKit mods.</summary>
+    public string ModKitAuthorLine => !string.IsNullOrWhiteSpace(Author) ? $"by {Author}" : "";
+    /// <summary>Formatted source folder line.</summary>
+    public string SourceFolderLine => !string.IsNullOrWhiteSpace(SourceFolder) ? $"Folder: {SourceFolder}" : "";
 }

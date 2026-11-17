@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 
 namespace Jamm.Gui;
 
@@ -24,5 +25,11 @@ public sealed partial class ModListRow : UserControl
         if (e.Key != Key.Enter) return;
         IsExpanded = !IsExpanded;
         e.Handled = true;
+    }
+
+    private async void RebuildClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.ModRow row && this.FindAncestorOfType<MainWindow>() is { } window)
+            await window.RebuildModAsync(row);
     }
 }

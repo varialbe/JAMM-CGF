@@ -173,9 +173,109 @@ public sealed partial class MainWindow : Window
         if (Model is not { } vm) return;
         await vm.AfterSetupAsync(async () =>
         {
-            var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "Add local mods", AllowMultiple = true, FileTypeFilter = [new("Mods (.win, .zip)") { Patterns = ["*.win", "*.zip"] }] });
-            await vm.AddAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
+            var dialog = new AddModDialog();
+            var choice = await dialog.ShowDialog<AddModChoice?>(this);
+            if (choice == AddModChoice.Files)
+            {
+                var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "Add local mods", AllowMultiple = true, FileTypeFilter = [new("Mods (.win, .zip)") { Patterns = ["*.win", "*.zip"] }] });
+                var paths = files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray();
+                if (paths.Length > 0) await vm.AddAsync(paths);
+            }
+            else if (choice == AddModChoice.Folder)
+            {
+                var folders = await StorageProvider.OpenFolderPickerAsync(new() { Title = "Add mod folder (ModKit)", AllowMultiple = false });
+                if (folders.FirstOrDefault()?.TryGetLocalPath() is { } folderPath)
+                {
+                    await vm.AddAsync([folderPath]);
+                }
+            }
         });
+    }
+
+    private async void AddFolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is not { } vm) return;
+        await vm.AfterSetupAsync(async () =>
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new() { Title = "Add mod folder (ModKit)", AllowMultiple = false });
+            if (folders.FirstOrDefault()?.TryGetLocalPath() is { } folderPath)
+            {
+                await vm.AddAsync([folderPath]);
+            }
+        });
+    }
+
+    internal async Task RebuildModAsync(ModRow row)
+    {
+        if (Model is not { CanEdit: true } vm) return;
+        await vm.RebuildModAsync(row.Id, async () =>
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new()
+            {
+                Title = $"Locate ModKit folder for '{row.Name}'",
+                AllowMultiple = false
+            });
+            return folders.FirstOrDefault()?.TryGetLocalPath();
+        });
+    }
+
+    private async void LibraryRebuildClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: ModRow row })
+            await RebuildModAsync(row);
+    }
+
+    private async void LibraryToolbarRebuildClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model?.SelectedMod is { } mod)
+            await RebuildModAsync(mod);
+    }
+
+    private async void OpenModKitGuideClick(object? sender, RoutedEventArgs e)
+    {
+        await OpenModKitGuideAsync();
+    }
+
+    internal async Task OpenModKitGuideAsync()
+    {
+        try
+        {
+            string guidePath = FindModKitGuidePath();
+            if (File.Exists(guidePath) && Launcher is { } launcher)
+            {
+                await launcher.LaunchUriAsync(new Uri(Path.GetFullPath(guidePath)));
+                return;
+            }
+            if (Launcher is { } webLauncher)
+            {
+                await webLauncher.LaunchUriAsync(new Uri("https://github.com/varialbe/JAMM-CGF/blob/experimental/docs/modding/getting-started.md"));
+            }
+        }
+        catch (Exception ex)
+        {
+            await ConfirmAsync("Could not open ModKit guide: " + ex.Message);
+        }
+    }
+
+    internal static string FindModKitGuidePath()
+    {
+        string[] candidates =
+        [
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "modding", "getting-started.md"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "docs", "modding", "getting-started.md"),
+            Path.Combine(AppContext.BaseDirectory, "docs", "modding", "getting-started.md"),
+            Path.Combine(Directory.GetCurrentDirectory(), "docs", "modding", "getting-started.md")
+        ];
+        foreach (var path in candidates)
+        {
+            try
+            {
+                string full = Path.GetFullPath(path);
+                if (File.Exists(full)) return full;
+            }
+            catch { }
+        }
+        return Path.GetFullPath(candidates[0]);
     }
     private async void RemoveClick(object? sender, RoutedEventArgs e)
     {
