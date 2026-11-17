@@ -58,12 +58,37 @@ public sealed partial class MainViewModel
     public ObservableCollection<DetectedGame> DetectedGames { get; } = [];
     /// <summary>Unusable results displayed in a collapsed group.</summary>
     public ObservableCollection<DetectedGame> OtherGames { get; } = [];
+    /// <summary>Whether any unusable games or folders were detected.</summary>
+    public bool HasOtherGames => OtherGames.Count > 0;
+    /// <summary>Neutral label showing count of other unusable folders found.</summary>
+    public string OtherGamesHeader => OtherGames.Count == 1
+        ? "Show 1 other folder that was found (not usable)"
+        : $"Show {OtherGames.Count} other folders that were found (not usable)";
     private DetectedGame? detectedLegacy;
     /// <summary>Selected game, preferring the recommended legacy manifest.</summary>
-    public DetectedGame? DetectedLegacy { get => detectedLegacy; set { SetProperty(ref detectedLegacy, value); if (value is not null) ModdedDirectory = Path.GetDirectoryName(value.Archive)! + "-modded"; OnPropertyChanged(nameof(HasDetectedLegacy)); } }
+    public DetectedGame? DetectedLegacy
+    {
+        get => detectedLegacy;
+        set
+        {
+            SetProperty(ref detectedLegacy, value);
+            ModdedDirectory = value is not null ? Path.GetDirectoryName(value.Archive)! + "-modded" : "";
+            OnPropertyChanged(nameof(HasDetectedLegacy));
+        }
+    }
     private string moddedDirectory = "";
     /// <summary>Separate game copy destination; editable in advanced setup.</summary>
-    public string ModdedDirectory { get => moddedDirectory; set => SetProperty(ref moddedDirectory, value); }
+    public string ModdedDirectory
+    {
+        get => moddedDirectory;
+        set
+        {
+            if (SetProperty(ref moddedDirectory, value))
+                OnPropertyChanged(nameof(HasModdedDirectory));
+        }
+    }
+    /// <summary>Whether a separate modded directory destination has been assigned.</summary>
+    public bool HasModdedDirectory => !string.IsNullOrWhiteSpace(ModdedDirectory);
     private bool usableBase;
     /// <summary>Whether the configured base has passed inspection.</summary>
     public bool NeedsSetup => !usableBase;
