@@ -99,12 +99,28 @@ After base setup (or in the first-run panel), toggle **JAMM Perf**, **JAMM Smoot
 caches them for your base and enables them in your profile. Then Check/Install or
 Play. No terminal or SDK is needed.
 
-Hotkeys and console commands are listed above and in the app's **Hotkeys** help button.
-CLI: `cgfmm builtin list` (prints the mods and hotkeys) / `cgfmm builtin add console` (also `perf`, `smooth`, `hd-lite`).
-[Controls and developer ModMaker variants](docs/example-mods.md).
+Hotkeys and all console commands are documented in [Hotkeys & console](#hotkeys--console), the app's **Hotkeys** help button, the [User guide](docs/user-guide.md#built-in-mods), and [Example mods](docs/example-mods.md).
+CLI: `cgfmm builtin list` (prints the mods, hotkeys, and console commands) / `cgfmm builtin add console` (also `perf`, `smooth`, `hd-lite`).
+
+## Make your own mods
+
+Add custom fish, boats, hats, and rod upgrades without UndertaleModTool or editing shared game files—just a folder with `jamm-mod.json` and a PNG sprite:
+
+```json
+{
+  "id": "my-reef-fish", "name": "My Reef Fish",
+  "fish": [{
+    "key": "sunfin", "name": "Sunfin", "size": "small", "sprite": "art/sunfin.png",
+    "spawn": { "x": [1100, 2400], "y": [1400, 1950], "count": 4 }
+  }]
+}
+```
+
+JAMM merges API and ModKit mods side-by-side with zero slot conflicts and saves progress by stable key. Start with **[Your First Fish in 10 Minutes](docs/modding/getting-started.md)**, explore the **[Modding Hub](docs/modding/README.md)**, or check the **[GML API Reference](docs/modding/api-reference.md)** for rods, lures, tools, and custom GML.
 
 [User guide](docs/user-guide.md) · [CLI reference](docs/cli.md) ·
-[Conflicts](docs/conflicts.md) · [Build from source](docs/user-guide.md#build-from-source)
+[Modding guide](docs/modding/README.md) · [Conflicts](docs/conflicts.md) ·
+[Build from source](docs/user-guide.md#build-from-source)
 
 Licensed under [GPL-3.0](LICENSE) because JAMM links
 [UndertaleModLib](https://github.com/UnderminersTeam/UndertaleModTool).

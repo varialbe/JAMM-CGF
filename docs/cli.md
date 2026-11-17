@@ -9,7 +9,12 @@ for schemas, compatibility reporting, backups and all launch settings.
 | --- | --- |
 | `config show [--json]` | Show configuration |
 | `config set <key> <value>` | Set `base`, `gameDir`, `wine.mode`, `wine.prefix`, `wine.binary`, `proton.path`, `proton.compatDataPath`, `proton.clientInstallPath`, or `steam.appId` |
-| `add <file.win or file.zip> [--name <name>]` | Copy into the library and immediately compute a patch; warn about source build differences |
+| `add <file.win, file.zip, or modkit dir> [--name <name>]` | Copy/build into the library and immediately compute a patch; warn about source build differences |
+| `builtin list` | List built-in mods, hotkeys, and console commands |
+| `builtin add <perf\|smooth\|hd-lite\|console>` | Generate and import a built-in JAMM enhancement mod |
+| `modkit new <dir> [--template fish\|upgrade\|boat\|hat]` | Scaffold a starter ModKit folder package (`jamm-mod.json` + PNG + hook) |
+| `modkit check <dir>` | Validate `jamm-mod.json`, PNG headers/frames, and hook paths without building |
+| `modkit build <dir> [--base <data.win>] [--out <file.win>]` | Compile a ModKit folder onto the legacy base (defaults to `config.base` and `<dir>/<id>.win`) |
 | `list [--json]` | Show IDs, names, base hash/timestamp/version compatibility and patch cache validity |
 | `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
 | `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
@@ -29,6 +34,19 @@ Management commands return 0 on success, 1 for errors or declined installation.
 `wine.mode` accepts `wine`, `proton`, or `proton-flatpak`. For Flatpak Steam, start
 Steam first; see the [Flatpak Steam setup](user-guide.md#flatpak-steam) for defaults
 and sandbox-visible game and compatibility directories.
+
+## ModKit commands
+
+Create, validate, build, and import folder-based ModKit packages (`jamm-mod.json` + PNGs + optional `.gml` hooks):
+
+```sh
+cgfmm modkit new my-reef-fish --template fish
+cgfmm modkit check my-reef-fish
+cgfmm modkit build my-reef-fish --out my-reef-fish.win
+cgfmm add my-reef-fish
+```
+
+`modkit new` supports `--template fish`, `upgrade`, `boat`, or `hat` (default `fish`). `modkit build` opens `--base` (or `config.base`) read-only, compiles and verifies the new `.win`, and writes to `--out` (default `<dir>/<id>.win`). `cgfmm add <dir>` validates, builds against `config.base`, and imports the mod directly into the library. See the [ModKit getting-started guide](modding/getting-started.md) and [ModKit reference](modding/modkit-reference.md).
 
 ## Archive and analysis commands
 
