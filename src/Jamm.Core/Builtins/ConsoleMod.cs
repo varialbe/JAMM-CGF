@@ -6,7 +6,8 @@ namespace Jamm.ModMaker;
 
 /// <summary>
 /// Optional in-game console overlay (<c>obj_jamm_console</c>) toggled with F12 (or backtick/grave),
-/// supporting <c>help</c> and <c>unlockall</c> without any hotkey cheat outside the console.
+/// supporting <c>help</c>, <c>unlockall</c>, <c>unlockgear</c>, <c>maxlevel</c>, <c>level</c>,
+/// <c>catalog all</c>/<c>unlockfish</c>, and <c>money</c> without any hotkey cheat outside the console.
 /// </summary>
 public static class ConsoleMod
 {
@@ -35,6 +36,8 @@ public static class ConsoleMod
             ModObjects.PlaceInstance(data, room, console, first: true);
     }
 
+    private const string SaveWarning = "WARNING: The next autosave (or opening the Esc save menu) will keep these changes in your save file.";
+
     private const string Create = """
         if (instance_number(object_index) > 1)
         {
@@ -49,6 +52,8 @@ public static class ConsoleMod
         jamm_console_hist_pos = 0;
         jamm_console_log = ds_list_create();
         jamm_console_unlocked_all = false;
+        jamm_console_slot_owner = -1;
+        jamm_console_slot = -1;
         jamm_console_toast = current_time + 4000;
         ds_list_add(jamm_console_log, "JAMM Console ready (F12 or ` to toggle). Type 'help' for commands.");
         """;
@@ -66,13 +71,18 @@ public static class ConsoleMod
         bool hasRod = data.GameObjects.ByName("Rod") is not null;
         bool hasHandler = data.GameObjects.ByName("Handler") is not null;
         bool hasAmbiance = data.GameObjects.ByName("AmbianceController") is not null;
+        bool hasExperienceBar = data.GameObjects.ByName("ExperienceBar") is not null;
+        bool hasCatalogData = data.GameObjects.ByName("CatalogData") is not null;
+        bool hasSaveManager = data.GameObjects.ByName("SaveManager") is not null;
         string unlockSwing = hasRod
             ? (hasHandler ? "if (instance_exists(Rod) && !instance_exists(Handler)) Rod.swing_locked = 0;" : "if (instance_exists(Rod)) Rod.swing_locked = 0;")
             : "";
         string lockSwing = hasRod ? "if (instance_exists(Rod)) Rod.swing_locked = 1;" : "";
-        string clearLockDay = hasAmbiance ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 0;" : "";
+        string slotSync = SlotSyncGml(hasSaveManager);
+        string catalogCommandWarning = hasCatalogData ? $"ds_list_add(jamm_console_log, \"{SaveWarning}\");" : "";
 
         return $$"""
+        {{slotSync}}
         if (keyboard_check_pressed(vk_f12) || keyboard_check_pressed(192))
         {
             jamm_console_open = !jamm_console_open;
@@ -144,10 +154,19 @@ public static class ConsoleMod
                 jamm_console_hist_pos = ds_list_size(jamm_console_history);
                 ds_list_add(jamm_console_log, "> " + jamm_raw);
                 var jamm_cmd = string_lower(jamm_raw);
+                while (string_pos("  ", jamm_cmd) > 0)
+                    jamm_cmd = string_replace_all(jamm_cmd, "  ", " ");
                 if (jamm_cmd == "help")
                 {
-                    ds_list_add(jamm_console_log, "Commands: help, unlockall, clear, close");
-                    ds_list_add(jamm_console_log, "  unlockall : unlock all upgrades, rods, lures, boats, tools/gear, hats, HUD shop icons, and nightfall (no money/catalog changes)");
+                    ds_list_add(jamm_console_log, "  help        : list commands");
+                    ds_list_add(jamm_console_log, "  unlockall   : unlock gear, max level, and full fish catalog");
+                    ds_list_add(jamm_console_log, "  unlockgear  : unlock equipment, upgrades, hats, HUD, nightfall");
+                    ds_list_add(jamm_console_log, "  maxlevel    : set level to max");
+                    ds_list_add(jamm_console_log, "  level <n>   : set level to n (0..max)");
+                    ds_list_add(jamm_console_log, "  catalog all : mark all fish caught (alias: unlockfish)");
+                    ds_list_add(jamm_console_log, "  money <n>   : set dollars (0..999999999); money +<n> adds");
+                    ds_list_add(jamm_console_log, "  clear       : clear console log");
+                    ds_list_add(jamm_console_log, "  close/exit  : close console");
                 }
                 else if (jamm_cmd == "clear")
                 {
@@ -160,96 +179,51 @@ public static class ConsoleMod
                 }
                 else if (jamm_cmd == "unlockall")
                 {
-                    var jamm_upg_total = 0;
-                    var jamm_upg_new = 0;
-                    if (instance_exists(UpgradeData))
+                    {{UnlockGearGml(hasAmbiance)}}
+                    {{SetLevelGml(hasExperienceBar, "jamm_max_lvl")}}
+                    {{CatalogAllGml(hasCatalogData, logIfMissing: false)}}
+                    ds_list_add(jamm_console_log, "{{SaveWarning}}");
+                }
+                else if (jamm_cmd == "unlockgear")
+                {
+                    {{UnlockGearGml(hasAmbiance)}}
+                    ds_list_add(jamm_console_log, "{{SaveWarning}}");
+                }
+                else if (jamm_cmd == "maxlevel")
+                {
+                    {{SetLevelGml(hasExperienceBar, "jamm_max_lvl")}}
+                    ds_list_add(jamm_console_log, "{{SaveWarning}}");
+                }
+                else if (jamm_cmd == "level")
+                {
+                    ds_list_add(jamm_console_log, "Usage: level <n> (e.g. level 50)");
+                }
+                else if (string_pos("level ", jamm_cmd) == 1)
+                {
+                    var jamm_lvl_arg = string_delete(jamm_cmd, 1, 6);
+                    {{DigitCheckGml("jamm_lvl_arg", "jamm_lvl_ok")}}
+                    if (!jamm_lvl_ok)
                     {
-                        jamm_upg_total = array_length_1d(UpgradeData.unlocks);
-                        for (var jamm_i = 0; jamm_i < jamm_upg_total; jamm_i += 1)
-                        {
-                            if (UpgradeData.unlocks[jamm_i] <= 0) jamm_upg_new += 1;
-                            UpgradeData.unlocks[jamm_i] = 1;
-                        }
+                        ds_list_add(jamm_console_log, "Invalid level '" + jamm_lvl_arg + "'. Usage: level <n>");
                     }
-                    var jamm_rod_total = 0;
-                    var jamm_rod_new = 0;
-                    if (instance_exists(RodData))
+                    else
                     {
-                        RodData.nItems = max(RodData.nItems, array_length_1d(RodData.name));
-                        jamm_rod_total = RodData.nItems;
-                        for (var jamm_i = 0; jamm_i < jamm_rod_total; jamm_i += 1)
-                        {
-                            if (RodData.unlocked[jamm_i] <= 0) jamm_rod_new += 1;
-                            RodData.unlocked[jamm_i] = 1;
-                        }
-                        if (instance_exists(Girl)) Girl.bestRod = max(Girl.bestRod, jamm_rod_total - 1);
+                        {{SetLevelGml(hasExperienceBar, "real(jamm_lvl_arg)")}}
+                        ds_list_add(jamm_console_log, "{{SaveWarning}}");
                     }
-                    var jamm_lure_total = 0;
-                    var jamm_lure_new = 0;
-                    if (instance_exists(LureData))
-                    {
-                        LureData.nItems = max(LureData.nItems, array_length_1d(LureData.name));
-                        jamm_lure_total = LureData.nItems;
-                        for (var jamm_i = 0; jamm_i < jamm_lure_total; jamm_i += 1)
-                        {
-                            if (LureData.unlocked[jamm_i] <= 0) jamm_lure_new += 1;
-                            LureData.unlocked[jamm_i] = 1;
-                        }
-                    }
-                    var jamm_boat_total = 0;
-                    var jamm_boat_new = 0;
-                    if (instance_exists(BoatData))
-                    {
-                        BoatData.nItems = max(BoatData.nItems, array_length_1d(BoatData.name));
-                        jamm_boat_total = BoatData.nItems;
-                        for (var jamm_i = 0; jamm_i < jamm_boat_total; jamm_i += 1)
-                        {
-                            if (BoatData.unlocked[jamm_i] <= 0) jamm_boat_new += 1;
-                            BoatData.unlocked[jamm_i] = 1;
-                        }
-                        if (instance_exists(Girl)) Girl.bestBoat = max(Girl.bestBoat, jamm_boat_total - 1);
-                    }
-                    var jamm_tool_total = 0;
-                    var jamm_tool_new = 0;
-                    if (instance_exists(ToolData))
-                    {
-                        ToolData.nItems = max(ToolData.nItems, array_length_1d(ToolData.name));
-                        jamm_tool_total = ToolData.nItems;
-                        for (var jamm_i = 0; jamm_i < jamm_tool_total; jamm_i += 1)
-                        {
-                            if (ToolData.unlocked[jamm_i] <= 0) jamm_tool_new += 1;
-                            ToolData.unlocked[jamm_i] = 1;
-                            if (instance_exists(ToolData.item[jamm_i])) ToolData.item[jamm_i].active = 1;
-                        }
-                    }
-                    var jamm_hat_total = 0;
-                    var jamm_hat_new = 0;
-                    if (instance_exists(GearData))
-                    {
-                        jamm_hat_total = GearData.n_gear;
-                        for (var jamm_i = 0; jamm_i < jamm_hat_total; jamm_i += 1)
-                        {
-                            if (GearData.unlocked[jamm_i] <= 0) jamm_hat_new += 1;
-                            GearData.unlocked[jamm_i] = 1;
-                        }
-                    }
-                    jamm_icon_new = 0; // instance variable: read via other.jamm_icon_new inside with (Icons)
-                    with (Icons)
-                    {
-                        if (unlocked <= 0) other.jamm_icon_new += 1;
-                        unlocked = 1;
-                    }
-                    if (instance_exists(Girl))
-                    {
-                        Girl.nightfallUnlocked = 1;
-                        Girl.NightfallUnlocked = 1;
-                        if (Girl.quest_max < 3) Girl.quest_max = 3;
-                    }
-                    {{clearLockDay}}
-                    jamm_console_unlocked_all = true;
-                    ds_list_add(jamm_console_log, "Unlocked: " + string(jamm_upg_total) + " upgrades (" + string(jamm_upg_new) + " new), " + string(jamm_rod_total) + " rods (" + string(jamm_rod_new) + " new), " + string(jamm_lure_total) + " lures (" + string(jamm_lure_new) + " new), " + string(jamm_boat_total) + " boats (" + string(jamm_boat_new) + " new).");
-                    ds_list_add(jamm_console_log, "Unlocked: " + string(jamm_tool_total) + " tools/gear (" + string(jamm_tool_new) + " new), " + string(jamm_hat_total) + " hats (" + string(jamm_hat_new) + " new), " + string(jamm_icon_new) + " HUD menus, nightfall=1. Money and catalog unchanged.");
-                    ds_list_add(jamm_console_log, "WARNING: The next autosave (or opening the Esc save menu) will keep these unlocks in your save file.");
+                }
+                else if (jamm_cmd == "catalog all" || jamm_cmd == "unlockfish")
+                {
+                    {{CatalogAllGml(hasCatalogData, logIfMissing: true)}}
+                    {{catalogCommandWarning}}
+                }
+                else if (jamm_cmd == "money")
+                {
+                    ds_list_add(jamm_console_log, "Usage: money <n> or money +<n>");
+                }
+                else if (string_pos("money ", jamm_cmd) == 1)
+                {
+                    {{MoneyGml()}}
                 }
                 else
                 {
@@ -273,15 +247,237 @@ public static class ConsoleMod
         """;
     }
 
+    private static string SlotSyncGml(bool hasSaveManager)
+    {
+        if (!hasSaveManager) return "";
+        return """
+            if (instance_exists(SaveManager))
+            {
+                if (jamm_console_slot_owner != SaveManager.id || jamm_console_slot != SaveManager.saveflag)
+                {
+                    jamm_console_unlocked_all = false;
+                    jamm_console_slot_owner = SaveManager.id;
+                    jamm_console_slot = SaveManager.saveflag;
+                }
+            }
+            """;
+    }
+
+    private static string DigitCheckGml(string strVar, string okVar) => $$"""
+        var {{okVar}} = string_length({{strVar}}) > 0;
+        for (var jamm_d = 1; jamm_d <= string_length({{strVar}}); jamm_d += 1)
+        {
+            if (string_pos(string_char_at({{strVar}}, jamm_d), "0123456789") == 0)
+            {
+                {{okVar}} = false;
+                break;
+            }
+        }
+        """;
+
+    private static string UnlockGearGml(bool hasAmbiance)
+    {
+        string clearLockDay = hasAmbiance ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 0;" : "";
+        return $$"""
+            var jamm_upg_total = 0;
+            var jamm_upg_new = 0;
+            if (instance_exists(UpgradeData))
+            {
+                jamm_upg_total = array_length_1d(UpgradeData.unlocks);
+                for (var jamm_i = 0; jamm_i < jamm_upg_total; jamm_i += 1)
+                {
+                    if (UpgradeData.unlocks[jamm_i] <= 0) jamm_upg_new += 1;
+                    UpgradeData.unlocks[jamm_i] = 1;
+                }
+            }
+            var jamm_rod_total = 0;
+            var jamm_rod_new = 0;
+            if (instance_exists(RodData))
+            {
+                RodData.nItems = max(RodData.nItems, array_length_1d(RodData.name));
+                jamm_rod_total = RodData.nItems;
+                for (var jamm_i = 0; jamm_i < jamm_rod_total; jamm_i += 1)
+                {
+                    if (RodData.unlocked[jamm_i] <= 0) jamm_rod_new += 1;
+                    RodData.unlocked[jamm_i] = 1;
+                }
+                if (instance_exists(Girl)) Girl.bestRod = max(Girl.bestRod, jamm_rod_total - 1);
+            }
+            var jamm_lure_total = 0;
+            var jamm_lure_new = 0;
+            if (instance_exists(LureData))
+            {
+                LureData.nItems = max(LureData.nItems, array_length_1d(LureData.name));
+                jamm_lure_total = LureData.nItems;
+                for (var jamm_i = 0; jamm_i < jamm_lure_total; jamm_i += 1)
+                {
+                    if (LureData.unlocked[jamm_i] <= 0) jamm_lure_new += 1;
+                    LureData.unlocked[jamm_i] = 1;
+                }
+            }
+            var jamm_boat_total = 0;
+            var jamm_boat_new = 0;
+            if (instance_exists(BoatData))
+            {
+                BoatData.nItems = max(BoatData.nItems, array_length_1d(BoatData.name));
+                jamm_boat_total = BoatData.nItems;
+                for (var jamm_i = 0; jamm_i < jamm_boat_total; jamm_i += 1)
+                {
+                    if (BoatData.unlocked[jamm_i] <= 0) jamm_boat_new += 1;
+                    BoatData.unlocked[jamm_i] = 1;
+                }
+                if (instance_exists(Girl)) Girl.bestBoat = max(Girl.bestBoat, jamm_boat_total - 1);
+            }
+            var jamm_tool_total = 0;
+            var jamm_tool_new = 0;
+            if (instance_exists(ToolData))
+            {
+                ToolData.nItems = max(ToolData.nItems, array_length_1d(ToolData.name));
+                jamm_tool_total = ToolData.nItems;
+                for (var jamm_i = 0; jamm_i < jamm_tool_total; jamm_i += 1)
+                {
+                    if (ToolData.unlocked[jamm_i] <= 0) jamm_tool_new += 1;
+                    ToolData.unlocked[jamm_i] = 1;
+                    if (instance_exists(ToolData.item[jamm_i])) ToolData.item[jamm_i].active = 1;
+                }
+            }
+            var jamm_hat_total = 0;
+            var jamm_hat_new = 0;
+            if (instance_exists(GearData))
+            {
+                jamm_hat_total = GearData.n_gear;
+                for (var jamm_i = 0; jamm_i < jamm_hat_total; jamm_i += 1)
+                {
+                    if (GearData.unlocked[jamm_i] <= 0) jamm_hat_new += 1;
+                    GearData.unlocked[jamm_i] = 1;
+                }
+            }
+            jamm_icon_new = 0; // instance variable: read via other.jamm_icon_new inside with (Icons)
+            with (Icons)
+            {
+                if (unlocked <= 0) other.jamm_icon_new += 1;
+                unlocked = 1;
+            }
+            if (instance_exists(Girl))
+            {
+                Girl.nightfallUnlocked = 1;
+                Girl.NightfallUnlocked = 1;
+                if (Girl.quest_max < 3) Girl.quest_max = 3;
+            }
+            {{clearLockDay}}
+            jamm_console_unlocked_all = true;
+            ds_list_add(jamm_console_log, "Unlocked: " + string(jamm_upg_total) + " upgrades (" + string(jamm_upg_new) + " new), " + string(jamm_rod_total) + " rods (" + string(jamm_rod_new) + " new), " + string(jamm_lure_total) + " lures (" + string(jamm_lure_new) + " new), " + string(jamm_boat_total) + " boats (" + string(jamm_boat_new) + " new).");
+            ds_list_add(jamm_console_log, "Unlocked: " + string(jamm_tool_total) + " tools/gear (" + string(jamm_tool_new) + " new), " + string(jamm_hat_total) + " hats (" + string(jamm_hat_new) + " new), " + string(jamm_icon_new) + " HUD menus, nightfall=1.");
+            """;
+    }
+
+    private static string SetLevelGml(bool hasExperienceBar, string targetExpr)
+    {
+        string readMax = hasExperienceBar
+            ? "if (instance_exists(ExperienceBar)) jamm_max_lvl = ExperienceBar.max_level;"
+            : "";
+        string resetBar = hasExperienceBar
+            ? "if (instance_exists(ExperienceBar)) ExperienceBar.experience = 0;"
+            : "";
+        return $$"""
+            var jamm_max_lvl = 100;
+            {{readMax}}
+            var jamm_target_lvl = clamp({{targetExpr}}, 0, jamm_max_lvl);
+            if (instance_exists(Girl))
+            {
+                Girl.level = jamm_target_lvl;
+                Girl.experience = 0;
+            }
+            {{resetBar}}
+            ds_list_add(jamm_console_log, "Level set to " + string(jamm_target_lvl) + " (max " + string(jamm_max_lvl) + ").");
+            """;
+    }
+
+    private static string CatalogAllGml(bool hasCatalogData, bool logIfMissing)
+    {
+        if (!hasCatalogData)
+            return logIfMissing
+                ? "ds_list_add(jamm_console_log, \"Fish catalog not available in this game build.\");"
+                : "";
+        return """
+            var jamm_cat_total = 0;
+            var jamm_cat_new = 0;
+            if (instance_exists(CatalogData))
+            {
+                var jamm_cat_rows = array_height_2d(CatalogData.object);
+                for (var jamm_i = 0; jamm_i < jamm_cat_rows; jamm_i += 1)
+                {
+                    var jamm_cat_cols = array_length_2d(CatalogData.object, jamm_i);
+                    for (var jamm_j = 0; jamm_j < jamm_cat_cols; jamm_j += 1)
+                    {
+                        var jamm_fish_obj = CatalogData.object[jamm_i, jamm_j];
+                        if (is_real(jamm_fish_obj))
+                        {
+                            if (jamm_fish_obj >= 0 && object_exists(jamm_fish_obj))
+                            {
+                                jamm_cat_total += 1;
+                                if (CatalogData.count[jamm_i, jamm_j] < 1)
+                                    jamm_cat_new += 1;
+                                CatalogData.count[jamm_i, jamm_j] = max(CatalogData.count[jamm_i, jamm_j], 1);
+                                CatalogData.life[jamm_i, jamm_j] = max(CatalogData.life[jamm_i, jamm_j], 0);
+                            }
+                        }
+                    }
+                }
+            }
+            ds_list_add(jamm_console_log, "Catalog: " + string(jamm_cat_total) + " fish (" + string(jamm_cat_new) + " newly caught).");
+            """;
+    }
+
+    private static string MoneyGml() => $$"""
+        var jamm_m_arg = string_delete(jamm_cmd, 1, 6);
+        var jamm_m_add = false;
+        if (string_length(jamm_m_arg) > 0)
+        {
+            if (string_char_at(jamm_m_arg, 1) == "+")
+            {
+                jamm_m_add = true;
+                jamm_m_arg = string_delete(jamm_m_arg, 1, 1);
+            }
+        }
+        {{DigitCheckGml("jamm_m_arg", "jamm_m_ok")}}
+        if (!jamm_m_ok)
+        {
+            ds_list_add(jamm_console_log, "Invalid money amount. Usage: money <n> or money +<n>");
+        }
+        else
+        {
+            var jamm_m_val = real(jamm_m_arg);
+            if (instance_exists(Girl))
+            {
+                if (jamm_m_add)
+                    Girl.dollars = clamp(Girl.dollars + jamm_m_val, 0, 999999999);
+                else
+                    Girl.dollars = clamp(jamm_m_val, 0, 999999999);
+                ds_list_add(jamm_console_log, "Money set to $" + string(Girl.dollars) + ".");
+                ds_list_add(jamm_console_log, "{{SaveWarning}}");
+            }
+            else
+            {
+                ds_list_add(jamm_console_log, "Girl instance not found; money unchanged.");
+            }
+        }
+        """;
+
     private static string EndStep(UndertaleData data)
     {
         bool hasAmbiance = data.GameObjects.ByName("AmbianceController") is not null;
+        bool hasSaveManager = data.GameObjects.ByName("SaveManager") is not null;
         return $$"""
         if (jamm_console_unlocked_all)
         {
-            if (instance_exists(LureData) && array_length_1d(LureData.unlocked) > 5)
-                LureData.unlocked[5] = 1;
-            {{(hasAmbiance ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 0;" : "")}}
+            {{SlotSyncGml(hasSaveManager)}}
+            if (jamm_console_unlocked_all)
+            {
+                if (instance_exists(LureData) && array_length_1d(LureData.unlocked) > 5)
+                    LureData.unlocked[5] = 1;
+                {{(hasAmbiance ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 0;" : "")}}
+            }
         }
         """;
     }

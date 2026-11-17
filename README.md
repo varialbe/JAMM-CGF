@@ -75,7 +75,7 @@ caches them for your base and enables them in your profile. Then Check/Install o
 Play. No terminal or SDK is needed.
 
 Hotkeys: **F8** Perf, **F7** Smooth, **F11** HD Lite, **F12/backtick** Console.
-Type `unlockall` in Console to unlock equipment (the next save keeps the unlocks).
+Console commands: `help`, `unlockall`, `unlockgear`, `maxlevel`, `level <n>`, `catalog all`/`unlockfish`, `money <n>`/`+<n>`, `clear`, `close`/`exit` (the next save keeps changes).
 CLI: `cgfmm builtin list` / `cgfmm builtin add console` (also `perf`, `smooth`, `hd-lite`).
 [Controls and developer ModMaker variants](docs/example-mods.md).
 

@@ -91,7 +91,7 @@ public class SmoothGeneratorTests
         data.GeneralInfo.Major = 1;
         data.GeneralInfo.BytecodeVersion = 16;
         data.Fonts.Add(new() { Name = data.Strings.MakeString("fnt_babySmall"), DisplayName = data.Strings.MakeString("Small") });
-        foreach (string name in new[] { "Girl", "Rod", "Handler", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons", "AmbianceController" })
+        foreach (string name in new[] { "Girl", "Rod", "Handler", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons", "AmbianceController", "CatalogData", "ExperienceBar", "SaveManager" })
             ModObjects.Create(data, name, false);
         foreach (string name in new[] { "NewWorld", "room11" })
             data.Rooms.Add(new() { Name = data.Strings.MakeString(name) });
@@ -109,14 +109,22 @@ public class SmoothGeneratorTests
         string end = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_2"));
         string gui = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Draw_64"));
 
-        // Verify F12 / backtick toggle, keyboard_string input, Up/Down history, help, and unlockall:
+        // Verify F12 / backtick toggle, keyboard_string input, Up/Down history, commands, and slot detection:
         Assert.Contains("jamm_console_history = ds_list_create()", create);
+        Assert.Contains("jamm_console_slot_owner = -1", create);
+        Assert.Contains("jamm_console_slot = -1", create);
         Assert.Contains("keyboard_check_pressed(vk_f12)", begin);
         Assert.Contains("keyboard_check_pressed(vk_up)", begin);
         Assert.Contains("keyboard_check_pressed(vk_down)", begin);
         Assert.Contains("keyboard_string", begin);
         Assert.Contains("\"help\"", begin);
         Assert.Contains("\"unlockall\"", begin);
+        Assert.Contains("\"unlockgear\"", begin);
+        Assert.Contains("\"maxlevel\"", begin);
+        Assert.Contains("\"level\"", begin);
+        Assert.Contains("\"catalog all\"", begin);
+        Assert.Contains("\"unlockfish\"", begin);
+        Assert.Contains("\"money\"", begin);
         Assert.Contains("UpgradeData.unlocks", begin);
         Assert.Contains("RodData.unlocked", begin);
         Assert.Contains("LureData.unlocked", begin);
@@ -124,14 +132,44 @@ public class SmoothGeneratorTests
         Assert.Contains("ToolData.unlocked", begin);
         Assert.Contains("GearData.unlocked", begin);
         Assert.Contains("Girl.nightfallUnlocked = 1", begin);
+        Assert.Contains("CatalogData.count", begin);
+        Assert.Contains("CatalogData.life", begin);
+        Assert.Contains("ExperienceBar.max_level", begin);
+        Assert.Contains("SaveManager.saveflag", begin);
+        Assert.Matches(@"jamm_console_unlocked_all = (false|0);", begin);
+        Assert.Contains("Girl.dollars", begin);
         Assert.Contains("WARNING: The next autosave", begin);
         Assert.DoesNotContain("dollars +=", begin);
-        Assert.DoesNotContain("CatalogData", begin);
         Assert.Contains("LureData.unlocked[5] = 1", end);
         Assert.Contains("AmbianceController.lockDay = 0", end);
+        Assert.Contains("SaveManager.saveflag", end);
         Assert.Contains("draw_set_font(fnt_babySmall)", gui);
         Assert.Contains("draw_set_halign(fa_left)", gui);
         Assert.Contains("draw_set_valign(fa_top)", gui);
+    }
+
+    [Fact]
+    public void ConsoleGeneratorCompilesWhenOptionalCatalogExperienceAndSaveObjectsAreAbsent()
+    {
+        var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Major = 1;
+        data.GeneralInfo.BytecodeVersion = 16;
+        foreach (string name in new[] { "Girl", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons" })
+            ModObjects.Create(data, name, false);
+        foreach (string name in new[] { "NewWorld", "room11" })
+            data.Rooms.Add(new() { Name = data.Strings.MakeString(name) });
+
+        ConsoleMod.Apply(data);
+
+        string begin = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_1"));
+        string end = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_2"));
+
+        Assert.Contains("\"unlockall\"", begin);
+        Assert.Contains("Girl.level", begin);
+        Assert.DoesNotContain("CatalogData", begin);
+        Assert.DoesNotContain("ExperienceBar", begin);
+        Assert.DoesNotContain("SaveManager", begin);
+        Assert.DoesNotContain("SaveManager", end);
     }
 
     private static string Code(UndertaleData data, string suffix)
