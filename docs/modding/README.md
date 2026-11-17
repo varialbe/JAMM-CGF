@@ -48,4 +48,5 @@ API and ModKit mods avoid shared assets completely:
 
 * [`examples/modkit/example-fish/`](../../examples/modkit/example-fish/) — **Goldie** (small shallow fish) and **Glowfin** (night-only medium fish with `create` and `step` hooks that pulse `image_blend` and dart away from moving lures).
 * [`examples/modkit/showcase-upgrades/`](../../examples/modkit/showcase-upgrades/) — five idempotent rod upgrades (**Turbo Reel**, **Deep Diver**, **Iron Line**, **Fish Magnet**, **Golden Touch**) demonstrating both `apply` and `step` hooks.
+* [`examples/modkit/harbor-pack/`](../../examples/modkit/harbor-pack/) — two boats (**Paddle Raft** and **Comet Cruiser**, triggering page 2 of the Boat shop alongside the 8 vanilla boats) and two hats (**Fisher's Beanie** and **Lucky Captain Hat**, with an `effect` hook boosting fish sale value).
 * [`examples/modkit/make-art.py`](../../examples/modkit/make-art.py) — Python standard-library script used to generate the example pixel art PNGs.

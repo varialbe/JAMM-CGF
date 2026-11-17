@@ -280,40 +280,61 @@ public sealed class ModKitTests
     }
 
     [RealFilesFact]
-    public void RealBaseBuildsAndMergesBothExamplePackages()
+    public void RealBaseBuildsAndMergesAllExamplePackages()
     {
         string basePath = Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!;
         string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
         string fishPkg = Path.Combine(repoRoot, "examples", "modkit", "example-fish");
         string upgPkg = Path.Combine(repoRoot, "examples", "modkit", "showcase-upgrades");
+        string harborPkg = Path.Combine(repoRoot, "examples", "modkit", "harbor-pack");
 
         using var temp = new TemporaryDirectory();
         string fishOut = temp.PathFor("example-fish.win");
         string upgOut = temp.PathFor("showcase-upgrades.win");
+        string harborOut = temp.PathFor("harbor-pack.win");
         string mergedOut = temp.PathFor("merged.win");
 
         var fishBuild = ModKitBuilder.Build(fishPkg, basePath, fishOut);
         var upgBuild = ModKitBuilder.Build(upgPkg, basePath, upgOut);
+        var harborBuild = ModKitBuilder.Build(harborPkg, basePath, harborOut);
         Assert.Equal(2, fishBuild.ObjectsAdded);
         Assert.Equal(5, upgBuild.SpritesAdded);
+        Assert.Equal(6, harborBuild.SpritesAdded);
+        Assert.Equal(4, harborBuild.ObjectsAdded);
+        Assert.Equal(4, harborBuild.ScriptsAdded);
 
         using var orig = GameFileLoader.Load(basePath);
         using var fishMod = GameFileLoader.Load(fishOut);
         using var upgMod = GameFileLoader.Load(upgOut);
+        using var harborMod = GameFileLoader.Load(harborOut);
         var patchFish = PatchBuilder.Create(orig, fishMod, "Example Fish");
         var patchUpg = PatchBuilder.Create(orig, upgMod, "Showcase Upgrades");
+        var patchHarbor = PatchBuilder.Create(orig, harborMod, "Harbor Pack");
 
-        var report = ConflictAnalyzer.Analyze([patchFish, patchUpg]);
+        var report = ConflictAnalyzer.Analyze([patchHarbor, patchFish, patchUpg]);
         Assert.DoesNotContain(report.Findings, f => f.Severity == "CONFLICT");
 
-        var merged = ArchiveBuilder.Build(basePath, [new(patchFish, fishOut), new(patchUpg, upgOut)], mergedOut);
+        var merged = ArchiveBuilder.Build(
+            basePath,
+            [new(patchHarbor, harborOut), new(patchFish, fishOut), new(patchUpg, upgOut)],
+            mergedOut);
         Assert.NotNull(merged.Verification);
 
         using var mergedFile = GameFileLoader.Load(mergedOut);
         Assert.NotNull(mergedFile.Data.GameObjects.ByName("jmk_example_fish_goldie"));
         Assert.NotNull(mergedFile.Data.GameObjects.ByName("jmk_example_fish_glowfin"));
-        Assert.Contains("jamm_init_example_fish()", PatchBuilder.ReadCode(mergedFile, FishRuntime.ApiInitCode).Text);
-        Assert.Contains("jamm_init_showcase_upgrades()", PatchBuilder.ReadCode(mergedFile, FishRuntime.ApiInitCode).Text);
+        Assert.NotNull(mergedFile.Data.GameObjects.ByName("jmk_harbor_pack_paddle_raft"));
+        Assert.NotNull(mergedFile.Data.GameObjects.ByName("jmk_harbor_pack_comet_cruiser"));
+        Assert.NotNull(mergedFile.Data.GameObjects.ByName("jmk_harbor_pack_fishers_beanie"));
+        Assert.NotNull(mergedFile.Data.GameObjects.ByName("jmk_harbor_pack_lucky_captain_hat"));
+
+        string apiInit = PatchBuilder.ReadCode(mergedFile, FishRuntime.ApiInitCode).Text;
+        Assert.Contains("jamm_init_harbor_pack()", apiInit);
+        Assert.Contains("jamm_init_example_fish()", apiInit);
+        Assert.Contains("jamm_init_showcase_upgrades()", apiInit);
+        Assert.Contains("BoatData.nItems", PatchBuilder.ReadCode(mergedFile, "gml_Script_jamm_boat_register").Text);
+        Assert.Contains("GearData.n_gear", PatchBuilder.ReadCode(mergedFile, "gml_Script_jamm_hat_register").Text);
+        Assert.Contains("scroll_row", PatchBuilder.ReadCode(mergedFile, "gml_Object_CardHandler_Create_0").Text);
     }
 
     private static (int ExitCode, string StdOut, string StdErr) RunCli(string[] args)
