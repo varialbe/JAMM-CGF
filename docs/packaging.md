@@ -150,3 +150,25 @@ meet the GPL source-offer requirements. Source:
 licenses. The root `LICENSE` is included in Windows and Docker outputs; Debian
 provides a machine-readable copyright file referencing the system GPL text.
 No copyrighted game assets are supplied.
+
+## What every package contains
+
+The .deb, the Windows zip/installer and the Docker image contain the CLI and GUI, the four built-in JAMM
+mods (Perf, Smooth, HD Lite, Console; they are generated locally from your own legacy game on first use, so no
+game data is shipped), the modder guide (`docs/modding`) and the ModKit example packages
+(`examples/modkit`: `example-fish`, `showcase-upgrades`, with original art). Locations: `.deb`
+`/usr/share/doc/jamm-cgf/{modding,examples/modkit}`; Windows `docs\modding`, `examples\modkit` next to the
+executables; Docker `/usr/share/doc/jamm-cgf/`.
+
+## Windows installer on Linux (Inno Setup under Wine)
+
+`package-windows.sh` builds `jamm-cgf_<version>_win-x64_setup.exe` when `ISCC` names an Inno Setup compiler
+command. Inno Setup 7 runs under Wine (64-bit prefix, `WINEARCH=win64`):
+
+```sh
+WINEARCH=win64 wine innosetup-7.x-x64.exe /VERYSILENT /CURRENTUSER
+ISCC="wine \"$HOME/.wine/drive_c/users/$USER/AppData/Local/Programs/Inno Setup 7/ISCC.exe\"" \
+    bash scripts/package-windows.sh
+```
+
+Paths are converted with `winepath` when it is on PATH. Without `ISCC` only the portable zip is built.
