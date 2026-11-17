@@ -17,7 +17,8 @@ public static class CgfAssetTypes
             ["jamm_rod_register"] = (9, 11, [(8, "sprites")]),
             ["jamm_lure_register"] = (6, 7, [(3, "objects"), (4, "sprites")]),
             ["jamm_tool_register"] = (8, 9, [(4, "objects"), (5, "objects"), (6, "sprites")]),
-            ["jamm_hat_register"] = (6, 9, [(1, "objects")])
+            ["jamm_hat_register"] = (6, 9, [(1, "objects")]),
+            ["jamm_upgrade_register"] = (9, 9, [(5, "sprites"), (7, "scripts"), (8, "scripts")])
         };
     private static Dictionary<string, Definition> Read()
     {
@@ -49,7 +50,16 @@ public static class CgfAssetTypes
                 IMacroType?[] args = new IMacroType?[count];
                 foreach (var (arg, family) in typed)
                     if (arg < count)
-                        args[arg] = registry.FindType("Asset." + (family == "sprites" ? "Sprite" : "Object"));
+                    {
+                        string assetType = family switch
+                        {
+                            "sprites" => "Asset.Sprite",
+                            "objects" => "Asset.Object",
+                            "scripts" => "Asset.Script",
+                            _ => throw new InvalidDataException($"Unknown asset family '{family}' in API function '{function}'.")
+                        };
+                        args[arg] = registry.FindType(assetType);
+                    }
                 signatures.Add(new FunctionArgsMacroType(args));
             }
             registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(function,

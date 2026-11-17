@@ -6,6 +6,9 @@ internal static class ItemsRuntimeScripts
 {
     internal const string ApiInitName = "jamm_api_init";
     internal const string ApiInitCode = "gml_Script_" + ApiInitName;
+    internal const string ApiControllerName = "obj_jamm_api";
+    internal const string ApiControllerCreateCode = "gml_Object_obj_jamm_api_Create_0";
+    internal const string ApiControllerStepCode = "gml_Object_obj_jamm_api_Step_1";
 
     internal static readonly IReadOnlyDictionary<string, string> DefaultScripts =
         BuildScripts(null, null);
@@ -21,7 +24,8 @@ internal static class ItemsRuntimeScripts
         {
             ["jamm_items_ensure_base"] = BuildEnsureBase(
                 HasObj("BoatData"), HasObj("RodData"), HasObj("LureData"),
-                HasObj("ToolData"), HasObj("GearData"), HasObj("UpgradeData")),
+                HasObj("ToolData"), HasObj("GearData"), HasObj("UpgradeData"),
+                HasObj("Girl")),
             ["jamm_item_find"] = BuildItemFind(
                 HasObj("BoatData"), HasObj("RodData"), HasObj("LureData"),
                 HasObj("ToolData"), HasObj("GearData"), HasObj("UpgradeData")),
@@ -30,6 +34,8 @@ internal static class ItemsRuntimeScripts
             ["jamm_lure_register"] = BuildLureRegister(HasObj("LureData"), HasObj("Girl"), HasObj("Gear")),
             ["jamm_tool_register"] = BuildToolRegister(HasObj("ToolData")),
             ["jamm_hat_register"] = BuildHatRegister(HasObj("GearData")),
+            ["jamm_upgrade_register"] = BuildUpgradeRegister(HasObj("UpgradeData"), HasObj("Girl"), HasObj("Gear")),
+            ["jamm_upgrade_stacks"] = BuildUpgradeStacks(HasObj("UpgradeData"), HasObj("Rod")),
             ["jamm_items_save"] = BuildSave(
                 HasObj("BoatData"), HasObj("RodData"), HasObj("LureData"),
                 HasObj("ToolData"), HasObj("GearData"), HasObj("UpgradeData"),
@@ -41,6 +47,45 @@ internal static class ItemsRuntimeScripts
         };
     }
 
+    internal static string BuildApiControllerCreate() => """
+        if (instance_number(object_index) > 1)
+        {
+            instance_destroy();
+            exit;
+        }
+        persistent = true;
+        """;
+
+    internal static string BuildApiControllerStep(IReadOnlySet<string>? objects)
+    {
+        bool HasObj(string name) => objects is null || objects.Contains(name);
+        if (!HasObj("UpgradeData") || !HasObj("Rod")) return "jamm_api_ready = 1;";
+        return """
+            if (!instance_exists(UpgradeData) || !instance_exists(Rod)) exit;
+            if (!variable_instance_exists(UpgradeData.id, "jamm_api_done") || !UpgradeData.jamm_api_done) exit;
+            if (!variable_instance_exists(UpgradeData.id, "jamm_is_api") || !variable_instance_exists(UpgradeData.id, "jamm_step")) exit;
+            if (!variable_instance_exists(Rod.id, "jamm_upg")) exit;
+            var jamm_n, jamm_i, jamm_stk, jamm_scr;
+            jamm_n = min(array_length_1d(UpgradeData.jamm_is_api), array_length_1d(UpgradeData.jamm_step));
+            jamm_n = min(jamm_n, array_length_1d(Rod.jamm_upg));
+            for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+            {
+                if (UpgradeData.jamm_is_api[jamm_i])
+                {
+                    jamm_stk = Rod.jamm_upg[jamm_i];
+                    if (jamm_stk > 0)
+                    {
+                        jamm_scr = UpgradeData.jamm_step[jamm_i];
+                        if (jamm_scr > -1 && script_exists(jamm_scr))
+                        {
+                            script_execute(jamm_scr, jamm_stk);
+                        }
+                    }
+                }
+            }
+            """;
+    }
+
     internal static string BuildApiInit(IReadOnlyList<string> initScripts, IReadOnlySet<string>? objects)
     {
         bool HasObj(string name) => objects is null || objects.Contains(name);
@@ -48,6 +93,9 @@ internal static class ItemsRuntimeScripts
             .Where(HasObj).ToArray();
 
         StringBuilder sb = new();
+        sb.AppendLine("if (!instance_exists(obj_jamm_api)) {");
+        sb.AppendLine("    instance_create(0, 0, obj_jamm_api);");
+        sb.AppendLine("}");
         sb.AppendLine("var jamm_need;");
         sb.AppendLine("jamm_need = 0;");
         foreach (string dataObj in dataObjects)
@@ -68,13 +116,20 @@ internal static class ItemsRuntimeScripts
             sb.AppendLine($"    with ({dataObj}) jamm_api_done = 1;");
             sb.AppendLine("}");
         }
+        if (HasObj("Rod"))
+        {
+            sb.AppendLine("if (instance_exists(Rod)) {");
+            sb.AppendLine("    with (Rod) { event_perform(ev_other, ev_user0); }");
+            sb.AppendLine("}");
+        }
         sb.Append("return 1;");
         return sb.ToString();
     }
 
     private static string BuildEnsureBase(
         bool hasBoatData, bool hasRodData, bool hasLureData,
-        bool hasToolData, bool hasGearData, bool hasUpgradeData)
+        bool hasToolData, bool hasGearData, bool hasUpgradeData,
+        bool hasGirl)
     {
         StringBuilder sb = new();
         sb.AppendLine("var jamm_i, jamm_ix, jamm_iy;");
@@ -94,11 +149,16 @@ internal static class ItemsRuntimeScripts
                 if (instance_exists(UpgradeData)) {
                     with (UpgradeData) {
                         if (!variable_instance_exists(id, "jamm_base_count")) {
-                            nItems = array_length_1d(name);
+                            nItems = array_length_1d(unlocks);
                             jamm_base_count = nItems;
                             for (jamm_i = 0; jamm_i < nItems; jamm_i += 1) {
                                 jamm_key[jamm_i] = "base:upgrade" + string(jamm_i);
                                 jamm_default_unlocked[jamm_i] = unlocks[jamm_i];
+                                disp[jamm_i] = -1;
+                                jamm_max_stacks[jamm_i] = -1;
+                                jamm_apply[jamm_i] = -1;
+                                jamm_step[jamm_i] = -1;
+                                jamm_is_api[jamm_i] = 0;
                             }
                             for (jamm_ix = 0; jamm_ix < array_height_2d(upg); jamm_ix += 1) {
                                 for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(upg, jamm_ix); jamm_iy += 1) {
@@ -109,6 +169,18 @@ internal static class ItemsRuntimeScripts
                     }
                 }
                 """);
+            if (hasGirl)
+            {
+                sb.AppendLine("""
+                    if (instance_exists(Girl) && instance_exists(UpgradeData)) {
+                        for (jamm_i = 0; jamm_i < UpgradeData.nItems; jamm_i += 1) {
+                            if (!variable_instance_exists(Girl.id, "gear_upgrade_scalar") || jamm_i >= array_length_1d(Girl.gear_upgrade_scalar)) {
+                                Girl.gear_upgrade_scalar[jamm_i] = 1;
+                            }
+                        }
+                    }
+                    """);
+            }
         }
         sb.Append("return 1;");
         return sb.ToString();
@@ -403,6 +475,69 @@ internal static class ItemsRuntimeScripts
             """;
     }
 
+    private static string BuildUpgradeRegister(bool hasUpgradeData, bool hasGirl, bool hasGear)
+    {
+        if (!hasUpgradeData) return "return -1;";
+        string girlLine = hasGirl ? "\nif (instance_exists(Girl)) { Girl.gear_upgrade_scalar[jamm_slot] = 1; }" : "";
+        string gearLine = hasGear ? "\nwith (Gear) { upgrade_scalar[jamm_slot] = 1; }" : "";
+        return $$"""
+            var jamm_key, jamm_name, jamm_desc, jamm_desc2, jamm_cost, jamm_icon, jamm_max, jamm_apply, jamm_step;
+            var jamm_existing, jamm_slot;
+            if (argument_count < 9 || !instance_exists(UpgradeData)) return -1;
+            jamm_key = argument0; jamm_name = argument1; jamm_desc = argument2; jamm_desc2 = argument3;
+            jamm_cost = argument4; jamm_icon = argument5; jamm_max = argument6; jamm_apply = argument7; jamm_step = argument8;
+            if (!is_string(jamm_key) || jamm_key == "" || !is_string(jamm_name) || !is_string(jamm_desc) || !is_string(jamm_desc2)) return -1;
+            if (!is_real(jamm_cost) || jamm_cost < 0 || !is_real(jamm_icon) || !is_real(jamm_max) || !is_real(jamm_apply) || !is_real(jamm_step)) return -1;
+            if (jamm_icon != -1 && !sprite_exists(jamm_icon)) return -1;
+            if (jamm_max != -1 && (jamm_max < 1 || floor(jamm_max) != jamm_max)) return -1;
+            if (jamm_apply != -1 && !script_exists(jamm_apply)) return -1;
+            if (jamm_step != -1 && !script_exists(jamm_step)) return -1;
+            jamm_items_ensure_base();
+            jamm_existing = jamm_item_find("upgrade", jamm_key);
+            if (jamm_existing > -1) return jamm_existing;
+            jamm_slot = array_length_1d(UpgradeData.unlocks);
+            UpgradeData.jamm_key[jamm_slot] = jamm_key;
+            UpgradeData.name[jamm_slot] = jamm_name;
+            UpgradeData.desc[jamm_slot] = jamm_desc;
+            UpgradeData.desc2[jamm_slot] = jamm_desc2;
+            UpgradeData.cost[jamm_slot] = jamm_cost;
+            UpgradeData.unlocks[jamm_slot] = 1;
+            UpgradeData.jamm_default_unlocked[jamm_slot] = 1;
+            UpgradeData.disp[jamm_slot] = jamm_icon;
+            UpgradeData.jamm_max_stacks[jamm_slot] = jamm_max;
+            UpgradeData.jamm_apply[jamm_slot] = jamm_apply;
+            UpgradeData.jamm_step[jamm_slot] = jamm_step;
+            UpgradeData.jamm_is_api[jamm_slot] = 1;
+            UpgradeData.nItems = jamm_slot + 1;{{girlLine}}{{gearLine}}
+            return jamm_slot;
+            """;
+    }
+
+    private static string BuildUpgradeStacks(bool hasUpgradeData, bool hasRod)
+    {
+        if (!hasUpgradeData || !hasRod) return "return 0;";
+        return """
+            var jamm_id, jamm_cnt, jamm_si, jamm_slen;
+            if (argument_count < 1 || !is_string(argument0) || argument0 == "") return 0;
+            if (!instance_exists(UpgradeData) || !instance_exists(Rod)) return 0;
+            jamm_id = jamm_item_find("upgrade", argument0);
+            if (jamm_id < 0) return 0;
+            if (variable_instance_exists(Rod.id, "jamm_upg") && jamm_id < array_length_1d(Rod.jamm_upg)) {
+                return Rod.jamm_upg[jamm_id];
+            }
+            if (variable_instance_exists(Rod.id, "allowUpgrades") && !Rod.allowUpgrades) return 0;
+            if (Rod.rod_id < 0 || Rod.rod_id >= array_height_2d(UpgradeData.upg)) return 0;
+            jamm_cnt = 0;
+            jamm_slen = min(8, array_length_2d(UpgradeData.upg, Rod.rod_id));
+            for (jamm_si = 0; jamm_si < jamm_slen; jamm_si += 1) {
+                if (UpgradeData.upg[Rod.rod_id, jamm_si] == jamm_id) {
+                    jamm_cnt += 1;
+                }
+            }
+            return jamm_cnt;
+            """;
+    }
+
     private static string BuildSave(
         bool hasBoatData, bool hasRodData, bool hasLureData,
         bool hasToolData, bool hasGearData, bool hasUpgradeData,
@@ -517,8 +652,9 @@ internal static class ItemsRuntimeScripts
         StringBuilder sb = new();
         sb.AppendLine("""
             var jamm_i, jamm_k, jamm_ix, jamm_iy, jamm_rkey, jamm_skey, jamm_uval, jamm_uslot;
-            var jamm_okey, jamm_oname, jamm_oid, jamm_eq, jamm_bi, jamm_b, jamm_ri, jamm_hi, jamm_g;
+            var jamm_okey, jamm_oname, jamm_oid, jamm_eq, jamm_bi, jamm_b, jamm_ri, jamm_hi, jamm_g, jamm_rod_refreshed;
             jamm_items_ensure_base();
+            jamm_rod_refreshed = 0;
             if (ini_section_exists("JAMM_Items")) {
             """);
 
@@ -604,6 +740,9 @@ internal static class ItemsRuntimeScripts
                                 } else if (jamm_ix >= RodData.jamm_base_count) {
                                     UpgradeData.upg[jamm_ix,jamm_iy] = UpgradeData.jamm_default_upg[jamm_ix,jamm_iy];
                                     UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                } else if (UpgradeData.upg[jamm_ix,jamm_iy] >= UpgradeData.jamm_base_count) {
+                                    UpgradeData.upg[jamm_ix,jamm_iy] = -1;
+                                    UpgradeData.object[jamm_ix,jamm_iy] = -1;
                                 }
                             }
                         }
@@ -639,6 +778,7 @@ internal static class ItemsRuntimeScripts
                         if (jamm_ri < 0) jamm_ri = 0;
                         Rod.rod_id = jamm_ri;
                         with (Rod) { event_perform(ev_other, ev_user0); }
+                        jamm_rod_refreshed = 1;
                     }
                 """);
         }
@@ -656,10 +796,10 @@ internal static class ItemsRuntimeScripts
                     Girl.gear = jamm_g;
                     Girl.gear_id = jamm_hi;
                     with (Girl) { event_perform(ev_other, ev_user0); }
-                    """ + (hasRod ? "\n                    with (Rod) { event_perform(ev_other, ev_user0); }" : "");
+                    """ + (hasRod ? "\n                    with (Rod) { event_perform(ev_other, ev_user0); }\n                    jamm_rod_refreshed = 1;" : "");
             string clearRefresh = """
                     with (Girl) { event_perform(ev_other, ev_user0); }
-                    """ + (hasRod ? "\n                    with (Rod) { event_perform(ev_other, ev_user0); }" : "");
+                    """ + (hasRod ? "\n                    with (Rod) { event_perform(ev_other, ev_user0); }\n                    jamm_rod_refreshed = 1;" : "");
             sb.AppendLine($$"""
                     if (ini_key_exists("JAMM_Items", "eq:hat") && instance_exists(GearData) && instance_exists(Girl)) {
                         jamm_eq = ini_read_string("JAMM_Items", "eq:hat", "");
@@ -705,6 +845,14 @@ internal static class ItemsRuntimeScripts
         {
             sb.AppendLine("""
                     if (instance_exists(RodData) && instance_exists(UpgradeData)) {
+                        for (jamm_ix = 0; jamm_ix < RodData.jamm_base_count && jamm_ix < array_height_2d(UpgradeData.upg); jamm_ix += 1) {
+                            for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
+                                if (UpgradeData.upg[jamm_ix,jamm_iy] >= UpgradeData.jamm_base_count) {
+                                    UpgradeData.upg[jamm_ix,jamm_iy] = -1;
+                                    UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                }
+                            }
+                        }
                         for (jamm_ix = RodData.jamm_base_count; jamm_ix < RodData.nItems && jamm_ix < array_height_2d(UpgradeData.upg); jamm_ix += 1) {
                             for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
                                 UpgradeData.upg[jamm_ix,jamm_iy] = UpgradeData.jamm_default_upg[jamm_ix,jamm_iy];
@@ -715,6 +863,12 @@ internal static class ItemsRuntimeScripts
                 """);
         }
         sb.AppendLine("}");
+        if (hasRod)
+        {
+            sb.AppendLine("if (!jamm_rod_refreshed && instance_exists(Rod)) {");
+            sb.AppendLine("    with (Rod) { event_perform(ev_other, ev_user0); }");
+            sb.AppendLine("}");
+        }
         sb.Append("return 1;");
         return sb.ToString();
 
