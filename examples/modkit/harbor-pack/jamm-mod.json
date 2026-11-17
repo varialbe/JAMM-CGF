@@ -1,0 +1,68 @@
+{
+  "id": "harbor-pack",
+  "name": "Harbor Pack",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Two boats (Paddle Raft and Comet Cruiser) and two hats (Fisher's Beanie and Lucky Captain Hat), showcasing boat-shop paging and hat effect hooks.",
+  "boats": [
+    {
+      "key": "paddle-raft",
+      "name": "Paddle Raft",
+      "cost": 8000,
+      "card": "art/paddle_raft_card.png",
+      "sprite": "art/paddle_raft.png",
+      "description": "A lashed-log raft with a wooden paddle.#Slow and cozy, holds 3 fish.",
+      "unlocked": false,
+      "stats": {
+        "maxSpeed": 3.2,
+        "capacity": 3,
+        "maxDistance": 2800,
+        "moveBonus": 0
+      }
+    },
+    {
+      "key": "comet-cruiser",
+      "name": "Comet Cruiser",
+      "cost": 950000,
+      "card": "art/comet_cruiser_card.png",
+      "sprite": "art/comet_cruiser.png",
+      "description": "A twin-stripe speedster for deep water.#Very fast and holds 14 fish.",
+      "unlocked": false,
+      "stats": {
+        "maxSpeed": 9.5,
+        "capacity": 14,
+        "maxDistance": 28000,
+        "moveBonus": 6
+      }
+    }
+  ],
+  "hats": [
+    {
+      "key": "fishers-beanie",
+      "name": "Fisher's Beanie",
+      "sprite": "art/fishers_beanie.png",
+      "value": 400,
+      "weight": 10,
+      "rangeMin": 0.0,
+      "rangeMax": 0.25,
+      "offsetX": 14,
+      "offsetY": -42,
+      "description": "A warm ribbed knit beanie for chilly mornings on the water."
+    },
+    {
+      "key": "lucky-captain-hat",
+      "name": "Lucky Captain Hat",
+      "sprite": "art/lucky_captain_hat.png",
+      "value": 3000,
+      "weight": 4,
+      "rangeMin": 0.05,
+      "rangeMax": 0.75,
+      "offsetX": 14,
+      "offsetY": -42,
+      "description": "A gilded skipper's cap with a four-leaf clover. All caught fish sell for 15% more.",
+      "hooks": {
+        "effect": "hooks/lucky_captain_effect.gml"
+      }
+    }
+  ]
+}

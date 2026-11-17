@@ -273,6 +273,22 @@ One `jamm-mod.json` can define any combination of `fish`, `boats`, `hats`, and `
 
 All four items compile into a single `jamm_init_coral_bundle` script and share the `"coral-bundle:<key>"` namespace.
 
+### Full working example: `harbor-pack` (boats + hats + shop paging)
+
+See [`examples/modkit/harbor-pack/`](../../examples/modkit/harbor-pack/) for a complete ready-to-build package combining two boats and two hats:
+
+* **Paddle Raft** (`"harbor-pack:paddle-raft"`) — cheap, slow, 3-fish hold starter raft (`maxSpeed: 3.2`, `capacity: 3`, `maxDistance: 2800`).
+* **Comet Cruiser** (`"harbor-pack:comet-cruiser"`) — fast, high-capacity ocean cruiser (`maxSpeed: 9.5`, `capacity: 14`, `maxDistance: 28000`, `moveBonus: 6`). Because the base game ships 8 boats (`BoatMenu` displays 8 cards per page), adding these two boats automatically enables **Page 2** in the Boat shop (see [Scrollable Menus](menus.md)).
+* **Fisher's Beanie** (`"harbor-pack:fishers-beanie"`) — affordable cosmetic beanie (`value: 400`, ocean drop near shore).
+* **Lucky Captain Hat** (`"harbor-pack:lucky-captain-hat"`) — skipper's cap with [`hooks/lucky_captain_effect.gml`](../../examples/modkit/harbor-pack/hooks/lucky_captain_effect.gml) setting `value_scalar[0..3] = 1.15` for a `+15%` sale value bonus across all fish sizes.
+
+Try it right away:
+
+```sh
+cgfmm modkit check examples/modkit/harbor-pack
+cgfmm add examples/modkit/harbor-pack
+```
+
 ---
 
 ## 8. Fast edit-check-build-test loop
