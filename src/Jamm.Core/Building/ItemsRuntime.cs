@@ -13,7 +13,8 @@ internal static class ItemsRuntime
         "jamm_rod_register",
         "jamm_lure_register",
         "jamm_tool_register",
-        "jamm_hat_register"
+        "jamm_hat_register",
+        "jamm_upgrade_register"
     };
 
     internal static BuildPlan PreparePlan(
@@ -33,6 +34,8 @@ internal static class ItemsRuntime
 
         string apiInit = ItemsRuntimeScripts.BuildApiInit(initScripts, availableObjects);
         Put(ItemsRuntimeScripts.ApiInitCode, apiInit);
+        Put(ItemsRuntimeScripts.ApiControllerCreateCode, ItemsRuntimeScripts.BuildApiControllerCreate());
+        Put(ItemsRuntimeScripts.ApiControllerStepCode, ItemsRuntimeScripts.BuildApiControllerStep(availableObjects));
 
         var scripts = ItemsRuntimeScripts.BuildScripts(availableObjects, availableScripts);
         foreach (var (script, body) in scripts)
@@ -75,6 +78,8 @@ internal static class ItemsRuntime
             EnsureScript(script, body);
         }
 
+        EnsureApiController(data, recompile);
+
         void EnsureScript(string script, string body)
         {
             string codeName = "gml_Script_" + script;
@@ -85,6 +90,53 @@ internal static class ItemsRuntime
             else
                 existing.Code = code;
             recompile[codeName] = body;
+        }
+    }
+
+    private static void EnsureApiController(UndertaleData data, Dictionary<string, string> recompile)
+    {
+        var controller = data.GameObjects.ByName(ItemsRuntimeScripts.ApiControllerName);
+        if (controller is null)
+        {
+            controller = new UndertaleGameObject
+            {
+                Name = data.Strings.MakeString(ItemsRuntimeScripts.ApiControllerName),
+                Visible = false,
+                Persistent = true,
+                Depth = -1000000
+            };
+            data.GameObjects.Add(controller);
+        }
+        else
+        {
+            controller.Persistent = true;
+        }
+
+        Attach(EventType.Create, 0u, ItemsRuntimeScripts.ApiControllerCreateCode, ItemsRuntimeScripts.BuildApiControllerCreate());
+        Attach(EventType.Step, (uint)EventSubtypeStep.BeginStep, ItemsRuntimeScripts.ApiControllerStepCode, ItemsRuntimeScripts.BuildApiControllerStep(null));
+
+        foreach (string roomName in new[] { "NewWorld", "room11" })
+        {
+            var room = data.Rooms.ByName(roomName);
+            if (room is null || room.GameObjects.Any(i => i.ObjectDefinition == controller)) continue;
+            room.GameObjects.Insert(0, new UndertaleRoom.GameObject
+            {
+                InstanceID = ++data.GeneralInfo.LastObj,
+                ObjectDefinition = controller,
+                X = 0,
+                Y = 0
+            });
+        }
+
+        void Attach(EventType type, uint subtype, string codeName, string fallbackBody)
+        {
+            var code = data.Code.ByName(codeName) ?? UndertaleCode.CreateEmptyEntry(data, codeName);
+            if (!recompile.ContainsKey(codeName)) recompile[codeName] = fallbackBody;
+            var events = controller.Events[(int)type];
+            var ev = events.FirstOrDefault(e => e.EventSubtype == subtype);
+            if (ev is null) { ev = new() { EventSubtype = subtype }; events.Add(ev); }
+            if (ev.Actions.Count == 0) ev.Actions.Add(new() { ActionName = data.Strings.MakeString("") });
+            ev.Actions[0].CodeId = code;
         }
     }
 
