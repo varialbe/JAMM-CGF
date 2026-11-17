@@ -1,13 +1,20 @@
 # Example mods: Smooth, HD / HD Lite, Perf and Console
 
-These are local builds from **your own untouched legacy 2023 `data.win`**.
-No game archives or textures are distributed. Install the [.NET 10 SDK and
-recursive source checkout](user-guide.md#build-from-source) first; run the commands
-below from the checkout. Choose new output paths every time: ModMaker refuses
-existing output files and opens the input read-only. Import the resulting `.win`
-files into JAMM just like other mods, then Check and Install your profile.
+The app provides **Built-in (JAMM)** mods after you configure the untouched legacy
+2023 base. Toggle Perf, Smooth, HD Lite or Console on to generate it locally and
+enable it in the active profile, then Check/Install or Play. Progress and Cancel
+are available. No SDK or terminal is required. Archives are cached by base SHA-256
+and generator version; game archives and textures are never distributed.
 
-## Build the example mods
+CLI users can use `cgfmm builtin list` and `cgfmm builtin add <perf|smooth|hd-lite|console>`.
+Add the resulting `JAMM …` library entry to a profile using the usual profile commands.
+
+## Developer ModMaker CLI
+
+The commands below are for developers building standalone variants (including optional
+upscaled HD pages). Install the [.NET 10 SDK and recursive source checkout](user-guide.md#build-from-source).
+Run from the checkout with new output paths: ModMaker refuses existing outputs and
+opens the input read-only. It calls the same shared generators as the app.
 
 ```sh
 dotnet run --project tools/Jamm.ModMaker -c Release -- perf /path/to/original/data.win /path/to/mods/perf.win

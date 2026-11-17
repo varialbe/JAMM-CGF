@@ -149,7 +149,7 @@ public sealed class ModLibrary(ManagerStore store)
     }
 
     /// <summary>Copies a .win or the single nested data.win in a zip, then immediately patches against the configured base.</summary>
-    public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default, ModOrigin? origin = null)
+    public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default, ModOrigin? origin = null, string? stableId = null, string? description = null)
     {
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
@@ -160,10 +160,14 @@ public sealed class ModLibrary(ManagerStore store)
         if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("The mod needs a nonempty name.");
         if (displayName.Contains(',') || displayName.Any(char.IsControl))
             throw new ArgumentException("Mod names cannot contain commas or control characters. Use --name with a readable name so it can be selected with --mods.");
+        if (stableId is not null) ManagerStore.Name(stableId);
         string stage = store.Path("mods", ".import-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
         string copy = Path.Combine(stage, "data.win");
         string? publishedPatch = null, publishedSanitized = null, publishedReport = null;
+        string? previousDirectory = null;
+        Dictionary<string, byte[]> previousFiles = [];
+        bool published = false;
         try
         {
             if (source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(source, copy, cancellationToken);
@@ -175,7 +179,7 @@ public sealed class ModLibrary(ManagerStore store)
             }
             else throw new ArgumentException($"Cannot add '{sourceName}'. Choose a .win archive or a .zip containing one data.win.");
             string hash = BuildFiles.Hash(copy);
-            var existing = All().FirstOrDefault(m => m.Sha256 == hash);
+            var existing = All().FirstOrDefault(m => m.Sha256 == hash && (stableId is null || m.Id == stableId));
             if (existing is not null)
             {
                 Patch(existing, progress, cancellationToken);
@@ -189,7 +193,7 @@ public sealed class ModLibrary(ManagerStore store)
                 }
                 return new(existing, ["This exact archive is already in the library; its existing name is retained."], true);
             }
-            if (All().Any(m => m.Name == displayName)) throw new ArgumentException($"Mod name '{displayName}' already exists. Use --name with a unique name.");
+            if (All().Any(m => m.Name == displayName && m.Id != stableId)) throw new ArgumentException($"Mod name '{displayName}' already exists. Use --name with a unique name.");
             using var original = GameFileLoader.Load(basePath, progress);
             using var mod = GameFileLoader.Load(copy, progress);
             List<string> notices = CompatibilityWarnings(original.Inspection, mod.Inspection).ToList();
@@ -202,11 +206,19 @@ public sealed class ModLibrary(ManagerStore store)
             if (BuildFiles.Hash(basePath) != patch.Base.Sha256 || hash != patch.Mod.Sha256)
                 throw new IOException("An input changed during import. Retry with stable copies.");
             var sanitized = ModSanitizer.Sanitize(patch);
-            var entry = new ManagedMod(hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
-                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode) { Origins = origin is null ? [] : [origin] };
+            var entry = new ManagedMod(stableId ?? hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
+                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode) { Origins = origin is null ? [] : [origin], Description = description };
             store.Write(store.Path("mods", Path.GetFileName(stage), "mod.json"), entry);
             string patchPath = PatchPath(entry);
-            if (File.Exists(patchPath)) throw new IOException("An orphaned patch already exists for this mod. Remove it from the data directory and retry.");
+            if (stableId is null && File.Exists(patchPath)) throw new IOException("An orphaned patch already exists for this mod. Remove it from the data directory and retry.");
+            if (stableId is not null && Directory.Exists(store.Path("mods", stableId)))
+            {
+                foreach (string path in new[] { patchPath, SanitizedPatchPath(entry), SanitizerReportPath(entry) })
+                    if (File.Exists(path)) previousFiles[path] = File.ReadAllBytes(path);
+                string backupDirectory = store.Path("mods", ".previous-" + Guid.NewGuid().ToString("N"));
+                Directory.Move(store.Path("mods", stableId), backupDirectory);
+                previousDirectory = backupDirectory;
+            }
             publishedPatch = patchPath;
             publishedSanitized = SanitizedPatchPath(entry);
             publishedReport = SanitizerReportPath(entry);
@@ -215,6 +227,7 @@ public sealed class ModLibrary(ManagerStore store)
             store.Write(publishedReport, sanitized.Report);
             cancellationToken.ThrowIfCancellationRequested();
             Directory.Move(stage, store.Path("mods", entry.Id));
+            published = true;
             return new(entry, notices.Concat(patch.Warnings).Distinct(StringComparer.Ordinal).ToArray(), false);
         }
         catch
@@ -225,9 +238,15 @@ public sealed class ModLibrary(ManagerStore store)
                 if (publishedSanitized is not null && File.Exists(publishedSanitized)) File.Delete(publishedSanitized);
                 if (publishedReport is not null && File.Exists(publishedReport)) File.Delete(publishedReport);
             }
+            foreach (var saved in previousFiles) File.WriteAllBytes(saved.Key, saved.Value);
+            if (previousDirectory is not null) Directory.Move(previousDirectory, store.Path("mods", stableId!));
             throw;
         }
-        finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
+        finally
+        {
+            if (Directory.Exists(stage)) Directory.Delete(stage, true);
+            if (published && previousDirectory is not null) Directory.Delete(previousDirectory, true);
+        }
     }
 
     /// <summary>Lists timestamp/version compatibility separately from exact patch-base hash compatibility.</summary>

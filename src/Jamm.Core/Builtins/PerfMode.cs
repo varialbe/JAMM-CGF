@@ -32,18 +32,18 @@ public static class PerfMode
     }
 
     /// <summary>Reports placement candidates, without pretending room data is runtime state.</summary>
-    public static void Census(UndertaleData data)
+    public static IEnumerable<string> Census(UndertaleData data)
     {
         var allowed = Eligible(data).ToHashSet(StringComparer.Ordinal);
-        Console.WriteLine("Historical static audit (not runtime eligibility): " + string.Join(", ", allowed));
+        yield return "Historical static audit (not runtime eligibility): " + string.Join(", ", allowed);
         var room = data.Rooms.ByName("NewWorld")!;
         double right = room.Views[3].ViewX + Math.Max(room.Views[3].ViewWidth, room.Views[3].ViewHeight) + 3000;
         var placements = room.GameObjects.Where(i => allowed.Contains(i.ObjectDefinition.Name.Content)).ToArray();
-        Console.WriteLine($"Total: {placements.Length} placements; {placements.Count(i => i.X > right)} beyond initial view-3 right+3000 ({right}). Runtime eligibility cannot be read from room placements.");
+        yield return $"Total: {placements.Length} placements; {placements.Count(i => i.X > right)} beyond initial view-3 right+3000 ({right}). Runtime eligibility cannot be read from room placements.";
         foreach (var g in room.GameObjects.Where(i => allowed.Contains(i.ObjectDefinition.Name.Content)).GroupBy(i => i.ObjectDefinition.Name.Content))
-            Console.WriteLine($"{g.Key}: {g.Count()} placed, {g.Count(i => i.X > right)} beyond initial view-3 right+3000 (upper bound; runtime pause/state required)");
+            yield return $"{g.Key}: {g.Count()} placed, {g.Count(i => i.X > right)} beyond initial view-3 right+3000 (upper bound; runtime pause/state required)";
         foreach (var v in room.Views.Select((v, i) => (v, i)))
-            Console.WriteLine($"view {v.i}: enabled={v.v.Enabled} x={v.v.ViewX} y={v.v.ViewY} width={v.v.ViewWidth} height={v.v.ViewHeight}");
+            yield return $"view {v.i}: enabled={v.v.Enabled} x={v.v.ViewX} y={v.v.ViewY} width={v.v.ViewWidth} height={v.v.ViewHeight}";
     }
 
     /// <summary>Builds the narrow End Step prefix; Mode 0 falls through to phase 6a.</summary>

@@ -58,6 +58,8 @@ public sealed record SteamSettings
 public sealed record ManagedMod(string Id, string Name, string SourceFileName, string Sha256,
     DateTimeOffset AddedUtc, string BaseSha256, ulong Gen8Timestamp, string GmVersion, byte Bytecode)
 {
+    /// <summary>Player-facing description and controls, when supplied by a bundled generator.</summary>
+    public string? Description { get; init; }
     /// <summary>Exact-byte online provenance; absent in older/manual imports. Hashes identify bytes, not trusted authorship.</summary>
     public ModOrigin[] Origins { get; init; } = [];
     /// <summary>Expert per-mod opt-out that uses the original unsanitized performance changes instead of JAMM's sanitized patch.</summary>

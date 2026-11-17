@@ -11,6 +11,12 @@ namespace Jamm.Gui;
 /// <summary>The desktop shell; delegates all state changes and archive work to its view model.</summary>
 public sealed partial class MainWindow : Window
 {
+    private async void BuiltinToggleClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && sender is Avalonia.Controls.ToggleSwitch { DataContext: BuiltinRow row })
+            await vm.ToggleBuiltinAsync(row.Id);
+    }
+
     private MainViewModel? Model => DataContext as MainViewModel;
     private bool initialized;
     private Point? dragStart;

@@ -58,7 +58,7 @@ public static class HdMod
                 item.SourceHeight = checked((ushort)(item.SourceHeight * 2));
             }
         }
-        Console.WriteLine($"Upscaled {safe.Count} texture pages; font and tile pages stay at original size.");
+        
     }
 
     private static string Create(bool debug) => $$"""

@@ -67,15 +67,17 @@ card shows what the mod adds (counted from the file, not copied from its descrip
 and a compatibility icon: green check, yellow question mark or red cross, with the
 reason one click away. [More about browsing and the shared compatibility results](docs/user-guide.md#browse-mods).
 
-## Example mods
+## Built-in mods
 
-Built locally from your own game with `tools/Jamm.ModMaker`:
+After base setup, toggle **JAMM Perf**, **JAMM Smooth**, **JAMM HD Lite** or
+**JAMM Console** in the **Built-in (JAMM)** group. JAMM generates them locally,
+caches them for your base and enables them in your profile. Then Check/Install or
+Play. No terminal or SDK is needed.
 
-- **Smooth** — targets 60/120 FPS rendering while keeping simulation at 30 ticks/s.
-- **HD / HD Lite** — fullscreen improvements, with optional 2x textures (Lite keeps original textures).
-- **Perf** — targeted optimizations and an optional performance mode, off by default.
-
-[Build examples, keys and performance results](docs/example-mods.md).
+Hotkeys: **F8** Perf, **F7** Smooth, **F11** HD Lite, **F12/backtick** Console.
+Type `unlockall` in Console to unlock equipment (the next save keeps the unlocks).
+CLI: `cgfmm builtin list` / `cgfmm builtin add console` (also `perf`, `smooth`, `hd-lite`).
+[Controls and developer ModMaker variants](docs/example-mods.md).
 
 [User guide](docs/user-guide.md) · [CLI reference](docs/cli.md) ·
 [Conflicts](docs/conflicts.md) · [Build from source](docs/user-guide.md#build-from-source)

@@ -8,6 +8,7 @@ namespace Jamm.ModMaker;
 /// <summary>Small helpers to add objects, room instances and compiled code to a data.win.</summary>
 public static class ModObjects
 {
+    /// <summary>Adds a named runtime controller.</summary>
     public static UndertaleGameObject Create(UndertaleData data, string name, bool persistent)
     {
         if (data.GameObjects.ByName(name) is not null)
@@ -23,6 +24,7 @@ public static class ModObjects
         return obj;
     }
 
+    /// <summary>Places a controller in a required legacy room.</summary>
     public static void PlaceInstance(UndertaleData data, string roomName, UndertaleGameObject obj, bool first)
     {
         var room = data.Rooms.ByName(roomName) ?? throw new InvalidDataException($"Room '{roomName}' not found: unsupported game version.");
@@ -36,9 +38,11 @@ public static class ModObjects
         if (first) room.GameObjects.Insert(0, instance); else room.GameObjects.Add(instance);
     }
 
+    /// <summary>Decompiles an entry with normalized line endings.</summary>
     public static string Decompile(UndertaleData data, UndertaleCode code)
         => new Underanalyzer.Decompiler.DecompileContext(new GlobalDecompileContext(data), code, data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n", StringComparison.Ordinal);
 
+    /// <summary>Compiles queued edits or reports compiler errors.</summary>
     public static void Compile(CompileGroup compiler)
     {
         var result = compiler.Compile();

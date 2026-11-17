@@ -44,6 +44,18 @@ internal static class ManagementCommand
         bool json = flags.Contains("--json");
         switch (command)
         {
+            case "builtin":
+                if (positional.SequenceEqual(new[] { "list" }))
+                {
+                    foreach (var mod in BuiltinMods.Catalog) Console.WriteLine($"{mod.Id}: {mod.Name} — {mod.Description}");
+                }
+                else if (positional.Count == 2 && positional[0] == "add")
+                {
+                    var builtinAdded = new BuiltinMods(store).Add(positional[1], Console.WriteLine);
+                    Console.WriteLine($"Added {builtinAdded.Mod.Name} ({builtinAdded.Mod.Id}). Enable it in a profile, then Check/Install or Play.");
+                }
+                else throw new ArgumentException("Use 'cgfmm builtin list' or 'cgfmm builtin add <perf|smooth|hd-lite|console>'.");
+                return 0;
             case "config":
                 if (positional.Count == 1 && positional[0] == "show")
                 {

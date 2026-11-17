@@ -46,7 +46,7 @@ public static class Program
         UndertaleData data = Load(original);
         switch (command)
         {
-            case "perf-census": PerfMode.Census(data); return 0;
+            case "perf-census": foreach (string line in PerfMode.Census(data)) Console.WriteLine(line); return 0;
             case "inspect": Inspector.Run(data); return 0;
             case "dump": Dump.Run(data, args.Skip(2)); return 0;
             case "names": foreach (var c in data.Code) Console.WriteLine(c.Name.Content); return 0;
@@ -64,7 +64,7 @@ public static class Program
                 foreach (var r in data.Rooms)
                     Console.WriteLine($"{r.Name.Content}: {r.GameObjects.Count} instances; mod instances: {string.Join(", ", r.GameObjects.Select((g, i) => (g, i)).Where(p => p.g.ObjectDefinition?.Name.Content.StartsWith("obj_jamm") == true).Select(p => $"{p.g.ObjectDefinition.Name.Content}@{p.i} id {p.g.InstanceID}"))}");
                 return 0;
-            case "export-pages": TexturePages.Export(data, output!); return 0;
+            case "export-pages": TexturePages.Export(data, output!, Console.WriteLine); return 0;
             case "perf":
                 string[] changed = ["gml_Object_Fish_Step_2", "gml_Script_fish_check_trawler",
                     "gml_Script_fish_avoid_fish", "gml_Object_SceneItem_Step_2",
@@ -85,7 +85,7 @@ public static class Program
                     throw new ArgumentException("hd needs <original.win> <out.win>; choose a new output path.");
                 var baseline = TexturePages.Capture(data);
                 HdMod.Apply(data, pages, args.Contains("--debug"));
-                Save(data, output, saved => TexturePages.VerifyHd(baseline, saved, pages is not null));
+                Save(data, output, saved => TexturePages.VerifyHd(baseline, saved, pages is not null, Console.WriteLine));
                 return 0;
             default: Console.Error.WriteLine($"Unknown command '{command}'."); return 1;
         }

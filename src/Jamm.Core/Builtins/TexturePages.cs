@@ -8,7 +8,7 @@ namespace Jamm.ModMaker;
 public static class TexturePages
 {
     /// <summary>Writes page_N.png for every texture page plus pages.json describing what each page holds.</summary>
-    public static void Export(UndertaleData data, string directory)
+    public static void Export(UndertaleData data, string directory, Action<string>? progress = null)
     {
         Directory.CreateDirectory(directory);
         var info = Describe(data);
@@ -18,7 +18,7 @@ public static class TexturePages
             data.EmbeddedTextures[i].TextureData.Image.SavePng(file);
         }
         File.WriteAllText(Path.Combine(directory, "pages.json"), JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine($"Exported {data.EmbeddedTextures.Count} pages to {directory}; {info.Count(p => p.Upscale)} can be upscaled.");
+        progress?.Invoke($"Exported {data.EmbeddedTextures.Count} pages to {directory}; {info.Count(p => p.Upscale)} can be upscaled.");
     }
 
     /// <summary>Page dimensions, usage counts, and eligibility for source-only scaling.</summary>
@@ -71,7 +71,7 @@ public static class TexturePages
     })).ToArray();
 
     /// <summary>Checks every saved page, TPAG rectangle, and font; reports uncompressed RGBA8 memory.</summary>
-    public static void VerifyHd(HdBaseline original, UndertaleData output, bool upscaled)
+    public static void VerifyHd(HdBaseline original, UndertaleData output, bool upscaled, Action<string>? progress = null)
     {
         var pages = Describe(output);
         if (pages.Count != original.Pages.Count || output.TexturePageItems.Count != original.Items.Length)
@@ -97,8 +97,8 @@ public static class TexturePages
         }
         if (!original.Fonts.SequenceEqual(FontSignatures(output)))
             throw new InvalidDataException("HD verification failed: font metadata or glyphs changed.");
-        Console.WriteLine($"HD offline verification passed: {pages.Count} pages, {original.Items.Length} TPAG items, {original.Fonts.Length} fonts unchanged.");
-        Console.WriteLine($"RGBA8 texture residency: {before / 1048576.0:F0} -> {after / 1048576.0:F0} MiB (+{(after - before) / 1048576.0:F0} MiB). " +
+        progress?.Invoke($"HD offline verification passed: {pages.Count} pages, {original.Items.Length} TPAG items, {original.Fonts.Length} fonts unchanged.");
+        progress?.Invoke($"RGBA8 texture residency: {before / 1048576.0:F0} -> {after / 1048576.0:F0} MiB (+{(after - before) / 1048576.0:F0} MiB). " +
             "Budget the same again if the runner retains decoded CPU copies; excludes MSAA, back buffers, audio and other game memory.");
     }
 }

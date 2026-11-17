@@ -123,7 +123,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (NeedsSetup) await SearchGamesInternalAsync(token, new Progress<string>(m => SetupMessage = m));
     });
     /// <summary>Persisted expert-mode preference.</summary>
-    public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); } }
+    public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); OnPropertyChanged(nameof(ShowBuiltinHeader)); } }
     /// <summary>Displays operation errors in the desktop shell as well as the status line.</summary>
     public event Action<string>? Error;
     internal void ReportError(string text) { Message(text); Error?.Invoke(text); }
@@ -205,11 +205,12 @@ public sealed partial class MainViewModel : ObservableObject
                 row.PropertyChanged += async (_, e) =>
                 {
                     if (loading) return;
-                    if (e.PropertyName == nameof(ModRow.Enabled)) { Conflicts.Clear(); NotifyButtons(); }
+                    if (e.PropertyName == nameof(ModRow.Enabled)) { Conflicts.Clear(); RefreshBuiltins(); NotifyButtons(); }
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorPerformanceChanges)) await SetKeepAuthorPerformanceChangesAsync(row);
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorHudDesign)) await SetKeepAuthorHudDesignAsync(row);
                 };
             }
+            RefreshBuiltins();
             knownGame = data.State.Known; canRestore = data.State.CanRestore; GameStatus = data.State.Message;
             OnPropertyChanged(nameof(Config)); OnPropertyChanged(nameof(NeedsSetup)); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         }
@@ -297,6 +298,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (!CanUndo) return;
         foreach (var row in Mods) row.UndoChanges();
+        RefreshBuiltins();
         NotifyButtons();
     }
     private async Task ApplyPendingAsync(IProgress<string> progress)

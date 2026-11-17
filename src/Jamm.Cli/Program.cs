@@ -56,6 +56,7 @@ int Run(string[] arguments)
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
+            cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
             cgfmm add <file.win|file.zip> [--name <name>]
             cgfmm list [--json] | remove <mod ID or name>
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
@@ -77,7 +78,7 @@ int Run(string[] arguments)
     }
     string command = arguments[0];
     if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
-    if (command is "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
+    if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory);
     if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..]);

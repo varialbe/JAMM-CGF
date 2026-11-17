@@ -17,6 +17,24 @@
     </Grid>
     <TabControl Grid.Row="1" x:Name="MainTabs">
     <TabItem Header="Manager">
+    <DockPanel LastChildFill="True">
+    <Border DockPanel.Dock="Top" Classes="card" IsVisible="{Binding ShowBuiltinHeader}" Margin="0,0,0,8" Padding="12">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Built-in (JAMM)" Classes="title"/>
+        <ItemsControl ItemsSource="{Binding Builtins}" IsEnabled="{Binding CanEdit}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate><DataTemplate>
+            <StackPanel Margin="0,0,12,0" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ToggleSwitch Width="48" MinWidth="0" OnContent="" OffContent="" IsChecked="{Binding Enabled, Mode=OneWay}" Click="BuiltinToggleClick" AutomationProperties.Name="{Binding Name}"/>
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+              </StackPanel>
+              <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Classes="muted" FontSize="12"/>
+            </StackPanel>
+          </DataTemplate></ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
     <Grid>
     <Border Classes="card" IsVisible="{Binding !AdvancedMode}"><Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
       <TextBlock Text="Your mods" Classes="title"/>
@@ -27,10 +45,28 @@
       <StackPanel Grid.Row="2" Spacing="8"><TextBlock Text="Download mods in Browse mods, or add a local file. Enable the mods you want, then press Play." TextWrapping="Wrap"/><Button Content="+ Add mods" Click="AddClick" IsEnabled="{Binding CanEdit}"/></StackPanel>
     </Grid></Border>
     <Grid IsVisible="{Binding AdvancedMode}" ColumnDefinitions="285,280,*" ColumnSpacing="16">
-      <Border Classes="card"><Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+      <Border Classes="card"><Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
         <TextBlock Classes="title" Text="Mod library"/>
-        <TextBlock Grid.Row="1" Classes="muted" Text="Drop .win or .zip files here"/>
-        <ListBox Grid.Row="2" x:Name="LibraryList" ItemsSource="{Binding Mods}" IsEnabled="{Binding CanEdit}">
+        <ScrollViewer Grid.Row="1"><StackPanel Spacing="12">
+    <Border Classes="card" IsVisible="{Binding HasBuiltins}" Margin="0,0,0,8" Padding="0">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Built-in (JAMM)" Classes="title"/>
+        <ItemsControl ItemsSource="{Binding Builtins}" IsEnabled="{Binding CanEdit}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate><DataTemplate>
+            <StackPanel Margin="0,0,12,0" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <ToggleSwitch Width="48" MinWidth="0" OnContent="" OffContent="" IsChecked="{Binding Enabled, Mode=OneWay}" Click="BuiltinToggleClick" AutomationProperties.Name="{Binding Name}"/>
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+              </StackPanel>
+              <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Classes="muted" FontSize="12"/>
+            </StackPanel>
+          </DataTemplate></ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+        <ListBox x:Name="LibraryList" ItemsSource="{Binding Mods}" IsEnabled="{Binding CanEdit}">
           <ListBox.ItemTemplate><DataTemplate><StackPanel Spacing="5" Margin="0,8">
             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
             <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Metadata}" Classes="muted" FontSize="12"/>
@@ -45,7 +81,8 @@
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's HUD design" IsChecked="{Binding KeepAuthorHudDesign, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorHudDesign}"/>
           </StackPanel></DataTemplate></ListBox.ItemTemplate>
         </ListBox>
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEdit}"><Button Content="+ Add mods" Click="AddClick"/><Button Content="Remove" Click="RemoveClick"/></StackPanel>
+        </StackPanel></ScrollViewer>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEdit}"><Button Content="+ Add mods" Click="AddClick"/><Button Content="Remove" Click="RemoveClick"/></StackPanel>
       </Grid></Border>
       <Border Grid.Column="1" Classes="card"><Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="12">
         <TextBlock Classes="title" Text="Your mods"/>
@@ -81,6 +118,7 @@
       </Grid></Border>
     </Grid>
     </Grid>
+    </DockPanel>
     </TabItem>
     <TabItem Header="Browse mods">
       <Grid DataContext="{Binding Browse}" RowDefinitions="Auto,Auto,*" RowSpacing="12">

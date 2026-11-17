@@ -7,6 +7,6 @@
     <AssemblyName>jamm-modmaker</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../external/UndertaleModTool/UndertaleModLib/UndertaleModLib.csproj" />
+    <ProjectReference Include="../../src/Jamm.Core/Jamm.Core.csproj" />
   </ItemGroup>
 </Project>

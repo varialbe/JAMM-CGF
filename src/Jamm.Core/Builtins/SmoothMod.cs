@@ -13,9 +13,12 @@ namespace Jamm.ModMaker;
 /// </summary>
 public static class SmoothMod
 {
+    /// <summary>Name of the smoothing controller.</summary>
     public const string ObjectName = "obj_jamm_smooth";
+    /// <summary>Name of the draw probe.</summary>
     public const string ProbeName = "obj_jamm_smooth_probe";
 
+    /// <summary>Applies smoothing and render scheduling to a legacy base.</summary>
     public static void Apply(UndertaleData data, bool debug = false)
     {
         var questBegin = data.Code.ByName("gml_Object_QuestEngine_Step_1")

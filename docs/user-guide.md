@@ -268,3 +268,23 @@ Shared compatibility results: before checking a mod itself, JAMM asks
 `https://varialbe.xyz/jamm/compat/v1/` whether the server already checked exactly this file
 against exactly your game version (a plain HTTPS request without cookies or identifiers; the
 server sees your IP like any website). Switch it off in Settings. Details: [compat-db.md](compat-db.md).
+
+## Built-in mods
+
+After choosing your untouched legacy base in Settings, the **Built-in (JAMM)** group
+provides **JAMM Perf**, **JAMM Smooth**, **JAMM HD Lite** and **JAMM Console**.
+Toggle one on to generate and import it locally, with progress and Cancel available.
+It is enabled in your active profile; then use Check/Install (Advanced mode) or Play.
+No terminal, SDK, downloads or game assets bundled with JAMM are needed.
+
+- Perf: **F8** toggles the optional performance mode.
+- Smooth: **F7** cycles 60/120/off.
+- HD Lite: **F11** toggles fullscreen; original textures are retained.
+- Console: **F12** or **backtick** opens the console. Type `help` or `unlockall`.
+  Unlocks persist in your save at the next autosave or save menu.
+
+Generated archives are cached under the manager's `builtin/` directory by base SHA-256
+and generator version. Built-ins use the same merge and conflict checks as other mods.
+CLI users can run `cgfmm builtin list` and `cgfmm builtin add console` (or `perf`,
+`smooth`, `hd-lite`), then select the imported mod in a profile.
+The [ModMaker instructions](example-mods.md) are intended for developers.

@@ -233,7 +233,7 @@ public static class ConsoleMod
                             GearData.unlocked[jamm_i] = 1;
                         }
                     }
-                    var jamm_icon_new = 0;
+                    jamm_icon_new = 0; // instance variable: read via other.jamm_icon_new inside with (Icons)
                     with (Icons)
                     {
                         if (unlocked <= 0) other.jamm_icon_new += 1;
