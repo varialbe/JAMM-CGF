@@ -1,0 +1,47 @@
+{
+  "id": "example-fish",
+  "name": "Example Fish",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Two example custom fish: Goldie (shallow small fish) and Glowfin (nocturnal pulsing medium fish).",
+  "fish": [
+    {
+      "key": "goldie",
+      "name": "Goldie",
+      "size": "small",
+      "sprite": "art/goldie.png",
+      "frames": 1,
+      "value": 300,
+      "xp": 60,
+      "stamina": 40,
+      "lungeSpeed": 8,
+      "lungeRange": 60,
+      "speed": 1.5,
+      "spawn": { "x": [1100, 2200], "y": [1400, 1900], "count": 4 },
+      "night": false,
+      "description": "A cheerful golden fish that swims lazily near the dock.",
+      "caughtDescription": "You caught Goldie! Its bright scales shimmer in the sunlight."
+    },
+    {
+      "key": "glowfin",
+      "name": "Glowfin",
+      "size": "medium",
+      "sprite": "art/glowfin.png",
+      "frames": 1,
+      "value": 1200,
+      "xp": 180,
+      "stamina": 75,
+      "lungeSpeed": 10,
+      "lungeRange": 80,
+      "speed": 2.2,
+      "spawn": { "x": [1400, 2800], "y": [1600, 2300], "count": 3 },
+      "night": true,
+      "description": "A nocturnal reef swimmer whose fins pulse with cyan light after dusk.",
+      "caughtDescription": "Glowfin pulses with bioluminescence and darts away when startled by a fast lure.",
+      "hooks": {
+        "create": "hooks/glowfin_create.gml",
+        "step": "hooks/glowfin_step.gml"
+      }
+    }
+  ]
+}

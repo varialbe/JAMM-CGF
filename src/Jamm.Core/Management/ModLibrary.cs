@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using Jamm.Core.Building;
+using Jamm.Core.ModKit;
 using Jamm.Core.Patching;
 
 namespace Jamm.Core.Management;
@@ -148,15 +149,19 @@ public sealed class ModLibrary(ManagerStore store)
             : $"Mod name '{query}' is ambiguous. Use its full ID from 'cgfmm list'.");
     }
 
-    /// <summary>Copies a .win or the single nested data.win in a zip, then immediately patches against the configured base.</summary>
+    /// <summary>Copies a .win, a .zip containing one data.win, or builds a ModKit package folder, then patches against the configured base.</summary>
     public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default, ModOrigin? origin = null, string? stableId = null, string? description = null)
     {
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
         cancellationToken.ThrowIfCancellationRequested();
         string basePath = store.Config().Base ?? throw new ArgumentException("Set the legacy base first: cgfmm config set base <original data.win>.");
-        string sourceName = Path.GetFileName(source);
-        string displayName = name ?? Path.GetFileNameWithoutExtension(source);
+        string trimmedSource = Path.TrimEndingDirectorySeparator(source);
+        bool isModKitFolder = Directory.Exists(trimmedSource);
+        ModKitManifest? modKitManifest = isModKitFolder ? ModKitPackage.Load(trimmedSource) : null;
+        string sourceName = isModKitFolder ? $"{modKitManifest!.Id}.win" : Path.GetFileName(trimmedSource);
+        string displayName = name ?? (modKitManifest?.Name ?? Path.GetFileNameWithoutExtension(trimmedSource));
+        description ??= modKitManifest?.Description;
         if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("The mod needs a nonempty name.");
         if (displayName.Contains(',') || displayName.Any(char.IsControl))
             throw new ArgumentException("Mod names cannot contain commas or control characters. Use --name with a readable name so it can be selected with --mods.");
@@ -170,14 +175,15 @@ public sealed class ModLibrary(ManagerStore store)
         bool published = false;
         try
         {
-            if (source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(source, copy, cancellationToken);
-            else if (source.EndsWith(".win", StringComparison.OrdinalIgnoreCase))
+            if (isModKitFolder) ModKitBuilder.Build(trimmedSource, basePath, copy, progress, cancellationToken);
+            else if (trimmedSource.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(trimmedSource, copy, cancellationToken);
+            else if (trimmedSource.EndsWith(".win", StringComparison.OrdinalIgnoreCase))
             {
-                using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var input = new FileStream(trimmedSource, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var output = new FileStream(copy, FileMode.CreateNew, FileAccess.Write);
                 input.CopyTo(output);
             }
-            else throw new ArgumentException($"Cannot add '{sourceName}'. Choose a .win archive or a .zip containing one data.win.");
+            else throw new ArgumentException($"Cannot add '{sourceName}'. Choose a .win archive, a .zip containing one data.win, or a ModKit package folder.");
             string hash = BuildFiles.Hash(copy);
             var existing = All().FirstOrDefault(m => m.Sha256 == hash && (stableId is null || m.Id == stableId));
             if (existing is not null)
