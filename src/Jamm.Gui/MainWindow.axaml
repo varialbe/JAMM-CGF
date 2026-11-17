@@ -49,11 +49,30 @@
     <Grid>
     <Border Classes="card" IsVisible="{Binding !AdvancedMode}"><Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
       <TextBlock Text="Your mods" Classes="title"/>
-      <ListBox KeyboardNavigation.TabNavigation="Continue" Classes="modRows" Grid.Row="1" ItemsSource="{Binding Order}" IsEnabled="{Binding CanEdit}">
-        <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-        <ListBox.ItemTemplate><DataTemplate><local:ModListRow/></DataTemplate></ListBox.ItemTemplate>
-      </ListBox>
-      <StackPanel Grid.Row="2" Spacing="8"><TextBlock Text="Download mods in Browse mods, or add a local file. Enable the mods you want, then press Play." TextWrapping="Wrap"/><Button Content="+ Add mods" Click="AddClick" IsEnabled="{Binding CanEdit}"/></StackPanel>
+      <Grid Grid.Row="1">
+        <ListBox KeyboardNavigation.TabNavigation="Continue" Classes="modRows" ItemsSource="{Binding Order}" IsEnabled="{Binding CanEdit}">
+          <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+          <ListBox.ItemTemplate><DataTemplate><local:ModListRow/></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel IsVisible="{Binding !HasMods}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" Margin="0,32">
+          <TextBlock Text="No mods added yet." Classes="muted" HorizontalAlignment="Center"/>
+          <WrapPanel HorizontalAlignment="Center">
+            <TextBlock Text="Made your own mod with ModKit? Add its folder." Classes="muted" VerticalAlignment="Center"/>
+            <Button Content="Getting started guide ↗" Click="OpenModKitGuideClick" FontSize="11" Padding="6,2" Margin="8,0,0,0" ToolTip.Tip="Open docs/modding/getting-started.md"/>
+          </WrapPanel>
+        </StackPanel>
+      </Grid>
+      <StackPanel Grid.Row="2" Spacing="8">
+        <TextBlock Text="Download mods in Browse mods, or add a local file. Enable the mods you want, then press Play." TextWrapping="Wrap"/>
+        <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasMods}">
+          <TextBlock Text="Made your own mod with ModKit? Add its folder." Classes="muted" VerticalAlignment="Center"/>
+          <Button Content="Getting started guide ↗" Click="OpenModKitGuideClick" FontSize="11" Padding="6,2" Margin="8,0,0,0" ToolTip.Tip="Open docs/modding/getting-started.md"/>
+        </WrapPanel>
+        <WrapPanel Orientation="Horizontal">
+          <Button Content="+ Add mods" Click="AddClick" IsEnabled="{Binding CanEdit}" Margin="0,0,8,0"/>
+          <Button Content="Add mod folder (ModKit)…" Click="AddFolderClick" IsEnabled="{Binding CanEdit}"/>
+        </WrapPanel>
+      </StackPanel>
     </Grid></Border>
     <Grid IsVisible="{Binding AdvancedMode}" ColumnDefinitions="285,280,*" ColumnSpacing="16">
       <Border Classes="card"><Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
@@ -88,9 +107,19 @@
       </StackPanel>
     </Border>
 
-        <ListBox x:Name="LibraryList" ItemsSource="{Binding Mods}" IsEnabled="{Binding CanEdit}">
+        <ListBox x:Name="LibraryList" ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod, Mode=TwoWay}" IsEnabled="{Binding CanEdit}">
           <ListBox.ItemTemplate><DataTemplate><StackPanel Spacing="5" Margin="0,8">
-            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <WrapPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,6,0"/>
+              <Border Background="#1E3A8A" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" IsVisible="{Binding IsModKit}">
+                <TextBlock Text="ModKit" FontSize="10" FontWeight="Bold" Foreground="#93C5FD"/>
+              </Border>
+            </WrapPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsModKit}">
+              <TextBlock Text="{Binding ModKitVersionLine}" Classes="muted" FontSize="12"/>
+              <TextBlock Text="{Binding ModKitAuthorLine}" Classes="muted" FontSize="12" IsVisible="{Binding HasAuthor}"/>
+            </StackPanel>
+            <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" FontSize="12" TextWrapping="Wrap"/>
             <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Metadata}" Classes="muted" FontSize="12"/>
             <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Badge}" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" FontSize="12" TextWrapping="Wrap"/>
             <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasSanitizedInfo}">
@@ -101,10 +130,18 @@
             </StackPanel>
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's performance changes" IsChecked="{Binding KeepAuthorPerformanceChanges, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorPerformanceChanges}"/>
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's HUD design" IsChecked="{Binding KeepAuthorHudDesign, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorHudDesign}"/>
+            <WrapPanel Orientation="Horizontal" Margin="0,2,0,0" IsVisible="{Binding IsModKit}">
+              <Button Content="Rebuild" Click="LibraryRebuildClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" ToolTip.Tip="Rebuild this mod from its ModKit folder"/>
+            </WrapPanel>
           </StackPanel></DataTemplate></ListBox.ItemTemplate>
         </ListBox>
         </StackPanel></ScrollViewer>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding CanEdit}"><Button Content="+ Add mods" Click="AddClick"/><Button Content="Remove" Click="RemoveClick"/></StackPanel>
+        <WrapPanel Grid.Row="2" Orientation="Horizontal" IsEnabled="{Binding CanEdit}">
+          <Button Content="+ Add mods" Click="AddClick" Margin="0,0,6,4"/>
+          <Button Content="Add folder…" Click="AddFolderClick" ToolTip.Tip="Add mod folder (ModKit)…" Margin="0,0,6,4"/>
+          <Button Content="Rebuild" Click="LibraryToolbarRebuildClick" IsVisible="{Binding SelectedMod.IsModKit}" Margin="0,0,6,4"/>
+          <Button Content="Remove" Click="RemoveClick" Margin="0,0,0,4"/>
+        </WrapPanel>
       </Grid></Border>
       <Border Grid.Column="1" Classes="card"><Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="12">
         <TextBlock Classes="title" Text="Your mods"/>

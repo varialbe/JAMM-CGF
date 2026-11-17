@@ -4,6 +4,7 @@ using Jamm.Core.Building;
 using Jamm.Core.Browsing;
 using Jamm.Core.Management;
 using Jamm.Core.Merging;
+using Jamm.Core.ModKit;
 
 namespace Jamm.Gui.ViewModels;
 
@@ -61,6 +62,11 @@ public sealed partial class MainViewModel : ObservableObject
     public string Validation { get => validation; private set => SetProperty(ref validation, value); }
     /// <summary>Finding counts include zeroes and warnings.</summary>
     public string ConflictCounts => string.Join(" · ", new[] { "CONFLICT", "AUTO", "INFO", "WARNING" }.Select(s => $"{s} {Conflicts.Count(c => c.Severity == s)}"));
+    private ModRow? selectedMod;
+    /// <summary>Currently selected mod in the library list.</summary>
+    public ModRow? SelectedMod { get => selectedMod; set => SetProperty(ref selectedMod, value); }
+    /// <summary>True when the local library contains at least one mod.</summary>
+    public bool HasMods => Mods.Count > 0;
     /// <summary>Selected profile; switching is persisted via SelectProfileAsync.</summary>
     public string? SelectedProfile { get => selectedProfile; private set => SetProperty(ref selectedProfile, value); }
     /// <summary>Reads shared configuration for the settings editor.</summary>
@@ -68,7 +74,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void NotifyButtons()
     {
-        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy), nameof(PendingCount), nameof(CanUndo), nameof(StatusTitle), nameof(StatusExplanation) }) OnPropertyChanged(property);
+        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy), nameof(PendingCount), nameof(CanUndo), nameof(StatusTitle), nameof(StatusExplanation), nameof(HasMods) }) OnPropertyChanged(property);
     }
     private double operationProgress;
     private bool operationIndeterminate = true;
@@ -165,8 +171,11 @@ public sealed partial class MainViewModel : ObservableObject
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) : null;
                 string[] adds = facts?.Adds ?? ModFactAnalyzer.Extract(patch, []);
                 string verdict = facts is null ? "? " + m.Compatibility : (facts.Compatibility == "Compatible" ? "✓ " : facts.Compatibility == "Incompatible" ? "✕ " : "? ") + facts.Compatibility + ": " + facts.Reason;
-                string text = (adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", adds)) + "\nSource: "
-                    + (m.Mod.Origins.FirstOrDefault()?.SourcePage ?? m.Mod.SourceFileName) + "\nCompatibility: " + verdict;
+                string sourceLine = m.Mod.SourceFolder is not null
+                    ? "ModKit folder: " + m.Mod.SourceFolder
+                    : "Source: " + (m.Mod.Origins.FirstOrDefault()?.SourcePage ?? m.Mod.SourceFileName);
+                string text = (adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", adds)) + "\n"
+                    + sourceLine + "\nCompatibility: " + verdict;
                 return (Summary: text, Report: (Jamm.Core.Patching.ModSanitizerReport?)report);
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { return (Summary: "Summary unavailable: " + ex.Message, Report: null); }
@@ -179,6 +188,7 @@ public sealed partial class MainViewModel : ObservableObject
             foreach (var m in data.Mods)
             {
                 var info = summaries[m.Mod.Id];
+                bool isModKit = m.Mod.IsModKit || m.Mod.SourceFolder is not null;
                 Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length)
                 {
                     Summary = info.Summary,
@@ -188,7 +198,12 @@ public sealed partial class MainViewModel : ObservableObject
                     RemovedHudCount = info.Report?.RemovedHudCount ?? 0,
                     SanitizedDetails = info.Report?.FormatDetails() ?? "",
                     KeepAuthorPerformanceChanges = m.Mod.KeepAuthorPerformanceChanges,
-                    KeepAuthorHudDesign = m.Mod.KeepAuthorHudDesign
+                    KeepAuthorHudDesign = m.Mod.KeepAuthorHudDesign,
+                    IsModKit = isModKit,
+                    SourceFolder = m.Mod.SourceFolder,
+                    PackageVersion = m.Mod.Version,
+                    Author = m.Mod.Author,
+                    Description = m.Mod.Description
                 });
             }
             RefreshLocalIcons();
@@ -246,8 +261,64 @@ public sealed partial class MainViewModel : ObservableObject
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                ReportError($"Could not add mod '{path}': {ex.Message} Choose a legacy .win or supported .zip mod and try again.");
+                string trimmed = Path.TrimEndingDirectorySeparator(path);
+                bool isFolder = Directory.Exists(trimmed);
+                if (isFolder)
+                {
+                    ReportError($"Could not add mod folder '{path}': {ex.Message}");
+                }
+                else
+                {
+                    ReportError($"Could not add mod '{path}': {ex.Message} Choose a legacy .win or supported .zip mod and try again.");
+                }
             }
+        }
+        await ReloadAsync();
+    });
+
+    /// <summary>Rebuilds a ModKit folder mod from its source folder, updating its library copy and cached patch.</summary>
+    public Task RebuildModAsync(string modId, Func<Task<string?>>? promptFolder = null) => RunAsync("Rebuilding mod", async (token, progress) =>
+    {
+        var library = new ModLibrary(store);
+        var mod = library.Find(modId);
+        string? folder = mod.SourceFolder;
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            if (promptFolder is not null)
+            {
+                folder = await promptFolder();
+                if (string.IsNullOrWhiteSpace(folder))
+                {
+                    Message("Rebuild cancelled; no folder selected.");
+                    return;
+                }
+                mod = library.SetSourceFolder(mod.Id, folder);
+            }
+            else
+            {
+                ReportError($"Could not rebuild '{mod.Name}': No source folder is stored for this mod.");
+                return;
+            }
+        }
+        if (!Directory.Exists(folder))
+        {
+            ReportError($"Could not rebuild '{mod.Name}': The ModKit folder '{folder}' was not found. Has it been moved or deleted?");
+            return;
+        }
+        if (!File.Exists(Path.Combine(folder, ModKitPackage.ManifestFileName)))
+        {
+            ReportError($"Could not rebuild '{mod.Name}': Missing '{ModKitPackage.ManifestFileName}' in '{folder}'. Add a jamm-mod.json manifest or check the folder path.");
+            return;
+        }
+        try
+        {
+            var result = await Task.Run(() => library.Rebuild(mod.Id, progress: progress.Report, cancellationToken: token), token);
+            foreach (string warning in result.Warnings) Message(warning);
+            Message($"Rebuilt {result.Mod.Name}");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ReportError($"Could not rebuild '{mod.Name}': {ex.Message}");
         }
         await ReloadAsync();
     });
