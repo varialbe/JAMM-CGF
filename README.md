@@ -1,8 +1,8 @@
 # JAMM-CGF
 
 Combine Cat Goes Fishing mods into one verified `data.win`, review conflicts,
-save profiles and load order, then install, restore or play from the desktop app.
-Play currently uses Wine/Proton; on Windows, launch the legacy game manually after Install.
+save profiles and load order, then install, restore or play from the desktop app
+(Linux uses Proton/Wine, Windows launches directly).
 
 ## Supported game
 
@@ -52,13 +52,38 @@ Invoke-WebRequest https://raw.githubusercontent.com/varialbe/JAMM-CGF/main/scrip
 
 Open **JAMM-CGF** from the applications/Start menu. First-run setup finds your legacy
 game (Steam libraries, moved depot downloads, other drives) and creates a separate
-modded copy with one click. Then add mods or download them in **Browse mods**, switch
-them on or off, and press **Play**.
+modded copy with one click. Choose optional enhancements in the **Built-in (JAMM)**
+group (Perf, Smooth, HD Lite, Console), add mods or download them in **Browse mods**,
+switch them on or off, and press **Play**.
 Packaged builds need no system .NET: install the Ubuntu amd64 `.deb` with
 `sudo apt install ./jamm-cgf_<version>_amd64.deb`, or extract the Windows x64
 portable zip and run `cgfmm-gui.exe`. Windows CI also builds an `.exe` installer.
 For the headless CLI/scanner, build with `docker build -t jamm-cgf:local .`.
 [Package builds, installation and Docker examples](docs/packaging.md).
+
+## Hotkeys & console
+
+Built-in enhancements provide keyboard shortcuts and an in-game console. Single source of truth: `BuiltinMods.Hotkeys` (also printed via `cgfmm builtin list`):
+
+- **Hotkeys:**
+  - **F8**: Perf overlay (switches modes)
+  - **F7**: Smooth (cycles 60/120/off)
+  - **F11**: HD Lite fullscreen (toggles fullscreen)
+  - **F12** or **`** (backtick): Console (opens in-game console)
+
+- **Console commands:**
+  - `help`: list commands
+  - `unlockall`: unlock gear, max level, and full fish catalog
+  - `unlockgear`: unlock equipment, upgrades, hats, HUD, nightfall
+  - `maxlevel`: set level to max
+  - `level <n>`: set level to n (0..max)
+  - `catalog all`: mark all fish caught (alias: `unlockfish`)
+  - `money <n>`: set dollars (0..999999999); `money +<n>` adds
+  - `clear`: clear console log
+  - `close` or `exit`: close console
+
+> [!NOTE]
+> The next autosave (or opening the Esc save menu) keeps console changes in your save file.
 
 ## Browse mods
 
@@ -69,14 +94,13 @@ reason one click away. [More about browsing and the shared compatibility results
 
 ## Built-in mods
 
-After base setup, toggle **JAMM Perf**, **JAMM Smooth**, **JAMM HD Lite** or
+After base setup (or in the first-run panel), toggle **JAMM Perf**, **JAMM Smooth**, **JAMM HD Lite** or
 **JAMM Console** in the **Built-in (JAMM)** group. JAMM generates them locally,
 caches them for your base and enables them in your profile. Then Check/Install or
 Play. No terminal or SDK is needed.
 
-Hotkeys: **F8** Perf, **F7** Smooth, **F11** HD Lite, **F12/backtick** Console.
-Console commands: `help`, `unlockall`, `unlockgear`, `maxlevel`, `level <n>`, `catalog all`/`unlockfish`, `money <n>`/`+<n>`, `clear`, `close`/`exit` (the next save keeps changes).
-CLI: `cgfmm builtin list` / `cgfmm builtin add console` (also `perf`, `smooth`, `hd-lite`).
+Hotkeys and console commands are listed above and in the app's **Hotkeys** help button.
+CLI: `cgfmm builtin list` (prints the mods and hotkeys) / `cgfmm builtin add console` (also `perf`, `smooth`, `hd-lite`).
 [Controls and developer ModMaker variants](docs/example-mods.md).
 
 [User guide](docs/user-guide.md) · [CLI reference](docs/cli.md) ·
