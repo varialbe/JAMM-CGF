@@ -10,6 +10,12 @@
 !external/UndertaleModTool/Underanalyzer/**
 !LICENSE
 !Dockerfile
+!examples/
+!examples/modkit/
+!examples/modkit/**
+!docs/
+!docs/modding/
+!docs/modding/**
 **/bin
 **/obj
 **/.git
