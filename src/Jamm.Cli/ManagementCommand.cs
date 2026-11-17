@@ -48,6 +48,14 @@ internal static class ManagementCommand
                 if (positional.SequenceEqual(new[] { "list" }))
                 {
                     foreach (var mod in BuiltinMods.Catalog) Console.WriteLine($"{mod.Id}: {mod.Name} — {mod.Description}");
+                    Console.WriteLine();
+                    Console.WriteLine("Hotkeys:");
+                    foreach (var h in BuiltinMods.HotkeyEntries)
+                        Console.WriteLine($"  {h.Key,-16} : {h.Description}");
+                    Console.WriteLine();
+                    Console.WriteLine("Console commands:");
+                    foreach (var c in BuiltinMods.ConsoleCommands)
+                        Console.WriteLine($"  {c.Key,-16} : {c.Description}");
                 }
                 else if (positional.Count == 2 && positional[0] == "add")
                 {
