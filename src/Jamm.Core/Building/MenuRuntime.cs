@@ -371,7 +371,7 @@ internal static class MenuRuntime
     }
 
     private static string BuildHatIconStepGml() => """
-        var jamm_shop_menu, jamm_shop_menu_type, jamm_shop_anchor, jamm_shop_anchor_y;
+        var jamm_shop_menu, jamm_shop_menu_type, jamm_shop_anchor, jamm_shop_anchor_instance, jamm_shop_anchor_y;
         jamm_shop_menu = 0;
         jamm_shop_menu_type = asset_get_index("UpgradeMenu");
         if (jamm_shop_menu_type > -1 && instance_number(jamm_shop_menu_type) > 0) jamm_shop_menu = 1;
@@ -385,7 +385,8 @@ internal static class MenuRuntime
             jamm_shop_anchor_y = view_yview[0] - sprite_height - 8;
             if (jamm_shop_anchor > -1 && instance_exists(jamm_shop_anchor))
             {
-                with (jamm_shop_anchor) jamm_shop_anchor_y = min(y, view_yview[0] - sprite_height - 8);
+                jamm_shop_anchor_instance = instance_find(jamm_shop_anchor, 0);
+                jamm_shop_anchor_y = min(jamm_shop_anchor_instance.y, view_yview[0] - sprite_height - 8);
             }
             if (!variable_instance_exists(id, "jamm_shop_icon_saved") || !jamm_shop_icon_saved)
             {

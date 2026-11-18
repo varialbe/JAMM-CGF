@@ -300,14 +300,14 @@ public sealed class MenuRuntimeTests
         Assert.Contains("\"icon_Rods\"", umStep);
 
         string hatStep = PatchBuilder.ReadCode(merged, "gml_Object_icon_HatsNew_Step_0").Text;
-        Assert.StartsWith("visible = true; y = 3;", hatStep);
+        Assert.StartsWith("visible = true;\ny = 3;", hatStep);
         Assert.Contains("y = jamm_shop_icon_hidden_y", hatStep);
         Assert.Contains("y = jamm_shop_icon_saved_y", hatStep);
         Assert.Contains("visible = jamm_shop_icon_saved_visible", hatStep);
         Assert.Contains("asset_get_index(\"UpgradeSlotMenu\")", hatStep);
         Assert.Contains("instance_number(jamm_shop_menu_type)", hatStep);
         Assert.Contains("|| !jamm_shop_icon_saved", hatStep);
-        Assert.Contains("min(y, view_yview[0] - sprite_height - 8)", hatStep);
+        Assert.Contains("min(jamm_shop_anchor_instance.y, view_yview[0] - sprite_height - 8)", hatStep);
 
         string umAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text;
         Assert.Contains("window_pos == (scroll_row * visible_rows * card_width)", umAlarm);
