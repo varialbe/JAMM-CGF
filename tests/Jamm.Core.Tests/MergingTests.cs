@@ -268,9 +268,9 @@ public class MergingTests
     }
 
     [Fact]
-    public void LegacyUpgradeSlotCollisionsAreGroupedWithoutOfferingSlotLevelResolution()
+    public void ExistingUpgradeSlotReplacementIsReportedWithoutAnAddedIdGroup()
     {
-        const string ancestor = "name[18] = \"base\";\ncost[18] = 1;\ndesc[18] = \"base description\";\n";
+        const string ancestor = "name[18] = \"existing\";\ncost[18] = 1;\ndesc[18] = \"base description\";\n";
         var a = Patch("A", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
             "name[18] = \"A upgrade\";\ncost[18] = 2;\ndesc[18] = \"A description\";\n"), null));
         var b = Patch("B", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
@@ -281,10 +281,10 @@ public class MergingTests
         Assert.Equal("INFO", grouped.Severity);
         Assert.Equal(new[] { "A", "B" }, grouped.Mods);
         Assert.Contains("No slot renumbering", grouped.Message, StringComparison.Ordinal);
-        Assert.Contains("A upgrade (A) vs B upgrade (B)", grouped.Message, StringComparison.Ordinal);
-        Assert.Contains("code/gml_Object_UpgradeData_Create_0", grouped.SuggestedResolution ?? "", StringComparison.Ordinal);
         Assert.Contains(report.Findings, f => f.Kind == "index" && f.Severity == "CONFLICT");
         Assert.Contains(report.Findings, f => (f.Kind is "code" or "addition") && f.Severity == "CONFLICT");
+
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-group");
 
         var plan = BuildPlan.Create([a, b], new Dictionary<string, string>
         {
@@ -293,6 +293,168 @@ public class MergingTests
         var selected = Assert.Single(plan.Assets, asset => asset.Family == "code" && asset.Name == "gml_Object_UpgradeData_Create_0");
         Assert.Contains("A upgrade", selected.Gml, StringComparison.Ordinal);
         Assert.DoesNotContain("B upgrade", selected.Gml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyUpgradeGroupResolvesSameAnchorLiteralRowInsertionsWithoutMenuWrites()
+    {
+        const string ancestor = "name[17] = \"Existing\";\n// appended rows follow\n";
+        const string alphaText = "name[17] = \"Existing\";\nname[18] = \"Alpha\";\ndesc[18] = \"Alpha description\";\ndesc2[18] = \"Alpha detail\";\ncost[18] = 100;\n// appended rows follow\n";
+        const string betaText = "name[17] = \"Existing\";\nname[18] = \"Beta\";\ndesc[18] = \"Beta description\";\ndesc2[18] = \"Beta detail\";\ncost[18] = 200;\n// appended rows follow\n";
+        var alpha = Patch("Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor, alphaText), null));
+        var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor, betaText), null));
+
+        var report = ConflictAnalyzer.Analyze([alpha, beta]);
+        var merged = Assert.Single(report.CodeMerges["gml_Object_UpgradeData_Create_0"].Hunks, h => h.Status == "CONFLICT");
+        Assert.Equal("list", merged.Kind);
+        var group = Assert.Single(report.Findings, f => f.Kind == "upgrade-group");
+        Assert.Equal(new[] { "Alpha", "Beta" }, group.Mods);
+        Assert.Equal(new[] { $"code/gml_Object_UpgradeData_Create_0#{merged.Start}" }, group.Sources);
+
+        var plan = BuildPlan.Create([alpha, beta], new Dictionary<string, string>
+        {
+            ["code/upgrade-slot[18]"] = "Alpha"
+        });
+        Assert.Contains("upgrade-group code/upgrade-slot[18]: Alpha", plan.Decisions);
+        string selected = Assert.Single(plan.Assets, a => a.Name == "gml_Object_UpgradeData_Create_0").Gml!;
+        Assert.Contains("name[18] = \"Alpha\"", selected, StringComparison.Ordinal);
+        Assert.DoesNotContain("name[18] = \"Beta\"", selected, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyUpgradeGroupIncludesSharedIconAtlasAsAWholeAssetChoice()
+    {
+        const string ancestor = "// appended upgrade rows\n";
+        var alpha = UpgradePatch("Alpha", "name[18] = \"Alpha\";\ndesc[18] = \"Alpha\";\ncost[18] = 100;\n// appended upgrade rows\n",
+            "{\"frame0\":\"alpha\",\"frame1\":\"base\"}");
+        var beta = UpgradePatch("Beta", "name[18] = \"Beta\";\ndesc[18] = \"Beta\";\ncost[18] = 200;\n// appended upgrade rows\n",
+            "{\"frame0\":\"base\",\"frame1\":\"beta\"}");
+
+        var report = ConflictAnalyzer.Analyze([alpha, beta]);
+        var group = Assert.Single(report.Findings, f => f.Kind == "upgrade-group");
+        Assert.Contains("sprites/spr_upgradeicons", group.Sources!);
+        Assert.Contains("complete spr_upgradeicons sprite asset", group.Message, StringComparison.Ordinal);
+
+        var otherAtlasMod = UpgradePatch("Other Atlas Mod", ancestor, "{\"frame0\":\"other\",\"frame1\":\"base\"}");
+        var threeModReport = ConflictAnalyzer.Analyze([alpha, beta, otherAtlasMod]);
+        var threeModGroup = Assert.Single(threeModReport.Findings, f => f.Kind == "upgrade-group");
+        Assert.DoesNotContain("sprites/spr_upgradeicons", threeModGroup.Sources!);
+
+        var plan = BuildPlan.Create([alpha, beta], new Dictionary<string, string>
+        {
+            ["code/upgrade-slot[18]"] = "Alpha"
+        });
+        var atlas = Assert.Single(plan.Assets, a => a.Family == "sprites" && a.Name == "spr_upgradeicons");
+        Assert.Equal("alpha", atlas.Snapshot!.Value.GetProperty("frame0").GetString());
+        Assert.Equal("base", atlas.Snapshot.Value.GetProperty("frame1").GetString());
+
+        ModPatch UpgradePatch(string name, string code, string sprite)
+        {
+            var patch = Patch(name,
+                ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor, code), null),
+                ("sprites", Asset("spr_upgradeicons", "{\"frame0\":\"base\",\"frame1\":\"base\"}", sprite), null));
+            return patch with { BaseAssets = new SortedDictionary<string, string[]>(patch.BaseAssets!, StringComparer.Ordinal)
+            {
+                ["sprites"] = ["spr_fish", "spr_upgradeicons"]
+            } };
+        }
+    }
+
+    [Fact]
+    public void LegacyUpgradeGroupLeavesUnrelatedHunksSelectableAndRejectsConflictingHunkChoice()
+    {
+        const string ancestor = "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\n// appended rows\n";
+        var alpha = Patch("Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\nname[18] = \"Alpha\";\ncost[18] = 100;\n// appended rows\n"), null));
+        var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\nname[18] = \"Beta\";\ncost[18] = 200;\n// appended rows\n"), null));
+        var third = Patch("Third", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[17] = \"Existing\";\nmode = 1;\nmarker_a = 0;\nmarker_b = 0;\n// appended rows\n"), null));
+        var fourth = Patch("Fourth", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[17] = \"Existing\";\nmode = 2;\nmarker_a = 0;\nmarker_b = 0;\n// appended rows\n"), null));
+        var patches = new[] { alpha, beta, third, fourth };
+
+        var report = ConflictAnalyzer.Analyze(patches);
+        var group = Assert.Single(report.Findings, f => f.Kind == "upgrade-group");
+        string upgradeHunk = group.Sources!.Single(s => s.StartsWith("code/", StringComparison.Ordinal));
+        var unrelatedHunk = Assert.Single(report.CodeMerges["gml_Object_UpgradeData_Create_0"].Hunks,
+            h => h.Status == "CONFLICT" && !upgradeHunk.EndsWith($"#{h.Start}", StringComparison.Ordinal));
+
+        var plan = BuildPlan.Create(patches, new Dictionary<string, string>
+        {
+            ["code/upgrade-slot[18]"] = "Alpha",
+            [$"code/gml_Object_UpgradeData_Create_0#{unrelatedHunk.Start}"] = "Third"
+        });
+        string merged = Assert.Single(plan.Assets, a => a.Name == "gml_Object_UpgradeData_Create_0").Gml!;
+        Assert.Contains("name[18] = \"Alpha\"", merged, StringComparison.Ordinal);
+        Assert.Contains("mode = 1", merged, StringComparison.Ordinal);
+
+        Assert.Throws<ArgumentException>(() => BuildPlan.Create(patches, new Dictionary<string, string>
+        {
+            ["code/upgrade-slot[18]"] = "Alpha",
+            [upgradeHunk] = "Beta"
+        }));
+    }
+
+    [Fact]
+    public void LegacyUpgradeGroupRequiresDistinctLiteralNames()
+    {
+        const string ancestor = "// appended rows\n";
+        var alpha = Patch("Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[18] = \"Shared\";\ncost[18] = 100;\n// appended rows\n"), null));
+        var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[18] = \"Shared\";\ncost[18] = 200;\n// appended rows\n"), null));
+        var report = ConflictAnalyzer.Analyze([alpha, beta]);
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-group");
+
+        var distinctAlpha = Patch("Distinct Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[18] = \"Alpha\";\ncost[18] = 100;\n// appended rows\n"), null));
+        var distinctBeta = Patch("Distinct Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[18] = \"Beta\";\ncost[18] = 200;\n// appended rows\n"), null));
+        var anotherSlot = Patch("Another Slot", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[19] = \"Gamma\";\ncost[19] = 300;\n// appended rows\n"), null));
+        report = ConflictAnalyzer.Analyze([distinctAlpha, distinctBeta, anotherSlot]);
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-group");
+
+        var menuA = Patch("MenuA", ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", "// menu\n",
+            "spawn_order[18] = 18;\n// menu\n"), null));
+        var menuB = Patch("MenuB", ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", "// menu\n",
+            "spawn_order[18] = 28;\n// menu\n"), null));
+        report = ConflictAnalyzer.Analyze([menuA, menuB]);
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-group");
+    }
+
+    [Fact]
+    public void LegacyUpgradeGroupChoiceSpansCodeAssetsAndKeepsDisjointHunks()
+    {
+        const string dataBase = "name[17] = \"base\";\ncost[17] = 1;\nalpha_flag = 0;\nbeta_flag = 0;\n";
+        const string menuBase = "spawn_order[18] = 18;\nalpha_menu_flag = 0;\nbeta_menu_flag = 0;\n";
+        var alpha = Patch("Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", dataBase,
+                "name[17] = \"base\";\ncost[17] = 1;\nname[18] = \"Alpha\";\ncost[18] = 2;\nalpha_flag = 1;\nbeta_flag = 0;\n"), null),
+            ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", menuBase,
+                "spawn_order[18] = 28;\nalpha_menu_flag = 1;\nbeta_menu_flag = 0;\n"), null));
+        var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", dataBase,
+                "name[17] = \"base\";\ncost[17] = 1;\nname[18] = \"Beta\";\ncost[18] = 3;\nalpha_flag = 0;\nbeta_flag = 1;\n"), null),
+            ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", menuBase,
+                "spawn_order[18] = 38;\nalpha_menu_flag = 0;\nbeta_menu_flag = 1;\n"), null));
+
+        var report = ConflictAnalyzer.Analyze([alpha, beta]);
+        var group = Assert.Single(report.Findings, f => f.Kind == "upgrade-group");
+        Assert.Single(group.Sources!);
+
+        var plan = BuildPlan.Create([alpha, beta], new Dictionary<string, string>
+        {
+            ["code/upgrade-slot[18]"] = "Alpha"
+        });
+        string data = Assert.Single(plan.Assets, a => a.Name == "gml_Object_UpgradeData_Create_0").Gml!;
+        string menu = Assert.Single(plan.Assets, a => a.Name == "gml_Object_UpgradeMenu_Create_0").Gml!;
+        Assert.Contains("Alpha", data, StringComparison.Ordinal);
+        Assert.DoesNotContain("Beta\"", data, StringComparison.Ordinal);
+        Assert.Contains("alpha_flag", data, StringComparison.Ordinal);
+        Assert.Contains("beta_flag", data, StringComparison.Ordinal);
+        Assert.Contains("spawn_order[18] = 38", menu, StringComparison.Ordinal);
+        Assert.Contains("alpha_menu_flag", menu, StringComparison.Ordinal);
+        Assert.Contains("beta_menu_flag", menu, StringComparison.Ordinal);
     }
 
     [Fact]

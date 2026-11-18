@@ -152,6 +152,14 @@ Resolutions are a JSON object mapping `family/name` (or an unambiguous bare asse
 `"keep-both"` for code insertion conflicts, for example
 `{"example_object":"cave-expansion","example_code_entry":"keep-both"}`. Later mods
 win other overlaps; disjoint changes combine. Every conflict decision is printed.
+Legacy upgrade slot collisions may offer a group choice such as
+`{"code/upgrade-slot[18]":"Alpha"}` when every claimant adds that ID with a distinct
+literal name. This selects that mod's version in each listed conflicting code hunk.
+When every claimant also changes the shared vanilla `spr_upgradeicons` sprite, the
+choice selects the complete sprite asset, including unrelated frames. Save code and
+menu positions are not inferred as slot identities. A saved group choice is ignored
+while that group is absent from the enabled profile, then becomes active again if the
+same group returns.
 Installation verifies a permanent `data.win.cgfmm-original` backup before replacement
 and accepts only the exact base or a previous build with matching marker hashes.
 Restore verifies its copy and retains the backup. See [building details, safety rules

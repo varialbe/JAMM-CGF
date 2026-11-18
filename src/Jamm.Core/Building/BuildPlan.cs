@@ -45,21 +45,71 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             .ThenBy(g => g.Key.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToList());
         var familyCounts = versions.Keys.GroupBy(k => k.Name).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
         Dictionary<(string Family, string Name), string> choices = [];
+        Dictionary<string, (string Winner, string GroupKey)> upgradeHunkChoices = new(StringComparer.Ordinal);
+        Dictionary<(string Family, string Name), (string Winner, string GroupKey)> upgradeAssetChoices = [];
+        foreach (var finding in report.Findings.Where(f => f.Kind == "upgrade-group" && f.Severity == "CONFLICT"))
+        {
+            string groupKey = $"{finding.Family}/{finding.Asset}";
+            if (!resolutions.TryGetValue(groupKey, out string? winner)) continue;
+            if (!finding.Mods.Contains(winner, StringComparer.Ordinal))
+                throw new ArgumentException($"Resolution for '{groupKey}' selects '{winner}'. Choose one of: {string.Join(", ", finding.Mods)}.");
+            used.Add(groupKey);
+            choices[(finding.Family, finding.Asset)] = winner;
+            foreach (string source in finding.Sources ?? [])
+            {
+                int slash = source.IndexOf('/');
+                if (slash <= 0) continue;
+                string family = source[..slash];
+                string asset = source[(slash + 1)..];
+                if (family == "code" && asset.Contains('#', StringComparison.Ordinal))
+                {
+                    if (upgradeHunkChoices.TryGetValue(source, out var prior) && prior.Winner != winner)
+                        throw new ArgumentException($"Conflicting legacy upgrade group choices affect {source}: '{prior.Winner}' and '{winner}'.");
+                    if (resolutions.TryGetValue(source, out string? perHunk) && perHunk != winner)
+                        throw new ArgumentException($"Resolution for '{source}' conflicts with legacy upgrade group choice '{winner}'.");
+                    upgradeHunkChoices[source] = (winner, groupKey);
+                }
+                else
+                {
+                    var key = (Family: family, Name: asset);
+                    if (upgradeAssetChoices.TryGetValue(key, out var prior) && prior.Winner != winner)
+                        throw new ArgumentException($"Conflicting legacy upgrade group choices affect {source}: '{prior.Winner}' and '{winner}'.");
+                    if (resolutions.TryGetValue(source, out string? perAsset) && perAsset != winner)
+                        throw new ArgumentException($"Resolution for '{source}' conflicts with legacy upgrade group choice '{winner}'.");
+                    upgradeAssetChoices[key] = (winner, groupKey);
+                }
+            }
+        }
+        Dictionary<string, string> effectiveResolutions = new(resolutions, StringComparer.Ordinal);
+        foreach (var (key, groupChoice) in upgradeHunkChoices)
+        {
+            string asset = key[..key.LastIndexOf('#')];
+            string bare = asset[(asset.IndexOf('/') + 1)..];
+            if (resolutions.TryGetValue(asset, out string? entryChoice) && entryChoice != groupChoice.Winner
+                || resolutions.TryGetValue(bare, out string? bareChoice) && bareChoice != groupChoice.Winner)
+                throw new ArgumentException($"An asset-wide resolution conflicts with legacy upgrade group choice '{groupChoice.Winner}' for '{key}'. Resolve the code hunk and group consistently.");
+            effectiveResolutions[key] = groupChoice.Winner;
+        }
         foreach (var (key, entries) in versions)
         {
             string qualified = $"{key.Family}/{key.Name}";
+            bool hasGroupChoice = upgradeAssetChoices.TryGetValue(key, out var groupChoice);
+            if (hasGroupChoice && resolutions.TryGetValue(qualified, out string? explicitQualified) && explicitQualified != groupChoice.Winner
+                || hasGroupChoice && resolutions.TryGetValue(key.Name, out string? explicitBare) && explicitBare != groupChoice.Winner)
+                throw new ArgumentException($"Resolution for '{qualified}' conflicts with legacy upgrade group choice '{groupChoice.Winner}' in '{groupChoice.GroupKey}'.");
             string? resolutionKey = resolutions.ContainsKey(qualified) ? qualified
                 : resolutions.TryGetValue(key.Name, out var bare)
                     && (bare != "keep-both" || key.Family == "code")
                     && (familyCounts[key.Name] == 1
                         || report.Findings.Any(f => f.Severity == "CONFLICT" && f.Family == key.Family && f.Asset == key.Name))
                     ? key.Name : null;
-            string? choice = resolutionKey is null ? null : resolutions[resolutionKey];
+            string? choice = resolutionKey is null ? hasGroupChoice ? groupChoice.Winner : null : resolutions[resolutionKey];
             if (resolutionKey is not null)
             {
                 used.Add(resolutionKey);
                 choices[key] = choice!;
             }
+            else if (hasGroupChoice) choices[key] = groupChoice.Winner;
             var selected = Select(key.Family, key.Name, entries, choice);
             if (selected is not null) assets.Add(selected);
         }
@@ -187,7 +237,8 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 ? ordered.Where(v => v.Asset is not null).ToList()
                 : ordered.Skip(ordered.FindLastIndex(v => v.Asset is null) + 1).ToList();
             JsonElement snapshot = last.Asset.Mod;
-            if (family is "objects" or "rooms" or "scripts" or "functions" or "paths" or "timelines" or "fonts" or "sprites"
+            bool wholeAssetGroup = upgradeAssetChoices.ContainsKey((family, name));
+            if (!wholeAssetGroup && (family is "objects" or "rooms" or "scripts" or "functions" or "paths" or "timelines" or "fonts" or "sprites")
                 && ordered.All(v => v.Asset?.Base is not null))
             {
                 snapshot = ordered[0].Asset!.Base!.Value;
@@ -202,7 +253,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                     ?? throw new InvalidDataException($"Missing GML for '{name}'. Regenerate the patch."))).ToArray();
                 MergeResult merge = ordered[0].Asset!.BaseCode is { Format: "gml" } ancestor
                     ? ThreeWayMerge.Merge(ancestor.Text, texts) : ThreeWayMerge.Added(texts);
-                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", resolutions, used, decisions);
+                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", effectiveResolutions, used, decisions);
             }
             else if (choice == "keep-both") throw new ArgumentException($"keep-both is only valid for code insertion conflicts ('{family}/{name}').");
             return new(family, name, last.Index, last.Asset, snapshot, gml);

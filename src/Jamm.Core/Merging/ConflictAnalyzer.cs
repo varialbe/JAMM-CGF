@@ -256,10 +256,10 @@ public static class ConflictAnalyzer
             {
                 string[] sources = group.OrderBy(w => w.Mod).ThenBy(w => w.Code, StringComparer.Ordinal).ThenBy(w => w.Slot.Line)
                     .Select(SourceLabel).Distinct(StringComparer.Ordinal).ToArray();
-                bool legacyUpgrade = group.All(w => IsLegacyUpgradeWrite(w.Code, w.Slot.Container));
+                bool legacyUpgrade = group.All(w => IsUpgradeSlotWrite(w.Code, w.Slot.Container));
                 string[] resolvableAssets = legacyUpgrade ? group.Select(w => w.Code).Distinct(StringComparer.Ordinal)
                     .Where(asset => findings.Any(f => f.Family == "code" && f.Asset == asset && f.Severity == "CONFLICT"
-                        && f.Kind is "code" or "addition" or "disassembly"))
+                        && f.Kind is "code" or "list" or "addition" or "disassembly"))
                     .Order(StringComparer.Ordinal).ToArray() : [];
                 findings.Add(new("CONFLICT", "index", "code", $"{group.Key.Container}[{group.Key.Index}]", group.Select(w => w.Mod).Distinct().Order().Select(m => names[m]).ToArray(),
                     legacyUpgrade
@@ -267,38 +267,104 @@ public static class ConflictAnalyzer
                         : $"Literal slot collision: container {group.Key.Container}, index/key {group.Key.Index}.",
                     SuggestedResolution: legacyUpgrade
                         ? "No automatic relocation is safe: legacy slot references may be numeric literals in code and save data, and their complete set cannot be proven from these patches."
-                            + (resolvableAssets.Length > 0 ? $" Existing code conflicts can be resolved per asset with --resolve: {string.Join(", ", resolvableAssets.Select(a => $"code/{a}"))}." : "")
+                            + (resolvableAssets.Length > 0 ? $" Resolve these code entries per asset: {string.Join(", ", resolvableAssets.Select(a => $"code/{a}"))}." : "")
                         : null,
                     Sources: sources));
             }
-            foreach (var group in writes.Where(w => IsLegacyUpgradeWrite(w.Code, w.Slot.Container))
+            foreach (var group in writes.Where(w => IsUpgradeSlotWrite(w.Code, w.Slot.Container))
                 .GroupBy(w => w.Slot.Index, StringComparer.Ordinal)
                 .Where(g => g.Select(w => w.Mod).Distinct().Count() > 1)
                 .OrderBy(g => g.Key, StringComparer.Ordinal))
             {
-                var eligibleAssets = group.Select(w => w.Code).Distinct(StringComparer.Ordinal)
-                    .Where(asset => findings.Any(f => f.Family == "code" && f.Asset == asset && f.Severity == "CONFLICT"
-                        && f.Kind is "code" or "addition" or "disassembly"))
-                    .ToHashSet(StringComparer.Ordinal);
+                int[] slotMods = group.Select(w => w.Mod).Distinct().Order().ToArray();
+                var nameClaims = slotMods.ToDictionary(mod => mod, mod => AddedUpgradeName(mod, group.Key));
+                bool distinctNames = nameClaims.Values.All(name => !string.IsNullOrWhiteSpace(name))
+                    && nameClaims.Values.OfType<string>().Distinct(StringComparer.Ordinal).Count() == slotMods.Length;
                 string[] sources = group.OrderBy(w => w.Mod).ThenBy(w => w.Code, StringComparer.Ordinal).ThenBy(w => w.Slot.Line)
                     .Select(SourceLabel).Distinct(StringComparer.Ordinal).ToArray();
-                string[] resolvableAssets = sources.Length == 0 ? [] : group.Select(w => w.Code)
-                    .Where(eligibleAssets.Contains).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-                var literals = group.Select(w => (w.Mod, Name: UpgradeName(w)))
-                    .Where(x => x.Name is not null).GroupBy(x => x.Mod)
-                    .ToDictionary(g => g.Key, g => g.Select(x => x.Name!).Distinct(StringComparer.Ordinal).ToArray());
                 string labels = string.Join(" vs ", group.Select(w => w.Mod).Distinct().Order()
-                    .Select(mod => literals.TryGetValue(mod, out var values) && values.Length == 1
-                        ? $"{values[0]} ({names[mod]})" : names[mod]));
+                    .Select(mod => nameClaims[mod] is { } name ? $"{name} ({names[mod]})" : names[mod]));
                 findings.Add(new("INFO", "upgrade-slot", "code", $"upgrade[{group.Key}]",
                     group.Select(w => w.Mod).Distinct().Order().Select(m => names[m]).ToArray(),
-                    $"Legacy mods write upgrade slot {group.Key} in multiple fields ({labels}). No slot renumbering is applied."
-                        + (resolvableAssets.Length > 0 ? $" Review existing code conflicts for: {string.Join(", ", resolvableAssets)}." : ""),
-                    SuggestedResolution: resolvableAssets.Length > 0
-                        ? $"Existing code conflicts can be resolved per asset with --resolve: {string.Join(", ", resolvableAssets.Select(a => $"code/{a}"))}."
-                        : null,
+                    $"Legacy mods write upgrade slot {group.Key} in multiple fields ({labels}). No slot renumbering is applied.",
                     Sources: sources));
+
+                if (!distinctNames) continue;
+                List<string> groupedSources = [];
+                bool ambiguousHunk = false;
+                foreach (var assetGroup in group.GroupBy(w => w.Code, StringComparer.Ordinal))
+                {
+                    if (slotMods.Any(mod => !assetGroup.Any(w => w.Mod == mod))) continue;
+                    if (!codeMerges.TryGetValue(assetGroup.Key, out var merge)) continue;
+                    foreach (var hunk in merge.Hunks.Where(h => h.Status == "CONFLICT"))
+                    {
+                        var versionsWithSlotWrite = hunk.Versions.Where(v => HasUpgradeSlotWrite(v.Text, group.Key)).ToArray();
+                        if (versionsWithSlotWrite.Length == 0) continue;
+                        int[] hunkMods = hunk.Versions.Select(v => Array.IndexOf(names, v.Name)).Where(i => i >= 0).Distinct().Order().ToArray();
+                        if (!hunkMods.SequenceEqual(slotMods) || versionsWithSlotWrite.Length != hunk.Versions.Count)
+                        {
+                            ambiguousHunk = true;
+                            break;
+                        }
+                        groupedSources.Add($"code/{assetGroup.Key}#{hunk.Start}");
+                    }
+                    if (ambiguousHunk) break;
+                }
+                if (ambiguousHunk || groupedSources.Count == 0) continue;
+
+                var groupNames = slotMods.Select(mod => names[mod]).ToHashSet(StringComparer.Ordinal);
+                string? atlasSource = null;
+                var atlasConflict = findings.FirstOrDefault(f => f.Severity == "CONFLICT" && f.Family == "sprites"
+                    && f.Asset == "spr_upgradeicons" && f.Kind == "binary"
+                    && f.Mods.ToHashSet(StringComparer.Ordinal).SetEquals(groupNames));
+                if (atlasConflict is not null && slotMods.All(mod =>
+                    patches[mod].BaseAssets?.GetValueOrDefault("sprites")?.Contains("spr_upgradeicons", StringComparer.Ordinal) == true
+                    && patches[mod].Changes.GetValueOrDefault("sprites")?.Changed.Any(a => a.Name == "spr_upgradeicons" && a.Base is not null) == true))
+                {
+                    atlasSource = "sprites/spr_upgradeicons";
+                    groupedSources.Add(atlasSource);
+                }
+
+                string groupMessage = $"These mods claim added upgrade slot {group.Key} with distinct names ({string.Join(" vs ", slotMods.Select(mod => $"{nameClaims[mod]} ({names[mod]})"))}). Choose one mod for the listed conflicting code hunks";
+                if (atlasSource is not null) groupMessage += " and replace the complete spr_upgradeicons sprite asset, including unrelated atlas frames";
+                groupMessage += ". Unrelated code hunks remain independently resolvable.";
+                findings.Add(new("CONFLICT", "upgrade-group", "code", $"upgrade-slot[{group.Key}]",
+                    slotMods.Select(m => names[m]).ToArray(), groupMessage,
+                    SuggestedResolution: atlasSource is null
+                        ? "The choice applies only to conflicting code hunks with a proven literal write to this added slot."
+                        : "The sprite choice replaces the complete spr_upgradeicons asset from the selected mod, including unrelated atlas frames.",
+                    Sources: groupedSources.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()));
             }
+
+            string? AddedUpgradeName(int mod, string index)
+            {
+                var entry = patches[mod].Changes["code"].Added.Concat(patches[mod].Changes["code"].Changed)
+                    .FirstOrDefault(a => a.Name == "gml_Object_UpgradeData_Create_0");
+                if (entry?.ModCode is not { Format: "gml" } code) return null;
+                if (entry.BaseCode is { Format: "gml" } ancestor && GmlReferences.IndexWrites(ancestor.Text)
+                    .Any(w => w.Index == index && (w.Container is "name" or "UpgradeData.name"))) return null;
+                string?[] namesForSlot = GmlReferences.IndexWrites(code.Text)
+                    .Where(w => w.Index == index && (w.Container is "name" or "UpgradeData.name"))
+                    .Select(w => LiteralNameAtLine(code.Text, w.Line, index)).Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct(StringComparer.Ordinal).ToArray();
+                return namesForSlot.Length == 1 ? namesForSlot[0] : null;
+            }
+
+            static string? LiteralNameAtLine(string text, int line, string index)
+            {
+                string[] lines = text.Split('\n');
+                if (line < 1 || line > lines.Length) return null;
+                var match = System.Text.RegularExpressions.Regex.Match(lines[line - 1],
+                    $"^\\s*(?:UpgradeData\\.)?name\\s*\\[\\s*{System.Text.RegularExpressions.Regex.Escape(index)}\\s*\\]\\s*=\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*;?\\s*$",
+                    System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+                return match.Success && match.Groups[1].Value.Length > 0 ? match.Groups[1].Value : null;
+            }
+
+            static bool HasUpgradeSlotWrite(string text, string index) => GmlReferences.IndexWrites(text)
+                .Any(w => w.Index == index && (w.Container is "name" or "UpgradeData.name" or "desc" or "desc2" or "cost" or "unlocks"));
+
+            static bool IsUpgradeSlotWrite(string code, string container) => IsUpgradeDataEvent(code)
+                && (container is "name" or "UpgradeData.name" or "desc" or "desc2" or "cost" or "unlocks");
 
             string SourceLabel(Write w)
             {
@@ -310,21 +376,12 @@ public static class ConflictAnalyzer
             string? UpgradeName(Write w)
             {
                 if (w.Slot.Container is not ("name" or "UpgradeData.name") || !IsUpgradeDataEvent(w.Code)) return null;
-                string[] lines = patches[w.Mod].Changes["code"].Added.Concat(patches[w.Mod].Changes["code"].Changed)
-                    .Where(a => a.Name == w.Code).SelectMany(a => (a.ModCode?.Text ?? "").Split('\n')).ToArray();
-                if (w.Slot.Line < 1 || w.Slot.Line > lines.Length) return null;
-                var match = System.Text.RegularExpressions.Regex.Match(lines[w.Slot.Line - 1],
-                    $"^\\s*(?:UpgradeData\\.)?name\\s*\\[\\s*{System.Text.RegularExpressions.Regex.Escape(w.Slot.Index)}\\s*\\]\\s*=\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*;?\\s*$",
-                    System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-                return match.Success ? match.Groups[1].Value : null;
+                string text = patches[w.Mod].Changes["code"].Added.Concat(patches[w.Mod].Changes["code"].Changed)
+                    .FirstOrDefault(a => a.Name == w.Code)?.ModCode?.Text ?? "";
+                return LiteralNameAtLine(text, w.Slot.Line, w.Slot.Index);
             }
 
-            static bool IsLegacyUpgradeWrite(string code, string container) =>
-                IsUpgradeDataEvent(code) && container is "name" or "desc" or "desc2" or "cost" or "unlocks" or "upg" or "object"
-                || IsUpgradeMenuEvent(code) && container == "spawn_order";
             static bool IsUpgradeDataEvent(string code) => code == "gml_Object_UpgradeData_Create_0";
-            static bool IsUpgradeMenuEvent(string code) => code is "gml_Object_UpgradeMenu_Create_0" or "gml_Object_UpgradeMenu_Alarm_0"
-                or "gml_Object_UpgradeMenu_Step_0" or "gml_Object_UpgradeMenu_Draw_0";
 
             void Catalog(string asset, string family)
             {
