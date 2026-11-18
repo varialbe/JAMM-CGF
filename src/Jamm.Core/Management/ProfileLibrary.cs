@@ -1,4 +1,5 @@
 using Jamm.Core.Building;
+using Jamm.Core.Merging;
 
 namespace Jamm.Core.Management;
 
@@ -92,7 +93,22 @@ public sealed class ProfileLibrary(ManagerStore store)
     {
         var library = new ModLibrary(store);
         var disabled = profile.DisabledMods.Select(library.Find).Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
-        return profile.Resolutions.Where(r => !disabled.Contains(r.Value)).ToDictionary(r => r.Key, r => r.Value, StringComparer.Ordinal);
+        var active = profile.Resolutions.Where(r => !disabled.Contains(r.Value)).ToDictionary(r => r.Key, r => r.Value, StringComparer.Ordinal);
+        string[] groupKeys = active.Keys.Where(IsUpgradeGroupKey).ToArray();
+        if (groupKeys.Length == 0) return active;
+
+        var patches = profile.EnabledMods.Select(id => library.Patch(library.Find(id))).ToArray();
+        if (patches.Length == 0)
+        {
+            foreach (string key in groupKeys) active.Remove(key);
+            return active;
+        }
+        var report = ConflictAnalyzer.Analyze(patches, allowSingle: true);
+        var liveGroups = report.Findings.Where(f => f.Kind == "upgrade-group" && f.Severity == "CONFLICT")
+            .ToDictionary(f => $"{f.Family}/{f.Asset}", f => f.Mods.ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
+        foreach (string key in groupKeys)
+            if (!liveGroups.TryGetValue(key, out var participants) || !participants.Contains(active[key])) active.Remove(key);
+        return active;
     }
 
     /// <summary>Records a valid asset choice, translating a library ID or name to the patch display name.</summary>
@@ -103,10 +119,21 @@ public sealed class ProfileLibrary(ManagerStore store)
         string winner = choice == "keep-both" ? choice : library.Find(choice).Name;
         if (choice != "keep-both" && !profile.Mods.Select(library.Find).Any(m => m.Name == winner))
             throw new ArgumentException($"Mod '{choice}' is not in profile '{name}'. Choose one of its mods.");
+        if (IsUpgradeGroupKey(asset))
+        {
+            var enabledPatches = profile.EnabledMods.Select(id => library.Patch(library.Find(id), progress, cancellationToken)).ToArray();
+            var report = ConflictAnalyzer.Analyze(enabledPatches, allowSingle: true, cancellationToken: cancellationToken);
+            var group = report.Findings.FirstOrDefault(f => f.Kind == "upgrade-group" && $"{f.Family}/{f.Asset}" == asset);
+            if (group is null || !group.Mods.Contains(winner, StringComparer.Ordinal))
+                throw new ArgumentException($"'{asset}' is not an active legacy upgrade group for the selected mods. Run check again and choose a reported group.");
+        }
         var updated = new Dictionary<string, string>(profile.Resolutions, StringComparer.Ordinal) { [asset] = winner };
         BuildPlan.Create(profile.EnabledMods.Select(id => library.Patch(library.Find(id), progress, cancellationToken)).ToArray(), ActiveResolutions(profile with { Resolutions = updated }));
         var result = profile with { Resolutions = updated };
         store.Write(FilePath(name), result);
         return result;
     }
+
+    private static bool IsUpgradeGroupKey(string key) => key.StartsWith("code/upgrade-slot[", StringComparison.Ordinal)
+        && key.EndsWith(']') && int.TryParse(key.AsSpan("code/upgrade-slot[".Length, key.Length - "code/upgrade-slot[".Length - 1), out _);
 }

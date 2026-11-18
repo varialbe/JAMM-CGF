@@ -244,6 +244,33 @@ public sealed class ManagementTests : IDisposable
     }
 
     [Fact]
+    public void DormantUpgradeGroupChoiceIsIgnoredWhenTheLosingModIsDisabledOrRemoved()
+    {
+        const string ancestor = "// appended upgrade rows\n";
+        WriteUpgradeArchive(original, ancestor);
+        store.Set("base", original);
+        WriteUpgradeArchive(source, "name[18] = \"Alpha\";\ncost[18] = 100;\n// appended upgrade rows\n");
+        string second = Path.Combine(directory, "beta.win");
+        WriteUpgradeArchive(second, "name[18] = \"Beta\";\ncost[18] = 200;\n// appended upgrade rows\n");
+        var library = new ModLibrary(store);
+        var alpha = library.Add(source, "Alpha").Mod;
+        var beta = library.Add(second, "Beta").Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("upgrade", [alpha.Id, beta.Id]);
+        const string groupKey = "code/upgrade-slot[18]";
+        profiles.Resolve("upgrade", groupKey, alpha.Id);
+
+        var profile = profiles.Update("upgrade", [alpha.Id, beta.Id], [beta.Id]);
+        Assert.Equal("Alpha", profile.Resolutions[groupKey]);
+        Assert.DoesNotContain(groupKey, profiles.ActiveResolutions(profile));
+        profile = profiles.Update("upgrade", [alpha.Id], []);
+        Assert.Equal("Alpha", profile.Resolutions[groupKey]);
+        Assert.DoesNotContain(groupKey, profiles.ActiveResolutions(profile));
+        var plan = BuildPlan.Create([library.Patch(alpha)], profiles.ActiveResolutions(profile));
+        Assert.Contains(plan.Assets, a => a.Name == "gml_Object_UpgradeData_Create_0");
+    }
+
+    [Fact]
     public void ChangedBaseOrDamagedPayloadMakesCacheUnusable()
     {
         var library = new ModLibrary(store);
@@ -627,6 +654,17 @@ public sealed class ManagementTests : IDisposable
         var code = UndertaleCode.CreateEmptyEntry(data, "synthetic");
         var compiler = new CompileGroup(data);
         compiler.QueueCodeReplace(code, $"x = {value};\n");
+        Assert.True(compiler.Compile().Successful);
+        using var stream = File.Create(path); UndertaleIO.Write(stream, data);
+    }
+
+    private static void WriteUpgradeArchive(string path, string text)
+    {
+        using var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Timestamp = 1692207312;
+        data.GeneralInfo.Major = 1; data.GeneralInfo.Minor = 0; data.GeneralInfo.Release = 0; data.GeneralInfo.Build = 1773;
+        var code = UndertaleCode.CreateEmptyEntry(data, "gml_Object_UpgradeData_Create_0");
+        var compiler = new CompileGroup(data); compiler.QueueCodeReplace(code, text);
         Assert.True(compiler.Compile().Successful);
         using var stream = File.Create(path); UndertaleIO.Write(stream, data);
     }

@@ -20,6 +20,7 @@ public sealed partial class MainViewModel : ObservableObject
     private bool knownGame, canRestore;
     private bool updatingConflictChoices;
     private IReadOnlyDictionary<string, string> conflictResolutions = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> upgradeGroupChildChoices = new Dictionary<string, string>();
     /// <summary>Creates a manager model without opening game archives on the calling thread.</summary>
     public MainViewModel(ManagerStore store, ModHttp? browseHttp = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null, Func<CancellationToken, IProgress<string>, DetectedGame[]>? gameSearch = null)
     {
@@ -438,6 +439,13 @@ public sealed partial class MainViewModel : ObservableObject
     private void PopulateConflicts(ConflictReport report, IReadOnlyDictionary<string, string> resolutions)
     {
         conflictResolutions = resolutions;
+        Dictionary<string, string> childChoices = new(StringComparer.Ordinal);
+        foreach (var group in report.Findings.Where(f => f.Kind == "upgrade-group" && f.Severity == "CONFLICT"))
+        {
+            string groupKey = $"{group.Family}/{group.Asset}";
+            foreach (string source in group.Sources ?? []) childChoices[source] = groupKey;
+        }
+        upgradeGroupChildChoices = childChoices;
         Conflicts.Clear();
         foreach (string severity in new[] { "CONFLICT", "AUTO", "INFO", "WARNING" })
         {
@@ -458,7 +466,9 @@ public sealed partial class MainViewModel : ObservableObject
                             [.. hunk.Versions.Select(v => v.Name), .. hunk.KeepBoth is not null ? new[] { "keep-both" } : []], null));
                     }
                 }
-                else Add(new(severity, key, finding.Kind, string.Join(", ", finding.Mods), finding.Message +
+                else Add(new(severity, key, finding.Kind, string.Join(", ", finding.Mods), finding.Message
+                    + (finding.Family == "sprites" && upgradeGroupChildChoices.TryGetValue(key, out string? groupKey)
+                        && conflictResolutions.ContainsKey(groupKey) ? " The upgrade group selects this complete sprite asset, including unrelated atlas frames." : "") +
                     (finding.Kind == "index" ? " Review the source code entries in Details. Resolve their code conflicts, disable a conflicting mod, or use mods with distinct slots; verify runtime behavior in-game."
                     : severity == "CONFLICT" ? " This choice applies to all conflicts for this asset." : ""),
                     merge?.Text ?? System.Text.Json.JsonSerializer.Serialize(finding, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
@@ -490,8 +500,10 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 string entry = row.Key.Split('#')[0];
                 string bare = entry[(entry.IndexOf('/') + 1)..];
+                string? groupKey = upgradeGroupChildChoices.GetValueOrDefault(row.Key);
                 string? choice = conflictResolutions.GetValueOrDefault(row.Key)
-                    ?? conflictResolutions.GetValueOrDefault(entry) ?? conflictResolutions.GetValueOrDefault(bare);
+                    ?? conflictResolutions.GetValueOrDefault(entry) ?? conflictResolutions.GetValueOrDefault(bare)
+                    ?? (groupKey is null ? null : conflictResolutions.GetValueOrDefault(groupKey));
                 row.SelectedChoice = row.Choices.Contains(choice, StringComparer.Ordinal) ? choice : null;
             }
         }

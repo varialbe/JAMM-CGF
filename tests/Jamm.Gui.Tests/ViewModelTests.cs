@@ -2,6 +2,8 @@ using Jamm.Core.Building;
 using Jamm.Core.Management;
 using Jamm.Gui.ViewModels;
 using UndertaleModLib;
+using UndertaleModLib.Compiler;
+using UndertaleModLib.Models;
 
 namespace Jamm.Gui.Tests;
 
@@ -108,6 +110,41 @@ public sealed class ViewModelTests
         Assert.Equal(a.Name, new ProfileLibrary(new ManagerStore(files.Store.Root)).Get("test").Resolutions[row.Key]);
         var fresh = new MainViewModel(files.Store); await fresh.InitializeAsync(); await fresh.CheckAsync();
         Assert.Equal(a.Name, fresh.Conflicts.Single(r => r.Key == row.Key).SelectedChoice);
+    }
+
+    [Fact]
+    public async Task UpgradeGroupChoiceAppearsOnItsCodeHunkChildRow()
+    {
+        static void WriteUpgradeArchive(string path, string text)
+        {
+            using var data = UndertaleData.CreateNew();
+            data.GeneralInfo.Timestamp = 1692207312;
+            data.GeneralInfo.Major = 1; data.GeneralInfo.Minor = 0; data.GeneralInfo.Release = 0; data.GeneralInfo.Build = 1773;
+            var code = UndertaleCode.CreateEmptyEntry(data, "gml_Object_UpgradeData_Create_0");
+            var compiler = new CompileGroup(data); compiler.QueueCodeReplace(code, text);
+            Assert.True(compiler.Compile().Successful);
+            using var stream = File.Create(path); UndertaleIO.Write(stream, data);
+        }
+
+        using var files = new TestFiles();
+        const string ancestor = "// appended rows\n";
+        WriteUpgradeArchive(files.Original, ancestor);
+        File.Copy(files.Original, Path.Combine(files.Store.Config().GameDir!, "data.win"), true);
+        string alphaPath = Path.Combine(files.Root, "alpha.win"), betaPath = Path.Combine(files.Root, "beta.win");
+        WriteUpgradeArchive(alphaPath, "name[18] = \"Alpha\";\ncost[18] = 100;\n// appended rows\n");
+        WriteUpgradeArchive(betaPath, "name[18] = \"Beta\";\ncost[18] = 200;\n// appended rows\n");
+        var library = new ModLibrary(files.Store);
+        var alpha = library.Add(alphaPath, "Alpha").Mod; var beta = library.Add(betaPath, "Beta").Mod;
+        var profiles = new ProfileLibrary(files.Store); profiles.Create("upgrades", [alpha.Id, beta.Id]); profiles.Use("upgrades");
+        var vm = new MainViewModel(files.Store); await vm.InitializeAsync(); await vm.CheckAsync();
+        var group = Assert.Single(vm.Conflicts, row => row.Kind == "upgrade-group");
+        var child = Assert.Single(vm.Conflicts, row => row.Kind == "list" && row.Key.StartsWith("code/gml_Object_UpgradeData_Create_0#", StringComparison.Ordinal));
+        await vm.ResolveAsync(group.Key, alpha.Name);
+        Assert.Equal(alpha.Name, vm.Conflicts.Single(row => row.Key == child.Key).SelectedChoice);
+        await vm.CheckAsync();
+        Assert.Equal(alpha.Name, vm.Conflicts.Single(row => row.Key == group.Key).SelectedChoice);
+        Assert.Equal(alpha.Name, vm.Conflicts.Single(row => row.Key == child.Key).SelectedChoice);
+        vm.Browse.Dispose();
     }
 
     [Theory]

@@ -65,6 +65,14 @@ overlapping replacement, deletion or differing whole-code addition. A qualified 
 families when names are shared; bare `keep-both` applies only to code. Qualify keys to
 resolve families independently.
 
+Legacy upgrade slot collisions may offer a group key such as
+`code/upgrade-slot[18]` when the mods add that slot with different literal names.
+Choosing a mod resolves only the listed conflicting code hunks, while other hunks
+remain independently selectable. If every claimant also changes the shared vanilla
+`spr_upgradeicons` atlas, the group includes that sprite asset. Its choice replaces the
+whole atlas, including frames for other upgrades, so inspect the selected version.
+Save logic and menu positions are not inferred as slot identities.
+
 Per-hunk keys use `code/<entry>#<zero-based ancestor line>`, matching the report's
 `hunks[].start`. For example:
 
