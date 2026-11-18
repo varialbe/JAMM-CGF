@@ -39,8 +39,10 @@ public sealed partial class BrowseViewModel
         {
             row.Adds = "Content summary unavailable. Select to check.";
             row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
-            row.CompatibilityReason = "Unsure: no cached result for this game base. Select to check.";
-            var local = metadata.Where(m => m.Origins.Any(o => o.Catalog == "litterbox" && o.ModId == row.Mod.Id)).ToArray();
+            row.CompatibilityReason = index is null
+                ? "Unsure: no current shared compatibility export is available for this game base. Select this mod to check its download locally."
+                : "Unsure: no analyzer 6 result for this mod in the current shared export. Select this mod to check its download locally.";
+            var local = metadata.Where(m => m.Origins.Any(o => o.Catalog == row.Mod.Catalog && o.ModId == row.Mod.Id)).ToArray();
             // Only use catalog IDs explicitly supplied by the publisher; never display-name matches.
             var checks = index?.Checks.Where(c => c.ExternalId == row.Mod.Id || local.Any(m => m.Sha256 == c.Facts.FileHash
                 || m.Origins.Any(o => o.Provider == c.Provider && o.FileId == c.FileId))).ToArray() ?? [];

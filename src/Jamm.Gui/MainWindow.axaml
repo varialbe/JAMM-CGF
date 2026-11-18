@@ -189,7 +189,7 @@
           <Button Grid.Column="4" Content="Refresh" Click="BrowseRefreshClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}"/>
         </Grid>
         <StackPanel Grid.Row="1" Spacing="4">
-          <WrapPanel Orientation="Horizontal"><CheckBox Content="Show mods without download" IsChecked="{Binding ShowModsWithoutDownload, Mode=TwoWay}" Margin="0,0,16,0"/><TextBlock Text="{Binding ShownCount}" VerticalAlignment="Center"/></WrapPanel>
+          <WrapPanel Orientation="Horizontal"><CheckBox Content="Show mods without download" IsChecked="{Binding ShowModsWithoutDownload, Mode=TwoWay}" Margin="0,0,12,0"/><CheckBox Content="Litterbox" IsChecked="{Binding ShowLitterboxCatalog, Mode=TwoWay}" Margin="0,0,12,0"/><CheckBox Content="First-party" IsChecked="{Binding ShowFirstPartyCatalog, Mode=TwoWay}" Margin="0,0,12,0"/><CheckBox Content="Game Jolt" IsChecked="{Binding ShowGameJoltCatalog, Mode=TwoWay}" Margin="0,0,12,0"/><TextBlock Text="{Binding ShownCount}" VerticalAlignment="Center"/></WrapPanel>
           <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
           <TextBlock Text="{Binding EmptyMessage}" Classes="muted"/>
           <ProgressBar Value="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding IsLoading}" Height="8"/><Button Content="Cancel check" Click="BrowseCancelClick" IsVisible="{Binding IsLoading}"/>
@@ -209,7 +209,7 @@
                       <Button.Flyout><Flyout><ScrollViewer MaxHeight="360" MaxWidth="560"><SelectableTextBlock Text="{Binding SanitizedDetails}" TextWrapping="Wrap" Focusable="True"/></ScrollViewer></Flyout></Button.Flyout>
                     </Button>
                   </StackPanel>
-                  <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Litterbox page" Click="CardPageClick"/><Button Content="Download" Click="CardDownloadClick" IsEnabled="{Binding Mod.HasDownload}"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="{Binding SourceLabel}" Click="CardPageClick"/><Button Content="Download" Click="CardDownloadClick" IsEnabled="{Binding Mod.HasDownload}"/></StackPanel>
                   <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap"/>
                   <TextBlock IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Text="{Binding Excerpt}" TextWrapping="Wrap"/>
                 </StackPanel>
@@ -235,7 +235,7 @@
             <WrapPanel Grid.Row="1">
               <Button IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Refresh" Click="BrowseResolveClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" Margin="0,0,6,6"/>
               <Button IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Open source page" Click="BrowseSourceClick" Margin="0,0,6,6"/>
-              <Button Content="Litterbox details" Click="BrowseCatalogClick" Margin="0,0,0,6"/>
+              <Button Content="{Binding Selected.SourceLabel}" Click="BrowseCatalogClick" Margin="0,0,0,6"/>
             </WrapPanel>
           <StackPanel Grid.Row="2" Spacing="10">
             <ComboBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" SelectionChanged="BrowseFileChanged" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}" PlaceholderText="Choose a file / release" HorizontalAlignment="Stretch" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}">

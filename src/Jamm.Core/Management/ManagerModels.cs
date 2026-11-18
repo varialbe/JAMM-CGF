@@ -9,6 +9,12 @@ public sealed record ManagerConfig
     public bool AdvancedMode { get; init; }
     /// <summary>Includes previews and unsupported download sources in Browse.</summary>
     public bool ShowModsWithoutDownload { get; init; }
+    /// <summary>Includes Litterbox entries in Browse.</summary>
+    public bool ShowLitterboxCatalog { get; init; } = true;
+    /// <summary>Includes Varialbe first-party entries in Browse.</summary>
+    public bool ShowFirstPartyCatalog { get; init; } = true;
+    /// <summary>Includes official Game Jolt entries in Browse.</summary>
+    public bool ShowGameJoltCatalog { get; init; } = true;
     /// <summary>Game copy whose concrete replacement and backup paths were approved.</summary>
     public string? ConfirmedInstallDirectory { get; init; }
     /// <summary>Read-only merge ancestor, preferably outside the installed game.</summary>

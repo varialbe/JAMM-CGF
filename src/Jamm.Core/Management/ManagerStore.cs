@@ -108,6 +108,9 @@ public sealed class ManagerStore
         {
             "useSharedCompatibilityResults" when bool.TryParse(value, out _) => config with { UseSharedCompatibilityResults = bool.Parse(value) },
             "showModsWithoutDownload" when bool.TryParse(value, out _) => config with { ShowModsWithoutDownload = bool.Parse(value) },
+            "showLitterboxCatalog" when bool.TryParse(value, out _) => config with { ShowLitterboxCatalog = bool.Parse(value) },
+            "showFirstPartyCatalog" when bool.TryParse(value, out _) => config with { ShowFirstPartyCatalog = bool.Parse(value) },
+            "showGameJoltCatalog" when bool.TryParse(value, out _) => config with { ShowGameJoltCatalog = bool.Parse(value) },
             "advancedMode" when bool.TryParse(value, out _) => config with { AdvancedMode = bool.Parse(value) },
             "base" => config with { Base = Full() },
             "confirmedInstallDirectory" => config with { ConfirmedInstallDirectory = Full() },
