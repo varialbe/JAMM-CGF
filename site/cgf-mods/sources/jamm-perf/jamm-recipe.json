@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-perf",
+  "generator": "perf",
+  "generatorVersion": "2",
+  "stableId": "builtin-perf",
+  "name": "JAMM Perf",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Targeted code optimizations and optional fish scheduling for the legacy 2023 Cat Goes Fishing build. Press F8 in-game to toggle experimental scheduling modes.",
+  "default": true
+}

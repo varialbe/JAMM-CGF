@@ -12,6 +12,7 @@ TestResults/
 # Local game data and generated scratch output
 *.win
 *.zip
+!site/cgf-mods/packages/*.zip
 /out/
 /.orchestrator/
 

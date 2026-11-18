@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-smooth",
+  "generator": "smooth",
+  "generatorVersion": "2",
+  "stableId": "builtin-smooth",
+  "name": "JAMM Smooth",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Separates rendering (60 or 120 FPS) from the original 30 ticks/s simulation with interpolated camera and motion. Press F7 in-game to cycle 60 / 120 / off.",
+  "default": true
+}

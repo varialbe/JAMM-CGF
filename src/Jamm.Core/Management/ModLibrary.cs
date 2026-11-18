@@ -196,7 +196,7 @@ public sealed class ModLibrary(ManagerStore store)
             : $"Mod name '{query}' is ambiguous. Use its full ID from 'cgfmm list'.");
     }
 
-    /// <summary>Copies a .win, a .zip containing one data.win, or builds a ModKit package folder, then patches against the configured base.</summary>
+    /// <summary>Copies a .win, a .zip (containing data.win, ModKit package, or recipe), or builds a ModKit package folder, then patches against the configured base.</summary>
     public AddModResult Add(string source, string? name = null, Action<string>? progress = null, CancellationToken cancellationToken = default, ModOrigin? origin = null, string? stableId = null, string? description = null)
     {
         var reportProgress = progress;
@@ -205,15 +205,11 @@ public sealed class ModLibrary(ManagerStore store)
         string basePath = store.Config().Base ?? throw new ArgumentException("Set the legacy base first: cgfmm config set base <original data.win>.");
         string trimmedSource = Path.TrimEndingDirectorySeparator(source);
         bool isModKitFolder = Directory.Exists(trimmedSource);
-        ModKitManifest? modKitManifest = isModKitFolder ? ModKitPackage.Load(trimmedSource) : null;
-        string sourceName = isModKitFolder ? $"{modKitManifest!.Id}.win" : Path.GetFileName(trimmedSource);
-        string displayName = name ?? (modKitManifest?.Name ?? Path.GetFileNameWithoutExtension(trimmedSource));
-        description ??= modKitManifest?.Description;
-        string? sourceFolder = isModKitFolder ? Path.GetFullPath(trimmedSource) : null;
-        if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("The mod needs a nonempty name.");
-        if (displayName.Contains(',') || displayName.Any(char.IsControl))
-            throw new ArgumentException("Mod names cannot contain commas or control characters. Use --name with a readable name so it can be selected with --mods.");
+        bool isZip = !isModKitFolder && trimmedSource.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+        if (name is not null) ValidateDisplayName(name);
+        else if (!isModKitFolder && !isZip) ValidateDisplayName(Path.GetFileNameWithoutExtension(trimmedSource));
         if (stableId is not null) ManagerStore.Name(stableId);
+        string? extractedPackageDir = null;
         string stage = store.Path("mods", ".import-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
         string copy = Path.Combine(stage, "data.win");
@@ -223,15 +219,64 @@ public sealed class ModLibrary(ManagerStore store)
         bool published = false;
         try
         {
-            if (isModKitFolder) ModKitBuilder.Build(trimmedSource, basePath, copy, progress, cancellationToken);
-            else if (trimmedSource.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) CopyZip(trimmedSource, copy, cancellationToken);
+            ModKitManifest? modKitManifest = isModKitFolder ? ModKitPackage.Load(trimmedSource) : null;
+            RecipeManifest? recipeManifest = null;
+            string? sourceFolder = isModKitFolder ? Path.GetFullPath(trimmedSource) : null;
+            if (modKitManifest is not null) ValidateDisplayName(name ?? modKitManifest.Name);
+
+            if (isZip)
+            {
+                var zipKind = InspectZipKind(trimmedSource, cancellationToken);
+                if (zipKind == ZipPackageKind.DataWin)
+                {
+                    ValidateDisplayName(name ?? Path.GetFileNameWithoutExtension(trimmedSource));
+                    CopyZip(trimmedSource, copy, cancellationToken);
+                }
+                else
+                {
+                    extractedPackageDir = store.Path("mods", ".pkg-" + Guid.NewGuid().ToString("N"));
+                    string packageRoot = ExtractSourceZip(trimmedSource, extractedPackageDir, zipKind, cancellationToken);
+                    if (zipKind == ZipPackageKind.ModKit)
+                    {
+                        modKitManifest = ModKitPackage.Load(packageRoot);
+                        ValidateDisplayName(name ?? modKitManifest.Name);
+                        ModKitBuilder.Build(packageRoot, basePath, copy, progress, cancellationToken);
+                    }
+                    else
+                    {
+                        recipeManifest = RecipePackage.Load(packageRoot);
+                        ValidateDisplayName(name ?? recipeManifest.Name);
+                        stableId ??= recipeManifest.StableId;
+                        ManagerStore.Name(stableId);
+                        RecipePackage.Build(packageRoot, basePath, copy, progress, cancellationToken);
+                    }
+                }
+            }
+            else if (isModKitFolder)
+            {
+                ModKitBuilder.Build(trimmedSource, basePath, copy, progress, cancellationToken);
+            }
             else if (trimmedSource.EndsWith(".win", StringComparison.OrdinalIgnoreCase))
             {
                 using var input = new FileStream(trimmedSource, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var output = new FileStream(copy, FileMode.CreateNew, FileAccess.Write);
                 input.CopyTo(output);
             }
-            else throw new ArgumentException($"Cannot add '{sourceName}'. Choose a .win archive, a .zip containing one data.win, or a ModKit package folder.");
+            else
+            {
+                throw new ArgumentException($"Cannot add '{Path.GetFileName(trimmedSource)}'. Choose a .win archive, a .zip package, or a ModKit package folder.");
+            }
+
+            string sourceName = modKitManifest is not null ? $"{modKitManifest.Id}.win"
+                : recipeManifest is not null ? $"{recipeManifest.Id}.win"
+                : Path.GetFileName(trimmedSource);
+            string displayName = name ?? modKitManifest?.Name ?? recipeManifest?.Name ?? Path.GetFileNameWithoutExtension(trimmedSource);
+            description ??= modKitManifest?.Description ?? recipeManifest?.Description;
+            string? author = modKitManifest?.Author ?? recipeManifest?.Author;
+            string? version = modKitManifest?.Version ?? recipeManifest?.Version;
+            bool isModKit = modKitManifest is not null;
+            ValidateDisplayName(displayName);
+            if (stableId is not null) ManagerStore.Name(stableId);
             string hash = BuildFiles.Hash(copy);
             var existing = All().FirstOrDefault(m => m.Sha256 == hash && (stableId is null || m.Id == stableId));
             if (existing is not null)
@@ -245,15 +290,15 @@ public sealed class ModLibrary(ManagerStore store)
                     existing = existing with { Origins = [.. existing.Origins, origin] };
                     updatedMeta = true;
                 }
-                if (isModKitFolder && (existing.SourceFolder != sourceFolder || !existing.IsModKit || existing.Version != modKitManifest?.Version || existing.Author != modKitManifest?.Author || existing.Description != description || existing.Name != displayName))
+                if (isModKitFolder && (existing.SourceFolder != sourceFolder || !existing.IsModKit || existing.Version != version || existing.Author != author || existing.Description != description || existing.Name != displayName))
                 {
                     existing = existing with
                     {
                         Name = displayName,
                         SourceFolder = sourceFolder,
                         IsModKit = true,
-                        Author = modKitManifest?.Author ?? existing.Author,
-                        Version = modKitManifest?.Version ?? existing.Version,
+                        Author = author ?? existing.Author,
+                        Version = version ?? existing.Version,
                         Description = description ?? existing.Description
                     };
                     updatedMeta = true;
@@ -274,7 +319,7 @@ public sealed class ModLibrary(ManagerStore store)
             catch (Exception ex) when (ex is ArgumentException or NotComparableException or InvalidDataException)
             { throw new InvalidDataException($"Cannot add '{sourceName}': {string.Join(" ", notices)} {ex.Message} Choose a compatible legacy VM mod and base.", ex); }
             // Patch identity describes the .win bytes; metadata separately retains the supplied zip filename.
-            patch = patch with { Mod = patch.Mod with { FileName = source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? "data.win" : sourceName } };
+            patch = patch with { Mod = patch.Mod with { FileName = isZip && recipeManifest is null && modKitManifest is null ? "data.win" : sourceName } };
             if (BuildFiles.Hash(basePath) != patch.Base.Sha256 || hash != patch.Mod.Sha256)
                 throw new IOException("An input changed during import. Retry with stable copies.");
             var sanitized = ModSanitizer.Sanitize(patch, sonarCondition: VanillaSonarCondition.FromData(original.Data));
@@ -284,9 +329,9 @@ public sealed class ModLibrary(ManagerStore store)
                 Origins = origin is null ? [] : [origin],
                 Description = description,
                 SourceFolder = sourceFolder,
-                Author = modKitManifest?.Author,
-                Version = modKitManifest?.Version,
-                IsModKit = isModKitFolder
+                Author = author,
+                Version = version,
+                IsModKit = isModKit
             };
             store.Write(store.Path("mods", Path.GetFileName(stage), "mod.json"), entry);
             string patchPath = PatchPath(entry);
@@ -324,6 +369,7 @@ public sealed class ModLibrary(ManagerStore store)
         }
         finally
         {
+            if (extractedPackageDir is not null && Directory.Exists(extractedPackageDir)) Directory.Delete(extractedPackageDir, true);
             if (Directory.Exists(stage)) Directory.Delete(stage, true);
             if (published && previousDirectory is not null) Directory.Delete(previousDirectory, true);
         }
@@ -370,24 +416,105 @@ public sealed class ModLibrary(ManagerStore store)
         Directory.Delete(directory, true);
     }
 
-    internal static void CopyZip(string source, string destination, CancellationToken cancellationToken)
+    private static void ValidateDisplayName(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("The mod needs a nonempty name.");
+        if (displayName.Contains(',') || displayName.Any(char.IsControl))
+            throw new ArgumentException("Mod names cannot contain commas or control characters. Use --name with a readable name so it can be selected with --mods.");
+    }
+
+    private enum ZipPackageKind { DataWin, ModKit, Recipe }
+
+    private static ZipPackageKind InspectZipKind(string source, CancellationToken cancellationToken)
     {
         using var zip = ZipFile.OpenRead(source);
-        List<ZipArchiveEntry> candidates = [];
+        var entries = ValidateZipEntries(zip, Path.GetFileName(source), 512L * 1048576, cancellationToken);
+        int dataWins = 0, modKits = 0, recipes = 0;
+        foreach (var (entry, normalized) in entries)
+        {
+            string fileName = normalized.Split('/').Last();
+            if (fileName.Equals("data.win", StringComparison.OrdinalIgnoreCase)) dataWins++;
+            else if (normalized.Count(c => c == '/') <= 1 && fileName.Equals(ModKitPackage.ManifestFileName, StringComparison.OrdinalIgnoreCase)) modKits++;
+            else if (normalized.Count(c => c == '/') <= 1 && fileName.Equals(RecipePackage.ManifestFileName, StringComparison.OrdinalIgnoreCase)) recipes++;
+        }
+        if (dataWins == 1 && modKits == 0 && recipes == 0) return ZipPackageKind.DataWin;
+        if (dataWins == 0 && modKits == 1 && recipes == 0) return ZipPackageKind.ModKit;
+        if (dataWins == 0 && modKits == 0 && recipes == 1) return ZipPackageKind.Recipe;
+        throw new InvalidDataException($"'{Path.GetFileName(source)}' must contain exactly one data.win, one jamm-mod.json, or one jamm-recipe.json.");
+    }
+
+    private static string ExtractSourceZip(string source, string destinationRoot, ZipPackageKind kind, CancellationToken cancellationToken)
+    {
+        const long limit = 64L * 1048576;
+        using var zip = ZipFile.OpenRead(source);
+        var entries = ValidateZipEntries(zip, Path.GetFileName(source), limit, cancellationToken);
+        Directory.CreateDirectory(destinationRoot);
+        string fullRoot = Path.GetFullPath(destinationRoot);
+        string rootPrefix = fullRoot.EndsWith(Path.DirectorySeparatorChar) ? fullRoot : fullRoot + Path.DirectorySeparatorChar;
+        string manifestName = kind == ZipPackageKind.ModKit ? ModKitPackage.ManifestFileName : RecipePackage.ManifestFileName;
+        string? manifestDir = null;
+        long total = 0;
+        byte[] buffer = new byte[65536];
+
+        foreach (var (entry, normalized) in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrEmpty(normalized) || entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\')) continue;
+            string ext = Path.GetExtension(entry.Name);
+            if (ext.Equals(".win", StringComparison.OrdinalIgnoreCase) || ext.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Source package '{Path.GetFileName(source)}' cannot contain binary '{entry.FullName}'.");
+            string target = Path.GetFullPath(Path.Combine(fullRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+            if (!target.StartsWith(rootPrefix, StringComparison.Ordinal))
+                throw new InvalidDataException($"Unsafe zip entry '{entry.FullName}' in '{Path.GetFileName(source)}'.");
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            using var input = entry.Open();
+            using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
+            long copied = 0;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int count = input.Read(buffer);
+                if (count == 0) break;
+                copied += count;
+                total += count;
+                if (total > limit) throw new InvalidDataException("Expanded source package exceeds the 64 MB safety limit.");
+                output.Write(buffer, 0, count);
+            }
+            if (Path.GetFileName(target).Equals(manifestName, StringComparison.OrdinalIgnoreCase))
+                manifestDir = Path.GetDirectoryName(target);
+        }
+
+        return manifestDir ?? throw new InvalidDataException($"Missing '{manifestName}' in '{Path.GetFileName(source)}'.");
+    }
+
+    private static List<(ZipArchiveEntry Entry, string Normalized)> ValidateZipEntries(ZipArchive zip, string label, long limit, CancellationToken cancellationToken)
+    {
         long expanded = 0;
-        const long limit = 512L * 1048576;
         if (zip.Entries.Count > 4096) throw new InvalidDataException("ZIP has too many entries. Choose a smaller mod archive.");
+        var result = new List<(ZipArchiveEntry, string)>(zip.Entries.Count);
         foreach (var entry in zip.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (entry.Length > limit - expanded) throw new InvalidDataException("ZIP expanded data exceeds the 512 MB safety limit.");
+            if (entry.Length > limit - expanded) throw new InvalidDataException($"ZIP expanded data exceeds the {limit / 1048576} MB safety limit.");
             expanded += entry.Length;
-            string normalized = entry.FullName.Replace('\\', '/');
+            string normalized = entry.FullName.Replace('\\', '/').TrimEnd('/');
             if (normalized.StartsWith('/') || normalized.Contains(':') || normalized.Split('/').Any(p => p == "..")
                 || (entry.ExternalAttributes >> 16 & 0xF000) == 0xA000)
-                throw new InvalidDataException($"Unsafe zip entry '{entry.FullName}' in '{Path.GetFileName(source)}'. Choose a zip without absolute paths, parent traversal or symbolic links.");
-            if (normalized.Split('/').Last().Equals("data.win", StringComparison.OrdinalIgnoreCase)) candidates.Add(entry);
+                throw new InvalidDataException($"Unsafe zip entry '{entry.FullName}' in '{label}'. Choose a zip without absolute paths, parent traversal or symbolic links.");
+            result.Add((entry, normalized));
         }
+        return result;
+    }
+
+    internal static void CopyZip(string source, string destination, CancellationToken cancellationToken)
+    {
+        using var zip = ZipFile.OpenRead(source);
+        const long limit = 512L * 1048576;
+        var entries = ValidateZipEntries(zip, Path.GetFileName(source), limit, cancellationToken);
+        var candidates = entries
+            .Where(e => e.Normalized.Split('/').Last().Equals("data.win", StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Entry)
+            .ToList();
         if (candidates.Count != 1) throw new InvalidDataException($"'{Path.GetFileName(source)}' must contain exactly one data.win (nested folders are supported); found {candidates.Count}.");
         using var input = candidates[0].Open();
         using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write);
