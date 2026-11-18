@@ -1,3 +1,4 @@
+using System.Globalization;
 using UndertaleModLib;
 
 namespace Jamm.ModMaker;
@@ -29,6 +30,7 @@ public static class Program
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
                   silo    <original.win> <out.win>
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -36,7 +38,7 @@ public static class Program
         }
         string command = args[0];
         string original = Path.GetFullPath(args[1]);
-        bool needsOutput = command is "perf" or "smooth" or "hd" or "console" or "silo" or "profile" or "export-pages";
+        bool needsOutput = command is "perf" or "smooth" or "hd" or "console" or "silo" or "bench" or "profile" or "export-pages";
         if (needsOutput && (args.Length < 3 || args[2].StartsWith("--", StringComparison.Ordinal)))
             throw new ArgumentException($"'{command}' requires an original file and a new output path before options.");
         string? output = needsOutput ? Path.GetFullPath(args[2]) : null;
@@ -78,6 +80,11 @@ public static class Program
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
             case "silo": SiloMod.Apply(data); Save(data, output!); return 0;
+            case "bench":
+                var benchOpts = ParseBenchOptions(args.Skip(3).ToArray());
+                BenchmarkMod.Apply(data, benchOpts);
+                Save(data, output!, saved => VerifyBench(saved, benchOpts));
+                return 0;
             case "profile":
                 // Profiles a (possibly modded) data.win: instruments all object events.
                 Profiler.Apply(data); Save(data, output!); return 0;
@@ -91,6 +98,79 @@ public static class Program
                 return 0;
             default: Console.Error.WriteLine($"Unknown command '{command}'."); return 1;
         }
+    }
+
+    private static BenchmarkOptions ParseBenchOptions(string[] args)
+    {
+        var scene = BenchmarkScene.Dock;
+        double warmup = 5.0;
+        double duration = 15.0;
+        int maxSamples = 50000;
+        string? outFile = null;
+        bool autoExit = true;
+        int seed = 1337;
+        double dockX = 815.0;
+        double deepX = 21000.0;
+        double deepY = 7200.0;
+        int boatSlot = 7;
+        bool deepSonar = false;
+        bool showHud = false;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            switch (arg)
+            {
+                case "--verbose": break;
+                case "--auto-exit": autoExit = true; break;
+                case "--no-exit": autoExit = false; break;
+                case "--deep-sonar": deepSonar = true; break;
+                case "--show-hud": showHud = true; break;
+                case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
+                case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--duration": duration = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--max-samples": maxSamples = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                case "--out-file": outFile = RequireValue(args, ref i, arg); break;
+                case "--seed": seed = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                case "--dock-x": dockX = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--deep-x": deepX = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--deep-y": deepY = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--boat-slot": boatSlot = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                default: throw new ArgumentException($"Unknown bench option '{arg}'.");
+            }
+        }
+
+        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud);
+    }
+
+    private static string RequireValue(string[] args, ref int i, string option)
+    {
+        if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+            throw new ArgumentException($"{option} requires a value.");
+        return args[++i];
+    }
+
+    private static double ParseDouble(string text, string option)
+        => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
+            ? value
+            : throw new ArgumentException($"Invalid number '{text}' for {option}.");
+
+    private static int ParseInt(string text, string option)
+        => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+            ? value
+            : throw new ArgumentException($"Invalid integer '{text}' for {option}.");
+
+    private static void VerifyBench(UndertaleData saved, BenchmarkOptions opts)
+    {
+        var ctrl = saved.GameObjects.ByName(BenchmarkMod.ObjectName)
+            ?? throw new InvalidDataException($"Saved archive missing '{BenchmarkMod.ObjectName}'.");
+        if (!ctrl.Persistent)
+            throw new InvalidDataException($"Saved '{BenchmarkMod.ObjectName}' is not persistent.");
+        var newWorld = saved.Rooms.ByName("NewWorld")
+            ?? throw new InvalidDataException("Saved archive missing 'NewWorld'.");
+        if (!newWorld.GameObjects.Any(g => g.ObjectDefinition == ctrl))
+            throw new InvalidDataException($"Saved 'NewWorld' does not contain '{BenchmarkMod.ObjectName}'.");
+        Console.WriteLine($"bench: scene={BenchmarkMod.SceneName(opts.Scene)}, warmup={opts.WarmupSeconds}s, duration={opts.CaptureSeconds}s, max_samples={opts.MaxSamples}, auto_exit={opts.AutoExit}");
     }
 
     private static string? OptionValue(string[] args, string name)
