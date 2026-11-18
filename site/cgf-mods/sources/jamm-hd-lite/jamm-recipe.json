@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-hd-lite",
+  "generator": "hd-lite",
+  "generatorVersion": "2",
+  "stableId": "builtin-hd-lite",
+  "name": "JAMM HD Lite",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Aspect-correct fullscreen rendering through the native application surface while keeping original texture pages for lower VRAM usage. Press F11 in-game to toggle fullscreen.",
+  "default": true
+}

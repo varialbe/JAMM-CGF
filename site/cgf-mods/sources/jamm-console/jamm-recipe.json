@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-console",
+  "generator": "console",
+  "generatorVersion": "2",
+  "stableId": "builtin-console",
+  "name": "JAMM Console",
+  "version": "1.0.0",
+  "author": "JAMM",
+  "description": "Optional in-game developer/testing console overlay. Press F12 or backtick (`) to toggle, and type help for unlockall, unlockgear, level, catalog all, and money commands.",
+  "default": true
+}
