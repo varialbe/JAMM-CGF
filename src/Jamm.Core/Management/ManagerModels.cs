@@ -5,6 +5,8 @@ public sealed record ManagerConfig
 {
     /// <summary>Allows anonymous read-only shared compatibility lookups.</summary>
     public bool UseSharedCompatibilityResults { get; init; } = true;
+    /// <summary>Checks official GitHub releases on startup and asks before downloading an installer.</summary>
+    public bool CheckForUpdates { get; init; }
     /// <summary>Shows expert controls when explicitly enabled.</summary>
     public bool AdvancedMode { get; init; }
     /// <summary>Includes previews and unsupported download sources in Browse.</summary>

@@ -109,6 +109,11 @@ public sealed partial class MainWindow : Window
             initialized = true;
             await Model.InitializeAsync();
             // First-run detection and setup actions are shown in the main window.
+            if (Model.Config.CheckForUpdates)
+            {
+                try { await OfficialUpdater.CheckAndOfferAsync(ConfirmAsync); }
+                catch (Exception) { Model.ReportError("Could not check official JAMM updates. Check your internet connection and try again."); }
+            }
         };
         MainTabs.SelectionChanged += async (_, e) =>
         {
