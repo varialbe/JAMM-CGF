@@ -25,6 +25,8 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
     public CatalogMod Mod { get; } = mod;
     /// <summary>Display name.</summary>
     public string Name => Mod.Name;
+    /// <summary>Readable source label shown on Browse actions.</summary>
+    public string SourceLabel => Mod.Catalog switch { "gamejolt" => "Game Jolt", "first-party" => "Varialbe catalog", _ => "Litterbox" };
     /// <summary>Author, categories and release status.</summary>
     public string Summary => Mod.Summary;
     /// <summary>Short plain-text description.</summary>
@@ -67,14 +69,14 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
     private string[] enabledIds = [], installedIds = [];
     private CatalogRow? selected;
     private ModDownloadFile? selectedFile;
-    private string search = "", category = "All categories", release = "All releases", sort = "Name", status = "Choose Refresh to load Litterbox.", detailStatus = "Select a mod for details.", membership = "Available in catalog", transferState = "";
+    private string search = "", category = "All categories", release = "All releases", sort = "Name", status = "Choose Refresh to load mod catalogs.", detailStatus = "Select a mod for details.", membership = "Available in catalog", transferState = "";
     private bool loading, indeterminate = true;
     private double progress;
     /// <summary>Creates public discovery services, with injectable providers for deterministic tests.</summary>
     public BrowseViewModel(MainViewModel owner, ManagerStore store, ModHttp? http = null, IModCatalogProvider? catalog = null, IModDownloadResolver? resolver = null)
     {
         this.owner = owner; this.store = store; this.http = http ?? new();
-        this.catalog = catalog ?? new LitterboxCatalogProvider(store, this.http);
+        this.catalog = catalog ?? BrowseCatalogs.Create(store, this.http);
         this.resolver = resolver ?? new GameJoltDownloadResolver(this.http);
     }
     /// <summary>Filtered native rows.</summary>
@@ -156,12 +158,25 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
             catch (Exception ex) { owner.ReportError("Could not save Browse preference: " + ex.Message + " Check Settings and try again."); }
         }
     }
+    /// <summary>Persisted visibility of Litterbox entries.</summary>
+    public bool ShowLitterboxCatalog { get => store.Config().ShowLitterboxCatalog; set => SetCatalogVisibility("showLitterboxCatalog", value); }
+    /// <summary>Persisted visibility of first-party entries.</summary>
+    public bool ShowFirstPartyCatalog { get => store.Config().ShowFirstPartyCatalog; set => SetCatalogVisibility("showFirstPartyCatalog", value); }
+    /// <summary>Persisted visibility of Game Jolt entries.</summary>
+    public bool ShowGameJoltCatalog { get => store.Config().ShowGameJoltCatalog; set => SetCatalogVisibility("showGameJoltCatalog", value); }
+    private void SetCatalogVisibility(string key, bool value)
+    {
+        if (owner.IsBusy) return;
+        try { store.Set(key, value.ToString()); OnPropertyChanged(key switch { "showLitterboxCatalog" => nameof(ShowLitterboxCatalog), "showFirstPartyCatalog" => nameof(ShowFirstPartyCatalog), _ => nameof(ShowGameJoltCatalog) }); Filter(); }
+        catch (Exception ex) { owner.ReportError("Could not save Browse preference: " + ex.Message + " Check Settings and try again."); }
+    }
     /// <summary>Visible results relative to the complete catalog, including hidden entries.</summary>
     public string ShownCount => $"{Mods.Count} of {all.Length} shown";
     private void Filter()
     {
         bool includeWithoutDownload = ShowModsWithoutDownload;
-        var rows = all.Where(r => (includeWithoutDownload || GameJoltDownloadResolver.SupportsSource(r.Mod))
+        var rows = all.Where(r => (r.Mod.Catalog switch { "litterbox" => ShowLitterboxCatalog, "first-party" => ShowFirstPartyCatalog, "gamejolt" => ShowGameJoltCatalog, _ => true })
+            && (includeWithoutDownload || GameJoltDownloadResolver.SupportsSource(r.Mod))
             && (string.IsNullOrWhiteSpace(Search) || (r.Name + " " + r.Mod.Author + " " + r.Mod.Description).Contains(Search, StringComparison.OrdinalIgnoreCase))
             && (Category == "All categories" || r.Mod.Categories.Contains(Category))
             && (Release == "All releases" || r.Mod.IsPreview == (Release == "Preview")));
@@ -175,7 +190,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
     public async Task RefreshAsync()
     {
         if (owner.IsBusy) return;
-        reading?.Cancel(); var current = new CancellationTokenSource(); reading = current; IsLoading = true; Status = "Loading Litterbox…";
+        reading?.Cancel(); var current = new CancellationTokenSource(); reading = current; IsLoading = true; Status = "Loading mod catalogs…";
         try
         {
             var snapshot = await catalog.LoadAsync(current.Token);
@@ -307,7 +322,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         if (Selected is null) { Membership = "Select a mod"; return; }
         try
         {
-            var ids = localMods.Where(m => m.Origins.Any(o => o.Catalog == "litterbox" && o.ModId == Selected.Mod.Id)).Select(m => m.Id).ToArray();
+            var ids = localMods.Where(m => m.Origins.Any(o => o.Catalog == Selected.Mod.Catalog && o.ModId == Selected.Mod.Id)).Select(m => m.Id).ToArray();
             string state = ids.Length == 0 ? "Available in catalog; no proven local import" : ids.Intersect(enabledIds).Any() ? "Enabled in selected profile" : "In library";
             if (ids.Intersect(installedIds).Any()) state += " · Included in currently installed profile";
             Membership = (transferState.Length == 0 || transferState == state ? "" : transferState + " · ") + state;
@@ -357,12 +372,12 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
                 ShowFacts(Selected!, verifiedFacts, shared is null ? "checked on this PC" : $"checked by JAMM server on {shared.CheckedUtc:yyyy-MM-dd HH:mm} UTC");
                 lock (transferGate) transferring = 0;
                 transferState = "Importing"; RefreshMembership(); IsIndeterminate = true;
-                var origin = new ModOrigin("litterbox", mod.Id, file.SourceUrl, file.Provider, file.Id, file.ReleaseId, file.Version);
+                var origin = new ModOrigin(mod.Catalog, mod.Id, file.SourceUrl, file.Provider, file.Id, file.ReleaseId, file.Version);
                 var result = await Task.Run(() =>
                 {
                     var library = new ModLibrary(store);
                     string name = new string(mod.Name.Where(c => c != ',' && !char.IsControl(c)).Take(160).ToArray()).Trim();
-                    if (name.Length == 0) name = "Litterbox " + mod.Id;
+                    if (name.Length == 0) name = mod.Catalog switch { "gamejolt" => "Game Jolt " + mod.Id, "first-party" => "Varialbe " + mod.Id, _ => "Litterbox " + mod.Id };
                     var names = library.Metadata().Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
                     string stem = name;
                     for (int suffix = 2; names.Contains(name); suffix++) name = stem + " (" + suffix + ")";

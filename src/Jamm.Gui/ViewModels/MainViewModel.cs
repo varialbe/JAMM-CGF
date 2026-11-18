@@ -192,7 +192,7 @@ public sealed partial class MainViewModel : ObservableObject
                 Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length)
                 {
                     Summary = info.Summary,
-                    CatalogId = m.Mod.Origins.FirstOrDefault(o => o.Catalog == "litterbox")?.ModId,
+                    CatalogId = m.Mod.Origins.FirstOrDefault()?.ModId,
                     IsJammMod = info.Report?.IsJammMod ?? false,
                     RemovedPerformanceCount = info.Report?.RemovedPerformanceCount ?? 0,
                     RemovedHudCount = info.Report?.RemovedHudCount ?? 0,

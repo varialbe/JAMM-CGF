@@ -3,10 +3,11 @@ namespace Jamm.Core.Browsing;
 /// <summary>Public catalog metadata; compatibility remains unknown until local archive validation.</summary>
 public sealed record CatalogMod(string Id, string Name, string Author, string Description, string? FileUrl,
     bool IsPreview, string[] Categories, DateTimeOffset? CreatedUtc, double? Rating,
-    string? IconUrl = null, string? BannerUrl = null, string[]? Screenshots = null, bool VerifiedCreator = false, string Credits = "")
+    string? IconUrl = null, string? BannerUrl = null, string[]? Screenshots = null, bool VerifiedCreator = false, string Credits = "",
+    string Catalog = "litterbox", string? CatalogPage = null)
 {
     /// <summary>Stable catalog detail page, distinct from the file host.</summary>
-    public string SourcePage => "https://litterbox.fyi/mod.html?id=" + Uri.EscapeDataString(Id);
+    public string SourcePage => CatalogPage ?? (Catalog == "litterbox" ? "https://litterbox.fyi/mod.html?id=" + Uri.EscapeDataString(Id) : FileUrl ?? "https://varialbe.xyz/cgf-mods/");
     /// <summary>Readable list summary without implying compatibility.</summary>
     public string Summary => $"{Author} · {string.Join(", ", Categories)} · {(IsPreview ? "Preview · no released download" : HasDownload ? "Released · source available" : "Released · no download")}";
     /// <summary>Whether the catalog advertises a released source.</summary>

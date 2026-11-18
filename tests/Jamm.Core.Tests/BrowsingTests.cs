@@ -36,6 +36,21 @@ public sealed class BrowsingTests
         Assert.Equal(["Fish"], mods[1].Categories); Assert.Null(mods[1].CreatedUtc);
     }
     [Fact]
+    public async Task FirstPartyCatalogUsesCatalogModArrayAndRetainsPublisherProvenance()
+    {
+        var mod = Assert.Single(FirstPartyCatalogProvider.Parse(Encoding.UTF8.GetBytes("""
+            [{"id":"abyss","name":"The Abyss","author":"varialbe","description":"Official","fileUrl":"https://gamejolt.com/games/ringdingdingringring/842483","isPreview":false,"categories":["Content"]}]
+            """)));
+        Assert.Equal("first-party", mod.Catalog);
+        Assert.Equal("https://varialbe.xyz/cgf-mods/", mod.SourcePage);
+        Assert.True(GameJoltDownloadResolver.SupportsSource(mod));
+        var official = new OfficialAbyssCatalogProvider();
+        var abyss = Assert.Single((await official.LoadAsync(default)).Mods);
+        Assert.Equal("gamejolt", abyss.Catalog);
+        Assert.Equal("https://gamejolt.com/games/ringdingdingringring/842483", abyss.SourcePage);
+        Assert.True(GameJoltDownloadResolver.SupportsSource(abyss));
+    }
+    [Fact]
     public async Task PreviewAndUnsupportedSourcesNeverMasqueradeAsFiles()
     {
         using var http = new ModHttp(new Handler((_, _) => throw new Exception("No network expected")));
