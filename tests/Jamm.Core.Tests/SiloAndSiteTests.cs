@@ -50,6 +50,20 @@ public sealed class SiloAndSiteTests
         Assert.NotNull(mod.Data.Code.ByName("gml_Object_MissileSilo_Step_0"));
         Assert.NotNull(mod.Data.Code.ByName("gml_Object_MissileSilo_Draw_0"));
 
+        string areaGui = PatchBuilder.ReadCode(mod, $"gml_Object_{SiloMod.AreaObjectName}_Draw_64").Text;
+        Assert.Contains("display_get_gui_width()", areaGui);
+        Assert.Contains("string_width_ext", areaGui);
+        Assert.Contains("string_height_ext", areaGui);
+        Assert.Contains("draw_text_ext", areaGui);
+        Assert.DoesNotContain("draw_rectangle(14, 12, 786, 40", areaGui);
+
+        string ctrlGui = PatchBuilder.ReadCode(mod, $"gml_Object_{SiloMod.ControllerObjectName}_Draw_64").Text;
+        Assert.Contains("display_get_gui_width()", ctrlGui);
+        Assert.Contains("draw_text_ext", ctrlGui);
+
+        string siloDraw = PatchBuilder.ReadCode(mod, "gml_Object_MissileSilo_Draw_0").Text;
+        Assert.Contains("string_width(label)", siloDraw);
+
         var patch = PatchBuilder.Create(orig, mod, "The Silo");
         Assert.True(ModSanitizer.IsJammMod(patch));
         var sanitized = ModSanitizer.Sanitize(patch);

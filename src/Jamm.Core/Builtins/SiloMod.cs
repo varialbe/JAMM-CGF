@@ -298,21 +298,11 @@ public static class SiloMod
 
     private static string ControllerDrawGuiGml(bool hasFont)
     {
-        string fontLine = hasFont ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);";
+        string banner = BuildCenteredGuiBannerGml("silo_toast_text", hasFont, "make_color_rgb(165, 245, 230)", "0.78", 12);
         return $$"""
             if (current_time < silo_toast_until && silo_toast_text != "")
             {
-                {{fontLine}}
-                draw_set_halign(fa_center);
-                draw_set_valign(fa_middle);
-                draw_set_alpha(0.78);
-                draw_set_color(c_black);
-                draw_rectangle(210, 14, 590, 42, false);
-                draw_set_alpha(1);
-                draw_set_color(make_color_rgb(165, 245, 230));
-                draw_text(400, 28, silo_toast_text);
-                draw_set_halign(fa_left);
-                draw_set_valign(fa_top);
+            {{banner}}
             }
             """;
     }
@@ -540,7 +530,7 @@ public static class SiloMod
 
             if (silo_near)
             {
-                var label;
+                var label, jamm_hw, jamm_hh;
                 if (silo_state == 2)
                 {
                     label = "Silo Open - Swim in or press W / E to descend";
@@ -550,11 +540,13 @@ public static class SiloMod
                     label = "Silo Hatch Opening...";
                 }
                 {{fontLine}}
+                jamm_hw = max(95, (string_width(label) * 0.5) + 14);
+                jamm_hh = max(14, (string_height(label) * 0.5) + 6);
                 draw_set_halign(fa_center);
                 draw_set_valign(fa_middle);
                 draw_set_alpha(0.82);
                 draw_set_color(c_black);
-                draw_rectangle(hx - 175, hy - 102, hx + 175, hy - 74, false);
+                draw_rectangle(hx - jamm_hw, (hy - 88) - jamm_hh, hx + jamm_hw, (hy - 88) + jamm_hh, false);
                 draw_set_alpha(1);
                 draw_set_color(make_color_rgb(175, 250, 235));
                 draw_text(hx, hy - 88, label);
@@ -818,19 +810,40 @@ public static class SiloMod
         draw_self();
         """;
 
-    private static string AreaDrawGuiGml(bool hasFont)
+    private static string AreaDrawGuiGml(bool hasFont) =>
+        BuildCenteredGuiBannerGml(
+            "\"Silo Sanctuary  |  WASD / Arrows / Mouse: Swim  |  Top Hatch or Esc / Q: Exit Safely\"",
+            hasFont,
+            "make_color_rgb(185, 250, 235)",
+            "0.72",
+            10);
+
+    private static string BuildCenteredGuiBannerGml(string textExpr, bool hasFont, string textColorExpr, string bgAlpha, int topY)
     {
         string fontLine = hasFont ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);";
         return $$"""
+            var jamm_gw, jamm_banner, jamm_sep, jamm_max_w, jamm_bw, jamm_bh, jamm_x1, jamm_y1, jamm_x2, jamm_y2, jamm_cx, jamm_cy;
             {{fontLine}}
-            draw_set_alpha(0.72);
+            jamm_gw = max(240, display_get_gui_width());
+            jamm_banner = {{textExpr}};
+            jamm_sep = max(14, string_height("Ay") + 2);
+            jamm_max_w = max(180, jamm_gw - 56);
+            jamm_bw = min(jamm_max_w, string_width_ext(jamm_banner, jamm_sep, jamm_max_w));
+            jamm_bh = max(jamm_sep, string_height_ext(jamm_banner, jamm_sep, jamm_max_w));
+            jamm_x1 = max(12, ((jamm_gw - jamm_bw) * 0.5) - 14);
+            jamm_x2 = min(jamm_gw - 12, jamm_x1 + jamm_bw + 28);
+            jamm_y1 = {{topY}};
+            jamm_y2 = jamm_y1 + jamm_bh + 12;
+            jamm_cx = (jamm_x1 + jamm_x2) * 0.5;
+            jamm_cy = (jamm_y1 + jamm_y2) * 0.5;
+            draw_set_alpha({{bgAlpha}});
             draw_set_color(c_black);
-            draw_rectangle(14, 12, 786, 40, false);
+            draw_rectangle(jamm_x1, jamm_y1, jamm_x2, jamm_y2, false);
             draw_set_alpha(1);
-            draw_set_color(make_color_rgb(185, 250, 235));
+            draw_set_color({{textColorExpr}});
             draw_set_halign(fa_center);
             draw_set_valign(fa_middle);
-            draw_text(400, 26, "Silo Sanctuary  |  WASD / Arrows / Mouse: Swim  |  Top Hatch or Esc / Q: Exit Safely");
+            draw_text_ext(jamm_cx, jamm_cy, jamm_banner, jamm_sep, jamm_max_w);
             draw_set_halign(fa_left);
             draw_set_valign(fa_top);
             """;
