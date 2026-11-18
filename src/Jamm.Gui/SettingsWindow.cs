@@ -35,6 +35,14 @@ public sealed class SettingsWindow : Window
         Add("wine.prefix", "Wine prefix (optional)", config.Wine.Prefix, true);
         Add("proton.path", "Proton directory (optional)", config.Proton.Path, true);
         Add("proton.compatDataPath", "Proton compatibility directory (optional)", config.Proton.CompatDataPath, true);
+        fields["proton.compatDataPath"].Watermark = "Blank uses active runner default";
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Leave blank to use the active runner default. In Flatpak mode, JAMM uses Steam’s compatibility data folder.",
+            Opacity = 0.7,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap
+        });
         Add("proton.clientInstallPath", "Steam installation directory (optional)", config.Proton.ClientInstallPath, true);
         Add("steam.appId", "Steam App ID", config.Steam.AppId);
         var shared = new CheckBox { Content = "Use shared compatibility results (no account, no cookies)", IsChecked = config.UseSharedCompatibilityResults };
@@ -43,7 +51,14 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(updates);
         var save = new Button { Content = "Validate & save settings", HorizontalAlignment = HorizontalAlignment.Left };
         save.Bind(IsEnabledProperty, new Binding(nameof(MainViewModel.CanEdit)));
-        save.Click += async (_, _) => { var values = fields.ToDictionary(p => p.Key, p => p.Value.Text ?? ""); values["useSharedCompatibilityResults"] = (shared.IsChecked == true).ToString(); values["checkForUpdates"] = (updates.IsChecked == true).ToString(); await model.SaveSettingsAsync(values); };
+        save.Click += async (_, _) =>
+        {
+            var values = fields.ToDictionary(p => p.Key, p => p.Value.Text ?? "");
+            values["useSharedCompatibilityResults"] = (shared.IsChecked == true).ToString();
+            values["checkForUpdates"] = (updates.IsChecked == true).ToString();
+            await model.SaveSettingsAsync(values);
+            if (model.Status == "Settings saved.") fields["proton.compatDataPath"].Text = model.Config.Proton.CompatDataPath;
+        };
         panel.Children.Add(save);
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap }; status.Bind(TextBlock.TextProperty, new Binding(nameof(MainViewModel.Status))); panel.Children.Add(status);
         Content = new ScrollViewer { Content = panel };

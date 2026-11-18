@@ -72,7 +72,8 @@ internal static class FlatpakSteamLauncher
 
         string steamPath = config.Proton.ClientInstallPath ?? Path.Combine(host.Home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam");
         string proton = Path.Combine(config.Proton.Path ?? Path.Combine(steamPath, "steamapps", "common", "Proton - Experimental"), "proton");
-        string compat = config.Proton.CompatDataPath ?? Path.Combine(steamPath, "steamapps", "compatdata", config.Steam.AppId);
+        string compat = ManagerStore.NormalizeCompatDataPath(config.Proton.CompatDataPath)
+            ?? Path.Combine(steamPath, "steamapps", "compatdata", config.Steam.AppId);
         string instance = pid.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (!Visible("-d", game))
             throw new IOException($"Game folder '{game}' is not visible inside Flatpak Steam. Move the whole legacy game folder under '{steamPath}' or grant Steam access to that folder, then set gameDir.");

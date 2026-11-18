@@ -64,7 +64,7 @@ the selection; it does not alter the installed game or delete backups.
 | `wine.prefix` | `wine.prefix` | Optional `WINEPREFIX`; otherwise runner default |
 | `wine.binary` | `wine.binary` | `wine` on PATH, or a runner executable path |
 | `proton.path` | `proton.path` | Folder containing the executable `proton` script |
-| `proton.compatDataPath` | `proton.compatDataPath` | Default `<data-dir>/proton/<app-id>`; a custom existing compatibility directory |
+| `proton.compatDataPath` | `proton.compatDataPath` | Optional; defaults to `<data-dir>/proton/<app-id>` in `proton` mode or `<Flatpak Steam>/steamapps/compatdata/<app-id>` in `proton-flatpak` mode (clear with `""` or blank in Settings) |
 | `proton.clientInstallPath` | `proton.clientInstallPath` | Steam directory; defaults to `STEAM_COMPAT_CLIENT_INSTALL_PATH`, then an existing `~/.steam/steam` or `~/.local/share/Steam` |
 | `steam.appId` | `steam.appId` | `343780`; positive application ID |
 

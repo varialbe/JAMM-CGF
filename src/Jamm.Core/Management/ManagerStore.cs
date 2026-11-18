@@ -1,10 +1,11 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jamm.Core.Building;
 
 namespace Jamm.Core.Management;
 
 /// <summary>Owns JSON persistence and confines all manager writes to ordinary paths below its root.</summary>
-public sealed class ManagerStore
+public sealed partial class ManagerStore
 {
     internal static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     /// <summary>The absolute data root chosen by option, environment or XDG default, in that order.</summary>
@@ -61,8 +62,27 @@ public sealed class ManagerStore
             || config.Wine.Mode is not "wine" and not "proton" and not "proton-flatpak" and not "direct" || string.IsNullOrWhiteSpace(config.Wine.Binary)
             || !uint.TryParse(config.Steam.AppId, out uint id) || id == 0)
             throw new InvalidDataException("Configuration 'config.json' has invalid runner settings. Repair the JSON or remove it and use config set to configure again.");
-        return config;
+        return config with { Proton = config.Proton with { CompatDataPath = NormalizeCompatDataPath(config.Proton.CompatDataPath) } };
     }
+
+    internal static string? NormalizeCompatDataPath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        string candidate = value.Trim().Replace('\\', '/');
+        if (candidate.Length >= 2 && char.IsAsciiLetter(candidate[0]) && candidate[1] == ':')
+            candidate = candidate[2..];
+        candidate = candidate.TrimEnd('/');
+        if (candidate.Equals("/path/to/...", StringComparison.OrdinalIgnoreCase)
+            || candidate.Equals("path/to/...", StringComparison.OrdinalIgnoreCase)
+            || candidate.Equals("<data-dir>/proton/<app-id>", StringComparison.OrdinalIgnoreCase)
+            || candidate.Equals("<Flatpak Steam>/steamapps/compatdata/343780", StringComparison.OrdinalIgnoreCase)
+            || StockCompatPlaceholder().IsMatch(candidate))
+            return null;
+        return value;
+    }
+
+    [GeneratedRegex("^/?path/to/compatdata/[0-9]+$", RegexOptions.IgnoreCase)]
+    private static partial Regex StockCompatPlaceholder();
 
     /// <summary>Creates the default Proton compatibility directory within guarded manager storage.</summary>
     public string EnsureProtonDataDirectory()
@@ -75,7 +95,10 @@ public sealed class ManagerStore
     /// <summary>Sets a documented configuration key, validating enum and numeric values.</summary>
     public ManagerConfig Set(string key, string value)
     {
-        var result = ApplySetting(Config(), key, value);
+        var config = Config();
+        var result = key == "proton.compatDataPath" && NormalizeCompatDataPath(value) is null
+            ? config with { Proton = config.Proton with { CompatDataPath = null } }
+            : ApplySetting(config, key, value);
         SaveConfig(result);
         return result;
     }
@@ -86,12 +109,13 @@ public sealed class ManagerStore
         var config = Config();
         foreach (var (key, value) in values)
         {
-            if (!string.IsNullOrWhiteSpace(value)) config = ApplySetting(config, key, value);
+            if (key == "proton.compatDataPath" && NormalizeCompatDataPath(value) is null)
+                config = config with { Proton = config.Proton with { CompatDataPath = null } };
+            else if (!string.IsNullOrWhiteSpace(value)) config = ApplySetting(config, key, value);
             else config = key switch
             {
                 "wine.prefix" => config with { Wine = config.Wine with { Prefix = null } },
                 "proton.path" => config with { Proton = config.Proton with { Path = null } },
-                "proton.compatDataPath" => config with { Proton = config.Proton with { CompatDataPath = null } },
                 "proton.clientInstallPath" => config with { Proton = config.Proton with { ClientInstallPath = null } },
                 _ => throw new ArgumentException($"Configuration '{key}' needs a nonempty value.")
             };

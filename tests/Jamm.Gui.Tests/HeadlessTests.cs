@@ -190,4 +190,40 @@ public sealed class HeadlessTests
         using (var bitmap = window.CaptureRenderedFrame()!) bitmap.Save(Path.Combine(output, "gui-conflicts.png"));
         window.Close();
     }
+
+    [AvaloniaFact]
+    public async Task SettingsWindowShowsCompatDefaultAndClearsStockPlaceholderOnSave()
+    {
+        using var files = new TestFiles();
+        files.Store.Set("wine.mode", "proton-flatpak");
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
+        await vm.InitializeAsync();
+        var settings = new SettingsWindow(vm);
+        try
+        {
+            settings.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var boxes = settings.GetVisualDescendants().OfType<TextBox>().ToArray();
+            var texts = settings.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+            var compatBox = Assert.Single(boxes, b => b.Watermark == "Blank uses active runner default");
+            Assert.Contains(texts, t => t.Contains("Leave blank to use the active runner default", StringComparison.Ordinal));
+
+            compatBox.Text = "/path/to/compatdata/343780";
+            var save = settings.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Validate & save settings"));
+            save.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            while (vm.IsBusy) await Task.Delay(10);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Null(files.Store.Config().Proton.CompatDataPath);
+            Assert.True(string.IsNullOrEmpty(compatBox.Text));
+
+            compatBox.Text = "/path/to/custom";
+            save.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            while (vm.IsBusy) await Task.Delay(10);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Path.GetFullPath("/path/to/custom"), files.Store.Config().Proton.CompatDataPath);
+            Assert.Equal(Path.GetFullPath("/path/to/custom"), compatBox.Text);
+        }
+        finally { settings.Close(); }
+    }
 }

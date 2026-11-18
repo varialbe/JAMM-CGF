@@ -33,7 +33,9 @@ Management commands return 0 on success, 1 for errors or declined installation.
 
 `wine.mode` accepts `wine`, `proton`, or `proton-flatpak`. For Flatpak Steam, start
 Steam first; see the [Flatpak Steam setup](user-guide.md#flatpak-steam) for defaults
-and sandbox-visible game and compatibility directories.
+and sandbox-visible game and compatibility directories. Leave `proton.compatDataPath`
+unset for the active runner's default, or clear an existing override with
+`cgfmm config set proton.compatDataPath ""`.
 
 ## ModKit commands
 
