@@ -11,10 +11,12 @@ let state = { font: 10, color: 123, alpha: 0.7, halign: 1, valign: 0 };
 let drawn = [];
 const context = {
     global: { jamm_hud_rows: new Proxy([], { get: (a, k) => a[k] ??= [] }) },
-    view_current: 0, view_xview: [100, 200], view_yview: [300, 400], view_wview: [960, 480],
+    view_current: 0, view_xview: [100, 200], view_yview: [300, 400], view_wview: [960, 480], view_hview: [480, 480],
     ExperienceBar: { offset_y: 450 }, Colors: { ui_light: 999 }, fa_right: 2, fa_middle: 1, fa_left: 0, fa_top: 0,
     variable_global_exists: name => name in context.global,
-    instance_exists: () => true, max: Math.max, abs: Math.abs, string: String,
+    variable_instance_exists: (inst, name) => inst != null && typeof inst === 'object' && name in inst,
+    asset_get_index: () => -1, sprite_exists: () => false,
+    instance_exists: obj => obj != null && obj !== -1, max: Math.max, min: Math.min, abs: Math.abs, string: String,
     dcos: a => Math.cos(a * Math.PI / 180), dsin: a => Math.sin(a * Math.PI / 180),
     string_height: s => state.font * s.split('#').length,
     string_width: s => state.font * Math.max(...s.split('#').map(s => s.length)),
@@ -75,4 +77,29 @@ assert.equal(drawn.length, 0, 'hidden/absent rows consume no space');
 const cursor = context.global.jamm_hud_cursor;
 assert.equal(context.jamm_hud_reserve(24, 'author'), cursor - 12);
 assert.equal(context.global.jamm_hud_cursor, cursor - 28);
-console.log('PASS: shipped HUD scripts: bounds/gaps, lanes, captured state, repeated frames, views, camera and hidden rows.');
+
+// Verify view_hview scaling and Back button (icon_Cancel) avoidance across resolutions.
+const cancelObj = {
+    valueOf: () => 42,
+    visible: true, x: 1200, y: 650, ORIGIN_Y: 640, sprite_index: 1,
+    image_xscale: 1, image_yscale: 1, bbox_left: 1120, bbox_right: 1220, bbox_top: 632, bbox_bottom: 690
+};
+const handlerObj = { valueOf: () => 43, id: 1 };
+context.view_wview[0] = 1280;
+context.view_hview[0] = 720;
+context.view_xview[0] = 0;
+context.view_yview[0] = 0;
+context.ExperienceBar.offset_y = 692;
+context.asset_get_index = name => name === 'icon_Cancel' ? cancelObj : name === 'Handler' ? handlerObj : -1;
+context.sprite_exists = s => s === 1;
+context.sprite_get_xoffset = () => 0;
+context.sprite_get_yoffset = () => 8;
+context.sprite_get_width = () => 100;
+drawn = [];
+context.jamm_hud_begin();
+context.jamm_hud_set_font(12);
+context.jamm_hud_text(2, 0, 'Quest above Back', 1, 1, 0);
+context.jamm_hud_flush();
+assert.equal(drawn.length, 1);
+assert.ok(drawn[0].bottom <= cancelObj.bbox_top - 8, 'quest lines stay above bottom-right Back button');
+console.log('PASS: shipped HUD scripts: bounds/gaps, lanes, captured state, repeated frames, views, camera, resolution scaling, Back button avoidance, and hidden rows.');

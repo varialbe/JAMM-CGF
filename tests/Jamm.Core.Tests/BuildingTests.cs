@@ -213,6 +213,115 @@ public sealed partial class BuildingTests
         Assert.False(File.Exists(backup)); Assert.False(Directory.Exists(System.IO.Path.Combine(game, "patches")));
     }
 
+    [Fact]
+    public void CustomUiSpritesHonorOverwriteOrderingExplicitChoicesAndHybridUpgradeIcons()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string customAPath = temp.PathFor("custom-a.win");
+        string customBPath = temp.PathFor("custom-b.win");
+        string hybridPath = temp.PathFor("hybrid.win");
+
+        WriteSpriteModel(basePath, rodColour: 10, upgradeColours: [20, 30], includeUpgradeRef: false);
+        WriteSpriteModel(customAPath, rodColour: 110, upgradeColours: [120, 130], includeUpgradeRef: false);
+        WriteSpriteModel(customBPath, rodColour: 210, upgradeColours: [220, 230], includeUpgradeRef: false);
+        WriteSpriteModel(hybridPath, rodColour: 50, upgradeColours: [60, 70, 80], includeUpgradeRef: true);
+
+        using var orig = GameFileLoader.Load(basePath);
+        using var customA = GameFileLoader.Load(customAPath);
+        using var customB = GameFileLoader.Load(customBPath);
+        using var hybrid = GameFileLoader.Load(hybridPath);
+
+        var patchA = PatchBuilder.Create(orig, customA, "CustomA");
+        var patchB = PatchBuilder.Create(orig, customB, "CustomB");
+        var rawHybrid = PatchBuilder.Create(orig, hybrid, "HybridMod");
+        var sanitizedHybrid = ModSanitizer.Sanitize(rawHybrid).Patch;
+
+        // 1. Overwrite ordering and explicit choices on custom UI sprites (spr_rodcard).
+        string outAB = temp.PathFor("ui-ab.win");
+        ArchiveBuilder.Build(basePath, [new(patchA, customAPath), new(patchB, customBPath)], outAB);
+        using (var merged = GameFileLoader.Load(outAB))
+            Assert.Equal(RegionHash(customB, "spr_rodcard", 0), RegionHash(merged, "spr_rodcard", 0));
+
+        string outBA = temp.PathFor("ui-ba.win");
+        ArchiveBuilder.Build(basePath, [new(patchB, customBPath), new(patchA, customAPath)], outBA);
+        using (var merged = GameFileLoader.Load(outBA))
+            Assert.Equal(RegionHash(customA, "spr_rodcard", 0), RegionHash(merged, "spr_rodcard", 0));
+
+        string outResolved = temp.PathFor("ui-resolved.win");
+        ArchiveBuilder.Build(basePath, [new(patchA, customAPath), new(patchB, customBPath)], outResolved,
+            resolutions: new Dictionary<string, string>(StringComparer.Ordinal) { ["sprites/spr_rodcard"] = "CustomA" });
+        using (var merged = GameFileLoader.Load(outResolved))
+            Assert.Equal(RegionHash(customA, "spr_rodcard", 0), RegionHash(merged, "spr_rodcard", 0));
+
+        // 2. Custom UI mod (CustomA) + sanitized hybrid spr_upgradeicons appender (HybridMod) in BOTH load orders
+        // preserves CustomA's spr_rodcard + custom spr_upgradeicons base frames 0..1 AND HybridMod's appended frame 2.
+        foreach (var (orderName, inputs) in new[]
+        {
+            ("custom-first", new[] { new BuildInput(patchA, customAPath), new BuildInput(sanitizedHybrid, hybridPath) }),
+            ("hybrid-first", new[] { new BuildInput(sanitizedHybrid, hybridPath), new BuildInput(patchA, customAPath) })
+        })
+        {
+            string outMerged = temp.PathFor($"hybrid-{orderName}.win");
+            var res = ArchiveBuilder.Build(basePath, inputs, outMerged);
+            Assert.NotNull(res.Verification);
+            using var merged = GameFileLoader.Load(outMerged);
+            Assert.Equal(RegionHash(customA, "spr_rodcard", 0), RegionHash(merged, "spr_rodcard", 0));
+            var upg = merged.Data.Sprites.ByName("spr_upgradeicons");
+            Assert.NotNull(upg);
+            Assert.Equal(3, upg.Textures.Count);
+            Assert.Equal(RegionHash(customA, "spr_upgradeicons", 0), RegionHash(merged, "spr_upgradeicons", 0));
+            Assert.Equal(RegionHash(customA, "spr_upgradeicons", 1), RegionHash(merged, "spr_upgradeicons", 1));
+            Assert.Equal(RegionHash(hybrid, "spr_upgradeicons", 2), RegionHash(merged, "spr_upgradeicons", 2));
+        }
+
+        static string RegionHash(LoadedGameFile file, string spriteName, int frame)
+            => new ContentFingerprints().Region(file.Data.Sprites.ByName(spriteName).Textures[frame].Texture);
+
+        static void WriteSpriteModel(string path, byte rodColour, byte[] upgradeColours, bool includeUpgradeRef)
+        {
+            using var data = UndertaleData.CreateNew();
+            data.GeneralInfo.Major = 1;
+            data.GeneralInfo.Build = 1773;
+            var code = UndertaleCode.CreateEmptyEntry(data, "gml_Object_UpgradeData_Create_0");
+            var compiler = new CompileGroup(data);
+            compiler.QueueCodeReplace(code, includeUpgradeRef
+                ? "unlocks[0] = 0;\nunlocks[1] = 1;\nname[0] = \"Base\";\nname[1] = \"Added\";\n"
+                : "unlocks[0] = 0;\nname[0] = \"Base\";\n");
+            Assert.True(compiler.Compile().Successful);
+            AddSprite(data, "spr_rodcard", [rodColour]);
+            AddSprite(data, "spr_upgradeicons", upgradeColours);
+            using var stream = File.Create(path);
+            UndertaleIO.Write(stream, data);
+        }
+
+        static void AddSprite(UndertaleData data, string name, byte[] colours)
+        {
+            var spr = new UndertaleSprite { Name = data.Strings.MakeString(name), Width = 4, Height = 4, MarginRight = 3, MarginBottom = 3 };
+            for (int i = 0; i < colours.Length; i++)
+            {
+                var image = new GMImage(4, 4);
+                image.GetRawImageData()[0] = colours[i];
+                var page = new UndertaleEmbeddedTexture { Name = data.Strings.MakeString($"Page_{name}_{i}"), TextureData = new() { Image = image.ConvertToPng() } };
+                var item = new UndertaleTexturePageItem
+                {
+                    Name = data.Strings.MakeString($"Item_{name}_{i}"),
+                    TexturePage = page,
+                    SourceWidth = 4,
+                    SourceHeight = 4,
+                    TargetWidth = 4,
+                    TargetHeight = 4,
+                    BoundingWidth = 4,
+                    BoundingHeight = 4
+                };
+                data.EmbeddedTextures.Add(page);
+                data.TexturePageItems.Add(item);
+                spr.Textures.Add(new() { Texture = item });
+            }
+            data.Sprites.Add(spr);
+        }
+    }
+
     private static ModPatch Patch(string name, string ancestor, string text)
     {
         var changes = new SortedDictionary<string, AssetChanges>(StringComparer.Ordinal);
