@@ -307,7 +307,7 @@ public sealed class MenuRuntimeTests
         Assert.Contains("asset_get_index(\"UpgradeSlotMenu\")", hatStep);
         Assert.Contains("instance_number(jamm_shop_menu_type)", hatStep);
         Assert.Contains("|| !jamm_shop_icon_saved", hatStep);
-        Assert.Contains("min(jamm_shop_anchor_instance.y, view_yview[0] - sprite_height - 8)", hatStep);
+        Assert.Contains("min(jamm_shop_anchor_instance.y, view_yview[0] - max(view_hview[0], sprite_height * 2) - 8)", hatStep);
 
         string umAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text;
         Assert.Contains("window_pos == (scroll_row * visible_rows * card_width)", umAlarm);
