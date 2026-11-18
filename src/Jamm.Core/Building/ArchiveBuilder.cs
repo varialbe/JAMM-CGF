@@ -60,12 +60,14 @@ public static class ArchiveBuilder
                     semantics.Base,
                     semantics.BaseNames),
                 semantics.Base, original.Data);
+            plan = InstanceCompatibility.Repair(plan, patches);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
             var data = working.Data;
             using (new AnalysisPhase(options, "build/compile"))
                 Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
+            plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
             var expectedReferences = semantics.Expected(plan, data);
             ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data);

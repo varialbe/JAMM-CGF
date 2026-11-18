@@ -29,7 +29,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             // Invalidate installation records made before numeric-reference verification.
-            Builder = "phase16", profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Builder = "phase16", InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);
