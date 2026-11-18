@@ -39,7 +39,7 @@ internal static class HudRuntime
                     if (jamm_handler > -1 && instance_exists(jamm_handler) && variable_instance_exists(jamm_cancel, "ORIGIN_Y")) jamm_cy = min(jamm_cy, jamm_cancel.ORIGIN_Y);
                     jamm_ctop = jamm_cy;
                     jamm_cright = jamm_cancel.x;
-                    if (jamm_cancel.sprite_index >= 0 && sprite_exists(jamm_cancel.sprite_index)) {
+                    if (sprite_exists(jamm_cancel.sprite_index)) {
                         jamm_ctop = jamm_cy - (sprite_get_yoffset(jamm_cancel.sprite_index) * abs(jamm_cancel.image_yscale));
                         jamm_cright = jamm_cancel.x - (sprite_get_xoffset(jamm_cancel.sprite_index) * abs(jamm_cancel.image_xscale)) + (sprite_get_width(jamm_cancel.sprite_index) * abs(jamm_cancel.image_xscale));
                         if (jamm_cancel.bbox_bottom > jamm_cancel.bbox_top) jamm_ctop = min(jamm_ctop, jamm_cancel.bbox_top);
