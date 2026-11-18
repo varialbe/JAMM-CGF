@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Jamm.Core.Building;
 using Jamm.Core.Diffing;
 using Jamm.Core.Merging;
 using Jamm.Core.Patching;
@@ -264,6 +265,45 @@ public class MergingTests
         Assert.Contains(report.Findings, f => f.Kind == "reference" && f.Asset == "fish");
         var index = Assert.Single(report.Findings, f => f.Kind == "index");
         Assert.Contains("list[42]", index.Asset); Assert.Contains(index.Sources!, s => s.Contains("second", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LegacyUpgradeSlotCollisionsAreGroupedWithoutOfferingSlotLevelResolution()
+    {
+        const string ancestor = "name[18] = \"base\";\ncost[18] = 1;\ndesc[18] = \"base description\";\n";
+        var a = Patch("A", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[18] = \"A upgrade\";\ncost[18] = 2;\ndesc[18] = \"A description\";\n"), null));
+        var b = Patch("B", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+            "name[18] = \"B upgrade\";\ncost[18] = 3;\ndesc[18] = \"B description\";\n"), null));
+
+        var report = ConflictAnalyzer.Analyze([a, b]);
+        var grouped = Assert.Single(report.Findings, f => f.Kind == "upgrade-slot");
+        Assert.Equal("INFO", grouped.Severity);
+        Assert.Equal(new[] { "A", "B" }, grouped.Mods);
+        Assert.Contains("No slot renumbering", grouped.Message, StringComparison.Ordinal);
+        Assert.Contains("A upgrade (A) vs B upgrade (B)", grouped.Message, StringComparison.Ordinal);
+        Assert.Contains("code/gml_Object_UpgradeData_Create_0", grouped.SuggestedResolution ?? "", StringComparison.Ordinal);
+        Assert.Contains(report.Findings, f => f.Kind == "index" && f.Severity == "CONFLICT");
+        Assert.Contains(report.Findings, f => (f.Kind is "code" or "addition") && f.Severity == "CONFLICT");
+
+        var plan = BuildPlan.Create([a, b], new Dictionary<string, string>
+        {
+            ["code/gml_Object_UpgradeData_Create_0"] = "A"
+        });
+        var selected = Assert.Single(plan.Assets, asset => asset.Family == "code" && asset.Name == "gml_Object_UpgradeData_Create_0");
+        Assert.Contains("A upgrade", selected.Gml, StringComparison.Ordinal);
+        Assert.DoesNotContain("B upgrade", selected.Gml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpgradeSlotClassifierRequiresKnownEventsAndOnlyAdvisesResolvableCodeConflicts()
+    {
+        const string ancestor = "name[18] = \"base\";\n";
+        var a = Patch("A", ("code", CodeAsset("gml_Object_MyUpgradeDataFake_Create_0", ancestor, "name[18] = \"A\";\n"), null));
+        var b = Patch("B", ("code", CodeAsset("gml_Object_MyUpgradeDataFake_Create_0", ancestor, "name[18] = \"B\";\n"), null));
+        var report = ConflictAnalyzer.Analyze([a, b]);
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-slot");
+        Assert.Contains(report.Findings, f => f.Kind == "index" && f.Severity == "CONFLICT");
     }
 
     [Fact]

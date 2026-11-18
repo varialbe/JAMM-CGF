@@ -161,6 +161,8 @@ internal static class CheckCommand
                 Console.WriteLine($"{field.Path} | base: {Value(field.Base)}");
                 Console.WriteLine(string.Join(" | ", field.Versions.Select(v => $"{v.Mod}: {Value(v.Value)}")));
             }
+            if (finding.SuggestedResolution is { Length: > 0 } suggestion)
+                Console.WriteLine($"Suggested resolution: {suggestion}");
             foreach (string source in finding.Sources ?? []) Console.WriteLine($"  {source}");
         }
         if (findings.Length == 0 && !report.CodeMerges.ContainsKey(asset))
