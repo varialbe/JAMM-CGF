@@ -23,6 +23,7 @@ public sealed class FishRuntimeTests
         {
             var fishParent = d.GameObjects.ByName("FishSmall")!;
             d.GameObjects.Add(new() { Name = d.Strings.MakeString("jmk_demo_minnow"), ParentId = fishParent });
+            var fishCreate = d.GameObjects.ByName("jmk_demo_minnow")!.EventHandlerFor(EventType.Create, 0u, d);
 
             var regCode = UndertaleCode.CreateEmptyEntry(d, "gml_Script_jamm_fish_register");
             d.Scripts.Add(new() { Name = d.Strings.MakeString("jamm_fish_register"), Code = regCode });
@@ -31,6 +32,7 @@ public sealed class FishRuntimeTests
             d.Scripts.Add(new() { Name = d.Strings.MakeString("jamm_init_demo"), Code = initCode });
 
             var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(fishCreate, "instance_destroy();\n");
             compiler.QueueCodeReplace(regCode, "return -1;\n");
             compiler.QueueCodeReplace(initCode, "jamm_fish_register(\"demo:minnow\", jmk_demo_minnow, 0, \"Minnow\", \"Tiny fish.\", 1100, 1500, 1400, 1700, 3);\nreturn 0;\n");
             Assert.True(compiler.Compile().Successful);
@@ -48,6 +50,13 @@ public sealed class FishRuntimeTests
         string reg = PatchBuilder.ReadCode(merged, FishRuntime.RegisterCode).Text;
         Assert.Contains("instance_number(", reg);
         Assert.Contains("instance_create(", reg);
+        int createPos = reg.IndexOf("jamm_inst = instance_create(", StringComparison.Ordinal);
+        Assert.True(createPos >= 0);
+        int guardPos = reg.IndexOf("if (instance_exists(jamm_inst))", createPos, StringComparison.Ordinal);
+        int metadataPos = reg.IndexOf("jamm_inst.start_x =", createPos, StringComparison.Ordinal);
+        int catalogPos = reg.IndexOf("jamm_catalog_register(", StringComparison.Ordinal);
+        Assert.True(guardPos > createPos && metadataPos > guardPos);
+        Assert.True(catalogPos > metadataPos);
         Assert.Contains("TRUE_START_X", reg);
         Assert.Contains("jamm_fish_names", reg);
         Assert.Contains("CatalogData", reg);

@@ -238,12 +238,18 @@ internal static class FishRuntime
                 jamm_sx = jamm_x1 + random(max(0, jamm_x2 - jamm_x1));
                 jamm_sy = jamm_y1 + random(max(0, jamm_y2 - jamm_y1));
                 jamm_inst = instance_create(jamm_sx, jamm_sy, jamm_obj);
-                jamm_inst.start_x = jamm_sx;
-                jamm_inst.start_y = jamm_sy;
-                jamm_inst.TRUE_START_X = jamm_sx;
-                jamm_inst.TRUE_START_Y = jamm_sy;
-                jamm_inst.nothungry_x = jamm_sx;
-                jamm_inst.nothungry_y = jamm_sy;
+                // instance_create runs the fish's Create event before returning. A fish or
+                // another Create hook can destroy it immediately, so only initialize spawn
+                // metadata while the returned instance still exists.
+                if (instance_exists(jamm_inst))
+                {
+                    jamm_inst.start_x = jamm_sx;
+                    jamm_inst.start_y = jamm_sy;
+                    jamm_inst.TRUE_START_X = jamm_sx;
+                    jamm_inst.TRUE_START_Y = jamm_sy;
+                    jamm_inst.nothungry_x = jamm_sx;
+                    jamm_inst.nothungry_y = jamm_sy;
+                }
             }
             """;
 
