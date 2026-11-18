@@ -38,6 +38,84 @@ public class MergingTests
         Assert.All(result.Hunks, h => Assert.Equal("AUTO", h.Status));
     }
 
+    [Fact]
+    public void AdjacentLoopInsertionAndNestedLoopEditDoNotCrossAssignStatements()
+    {
+        const string ancestor = "function f() {\n    upg[0, 0] = 1;\n    upg[1, 0] = 1;\n    for (ix = 0; ix < 6; ix++) {\n        for (iy = 0; iy < 8; iy++) {\n            object[ix, iy] = -1;\n        }\n    }\n    done();\n}\n";
+        const string a = "function f() {\n    upg[0, 0] = 1;\n    upg[1, 0] = 1;\n    upg[6, 0] = 1;\n    for (ix = 0; ix < 6; ix++) {\n        for (iy = 0; iy < 8; iy++) {\n            object[ix, iy] = -1;\n        }\n    }\n    done();\n}\n";
+        const string b = "function f() {\n    upg[0, 0] = 1;\n    upg[1, 0] = 1;\n    upg[18, 0] = 1;\n    for (iy = 0; iy < 9; iy++) {\n        upg[18, iy] = -1;\n    }\n    for (ix = 0; ix < 7; ix++) {\n        for (iy = 0; iy < 9; iy++) {\n            object[ix, iy] = -1;\n        }\n    }\n    done();\n}\n";
+        foreach (var versions in new[]
+        {
+            new[] { new MergeVersion("A", a), new MergeVersion("B", b) },
+            new[] { new MergeVersion("B", b), new MergeVersion("A", a) }
+        })
+        {
+            var result = ThreeWayMerge.Merge(ancestor, versions);
+            Assert.False(result.HasConflicts);
+            Assert.Contains("upg[6, 0] = 1;", result.Text);
+            Assert.Contains("for (iy = 0; iy < 9; iy++) {\n        upg[18, iy] = -1;", result.Text);
+            Assert.Contains("for (ix = 0; ix < 7; ix++) {\n        for (iy = 0; iy < 9; iy++)", result.Text);
+            Assert.DoesNotContain("for (iy = 0; iy < 9; iy++) {\n        object[ix, iy]", result.Text);
+        }
+    }
+
+    [Fact]
+    public void NearAdjacentIndependentLoopsAndOutsideEditsRemainMergeable()
+    {
+        const string ancestor = "function f() {\n    for (ix = 0; ix < 6; ix++) {\n        left_work();\n    }\n    for (iy = 0; iy < 8; iy++) {\n        right_work();\n    }\n    tail();\n}\n";
+        var result = ThreeWayMerge.Merge(ancestor,
+            "function f() {\n    for (ix = 0; ix < 7; ix++) {\n        left_work();\n    }\n    for (iy = 0; iy < 8; iy++) {\n        right_work();\n    }\n    tail();\n}\n",
+            "function f() {\n    for (ix = 0; ix < 6; ix++) {\n        left_work();\n    }\n    for (iy = 0; iy < 9; iy++) {\n        right_work();\n    }\n    TAIL();\n}\n");
+        Assert.False(result.HasConflicts);
+        Assert.Contains("ix < 7", result.Text);
+        Assert.Contains("iy < 9", result.Text);
+        Assert.Contains("TAIL();", result.Text);
+    }
+
+    [Fact]
+    public void ConflictingLoopScopeDoesNotSwallowUnrelatedTailEdit()
+    {
+        const string ancestor = "function f() {\n    for (ix = 0; ix < 6; ix++) {\n        work();\n    }\n    tail();\n}\n";
+        var result = ThreeWayMerge.Merge(ancestor,
+            "function f() {\n    for (ix = 0; ix < 7; ix++) {\n        work();\n    }\n    tail();\n}\n",
+            "function f() {\n    for (ix = 0; ix < 8; ix++) {\n        work();\n    }\n    TAIL();\n}\n");
+        Assert.True(result.HasConflicts);
+        Assert.Contains("<<<<<<< A", result.Text);
+        Assert.Contains("TAIL();", result.Text);
+        Assert.Equal(1, result.Hunks.Count(h => h.Status == "CONFLICT"));
+        Assert.Contains(result.Hunks, h => h.Status == "AUTO");
+    }
+
+    [Fact]
+    public void EditCrossingLoopScopeExpandsToItsFullRangeAndKeepsOutsideEdit()
+    {
+        const string ancestor = "function f() {\n    before();\n    for (ix = 0; ix < 6; ix++) {\n        work(\"}\"); // {\n    }\n    after();\n    tail();\n}\n";
+        const string a = "function f() {\n    before();\n    for (ix = 0; ix < 7; ix++) {\n        work(\"}\"); // {\n    }\n    after();\n    TAIL();\n}\n";
+        const string b = "function f() {\n    BEFORE();\n    for (ix = 0; ix < 6; ix++) { // B\n        WORK();\n    } // B\n    AFTER();\n    tail();\n}\n";
+
+        var result = ThreeWayMerge.Merge(ancestor, a, b);
+
+        Assert.True(result.HasConflicts);
+        var conflict = Assert.Single(result.Hunks, h => h.Status == "CONFLICT");
+        Assert.Contains("before();", conflict.Base);
+        Assert.Contains("after();", conflict.Base);
+        Assert.Contains("TAIL();", result.Text);
+        Assert.Contains("BEFORE();", result.Text);
+        Assert.Contains("AFTER();", result.Text);
+    }
+
+    [Fact]
+    public void DisjointOrdinaryEditsStillMergeInsideLoopContainingCode()
+    {
+        const string ancestor = "function f() {\n    for (ix = 0; ix < 6; ix++) {\n        work();\n    }\n    left();\n    right();\n}\n";
+        var result = ThreeWayMerge.Merge(ancestor,
+            "function f() {\n    for (ix = 0; ix < 6; ix++) {\n        work();\n    }\n    LEFT();\n    right();\n}\n",
+            "function f() {\n    for (ix = 0; ix < 6; ix++) {\n        work();\n    }\n    left();\n    RIGHT();\n}\n");
+        Assert.False(result.HasConflicts);
+        Assert.Contains("LEFT();", result.Text);
+        Assert.Contains("RIGHT();", result.Text);
+    }
+
     [Theory]
     [InlineData("a\nb\nc\n", "a\nA\nc\n", "a\nB\nc\n")]
     [InlineData("a\nb\nc\n", "a\nc\n", "a\nB\nc\n")]
