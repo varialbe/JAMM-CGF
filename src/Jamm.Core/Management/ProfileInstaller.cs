@@ -21,6 +21,7 @@ public sealed class ProfileInstaller(ManagerStore store)
             throw new ArgumentException("Set 'base' and 'gameDir' with cgfmm config set before applying a profile.");
         var profile = new ProfileLibrary(store).Get(name ?? config.ActiveProfile
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
+        new BuiltinMods(store).RefreshStale(profile.EnabledMods, progress, cancellationToken);
         var library = new ModLibrary(store);
         var inputs = profile.EnabledMods.Select(id => library.Find(id)).Select(m => new BuildInput(library.Patch(m, progress, cancellationToken), library.Archive(m))).ToArray();
         string hash = BuildFiles.Hash(config.Base);

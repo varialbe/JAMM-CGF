@@ -338,7 +338,7 @@ public static class ConsoleMod
                 {
                     if (ToolData.unlocked[jamm_i] <= 0) jamm_tool_new += 1;
                     ToolData.unlocked[jamm_i] = 1;
-                    if (instance_exists(ToolData.item[jamm_i])) ToolData.item[jamm_i].active = 1;
+                    if (ToolData.unlocked[jamm_i] == 1 && instance_exists(ToolData.item[jamm_i])) ToolData.item[jamm_i].active = 1;
                 }
             }
             var jamm_hat_total = 0;
@@ -416,13 +416,19 @@ public static class ConsoleMod
                             if (jamm_fish_obj >= 0 && object_exists(jamm_fish_obj))
                             {
                                 jamm_cat_total += 1;
-                                if (CatalogData.count[jamm_i, jamm_j] < 1)
+                                if (CatalogData.count[jamm_i, jamm_j] < 1 || CatalogData.life[jamm_i, jamm_j] < 3)
                                     jamm_cat_new += 1;
                                 CatalogData.count[jamm_i, jamm_j] = max(CatalogData.count[jamm_i, jamm_j], 1);
-                                CatalogData.life[jamm_i, jamm_j] = max(CatalogData.life[jamm_i, jamm_j], 0);
+                                CatalogData.life[jamm_i, jamm_j] = max(CatalogData.life[jamm_i, jamm_j], 3);
+                                CatalogData.hide[jamm_i, jamm_j] = 0;
                             }
                         }
                     }
+                }
+                CatalogData.all_fish_revealed = 1;
+                if (variable_instance_exists(CatalogData.id, "weight"))
+                {
+                    with (CatalogData) event_perform(ev_other, ev_user0);
                 }
             }
             ds_list_add(jamm_console_log, "Catalog: " + string(jamm_cat_total) + " fish (" + string(jamm_cat_new) + " newly caught).");

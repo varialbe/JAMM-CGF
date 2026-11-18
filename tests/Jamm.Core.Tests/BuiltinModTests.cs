@@ -166,5 +166,51 @@ public sealed class BuiltinModTests : IDisposable
             Assert.NotNull(loaded.Data.GameObjects.ByName(name));
     }
 
+    [Fact]
+    public void ConsoleCatalogAllSetsMaxLifeAndStaleBuiltinCacheAutoRefreshesOnCheckAndInstallCheck()
+    {
+        using (var stream = File.Open(original, FileMode.Open, FileAccess.ReadWrite))
+        {
+            var data = UndertaleIO.Read(stream);
+            ModObjects.Create(data, "CatalogData", false);
+            stream.SetLength(0);
+            stream.Position = 0;
+            UndertaleIO.Write(stream, data);
+        }
+
+        var console = new BuiltinMods(store).Add("console").Mod;
+        using (var loaded = GameFileLoader.Load(Path.Combine(store.Root, "mods", console.Id, "data.win")))
+        {
+            string step1 = Jamm.Core.Patching.PatchBuilder.ReadCode(loaded, "gml_Object_obj_jamm_console_Step_1").Text;
+            Assert.Contains("CatalogData.life[jamm_i, jamm_j] = max(CatalogData.life[jamm_i, jamm_j], 3);", step1);
+            Assert.Contains("CatalogData.hide[jamm_i, jamm_j] = 0;", step1);
+            Assert.Contains("CatalogData.all_fish_revealed = 1;", step1);
+            Assert.Contains("ToolData.unlocked[jamm_i] == 1 && instance_exists(ToolData.item[jamm_i])", step1);
+            Assert.Contains("ToolData.item[jamm_i].active = 1;", step1);
+        }
+
+        // Simulate an older GeneratorVersion cached console (receipt/version mismatch against current GeneratorVersion).
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("default", ["builtin-console"]);
+        profiles.Use("default");
+        string sha = BuildFiles.Hash(original);
+        string currentCached = store.Path("builtin", $"console-{BuiltinMods.GeneratorVersion}-{sha}.win");
+        File.WriteAllText(store.Path("builtin", $"console-{BuiltinMods.GeneratorVersion}-{sha}.win.sha256"), "stale-hash-from-v2");
+
+        var report = new ManagerOperations(store).Check("default");
+        Assert.NotNull(report);
+        Assert.True(File.Exists(currentCached));
+        Assert.Equal(BuildFiles.Hash(currentCached), File.ReadAllText(currentCached + ".sha256"));
+
+        // Also verify ProfileInstaller.IsInstalled refreshes a stale builtin receipt/cache automatically:
+        string gameDir = Path.Combine(root, "game");
+        Directory.CreateDirectory(gameDir);
+        File.Copy(original, Path.Combine(gameDir, "data.win"));
+        store.Set("gameDir", gameDir);
+        File.WriteAllText(currentCached + ".sha256", "stale-hash-again");
+        Assert.False(new ProfileInstaller(store).IsInstalled("default"));
+        Assert.Equal(BuildFiles.Hash(currentCached), File.ReadAllText(currentCached + ".sha256"));
+    }
+
     public void Dispose() => Directory.Delete(root, true);
 }

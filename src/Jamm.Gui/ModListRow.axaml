@@ -42,6 +42,7 @@
         <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" Margin="0,2"/>
         <CheckBox x:Name="KeepAuthorPerfCheck" Content="Keep the author's performance changes" IsChecked="{Binding KeepAuthorPerformanceChanges, Mode=TwoWay}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" IsEnabled="{Binding CanKeepAuthorPerformanceChanges}"/>
         <CheckBox x:Name="KeepAuthorHudCheck" Content="Keep the author's HUD design" IsChecked="{Binding KeepAuthorHudDesign, Mode=TwoWay}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" IsEnabled="{Binding CanKeepAuthorHudDesign}"/>
+        <CheckBox x:Name="KeepAuthorGameplayCheck" Content="Keep the author's gameplay/sonar changes" IsChecked="{Binding KeepAuthorGameplayChanges, Mode=TwoWay}" IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" IsEnabled="{Binding CanKeepAuthorGameplayChanges}"/>
         <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
         <TextBlock Text="{Binding SourceFolderLine}" Classes="muted" FontSize="11" IsVisible="{Binding IsModKit}" TextWrapping="Wrap"/>
         <WrapPanel Orientation="Horizontal" Margin="0,4,0,0" IsVisible="{Binding IsModKit}">

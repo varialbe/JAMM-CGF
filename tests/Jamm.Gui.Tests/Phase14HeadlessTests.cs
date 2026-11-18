@@ -177,21 +177,52 @@ public sealed class Phase14HeadlessTests
             window.UpdateLayout();
             var keepCheck = rowControl.FindControl<CheckBox>("KeepAuthorPerfCheck")!;
             var keepHudCheck = rowControl.FindControl<CheckBox>("KeepAuthorHudCheck")!;
+            var keepGameplayCheck = rowControl.FindControl<CheckBox>("KeepAuthorGameplayCheck")!;
             Assert.True(keepCheck.IsEffectivelyVisible);
             Assert.True(keepHudCheck.IsEffectivelyVisible);
+            Assert.True(keepGameplayCheck.IsEffectivelyVisible);
             Assert.False(modRow.KeepAuthorPerformanceChanges);
             Assert.False(modRow.KeepAuthorHudDesign);
+            Assert.False(modRow.KeepAuthorGameplayChanges);
             modRow.KeepAuthorPerformanceChanges = true;
             while (vm.IsBusy) await Task.Delay(10);
             Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorPerformanceChanges);
             modRow.KeepAuthorHudDesign = true;
             while (vm.IsBusy) await Task.Delay(10);
             Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorHudDesign);
+            modRow.KeepAuthorGameplayChanges = true;
+            while (vm.IsBusy) await Task.Delay(10);
+            Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorGameplayChanges);
         }
         finally
         {
             window.Close();
             Dispatcher.UIThread.RunJobs();
+            vm.Browse.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SonarSanitizedModRowShowsRemovedGameplayCountAndLine()
+    {
+        using var files = new TestFiles();
+        files.Store.Set("useSharedCompatibilityResults", "false");
+        string modPath = files.Mod("SonarBypassMod", "view_visible[3] = 1;\nx = 2;\n");
+        new ModLibrary(files.Store).Add(modPath);
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
+        await vm.InitializeAsync();
+        try
+        {
+            var modRow = Assert.Single(vm.Mods);
+            Assert.Equal(0, modRow.RemovedPerformanceCount);
+            Assert.Equal(0, modRow.RemovedHudCount);
+            Assert.Equal(1, modRow.RemovedGameplayCount);
+            Assert.True(modRow.HasSanitizedInfo);
+            Assert.Equal("JAMM removed 1 gameplay/sonar changes", modRow.SanitizedLine);
+            Assert.Contains("[gameplay-sonar]", modRow.SanitizedDetails);
+        }
+        finally
+        {
             vm.Browse.Dispose();
         }
     }

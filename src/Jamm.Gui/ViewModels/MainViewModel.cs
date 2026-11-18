@@ -196,9 +196,11 @@ public sealed partial class MainViewModel : ObservableObject
                     IsJammMod = info.Report?.IsJammMod ?? false,
                     RemovedPerformanceCount = info.Report?.RemovedPerformanceCount ?? 0,
                     RemovedHudCount = info.Report?.RemovedHudCount ?? 0,
+                    RemovedGameplayCount = info.Report?.RemovedGameplayCount ?? 0,
                     SanitizedDetails = info.Report?.FormatDetails() ?? "",
                     KeepAuthorPerformanceChanges = m.Mod.KeepAuthorPerformanceChanges,
                     KeepAuthorHudDesign = m.Mod.KeepAuthorHudDesign,
+                    KeepAuthorGameplayChanges = m.Mod.KeepAuthorGameplayChanges,
                     IsModKit = isModKit,
                     SourceFolder = m.Mod.SourceFolder,
                     PackageVersion = m.Mod.Version,
@@ -228,6 +230,7 @@ public sealed partial class MainViewModel : ObservableObject
                     if (e.PropertyName == nameof(ModRow.Enabled)) { Conflicts.Clear(); RefreshBuiltins(); NotifyButtons(); }
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorPerformanceChanges)) await SetKeepAuthorPerformanceChangesAsync(row);
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorHudDesign)) await SetKeepAuthorHudDesignAsync(row);
+                    else if (e.PropertyName == nameof(ModRow.KeepAuthorGameplayChanges)) await SetKeepAuthorGameplayChangesAsync(row);
                 };
             }
             RefreshBuiltins();
@@ -359,6 +362,13 @@ public sealed partial class MainViewModel : ObservableObject
         await Task.Run(() => new ModLibrary(store).SetKeepAuthorHudDesign(row.Id, row.KeepAuthorHudDesign));
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
         Message($"{row.Name}: {(row.KeepAuthorHudDesign ? "keeping the author's HUD design" : "protecting base HUD design")}.");
+    }, false);
+    /// <summary>Persists the Advanced per-mod opt-out to keep or sanitize the author's gameplay/sonar changes.</summary>
+    public Task SetKeepAuthorGameplayChangesAsync(ModRow row) => RunAsync("Updating gameplay compatibility setting", async (_, _) =>
+    {
+        await Task.Run(() => new ModLibrary(store).SetKeepAuthorGameplayChanges(row.Id, row.KeepAuthorGameplayChanges));
+        Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons();
+        Message($"{row.Name}: {(row.KeepAuthorGameplayChanges ? "keeping the author's gameplay/sonar changes" : "enforcing vanilla sonar progression")}.");
     }, false);
     /// <summary>Number of switches waiting to be applied.</summary>
     public int PendingCount => Mods.Count(m => m.IsPending);

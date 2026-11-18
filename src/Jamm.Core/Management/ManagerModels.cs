@@ -66,6 +66,8 @@ public sealed record ManagedMod(string Id, string Name, string SourceFileName, s
     public bool KeepAuthorPerformanceChanges { get; init; }
     /// <summary>Expert per-mod opt-out that keeps the author's HUD/UI asset replacements instead of reverting to base HUD art.</summary>
     public bool KeepAuthorHudDesign { get; init; }
+    /// <summary>Expert per-mod opt-out that keeps the author's gameplay/sonar changes instead of enforcing vanilla progression.</summary>
+    public bool KeepAuthorGameplayChanges { get; init; }
     /// <summary>Source folder path on disk for ModKit folder mods.</summary>
     public string? SourceFolder { get; init; }
     /// <summary>Mod author when supplied by a ModKit package manifest.</summary>

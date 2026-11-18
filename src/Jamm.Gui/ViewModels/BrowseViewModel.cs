@@ -33,21 +33,18 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
     public Avalonia.Media.IImage? Icon { get => icon; internal set => SetProperty(ref icon, value); }
     private int removedPerformanceCount;
     private int removedHudCount;
+    private int removedGameplayCount;
     private string sanitizedDetails = "";
     /// <summary>Number of third-party performance changes removed by JAMM's sanitizer.</summary>
     public int RemovedPerformanceCount { get => removedPerformanceCount; internal set { if (SetProperty(ref removedPerformanceCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
     /// <summary>Number of third-party HUD/UI asset changes reverted by JAMM's sanitizer.</summary>
     public int RemovedHudCount { get => removedHudCount; internal set { if (SetProperty(ref removedHudCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
-    /// <summary>True when JAMM removed at least one third-party performance or HUD change from this mod.</summary>
-    public bool HasSanitizedInfo => RemovedPerformanceCount > 0 || RemovedHudCount > 0;
-    /// <summary>Short summary line for removed performance and/or HUD changes.</summary>
-    public string SanitizedLine => (RemovedPerformanceCount, RemovedHudCount) switch
-    {
-        ( > 0, 0) => $"JAMM removed {RemovedPerformanceCount} performance changes",
-        (0, > 0) => $"JAMM removed {RemovedHudCount} HUD changes",
-        ( > 0, > 0) => $"JAMM removed {RemovedPerformanceCount} performance changes, {RemovedHudCount} HUD changes",
-        _ => ""
-    };
+    /// <summary>Number of gameplay/sonar compatibility changes adjusted by JAMM's sanitizer.</summary>
+    public int RemovedGameplayCount { get => removedGameplayCount; internal set { if (SetProperty(ref removedGameplayCount, value)) { OnPropertyChanged(nameof(HasSanitizedInfo)); OnPropertyChanged(nameof(SanitizedLine)); } } }
+    /// <summary>True when JAMM removed at least one third-party performance, HUD, or gameplay change from this mod.</summary>
+    public bool HasSanitizedInfo => RemovedPerformanceCount > 0 || RemovedHudCount > 0 || RemovedGameplayCount > 0;
+    /// <summary>Short summary line for removed performance, HUD, and/or gameplay changes.</summary>
+    public string SanitizedLine => ModRow.FormatSanitizedLine(RemovedPerformanceCount, RemovedHudCount, RemovedGameplayCount);
     /// <summary>Detailed list of removed performance and HUD changes for the info flyout.</summary>
     public string SanitizedDetails { get => sanitizedDetails; internal set => SetProperty(ref sanitizedDetails, value); }
 }
@@ -271,8 +268,9 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         row.CompatibilityColor = facts.Compatibility == "Compatible" ? "#259D50" : facts.Compatibility == "Incompatible" ? "#D74040" : "#D6A500";
         row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason + " · " + source;
         var removed = facts.RemovedPerformanceChanges ?? [];
-        row.RemovedPerformanceCount = removed.Count(r => r.Category != Jamm.Core.Patching.ModSanitizer.HudStyle);
+        row.RemovedPerformanceCount = removed.Count(r => r.Category != Jamm.Core.Patching.ModSanitizer.HudStyle && r.Category != Jamm.Core.Patching.ModSanitizer.GameplaySonar);
         row.RemovedHudCount = removed.Count(r => r.Category == Jamm.Core.Patching.ModSanitizer.HudStyle);
+        row.RemovedGameplayCount = removed.Count(r => r.Category == Jamm.Core.Patching.ModSanitizer.GameplaySonar);
         row.SanitizedDetails = removed.Count == 0 ? "" : string.Join("\n", removed.Select(r => $"[{r.Category}] {r.Entry}: {r.Summary}"));
         DetailStatus = facts.Reason;
     }

@@ -50,16 +50,18 @@ public static class ArchiveBuilder
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
             // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
             // jamm_api_init when no items runtime was injected.
-            var plan = FishRuntime.PreparePlan(
-                ItemsRuntime.PreparePlan(
-                    HudRuntime.PreparePlan(
-                        MenuRuntime.PreparePlan(
-                            CatalogRuntime.PreparePlan(BuildPlan.Create(patches, resolutions, baseReferences), semantics.Base),
-                            semantics.Base, original.Data),
-                        semantics.Base),
-                    semantics.Base,
-                    semantics.BaseNames),
-                semantics.Base, original.Data);
+            var plan = CatalogRuntime.PreparePlan(
+                FishRuntime.PreparePlan(
+                    ItemsRuntime.PreparePlan(
+                        HudRuntime.PreparePlan(
+                            MenuRuntime.PreparePlan(
+                                BuildPlan.Create(patches, resolutions, baseReferences),
+                                semantics.Base, original.Data),
+                            semantics.Base),
+                        semantics.Base,
+                        semantics.BaseNames),
+                    semantics.Base, original.Data),
+                semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
