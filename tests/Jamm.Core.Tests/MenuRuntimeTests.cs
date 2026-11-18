@@ -269,6 +269,7 @@ public sealed class MenuRuntimeTests
             foreach (string icon in new[] { "icon_Hats", "icon_HatsNew", "icon_Cancel" })
                 d.GameObjects.Add(new() { Name = d.Strings.MakeString(icon), Visible = true });
             var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(d.GameObjects.ByName("icon_HatsNew").EventHandlerFor(EventType.Step, d), "visible = true; y = 3;");
             compiler.QueueCodeReplace(d.GameObjects.ByName("Handler").EventHandlerFor(EventType.Destroy, 0u, d), "with (Card) { instance_destroy(); }");
             compiler.QueueCodeReplace(d.GameObjects.ByName("CardHandler").EventHandlerFor(EventType.Destroy, 0u, d), "event_inherited();\nRod.swing_locked = 0;");
             Assert.True(compiler.Compile().Successful);
@@ -278,6 +279,7 @@ public sealed class MenuRuntimeTests
             foreach (string icon in new[] { "icon_Hats", "icon_HatsNew", "icon_Cancel" })
                 d.GameObjects.Add(new() { Name = d.Strings.MakeString(icon), Visible = true });
             var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(d.GameObjects.ByName("icon_HatsNew").EventHandlerFor(EventType.Step, d), "visible = true; y = 3;");
             compiler.QueueCodeReplace(d.GameObjects.ByName("Handler").EventHandlerFor(EventType.Destroy, 0u, d), "with (Card) { instance_destroy(); }");
             compiler.QueueCodeReplace(d.GameObjects.ByName("CardHandler").EventHandlerFor(EventType.Destroy, 0u, d), "event_inherited();\nRod.swing_locked = 0;");
             Assert.True(compiler.Compile().Successful);
@@ -296,6 +298,16 @@ public sealed class MenuRuntimeTests
         Assert.Contains("\"icon_HatsNew\"", umStep);
         Assert.Contains("jamm_menu_hidden = 1", umStep);
         Assert.Contains("\"icon_Rods\"", umStep);
+
+        string hatStep = PatchBuilder.ReadCode(merged, "gml_Object_icon_HatsNew_Step_0").Text;
+        Assert.StartsWith("visible = true; y = 3;", hatStep);
+        Assert.Contains("y = jamm_shop_icon_hidden_y", hatStep);
+        Assert.Contains("y = jamm_shop_icon_saved_y", hatStep);
+        Assert.Contains("visible = jamm_shop_icon_saved_visible", hatStep);
+        Assert.Contains("asset_get_index(\"UpgradeSlotMenu\")", hatStep);
+        Assert.Contains("instance_number(jamm_shop_menu_type)", hatStep);
+        Assert.Contains("|| !jamm_shop_icon_saved", hatStep);
+        Assert.Contains("min(y, view_yview[0] - sprite_height - 8)", hatStep);
 
         string umAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text;
         Assert.Contains("window_pos == (scroll_row * visible_rows * card_width)", umAlarm);

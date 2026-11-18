@@ -39,6 +39,8 @@ internal static class MenuRuntime
             TryPatch("CardHandler (2 rows)", () => PatchCardHandler(assets, baseline, hasSmallFont));
         if (hasUpgradeMenu)
             TryPatch("UpgradeMenu (9 rows)", () => PatchUpgradeMenu(assets, baseline, hasSmallFont));
+        if (hasCardHandler || hasUpgradeMenu)
+            TryPatchOptional("hat icon shop visibility", () => PatchHatIconSteps(assets, baseline));
 
         TryPatchOptional("Boat card equip index", () => PatchBoatCard(assets, baseline));
         TryPatchOptional("invalid Dark Boat registration", () => PatchInvalidDarkBoat(assets, baseline));
@@ -357,6 +359,51 @@ internal static class MenuRuntime
     private static string BuildHideHatButtonsGml() => BuildHatButtonVisibilityGml(hide: true);
 
     private static string BuildRestoreHatButtonsGml() => BuildHatButtonVisibilityGml(hide: false);
+
+    private static void PatchHatIconSteps(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
+    {
+        foreach (string name in new[] { "icon_Hats", "icon_HatsNew" })
+        {
+            string step = $"gml_Object_{name}_Step_0";
+            if (HasCode(assets, baseline, step))
+                AppendOrPut(assets, baseline, step, BuildHatIconStepGml());
+        }
+    }
+
+    private static string BuildHatIconStepGml() => """
+        var jamm_shop_menu, jamm_shop_menu_type, jamm_shop_anchor, jamm_shop_anchor_y;
+        jamm_shop_menu = 0;
+        jamm_shop_menu_type = asset_get_index("UpgradeMenu");
+        if (jamm_shop_menu_type > -1 && instance_number(jamm_shop_menu_type) > 0) jamm_shop_menu = 1;
+        jamm_shop_menu_type = asset_get_index("UpgradeSlotMenu");
+        if (jamm_shop_menu_type > -1 && instance_number(jamm_shop_menu_type) > 0) jamm_shop_menu = 1;
+        jamm_shop_menu_type = asset_get_index("CardHandler");
+        if (jamm_shop_menu_type > -1 && instance_number(jamm_shop_menu_type) > 0) jamm_shop_menu = 1;
+        if (jamm_shop_menu)
+        {
+            jamm_shop_anchor = asset_get_index("icon_Rods");
+            jamm_shop_anchor_y = view_yview[0] - sprite_height - 8;
+            if (jamm_shop_anchor > -1 && instance_exists(jamm_shop_anchor))
+            {
+                with (jamm_shop_anchor) jamm_shop_anchor_y = min(y, view_yview[0] - sprite_height - 8);
+            }
+            if (!variable_instance_exists(id, "jamm_shop_icon_saved") || !jamm_shop_icon_saved)
+            {
+                jamm_shop_icon_saved = 1;
+                jamm_shop_icon_saved_y = y;
+                jamm_shop_icon_saved_visible = visible;
+            }
+            jamm_shop_icon_hidden_y = jamm_shop_anchor_y;
+            y = jamm_shop_icon_hidden_y;
+            visible = false;
+        }
+        else if (variable_instance_exists(id, "jamm_shop_icon_saved") && jamm_shop_icon_saved)
+        {
+            if (y == jamm_shop_icon_hidden_y) y = jamm_shop_icon_saved_y;
+            if (!visible) visible = jamm_shop_icon_saved_visible;
+            jamm_shop_icon_saved = 0;
+        }
+        """;
 
     private static string BuildHatButtonVisibilityGml(bool hide)
     {
