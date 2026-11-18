@@ -256,6 +256,150 @@ public sealed class MenuRuntimeTests
         Assert.Contains("draw_triangle(", chDraw);
     }
 
+    [Fact]
+    public void PagingHidesHatButtonsCentersPageLabelNearGridAndSyncsPageTwoAnchor()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string modPath = temp.PathFor("mod.win");
+        string output = temp.PathFor("merged.win");
+
+        WriteMenuModel(basePath, includeFont: true, includeHud: true, modEdit: d =>
+        {
+            foreach (string icon in new[] { "icon_Hats", "icon_HatsNew", "icon_Cancel" })
+                d.GameObjects.Add(new() { Name = d.Strings.MakeString(icon), Visible = true });
+            var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(d.GameObjects.ByName("Handler").EventHandlerFor(EventType.Destroy, 0u, d), "with (Card) { instance_destroy(); }");
+            compiler.QueueCodeReplace(d.GameObjects.ByName("CardHandler").EventHandlerFor(EventType.Destroy, 0u, d), "event_inherited();\nRod.swing_locked = 0;");
+            Assert.True(compiler.Compile().Successful);
+        });
+        WriteMenuModel(modPath, includeFont: true, includeHud: true, modEdit: d =>
+        {
+            foreach (string icon in new[] { "icon_Hats", "icon_HatsNew", "icon_Cancel" })
+                d.GameObjects.Add(new() { Name = d.Strings.MakeString(icon), Visible = true });
+            var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(d.GameObjects.ByName("Handler").EventHandlerFor(EventType.Destroy, 0u, d), "with (Card) { instance_destroy(); }");
+            compiler.QueueCodeReplace(d.GameObjects.ByName("CardHandler").EventHandlerFor(EventType.Destroy, 0u, d), "event_inherited();\nRod.swing_locked = 0;");
+            Assert.True(compiler.Compile().Successful);
+        });
+
+        using var original = GameFileLoader.Load(basePath);
+        using var mod = GameFileLoader.Load(modPath);
+        var patch = PatchBuilder.Create(original, mod, "UiMenuMod");
+        var build = ArchiveBuilder.Build(basePath, [new(patch, modPath)], output);
+        Assert.NotNull(build.Verification);
+
+        using var merged = GameFileLoader.Load(output);
+
+        string umStep = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuStep).Text;
+        Assert.Contains("\"icon_Hats\"", umStep);
+        Assert.Contains("\"icon_HatsNew\"", umStep);
+        Assert.Contains("jamm_menu_hidden = 1", umStep);
+        Assert.Contains("\"icon_Rods\"", umStep);
+
+        string umAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuAlarm).Text;
+        Assert.Contains("window_pos == (scroll_row * visible_rows * card_width)", umAlarm);
+        Assert.Contains("ORIGIN_X = jamm_page_anchor.ORIGIN_X", umAlarm);
+        Assert.Contains("ORIGIN_Y = jamm_page_anchor.ORIGIN_Y", umAlarm);
+
+        string umDestroy = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuDestroy).Text;
+        Assert.Contains("event_inherited()", umDestroy);
+        Assert.Contains("jamm_menu_hidden", umDestroy);
+
+        string chDestroy = PatchBuilder.ReadCode(merged, MenuRuntime.CardHandlerDestroy).Text;
+        Assert.Contains("Rod.swing_locked = 0", chDestroy);
+        Assert.Contains("jamm_menu_hidden", chDestroy);
+
+        string umDraw = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuDraw).Text;
+        Assert.Contains("ORIGIN_X + (card_width * X_GAP)", umDraw);
+        Assert.Contains("view_wview[0]", umDraw);
+        Assert.Contains("jamm_hud_set_halign(fa_center)", umDraw);
+        Assert.Contains("jamm_hud_set_valign(fa_middle)", umDraw);
+        Assert.Contains("jamm_hud_set_font(fnt_babySmall)", umDraw);
+        Assert.DoesNotContain("display_get_gui_width() - 52", umDraw);
+    }
+
+    [Fact]
+    public void MenuRuntimeHonorsOverwriteOrderingAndExplicitChoices()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string aPath = temp.PathFor("mod-a.win");
+        string bPath = temp.PathFor("mod-b.win");
+
+        WriteMenuModel(basePath, includeFont: true, includeHud: false, modEdit: null);
+        WriteMenuModel(aPath, includeFont: true, includeHud: false, modEdit: d =>
+        {
+            var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(d.Code.ByName(MenuRuntime.RodMenuDraw),
+                """
+                if (done_spawning)
+                {
+                    draw_set_color(Colors.ui_light);
+                    draw_set_halign(fa_center);
+                    draw_set_valign(fa_top);
+                    draw_set_font(fnt_babySmall);
+                    draw_text_shadowed(ORIGIN_X + 640, ORIGIN_Y + 220, "Hint A");
+                }
+                """);
+            Assert.True(compiler.Compile().Successful);
+        });
+        WriteMenuModel(bPath, includeFont: true, includeHud: false, modEdit: d =>
+        {
+            var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(d.Code.ByName(MenuRuntime.RodMenuDraw),
+                """
+                if (done_spawning)
+                {
+                    draw_set_color(Colors.ui_light);
+                    draw_set_halign(fa_center);
+                    draw_set_valign(fa_top);
+                    draw_set_font(fnt_babySmall);
+                    draw_text_shadowed(ORIGIN_X + 640, ORIGIN_Y + 220, "Hint B");
+                }
+                """);
+            Assert.True(compiler.Compile().Successful);
+        });
+
+        using var orig = GameFileLoader.Load(basePath);
+        using var modA = GameFileLoader.Load(aPath);
+        using var modB = GameFileLoader.Load(bPath);
+        var patchA = PatchBuilder.Create(orig, modA, "ModA");
+        var patchB = PatchBuilder.Create(orig, modB, "ModB");
+
+        string outAB = temp.PathFor("ab.win");
+        ArchiveBuilder.Build(basePath, [new(patchA, aPath), new(patchB, bPath)], outAB);
+        using (var merged = GameFileLoader.Load(outAB))
+        {
+            string rodDraw = PatchBuilder.ReadCode(merged, MenuRuntime.RodMenuDraw).Text;
+            Assert.Contains("Hint B", rodDraw);
+            Assert.Contains("event_inherited()", rodDraw);
+        }
+
+        string outBA = temp.PathFor("ba.win");
+        ArchiveBuilder.Build(basePath, [new(patchB, bPath), new(patchA, aPath)], outBA);
+        using (var merged = GameFileLoader.Load(outBA))
+        {
+            string rodDraw = PatchBuilder.ReadCode(merged, MenuRuntime.RodMenuDraw).Text;
+            Assert.Contains("Hint A", rodDraw);
+            Assert.Contains("event_inherited()", rodDraw);
+        }
+
+        string outResolved = temp.PathFor("resolved.win");
+        ArchiveBuilder.Build(basePath, [new(patchA, aPath), new(patchB, bPath)], outResolved,
+            resolutions: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [$"code/{MenuRuntime.RodMenuDraw}"] = "ModA"
+            });
+        using (var merged = GameFileLoader.Load(outResolved))
+        {
+            string rodDraw = PatchBuilder.ReadCode(merged, MenuRuntime.RodMenuDraw).Text;
+            Assert.Contains("Hint A", rodDraw);
+            Assert.DoesNotContain("Hint B", rodDraw);
+            Assert.Contains("event_inherited()", rodDraw);
+        }
+    }
+
     private static void WriteMinimalModel(string path, Action<UndertaleData> edit)
     {
         using var data = UndertaleData.CreateNew();

@@ -30,7 +30,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             // Rebuild installations that contain the earlier menu positioning patches.
-            Builder = "menu-layout-2", InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Builder = "menu-layout-3", InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);

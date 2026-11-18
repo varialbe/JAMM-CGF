@@ -23,9 +23,33 @@ internal static class HudRuntime
             if (!variable_global_exists("jamm_hud_halign")) global.jamm_hud_halign = fa_left;
             if (!variable_global_exists("jamm_hud_valign")) global.jamm_hud_valign = fa_top;
             global.jamm_hud_count = 0;
-            global.jamm_hud_x = view_xview[view_current] + view_wview[view_current] - 25;
-            global.jamm_hud_cursor = view_yview[view_current] + 452;
-            if (instance_exists(ExperienceBar)) global.jamm_hud_cursor = view_yview[view_current] + ExperienceBar.offset_y - 4;
+            var jamm_vw, jamm_vh, jamm_cancel, jamm_handler, jamm_cy, jamm_ctop, jamm_cright;
+            jamm_vw = view_wview[view_current];
+            if (jamm_vw <= 0) jamm_vw = 800;
+            jamm_vh = view_hview[view_current];
+            if (jamm_vh <= 0) jamm_vh = 480;
+            global.jamm_hud_x = view_xview[view_current] + jamm_vw - 25;
+            global.jamm_hud_cursor = view_yview[view_current] + jamm_vh - 28;
+            if (instance_exists(ExperienceBar) && ExperienceBar.offset_y < jamm_vh) global.jamm_hud_cursor = min(global.jamm_hud_cursor, view_yview[view_current] + ExperienceBar.offset_y - 4);
+            if (view_current == 0) {
+                jamm_cancel = asset_get_index("icon_Cancel");
+                if (jamm_cancel > -1 && instance_exists(jamm_cancel) && jamm_cancel.visible) {
+                    jamm_handler = asset_get_index("Handler");
+                    jamm_cy = jamm_cancel.y;
+                    if (jamm_handler > -1 && instance_exists(jamm_handler) && variable_instance_exists(jamm_cancel, "ORIGIN_Y")) jamm_cy = min(jamm_cy, jamm_cancel.ORIGIN_Y);
+                    jamm_ctop = jamm_cy;
+                    jamm_cright = jamm_cancel.x;
+                    if (jamm_cancel.sprite_index >= 0 && sprite_exists(jamm_cancel.sprite_index)) {
+                        jamm_ctop = jamm_cy - (sprite_get_yoffset(jamm_cancel.sprite_index) * abs(jamm_cancel.image_yscale));
+                        jamm_cright = jamm_cancel.x - (sprite_get_xoffset(jamm_cancel.sprite_index) * abs(jamm_cancel.image_xscale)) + (sprite_get_width(jamm_cancel.sprite_index) * abs(jamm_cancel.image_xscale));
+                        if (jamm_cancel.bbox_bottom > jamm_cancel.bbox_top) jamm_ctop = min(jamm_ctop, jamm_cancel.bbox_top);
+                        if (jamm_cancel.bbox_right > jamm_cancel.bbox_left) jamm_cright = max(jamm_cright, jamm_cancel.bbox_right);
+                    }
+                    if (jamm_ctop >= view_yview[view_current] && jamm_ctop < view_yview[view_current] + jamm_vh && jamm_cright >= view_xview[view_current] + jamm_vw - 260) {
+                        global.jamm_hud_cursor = min(global.jamm_hud_cursor, jamm_ctop - 8);
+                    }
+                }
+            }
             """,
         ["jamm_hud_reserve"] = """
             var jamm_h;

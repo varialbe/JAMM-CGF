@@ -214,7 +214,7 @@ public static class ArchiveBuilder
             object target = ResourceCatalog.Find(tables[asset.Family], asset.Name)!;
             if (asset.Family is "objects" or "rooms" or "scripts" or "paths" or "timelines") structured.Apply(target, asset.Snapshot!.Value, asset.Source);
             else if (target is UndertaleSprite targetSprite && sourceAsset is UndertaleSprite sourceSprite
-                && TryApplyHybridSpriteFrames(targetSprite, sourceSprite, asset, importers[asset.Source]))
+                && TryApplyHybridSpriteFrames(targetSprite, sourceSprite, asset, patches, sources, importers))
             {
                 continue;
             }
@@ -325,7 +325,13 @@ public static class ArchiveBuilder
         return System.Text.Json.JsonElement.DeepEquals(aSnap, bSnap);
     }
 
-    private static bool TryApplyHybridSpriteFrames(UndertaleSprite targetSprite, UndertaleSprite sourceSprite, PlannedAsset asset, ResourceImporter importer)
+    private static bool TryApplyHybridSpriteFrames(
+        UndertaleSprite targetSprite,
+        UndertaleSprite sourceSprite,
+        PlannedAsset asset,
+        IReadOnlyList<ModPatch> patches,
+        IReadOnlyList<UndertaleData> sources,
+        ResourceImporter[] importers)
     {
         if (asset.Patch?.Base is not { ValueKind: System.Text.Json.JsonValueKind.Object } baseSnap
             || asset.Snapshot is not { ValueKind: System.Text.Json.JsonValueKind.Object } modSnap
@@ -338,8 +344,9 @@ public static class ArchiveBuilder
         }
         var baseFrames = bfElem.EnumerateArray().ToArray();
         var modFrames = mfElem.EnumerateArray().ToArray();
-        if (modFrames.Length <= baseFrames.Length || targetSprite.Textures.Count < baseFrames.Length || sourceSprite.Textures.Count < modFrames.Length)
+        if (modFrames.Length <= baseFrames.Length || targetSprite.Textures.Count < baseFrames.Length)
             return false;
+
         bool keepsAllBaseFrames = true;
         for (int i = 0; i < baseFrames.Length; i++)
         {
@@ -349,17 +356,80 @@ public static class ArchiveBuilder
                 break;
             }
         }
-        if (!keepsAllBaseFrames)
+        if (keepsAllBaseFrames && sourceSprite.Textures.Count >= modFrames.Length)
+        {
+            // Keep base frames 0..baseFrames.Length-1 already present on targetSprite, and append mod frames baseFrames.Length..modFrames.Length-1.
+            while (targetSprite.Textures.Count > baseFrames.Length)
+                targetSprite.Textures.RemoveAt(targetSprite.Textures.Count - 1);
+            for (int i = baseFrames.Length; i < modFrames.Length; i++)
+            {
+                var copiedEntry = (UndertaleSprite.TextureEntry)importers[asset.Source].Copy(sourceSprite.Textures[i]);
+                targetSprite.Textures.Add(copiedEntry);
+            }
+            return true;
+        }
+
+        // Check if any participating patch is a sanitized hybrid appender (keeps base frames 0..baseFrames.Length-1 and appends >= baseFrames.Length).
+        bool hasHybridAppender = false;
+        for (int m = 0; m < patches.Count; m++)
+        {
+            var patchEntry = patches[m].Changes.GetValueOrDefault("sprites")?.Changed.FirstOrDefault(c => c.Name == asset.Name);
+            if (patchEntry is null || !patchEntry.Mod.TryGetProperty("frames", out var pfElem) || pfElem.ValueKind != System.Text.Json.JsonValueKind.Array)
+                continue;
+            var pFrames = pfElem.EnumerateArray().ToArray();
+            if (pFrames.Length > baseFrames.Length && Enumerable.Range(0, baseFrames.Length).All(i => System.Text.Json.JsonElement.DeepEquals(baseFrames[i], pFrames[i])))
+            {
+                hasHybridAppender = true;
+                break;
+            }
+        }
+        if (!hasHybridAppender)
             return false;
 
-        // Keep base frames 0..baseFrames.Length-1 already present on targetSprite, and append mod frames baseFrames.Length..modFrames.Length-1.
-        while (targetSprite.Textures.Count > baseFrames.Length)
-            targetSprite.Textures.RemoveAt(targetSprite.Textures.Count - 1);
-        for (int i = baseFrames.Length; i < modFrames.Length; i++)
+        // Multi-mod merge involving a hybrid sprite (e.g., custom base UI frames from one mod + appended icon frame from a sanitized mod).
+        var baseEntries = targetSprite.Textures.Take(baseFrames.Length).ToArray();
+        List<UndertaleSprite.TextureEntry> resolved = new(modFrames.Length);
+        for (int i = 0; i < modFrames.Length; i++)
         {
-            var copiedEntry = (UndertaleSprite.TextureEntry)importer.Copy(sourceSprite.Textures[i]);
-            targetSprite.Textures.Add(copiedEntry);
+            if (i < baseFrames.Length && System.Text.Json.JsonElement.DeepEquals(modFrames[i], baseFrames[i]))
+            {
+                resolved.Add(baseEntries[i]);
+                continue;
+            }
+            UndertaleSprite.TextureEntry? copied = null;
+            foreach (int m in Enumerable.Range(0, sources.Count).Reverse().Prepend(asset.Source).Distinct())
+            {
+                var patchEntry = patches[m].Changes.GetValueOrDefault("sprites")?.Changed.FirstOrDefault(c => c.Name == asset.Name);
+                if (patchEntry is null || !patchEntry.Mod.TryGetProperty("frames", out var pfElem) || pfElem.ValueKind != System.Text.Json.JsonValueKind.Array)
+                    continue;
+                var pFrames = pfElem.EnumerateArray().ToArray();
+                if (i < pFrames.Length && System.Text.Json.JsonElement.DeepEquals(modFrames[i], pFrames[i]))
+                {
+                    var candidateSprite = sources[m].Sprites.FirstOrDefault(s => s.Name.Content == asset.Name);
+                    if (candidateSprite is not null && i < candidateSprite.Textures.Count)
+                    {
+                        copied = (UndertaleSprite.TextureEntry)importers[m].Copy(candidateSprite.Textures[i]);
+                        break;
+                    }
+                }
+            }
+            if (copied is null)
+                return false;
+            resolved.Add(copied);
         }
+
+        targetSprite.Textures.Clear();
+        foreach (var entry in resolved)
+            targetSprite.Textures.Add(entry);
+
+        if (modSnap.TryGetProperty("width", out var w)) targetSprite.Width = w.GetUInt32();
+        if (modSnap.TryGetProperty("height", out var h)) targetSprite.Height = h.GetUInt32();
+        if (modSnap.TryGetProperty("originX", out var ox)) targetSprite.OriginX = ox.GetInt32();
+        if (modSnap.TryGetProperty("originY", out var oy)) targetSprite.OriginY = oy.GetInt32();
+        if (modSnap.TryGetProperty("marginLeft", out var ml)) targetSprite.MarginLeft = ml.GetInt32();
+        if (modSnap.TryGetProperty("marginRight", out var mr)) targetSprite.MarginRight = mr.GetInt32();
+        if (modSnap.TryGetProperty("marginTop", out var mt)) targetSprite.MarginTop = mt.GetInt32();
+        if (modSnap.TryGetProperty("marginBottom", out var mb)) targetSprite.MarginBottom = mb.GetInt32();
         return true;
     }
 

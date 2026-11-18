@@ -78,6 +78,9 @@ public sealed partial class BuildingTests
         foreach (string script in HudRuntime.Scripts.Keys) Assert.NotNull(merged.Data.Scripts.ByName(script));
         Assert.Contains("jamm_hud_begin", build.Plan.Assets.Single(a => a.Name == HudRuntime.Begin).Gml);
         Assert.DoesNotContain(build.Plan.Assets, a => a.Name.Contains("Step"));
+        string beginScript = PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_begin").Text;
+        Assert.Contains("view_hview[view_current]", beginScript);
+        Assert.Contains("\"icon_Cancel\"", beginScript);
 
         static void Setup(UndertaleData data, bool debug)
         {
@@ -90,6 +93,63 @@ public sealed partial class BuildingTests
             compiler.QueueCodeReplace(bar, "draw_set_font(font_quest); draw_set_halign(fa_right); draw_set_valign(fa_middle); draw_x = round(view_xview[view_current] + offset_x); draw_y = round(view_yview[view_current] + offset_y); draw_text(draw_x - 10, draw_y + 10, \"Level\");" + (debug ? "draw_text(draw_x + 430, draw_y - 20, \"Debug\");" : ""));
             var quest = data.GameObjects.ByName("Quest").EventHandlerFor(EventType.Draw, data);
             compiler.QueueCodeReplace(quest, "draw_set_font(font_quest); draw_text_transformed(draw_x, draw_y, label, 0.5, 0.5, 0);");
+            var shadow = UndertaleCode.CreateEmptyEntry(data, "gml_Script_draw_text_shadowed");
+            data.Scripts.Add(new() { Name = data.Strings.MakeString("draw_text_shadowed"), Code = shadow });
+            compiler.QueueCodeReplace(shadow, "draw_text(argument0, argument1, argument2);");
+            Assert.True(compiler.Compile().Successful);
+        }
+    }
+
+    [Fact]
+    public void HudOverwriteOrderingAndExplicitChoicesAreHonoredWithCancelButtonPresent()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string aPath = temp.PathFor("hud-a.win");
+        string bPath = temp.PathFor("hud-b.win");
+
+        WriteModel(basePath, d => Setup(d, "base"));
+        WriteModel(aPath, d => Setup(d, "ModA"));
+        WriteModel(bPath, d => Setup(d, "ModB"));
+
+        using var orig = GameFileLoader.Load(basePath);
+        using var a = GameFileLoader.Load(aPath);
+        using var b = GameFileLoader.Load(bPath);
+        var pa = PatchBuilder.Create(orig, a, "ModA");
+        var pb = PatchBuilder.Create(orig, b, "ModB");
+
+        string outAB = temp.PathFor("ab.win");
+        ArchiveBuilder.Build(basePath, [new(pa, aPath), new(pb, bPath)], outAB);
+        using (var merged = GameFileLoader.Load(outAB))
+        {
+            string quest = PatchBuilder.ReadCode(merged, HudRuntime.Quest).Text;
+            Assert.Contains("jamm_hud_text(2, 0, \"ModB\"", quest);
+            Assert.DoesNotContain("ModA", quest);
+        }
+
+        string outResolved = temp.PathFor("resolved.win");
+        ArchiveBuilder.Build(basePath, [new(pa, aPath), new(pb, bPath)], outResolved,
+            resolutions: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [$"code/{HudRuntime.Quest}"] = "ModA"
+            });
+        using (var merged = GameFileLoader.Load(outResolved))
+        {
+            string quest = PatchBuilder.ReadCode(merged, HudRuntime.Quest).Text;
+            Assert.Contains("jamm_hud_text(2, 0, \"ModA\"", quest);
+            Assert.DoesNotContain("ModB", quest);
+        }
+
+        static void Setup(UndertaleData data, string tag)
+        {
+            foreach (string name in new[] { "ExperienceBar", "Quest", "QuestEngine", "Colors", "Handler", "icon_Cancel" })
+                data.GameObjects.Add(new() { Name = data.Strings.MakeString(name), Visible = true });
+            data.Fonts.Add(new() { Name = data.Strings.MakeString("font_quest"), DisplayName = data.Strings.MakeString("Quest") });
+            var compiler = new CompileGroup(data);
+            var bar = data.GameObjects.ByName("ExperienceBar").EventHandlerFor(EventType.Draw, data);
+            compiler.QueueCodeReplace(bar, "draw_set_font(font_quest); draw_x = round(view_xview[view_current] + offset_x); draw_y = round(view_yview[view_current] + offset_y); draw_text(draw_x - 10, draw_y + 10, \"Level\");");
+            var quest = data.GameObjects.ByName("Quest").EventHandlerFor(EventType.Draw, data);
+            compiler.QueueCodeReplace(quest, $"draw_set_font(font_quest); draw_text_transformed(draw_x, draw_y, \"{tag}\", 0.5, 0.5, 0);");
             var shadow = UndertaleCode.CreateEmptyEntry(data, "gml_Script_draw_text_shadowed");
             data.Scripts.Add(new() { Name = data.Strings.MakeString("draw_text_shadowed"), Code = shadow });
             compiler.QueueCodeReplace(shadow, "draw_text(argument0, argument1, argument2);");
