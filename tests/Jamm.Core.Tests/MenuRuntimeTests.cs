@@ -198,11 +198,12 @@ public sealed class MenuRuntimeTests
     [Fact]
     public void LayoutRepairsUseGuiControlsFishProvenanceAndValidBoatEquipIndex()
     {
+        const string waitCreate = "gml_Object_icon_Wait_Create_0";
         var baseline = new Dictionary<string, CodeText>(StringComparer.Ordinal)
         {
             [MenuRuntime.BoatCardClick] = new("instance_create(0, 0, BoatData.object[item_id]);", "gml", 0, 0, null, []),
             [MenuRuntime.BoatDataCreate] = new("name[8] = \"Dark Boat\";\nobject[8] = BoatBackground;\ndisp[8] = bg_parallax;\ndesc[8] = \"The most op Boat\";", "gml", 0, 0, null, []),
-            [MenuRuntime.WaitCreate] = new("hidden_y = 0;", "gml", 0, 0, null, []),
+            [waitCreate] = new("hidden_y = 0;", "gml", 0, 0, null, []),
             [MenuRuntime.FishalogDraw] = new("if (!surface_exists(csurf)) { csurf = surface_create(570, 274); } scroll_height = py - scroll_y - CatalogItem.sprite_height; draw_surface(csurf, x + surfx, y + surfy); draw_text(x + 475, y + 10, \"Completion: \" + string(floor(Catalog.fish_completion[selected] * 100)) + \"%\");", "gml", 0, 0, null, []),
             [MenuRuntime.FishalogHandleStep] = new("if (ys < 0) ys = 0; if (ys > ymax) ys = ymax; y = yoffset + ys; ymax = Catalog.scroll_height * 0.03; image_yscale = height - ymax; if (!clicked) ys = Catalog.scroll_y * -0.03;", "gml", 0, 0, null, []),
             [MenuRuntime.FishalogHandleDrag] = new("Catalog.scroll_y = ys / -0.03;", "gml", 0, 0, null, []),
@@ -217,11 +218,11 @@ public sealed class MenuRuntimeTests
         Assert.Contains("name[8] = \"Neon Boat\"", boats);
         Assert.Contains("object[8] = Boat8", boats);
         Assert.Contains("disp[8] = spr_boat_icon8", boats);
-        Assert.Contains("hidden_y = 150", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.WaitCreate).Gml);
+        Assert.DoesNotContain(patched.Assets, a => a.Name == waitCreate);
         string fishalog = Assert.Single(patched.Assets, a => a.Name == MenuRuntime.FishalogDraw).Gml!;
         Assert.Contains("surface_create(surfw, surfh)", fishalog);
         Assert.Contains("max(0, py - scroll_y", fishalog);
-        Assert.Contains("x + 350", fishalog);
+        Assert.Contains("x + 475, y + 10", fishalog);
         Assert.Contains("Catalog.surfh / max(1, Catalog.surfh + Catalog.scroll_height)", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.FishalogHandleStep).Gml);
         Assert.Contains("Catalog.scroll_height : 0", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.FishalogHandleDrag).Gml);
         string fish = Assert.Single(patched.Assets, a => a.Name == MenuRuntime.CatalogItemDraw).Gml!;

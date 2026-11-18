@@ -14,7 +14,6 @@ internal static class MenuRuntime
     internal const string RodMenuDraw = "gml_Object_RodMenu_Draw_0";
     internal const string BoatCardClick = "gml_Object_BoatCard_Other_10";
     internal const string BoatDataCreate = "gml_Object_BoatData_Create_0";
-    internal const string WaitCreate = "gml_Object_icon_Wait_Create_0";
     internal const string FishalogDraw = "gml_Object_Fishalog_Draw_0";
     internal const string FishalogHandleStep = "gml_Object_CatalogHandle_Step_2";
     internal const string FishalogHandleDrag = "gml_Object_CatalogHandle_Mouse_50";
@@ -41,7 +40,6 @@ internal static class MenuRuntime
 
         TryPatchOptional("Boat card equip index", () => PatchBoatCard(assets, baseline));
         TryPatchOptional("invalid Dark Boat registration", () => PatchInvalidDarkBoat(assets, baseline));
-        TryPatchOptional("Wait tile separation", () => PatchWaitTile(assets, baseline));
         TryPatchOptional("Fishalog layout", () => PatchFishalog(assets, baseline, plan.Catalog));
 
         if (patchedMenus.Count > 0)
@@ -185,16 +183,6 @@ internal static class MenuRuntime
         Put(assets, baseline, BoatDataCreate, ReplaceOnce(BoatDataCreate, text, badRegistration, correctedRegistration));
     }
 
-    private static void PatchWaitTile(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
-    {
-        if (!HasCode(assets, baseline, WaitCreate)) return;
-        string text = Current(assets, baseline, WaitCreate);
-        if (text.Contains("hidden_y = 150;", StringComparison.Ordinal)) return;
-        if (!text.Contains("hidden_y = 0;", StringComparison.Ordinal))
-            throw new InvalidDataException($"Cannot patch '{WaitCreate}': expected the default hidden tile position.");
-        Put(assets, baseline, WaitCreate, ReplaceOnce(WaitCreate, text, "hidden_y = 0;", "hidden_y = 150;"));
-    }
-
     private static void PatchFishalog(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, IReadOnlyList<CatalogMapping> catalog)
     {
         if (!HasCode(assets, baseline, FishalogDraw)) return;
@@ -209,10 +197,6 @@ internal static class MenuRuntime
         if (draw.Contains(height, StringComparison.Ordinal))
             draw = ReplaceOnce(FishalogDraw, draw, height,
                 "scroll_height = max(0, py - scroll_y - CatalogItem.sprite_height);");
-        const string heading = "draw_text(x + 475, y + 10, \"Completion: \" + string(floor(Catalog.fish_completion[selected] * 100)) + \"%\");";
-        if (draw.Contains(heading, StringComparison.Ordinal))
-            draw = ReplaceOnce(FishalogDraw, draw, heading,
-                "draw_text(x + 350, y + 10, \"Completion: \" + string(floor(Catalog.fish_completion[selected] * 100)) + \"%\");");
         if (draw != Current(assets, baseline, FishalogDraw)) Put(assets, baseline, FishalogDraw, draw);
 
         if (HasCode(assets, baseline, FishalogHandleStep))

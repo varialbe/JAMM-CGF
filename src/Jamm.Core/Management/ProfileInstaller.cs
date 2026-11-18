@@ -29,8 +29,8 @@ public sealed class ProfileInstaller(ManagerStore store)
             throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
-            // Invalidate installation records made before numeric-reference verification.
-            Builder = "phase16", InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            // Rebuild installations that contain the earlier menu positioning patches.
+            Builder = "menu-layout-2", InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);
