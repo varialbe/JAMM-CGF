@@ -130,6 +130,7 @@
             </StackPanel>
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's performance changes" IsChecked="{Binding KeepAuthorPerformanceChanges, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorPerformanceChanges}"/>
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's HUD design" IsChecked="{Binding KeepAuthorHudDesign, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorHudDesign}"/>
+            <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's gameplay/sonar changes" IsChecked="{Binding KeepAuthorGameplayChanges, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorGameplayChanges}"/>
             <WrapPanel Orientation="Horizontal" Margin="0,2,0,0" IsVisible="{Binding IsModKit}">
               <Button Content="Rebuild" Click="LibraryRebuildClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" ToolTip.Tip="Rebuild this mod from its ModKit folder"/>
             </WrapPanel>

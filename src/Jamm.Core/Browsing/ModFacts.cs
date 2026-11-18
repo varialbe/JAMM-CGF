@@ -50,7 +50,7 @@ public sealed class ModFactAnalyzer(ManagerStore store, AnalysisOptions? options
                 result = WithSource(result, mod.Inspection.Timestamp);
                 token.ThrowIfCancellationRequested(); store.Write(cache, result); return result;
             }
-            var sanitized = ModSanitizer.Sanitize(patch);
+            var sanitized = ModSanitizer.Sanitize(patch, sonarCondition: VanillaSonarCondition.FromData(original.Data));
             patch = sanitized.Patch;
             var removedChanges = sanitized.Report.Removed.Count > 0 ? sanitized.Report.Removed : null;
             var facts = Extract(patch, mod.Data.GameObjects);

@@ -65,6 +65,7 @@ public sealed partial class BrowseViewModel
             {
                 row.RemovedPerformanceCount = localRow.RemovedPerformanceCount;
                 row.RemovedHudCount = localRow.RemovedHudCount;
+                row.RemovedGameplayCount = localRow.RemovedGameplayCount;
                 row.SanitizedDetails = localRow.SanitizedDetails;
             }
         }

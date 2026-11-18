@@ -103,6 +103,38 @@ public sealed class FishRuntimeTests
         Assert.Empty(result.Decisions);
     }
 
+    [Fact]
+    public void FishApiModAlsoActivatesCatalogRuntimeNameKeyedSavePersistence()
+    {
+        var snapshot = JsonSerializer.SerializeToElement(new { });
+        var baseline = new Dictionary<string, CodeText>(StringComparer.Ordinal)
+        {
+            [CatalogMerge.Create] = new("object[0, 0] = BaseFish;\nname[0, 0] = \"Base\";\nmap[0, 0] = 0;\n", "gml", 0, 0, null, []),
+            [FishRuntime.SaveManagerStep] = new("if (!loaded) { loaded = 1; }\n", "gml", 0, 0, null, []),
+            [FishRuntime.FishObjectToName] = new("return object_get_name(argument0);\n", "gml", 0, 0, null, []),
+            ["gml_Object_SaveManager_Other_13"] = new(
+                "var i = 0, j = 0;\ncount[i, j] = ini_read_real(\"Catalog\", \"f\" + string(i) + string(j), 0);\nlife[i, j] = ini_read_real(\"Catalog\", \"li\" + string(i) + string(j), 3);\n",
+                "gml", 0, 0, null, []),
+            ["gml_Object_SaveManager_Other_14"] = new(
+                "var i = 0, j = 0;\nini_write_real(\"Catalog\", \"f\" + string(i) + string(j), count[i, j]);\nini_write_real(\"Catalog\", \"li\" + string(i) + string(j), life[i, j]);\n",
+                "gml", 0, 0, null, [])
+        };
+
+        var assets = new List<PlannedAsset>
+        {
+            new("code", "gml_Script_jamm_init_demo", 0, new("gml_Script_jamm_init_demo", null, snapshot, [], null, new("jamm_fish_register(\"demo:minnow\", jmk_demo_minnow, 0, \"Minnow\", \"Tiny fish.\", 1100, 1500, 1400, 1700, 3);", "gml", 0, 0, null, [])), snapshot, "jamm_fish_register(\"demo:minnow\", jmk_demo_minnow, 0, \"Minnow\", \"Tiny fish.\", 1100, 1500, 1400, 1700, 3);")
+        };
+
+        var plan = CatalogRuntime.PreparePlan(FishRuntime.PreparePlan(new BuildPlan(assets, []), baseline), baseline);
+        string mergedRead = plan.Assets.Single(a => a.Name == "gml_Object_SaveManager_Other_13").Gml!;
+        string mergedWrite = plan.Assets.Single(a => a.Name == "gml_Object_SaveManager_Other_14").Gml!;
+        Assert.Contains("jamm_catalog_read(\"f\"", mergedRead);
+        Assert.Contains("jamm_catalog_read(\"li\"", mergedRead);
+        Assert.Contains("\"JAMM_Catalog\"", mergedWrite);
+        Assert.Contains("\"f:\" + object_get_name(object[i, j])", mergedWrite);
+        Assert.Contains("\"li:\" + object_get_name(object[i, j])", mergedWrite);
+    }
+
     private static void WriteSyntheticGame(string path, bool includeApiInit, Action<UndertaleData>? edit = null)
     {
         using var data = UndertaleData.CreateNew();

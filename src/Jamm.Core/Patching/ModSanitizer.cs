@@ -17,17 +17,20 @@ public sealed record ClassifiedHunk(string Category, int BaseStart, int BaseLeng
 public sealed record ModSanitizerReport(int SanitizerVersion, string ModSha256, string BaseSha256, bool IsJammMod,
     IReadOnlyList<SanitizedChange> Removed, IReadOnlyList<SanitizedChange> Unclassified)
 {
-    /// <summary>Count of removed third-party performance hacks (all categories except <see cref="ModSanitizer.HudStyle"/>).</summary>
-    public int RemovedPerformanceCount => Removed.Count(r => r.Category != ModSanitizer.HudStyle);
+    /// <summary>Count of removed third-party performance hacks (all categories except <see cref="ModSanitizer.HudStyle"/> and <see cref="ModSanitizer.GameplaySonar"/>).</summary>
+    public int RemovedPerformanceCount => Removed.Count(r => r.Category != ModSanitizer.HudStyle && r.Category != ModSanitizer.GameplaySonar);
 
     /// <summary>Count of reverted third-party HUD/UI asset changes (<see cref="ModSanitizer.HudStyle"/>).</summary>
     public int RemovedHudCount => Removed.Count(r => r.Category == ModSanitizer.HudStyle);
 
+    /// <summary>Count of sanitized third-party gameplay/sonar compatibility changes (<see cref="ModSanitizer.GameplaySonar"/>).</summary>
+    public int RemovedGameplayCount => Removed.Count(r => r.Category == ModSanitizer.GameplaySonar);
+
     /// <summary>Formats a concise human-readable multi-line summary for UI flyouts and CLI output.</summary>
     public string FormatDetails()
     {
-        if (IsJammMod || Removed.Count == 0 && Unclassified.Count == 0)
-            return "No third-party performance or HUD changes were removed.";
+        if (Removed.Count == 0 && Unclassified.Count == 0)
+            return "No third-party performance, HUD, or gameplay changes were removed.";
         StringBuilder sb = new();
         foreach (var item in Removed)
             sb.Append('[').Append(item.Category).Append("] ").Append(item.Entry).Append(": ").AppendLine(item.Summary);
@@ -50,7 +53,7 @@ public sealed record ModSanitizerResult(ModPatch Patch, ModSanitizerReport Repor
 public static partial class ModSanitizer
 {
     /// <summary>Current deterministic sanitizer rule revision used to invalidate cached sanitized patches and compatibility checks.</summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>Category for delta/time_scalar/DELTA_INSTANT/room_speed/game_set_speed/frame-limiter edits.</summary>
     public const string Timing = "timing";
@@ -202,13 +205,14 @@ public static partial class ModSanitizer
     }
 
     /// <summary>Sanitizes a portable <see cref="ModPatch"/> deterministically without touching game archives.</summary>
-    public static ModSanitizerResult Sanitize(ModPatch patch, bool keepPerformanceChanges = false, bool keepHudDesign = false)
+    public static ModSanitizerResult Sanitize(
+        ModPatch patch,
+        bool keepPerformanceChanges = false,
+        bool keepHudDesign = false,
+        bool keepGameplayChanges = false,
+        VanillaSonarCondition? sonarCondition = null)
     {
-        if (IsJammMod(patch))
-        {
-            var jammReport = new ModSanitizerReport(Version, patch.Mod.Sha256, patch.Base.Sha256, true, [], []);
-            return new(patch, jammReport);
-        }
+        bool isJammMod = IsJammMod(patch);
 
         List<SanitizedChange> removed = [];
         List<SanitizedChange> unclassified = [];
@@ -230,7 +234,7 @@ public static partial class ModSanitizer
         HashSet<string> candidateHelperObjects = new(StringComparer.Ordinal);
         HashSet<string> candidateHelperCode = new(StringComparer.Ordinal);
 
-        if (!keepPerformanceChanges)
+        if (!isJammMod && !keepPerformanceChanges)
         {
             var throttleVars = DiscoverThrottleVariables(
                 codeEntries.Changed.Where(c => c.BaseCode?.Format == "gml" && c.ModCode?.Format == "gml")
@@ -477,7 +481,7 @@ public static partial class ModSanitizer
         List<AssetPatch> keptChangedFonts = [.. fontChanges.Changed];
         List<AssetPatch> keptChangedBackgrounds = [.. backgroundChanges.Changed];
 
-        if (!keepHudDesign)
+        if (!isJammMod && !keepHudDesign)
         {
             keptChangedSprites = SanitizeHudSprites(spriteChanges.Changed, keptAddedCode, keptChangedCode, removed);
             keptChangedFonts = [];
@@ -502,7 +506,22 @@ public static partial class ModSanitizer
             }
         }
 
-        // 6. Filter References to drop removed helper objects/code.
+        // 6. Enforce default gameplay compatibility rules (sonar unlock & visibility) unless keepGameplayChanges is set.
+        if (!keepGameplayChanges)
+        {
+            var effectiveSonar = sonarCondition ?? VanillaSonarCondition.FromPatch(patch);
+            keptAddedCode = SanitizeAddedSonarCode(keptAddedCode, effectiveSonar, removed);
+            keptChangedCode = SanitizeChangedSonarCode(keptChangedCode, effectiveSonar, removed);
+            keptChangedObjects = SanitizeChangedSonarObjects(keptChangedObjects, removed);
+            keptChangedRooms = SanitizeChangedSonarRooms(keptChangedRooms, removed);
+        }
+
+        if (removed.Count == 0 && (!isJammMod ? unclassified.Count == 0 : true))
+        {
+            return new(patch, new ModSanitizerReport(Version, patch.Mod.Sha256, patch.Base.Sha256, isJammMod, removed, unclassified));
+        }
+
+        // 7. Filter References to drop removed helper objects/code.
         var updatedReferences = patch.References?
             .Where(r => !IsRemovedReference(r, candidateHelperObjects, candidateHelperCode))
             .ToArray();
@@ -520,7 +539,7 @@ public static partial class ModSanitizer
         };
 
         var sanitizedPatch = patch with { Changes = updatedChanges, References = updatedReferences };
-        var report = new ModSanitizerReport(Version, patch.Mod.Sha256, patch.Base.Sha256, false, removed, unclassified);
+        var report = new ModSanitizerReport(Version, patch.Mod.Sha256, patch.Base.Sha256, isJammMod, removed, unclassified);
         return new(sanitizedPatch, report);
     }
 

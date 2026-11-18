@@ -14,7 +14,7 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 public sealed class BuiltinMods(ManagerStore store)
 {
     /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "2";
+    public const string GeneratorVersion = "3";
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {
@@ -102,5 +102,30 @@ public sealed class BuiltinMods(ManagerStore store)
         if (BuildFiles.Hash(original) != sha) throw new IOException($"Base '{original}' changed. Retry with a stable untouched base.");
         return new ModLibrary(store).Add(output, definition.Name, progress, cancellationToken,
             stableId: "builtin-" + id, description: definition.Description);
+    }
+
+    /// <summary>Regenerates enabled bundled mods whose library copy predates the current generator version.</summary>
+    internal void RefreshStale(IEnumerable<string> modIds, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        string? original = store.Config().Base;
+        if (string.IsNullOrWhiteSpace(original) || !File.Exists(original)) return;
+        string? sha = null;
+        IReadOnlyList<ManagedMod>? libraryMods = null;
+        foreach (string modId in modIds.Distinct(StringComparer.Ordinal))
+        {
+            if (!modId.StartsWith("builtin-", StringComparison.Ordinal)) continue;
+            string id = modId["builtin-".Length..];
+            if (Catalog.All(m => m.Id != id)) continue;
+            libraryMods ??= new ModLibrary(store).Metadata();
+            var existing = libraryMods.FirstOrDefault(m => m.Id == modId);
+            if (existing is null) continue;
+            sha ??= BuildFiles.Hash(original);
+            if (existing.BaseSha256 != sha) continue;
+            string output = store.Path("builtin", $"{id}-{GeneratorVersion}-{sha}.win");
+            string receipt = store.Path("builtin", Path.GetFileName(output) + ".sha256");
+            if (File.Exists(output) && File.Exists(receipt) && File.ReadAllText(receipt) == existing.Sha256)
+                continue;
+            Add(id, progress, cancellationToken);
+        }
     }
 }

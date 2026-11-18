@@ -26,6 +26,7 @@ public sealed class ManagerOperations(ManagerStore store)
         var selection = new ProfileLibrary(store).Get(profile);
         if (selection.EnabledMods.Length == 0) throw new ArgumentException("Enable at least one mod in this profile before checking or installing.");
         string basePath = store.Config().Base ?? throw new ArgumentException("Choose a legacy base data.win in Settings first.");
+        new BuiltinMods(store).RefreshStale(selection.EnabledMods, progress, cancellationToken);
         string hash = BuildFiles.Hash(basePath);
         var patches = selection.EnabledMods.Select(id =>
         {

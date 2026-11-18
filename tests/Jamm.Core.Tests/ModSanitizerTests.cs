@@ -410,9 +410,11 @@ public sealed class ModSanitizerTests
         foreach (string hudSpr in abyssHudSprites)
             Assert.Contains(reports["Abyss"].Removed, r => r.Category == ModSanitizer.HudStyle && r.Entry == $"sprites/{hudSpr}");
         Assert.Empty(reports["Cave"].Removed);
-        Assert.Single(reports["Colour"].Removed);
-        Assert.Equal(ModSanitizer.DistanceCull, reports["Colour"].Removed[0].Category);
-        Assert.Equal("gml_Object_FishThinner_Step_0", reports["Colour"].Removed[0].Entry);
+        Assert.Equal(1, reports["Colour"].RemovedPerformanceCount);
+        Assert.Equal(1, reports["Colour"].RemovedGameplayCount);
+        Assert.Equal(0, reports["Colour"].RemovedHudCount);
+        Assert.Contains(reports["Colour"].Removed, r => r.Category == ModSanitizer.DistanceCull && r.Entry == "gml_Object_FishThinner_Step_0");
+        Assert.Contains(reports["Colour"].Removed, r => r.Category == ModSanitizer.GameplaySonar && r.Entry == "code/gml_Object_Zebriolet_Step_0");
 
         // Verify OAC has all 22 timing/throttle/cull/fps/debug-overlay hacks removed + 1 hud-style base-frame revert on spr_upgradeicons, and 0 unclassified.
         var oacReport = reports["Oops! All Chaws!"];
@@ -543,6 +545,128 @@ public sealed class ModSanitizerTests
         var consoleSanitized = ModSanitizer.Sanitize(consolePatch);
         Assert.True(consoleSanitized.Report.IsJammMod);
         Assert.Empty(consoleSanitized.Report.Removed);
+
+        // Verify Colour Expansion's Zebriolet sonar bypass is sanitized cleanly in the merged archive while keeping FishThinner/content:
+        string zebrioletMerged = PatchBuilder.ReadCode(merged, "gml_Object_Zebriolet_Step_0").Text;
+        Assert.Contains("jamm_sonar_jammed", zebrioletMerged);
+        Assert.Contains("ToolData.unlocked[1] == 1", zebrioletMerged);
+        Assert.DoesNotContain("shouldDraw = 1", zebrioletMerged);
+    }
+
+    [Fact]
+    public void SonarSanitizerDerivesBaseConditionAndEnforcesProgressionWhilePreservingJamMechanic()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string customBasePath = temp.PathFor("custom-base.win");
+        string jamModPath = temp.PathFor("jam-mod.win");
+        string unlockBypassModPath = temp.PathFor("unlock-bypass.win");
+
+        WriteSyntheticGame(basePath, data =>
+        {
+            var toolData = new UndertaleGameObject { Name = data.Strings.MakeString("ToolData") };
+            var radarButton = new UndertaleGameObject { Name = data.Strings.MakeString("RadarButton"), Visible = true };
+            var sonarPanel = new UndertaleGameObject { Name = data.Strings.MakeString("SonarPanel"), Visible = true };
+            var sonarAdv = new UndertaleGameObject { Name = data.Strings.MakeString("SonarPanelAdvanced"), Visible = false };
+            data.GameObjects.Add(toolData);
+            data.GameObjects.Add(radarButton);
+            data.GameObjects.Add(sonarPanel);
+            data.GameObjects.Add(sonarAdv);
+            AddCode(data, "gml_Object_ToolData_Create_0", "item[0] = 0;\nitem[1] = SonarPanel;\nunlocked[1] = 0;\nitem[2] = SonarPanelAdvanced;\nunlocked[2] = -1;\n");
+            AddCode(data, "gml_Object_RadarButton_Step_0", "if (ToolData.unlocked[1] == 1 && SonarPanel.active) { visible = 1; } else { visible = 0; }\n");
+            AddCode(data, "gml_Object_SonarPanel_Create_0", "active = 0;\nshouldDraw = 0;\ndrawOverride = 0;\n");
+            data.Rooms[0].Views.Add(new UndertaleRoom.View { Enabled = false });
+            data.Rooms[0].Views.Add(new UndertaleRoom.View { Enabled = false });
+            data.Rooms[0].Views.Add(new UndertaleRoom.View { Enabled = false });
+            data.Rooms[0].Views.Add(new UndertaleRoom.View { Enabled = false });
+        });
+
+        // Derived condition works with custom non-1 slot indices too:
+        WriteSyntheticGame(customBasePath, data =>
+        {
+            var toolData = new UndertaleGameObject { Name = data.Strings.MakeString("ToolData") };
+            var radarButton = new UndertaleGameObject { Name = data.Strings.MakeString("RadarButton") };
+            var sonarPanel = new UndertaleGameObject { Name = data.Strings.MakeString("SonarPanel") };
+            var sonarAdv = new UndertaleGameObject { Name = data.Strings.MakeString("SonarPanelAdvanced") };
+            data.GameObjects.Add(toolData);
+            data.GameObjects.Add(radarButton);
+            data.GameObjects.Add(sonarPanel);
+            data.GameObjects.Add(sonarAdv);
+            AddCode(data, "gml_Object_ToolData_Create_0", "item[4] = SonarPanel;\nunlocked[4] = 0;\nitem[5] = SonarPanelAdvanced;\nunlocked[5] = -1;\n");
+            AddCode(data, "gml_Object_RadarButton_Step_0", "if (ToolData.unlocked[4] == 1 && SonarPanel.active) { visible = 1; }\n");
+        });
+        using (var customLoaded = GameFileLoader.Load(customBasePath))
+        {
+            var derivedCustom = VanillaSonarCondition.FromData(customLoaded.Data);
+            Assert.Equal(4, derivedCustom.SonarToolSlot);
+            Assert.Equal(5, derivedCustom.DeepSonarToolSlot);
+            Assert.Equal("ToolData.unlocked[4] == 1", derivedCustom.UnlockExpression);
+        }
+
+        // Mod 1: Added fish Step event that jams sonar in state == 3 and forces SonarPanel on when state != 3.
+        File.Copy(basePath, jamModPath);
+        using (var stream = File.Open(jamModPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            var data = UndertaleIO.Read(stream);
+            var fish = new UndertaleGameObject { Name = data.Strings.MakeString("Zebriolet"), Visible = true };
+            data.GameObjects.Add(fish);
+            var step = fish.EventHandlerFor(EventType.Step, 0u, data);
+            ReplaceCode(data, step.Name.Content,
+                "var state = 0;\nif (state == 3)\n{\n    SonarPanel.active = 0;\n    SonarPanel.shouldDraw = 0;\n}\nif (state != 3)\n{\n    SonarPanel.active = 1;\n    SonarPanel.shouldDraw = 1;\n}\n");
+            stream.SetLength(0);
+            stream.Position = 0;
+            UndertaleIO.Write(stream, data);
+        }
+
+        // Mod 2: Changed vanilla files unlocking SonarPanel early + enabling view[3].
+        File.Copy(basePath, unlockBypassModPath);
+        using (var stream = File.Open(unlockBypassModPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            var data = UndertaleIO.Read(stream);
+            ReplaceCode(data, "gml_Object_ToolData_Create_0", "item[0] = 0;\nitem[1] = SonarPanel;\nunlocked[1] = 1;\nitem[2] = SonarPanelAdvanced;\nunlocked[2] = -1;\n");
+            ReplaceCode(data, "gml_Object_RadarButton_Step_0", "if (SonarPanel.active) { visible = 1; } else { visible = 0; }\n");
+            data.Rooms[0].Views[3].Enabled = true;
+            stream.SetLength(0);
+            stream.Position = 0;
+            UndertaleIO.Write(stream, data);
+        }
+
+        var store = new ManagerStore(temp.PathFor("store"));
+        store.Set("base", basePath);
+        var library = new ModLibrary(store);
+
+        var jamAdded = library.Add(jamModPath, "JamMod").Mod;
+        var jamReport = library.SanitizerReport(jamAdded);
+        Assert.Equal(0, jamReport.RemovedPerformanceCount);
+        Assert.Equal(0, jamReport.RemovedHudCount);
+        Assert.Equal(1, jamReport.RemovedGameplayCount);
+        Assert.Contains(jamReport.Removed, r => r.Category == ModSanitizer.GameplaySonar && r.Entry == "code/gml_Object_Zebriolet_Step_0");
+
+        var jamSanitizedPatch = library.Patch(jamAdded);
+        string jamRewritten = jamSanitizedPatch.Changes["code"].Added.Single(c => c.Name == "gml_Object_Zebriolet_Step_0").ModCode!.Text;
+        Assert.Contains("jamm_sonar_jammed", jamRewritten);
+        Assert.Contains("ToolData.unlocked[1] == 1", jamRewritten);
+        Assert.DoesNotContain("SonarPanel.shouldDraw = 1", jamRewritten);
+
+        // Build archive with sanitized JamMod to confirm rewritten GML compiles with UndertaleModLib cleanly.
+        string builtJam = temp.PathFor("built-jam.win");
+        var buildResult = ArchiveBuilder.Build(basePath, [new(jamSanitizedPatch, jamModPath)], builtJam);
+        Assert.NotNull(buildResult.Verification);
+
+        // Opt-out restores original author code without re-diffing archives.
+        library.SetKeepAuthorGameplayChanges(jamAdded.Id, true);
+        var jamKeptPatch = library.Patch(library.Find(jamAdded.Id));
+        string jamRaw = jamKeptPatch.Changes["code"].Added.Single(c => c.Name == "gml_Object_Zebriolet_Step_0").ModCode!.Text;
+        Assert.Contains("SonarPanel.shouldDraw = 1;", jamRaw);
+        Assert.DoesNotContain("jamm_sonar_jammed", jamRaw);
+
+        // Mod 2 reverts ToolData.unlocked[1] = 1, RadarButton_Step_0 unlock removal, and room view 3.
+        var bypassAdded = library.Add(unlockBypassModPath, "BypassMod").Mod;
+        var bypassReport = library.SanitizerReport(bypassAdded);
+        Assert.Equal(3, bypassReport.RemovedGameplayCount);
+        var bypassPatch = library.Patch(bypassAdded);
+        Assert.Empty(bypassPatch.Changes["code"].Changed);
+        Assert.Empty(bypassPatch.Changes["rooms"].Changed);
     }
 
     private static void AddSprite(UndertaleData data, string name, uint width, uint height, int frameCount)

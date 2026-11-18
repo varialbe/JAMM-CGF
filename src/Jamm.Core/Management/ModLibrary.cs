@@ -23,6 +23,7 @@ public sealed class ModLibrary(ManagerStore store)
         var (raw, sanitized, _) = EnsurePatches(mod, progress, cancellationToken);
         bool keepPerf = mod.KeepAuthorPerformanceChanges;
         bool keepHud = mod.KeepAuthorHudDesign;
+        bool keepGameplay = mod.KeepAuthorGameplayChanges;
         string metaPath = store.Path("mods", ManagerStore.Name(mod.Id), "mod.json");
         if (File.Exists(metaPath))
         {
@@ -31,12 +32,17 @@ public sealed class ModLibrary(ManagerStore store)
                 var stored = ReadMod(mod.Id);
                 keepPerf = stored.KeepAuthorPerformanceChanges;
                 keepHud = stored.KeepAuthorHudDesign;
+                keepGameplay = stored.KeepAuthorGameplayChanges;
             }
             catch (InvalidDataException) { }
         }
-        if (!keepPerf && !keepHud) return sanitized;
-        if (keepPerf && keepHud) return raw;
-        return ModSanitizer.Sanitize(raw, keepPerformanceChanges: keepPerf, keepHudDesign: keepHud).Patch;
+        if (!keepPerf && !keepHud && !keepGameplay) return sanitized;
+        if (keepPerf && keepHud && keepGameplay) return raw;
+        return ModSanitizer.Sanitize(raw,
+            keepPerformanceChanges: keepPerf,
+            keepHudDesign: keepHud,
+            keepGameplayChanges: keepGameplay,
+            sonarCondition: ResolveSonarCondition(mod.BaseSha256)).Patch;
     }
 
     /// <summary>Returns the verified unsanitized patch for a library mod.</summary>
@@ -63,6 +69,24 @@ public sealed class ModLibrary(ManagerStore store)
         var updated = mod with { KeepAuthorHudDesign = keep };
         store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
         return updated;
+    }
+
+    /// <summary>Toggles whether a mod keeps its author's gameplay/sonar changes instead of enforcing vanilla progression.</summary>
+    public ManagedMod SetKeepAuthorGameplayChanges(string query, bool keep)
+    {
+        var mod = Find(query);
+        var updated = mod with { KeepAuthorGameplayChanges = keep };
+        store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
+        return updated;
+    }
+
+    private VanillaSonarCondition ResolveSonarCondition(string baseSha256)
+    {
+        string? basePath = store.Config().Base;
+        if (string.IsNullOrWhiteSpace(basePath) || !File.Exists(basePath) || BuildFiles.Hash(basePath) != baseSha256)
+            return VanillaSonarCondition.Default;
+        using var file = GameFileLoader.Load(basePath);
+        return VanillaSonarCondition.FromData(file.Data);
     }
 
     /// <summary>Stores or updates the ModKit source folder path in the mod's metadata.</summary>
@@ -138,7 +162,7 @@ public sealed class ModLibrary(ManagerStore store)
             catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException) { }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var sanitizedResult = ModSanitizer.Sanitize(patch);
+        var sanitizedResult = ModSanitizer.Sanitize(patch, sonarCondition: ResolveSonarCondition(mod.BaseSha256));
         store.WriteText(sanitizedPath, PatchJson.Serialize(sanitizedResult.Patch));
         store.Write(reportPath, sanitizedResult.Report);
         return (patch, sanitizedResult.Patch, sanitizedResult.Report);
@@ -253,7 +277,7 @@ public sealed class ModLibrary(ManagerStore store)
             patch = patch with { Mod = patch.Mod with { FileName = source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? "data.win" : sourceName } };
             if (BuildFiles.Hash(basePath) != patch.Base.Sha256 || hash != patch.Mod.Sha256)
                 throw new IOException("An input changed during import. Retry with stable copies.");
-            var sanitized = ModSanitizer.Sanitize(patch);
+            var sanitized = ModSanitizer.Sanitize(patch, sonarCondition: VanillaSonarCondition.FromData(original.Data));
             var entry = new ManagedMod(stableId ?? hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
                 patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode)
             {
