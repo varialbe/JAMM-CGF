@@ -12,6 +12,13 @@ internal static class MenuRuntime
     internal const string CardHandlerStep = "gml_Object_CardHandler_Step_0";
     internal const string CardHandlerDraw = "gml_Object_CardHandler_Draw_0";
     internal const string RodMenuDraw = "gml_Object_RodMenu_Draw_0";
+    internal const string BoatCardClick = "gml_Object_BoatCard_Other_10";
+    internal const string BoatDataCreate = "gml_Object_BoatData_Create_0";
+    internal const string WaitCreate = "gml_Object_icon_Wait_Create_0";
+    internal const string FishalogDraw = "gml_Object_Fishalog_Draw_0";
+    internal const string FishalogHandleStep = "gml_Object_CatalogHandle_Step_2";
+    internal const string FishalogHandleDrag = "gml_Object_CatalogHandle_Mouse_50";
+    internal const string CatalogItemDraw = "gml_Object_CatalogItem_Other_10";
 
     internal const string UpgradeMenuCreate = "gml_Object_UpgradeMenu_Create_0";
     internal const string UpgradeMenuAlarm = "gml_Object_UpgradeMenu_Alarm_0";
@@ -22,8 +29,6 @@ internal static class MenuRuntime
     {
         bool hasCardHandler = baseline.ContainsKey(CardHandlerCreate);
         bool hasUpgradeMenu = baseline.ContainsKey(UpgradeMenuCreate);
-        if (!hasCardHandler && !hasUpgradeMenu) return plan;
-
         var assets = plan.Assets.ToList();
         var decisions = plan.Decisions.ToList();
         bool hasSmallFont = original?.Fonts.ByName("fnt_babySmall") is not null;
@@ -33,6 +38,11 @@ internal static class MenuRuntime
             TryPatch("CardHandler (2 rows)", () => PatchCardHandler(assets, baseline, hasSmallFont));
         if (hasUpgradeMenu)
             TryPatch("UpgradeMenu (9 rows)", () => PatchUpgradeMenu(assets, baseline, hasSmallFont));
+
+        TryPatchOptional("Boat card equip index", () => PatchBoatCard(assets, baseline));
+        TryPatchOptional("invalid Dark Boat registration", () => PatchInvalidDarkBoat(assets, baseline));
+        TryPatchOptional("Wait tile separation", () => PatchWaitTile(assets, baseline));
+        TryPatchOptional("Fishalog layout", () => PatchFishalog(assets, baseline, plan.Catalog));
 
         if (patchedMenus.Count > 0)
             decisions.Add($"Menu paging: injected row-windowed scrolling for {string.Join(" and ", patchedMenus)}.");
@@ -49,6 +59,16 @@ internal static class MenuRuntime
                 decisions.Add($"Menu paging skipped for {label}: {e.Message} The menu keeps its unpaged layout.");
             }
         }
+        void TryPatchOptional(string label, Action patch)
+        {
+            var snapshot = assets.ToList();
+            try { patch(); }
+            catch (InvalidDataException e)
+            {
+                assets.Clear(); assets.AddRange(snapshot);
+                decisions.Add($"Menu layout skipped for {label}: {e.Message}");
+            }
+        }
         return plan with { Assets = assets, Decisions = decisions };
     }
 
@@ -57,13 +77,13 @@ internal static class MenuRuntime
         if (recompile.ContainsKey(CardHandlerStep) && data.GameObjects.ByName("CardHandler") is { } cardHandler)
         {
             Attach(cardHandler, EventType.Step, (uint)EventSubtypeStep.Step, CardHandlerStep);
-            Attach(cardHandler, EventType.Draw, (uint)EventSubtypeDraw.Draw, CardHandlerDraw);
+            Attach(cardHandler, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, CardHandlerDraw);
         }
 
         if (recompile.ContainsKey(UpgradeMenuStep) && data.GameObjects.ByName("UpgradeMenu") is { } upgradeMenu)
         {
             Attach(upgradeMenu, EventType.Step, (uint)EventSubtypeStep.Step, UpgradeMenuStep);
-            Attach(upgradeMenu, EventType.Draw, (uint)EventSubtypeDraw.Draw, UpgradeMenuDraw);
+            Attach(upgradeMenu, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, UpgradeMenuDraw);
         }
 
         void Attach(UndertaleGameObject obj, EventType type, uint subtype, string codeName)
@@ -142,6 +162,100 @@ internal static class MenuRuntime
         AppendOrPut(assets, baseline, UpgradeMenuDraw, BuildDrawGml(hasSmallFont));
     }
 
+    private static void PatchBoatCard(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
+    {
+        if (!HasCode(assets, baseline, BoatCardClick)) return;
+        string text = Current(assets, baseline, BoatCardClick);
+        const string create = "instance_create(0, 0, BoatData.object[item_id]);";
+        if (text.Contains("boat_index = item_id", StringComparison.Ordinal)) return;
+        if (!text.Contains(create, StringComparison.Ordinal))
+            throw new InvalidDataException($"Cannot patch '{BoatCardClick}': expected the BoatData object spawn call.");
+        Put(assets, baseline, BoatCardClick, ReplaceOnce(BoatCardClick, text, create,
+            "var jamm_menu_boat;\njamm_menu_boat = instance_create(0, 0, BoatData.object[item_id]);\njamm_menu_boat.boat_index = item_id;"));
+    }
+
+    private static void PatchInvalidDarkBoat(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
+    {
+        if (!HasCode(assets, baseline, BoatDataCreate)) return;
+        string text = Current(assets, baseline, BoatDataCreate);
+        // This legacy Boat8 registration points at scenery; the archive also contains the actual Neon Boat assets.
+        const string badRegistration = "name[8] = \"Dark Boat\";\nobject[8] = BoatBackground;\ndisp[8] = bg_parallax;\ndesc[8] = \"The most op Boat\";";
+        if (!text.Contains(badRegistration, StringComparison.Ordinal)) return;
+        const string correctedRegistration = "name[8] = \"Neon Boat\";\nobject[8] = Boat8;\ndisp[8] = spr_boat_icon8;\ndesc[8] = \"Travels with flash speed and#holds many fish.\";";
+        Put(assets, baseline, BoatDataCreate, ReplaceOnce(BoatDataCreate, text, badRegistration, correctedRegistration));
+    }
+
+    private static void PatchWaitTile(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
+    {
+        if (!HasCode(assets, baseline, WaitCreate)) return;
+        string text = Current(assets, baseline, WaitCreate);
+        if (text.Contains("hidden_y = 150;", StringComparison.Ordinal)) return;
+        if (!text.Contains("hidden_y = 0;", StringComparison.Ordinal))
+            throw new InvalidDataException($"Cannot patch '{WaitCreate}': expected the default hidden tile position.");
+        Put(assets, baseline, WaitCreate, ReplaceOnce(WaitCreate, text, "hidden_y = 0;", "hidden_y = 150;"));
+    }
+
+    private static void PatchFishalog(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, IReadOnlyList<CatalogMapping> catalog)
+    {
+        if (!HasCode(assets, baseline, FishalogDraw)) return;
+        string draw = Current(assets, baseline, FishalogDraw);
+        const string fallback = "csurf = surface_create(570, 274);";
+        if (draw.Contains(fallback, StringComparison.Ordinal))
+        {
+            draw = ReplaceOnce(FishalogDraw, draw, fallback,
+                "csurf = surface_create(surfw, surfh);");
+        }
+        const string height = "scroll_height = py - scroll_y - CatalogItem.sprite_height;";
+        if (draw.Contains(height, StringComparison.Ordinal))
+            draw = ReplaceOnce(FishalogDraw, draw, height,
+                "scroll_height = max(0, py - scroll_y - CatalogItem.sprite_height);");
+        const string heading = "draw_text(x + 475, y + 10, \"Completion: \" + string(floor(Catalog.fish_completion[selected] * 100)) + \"%\");";
+        if (draw.Contains(heading, StringComparison.Ordinal))
+            draw = ReplaceOnce(FishalogDraw, draw, heading,
+                "draw_text(x + 350, y + 10, \"Completion: \" + string(floor(Catalog.fish_completion[selected] * 100)) + \"%\");");
+        if (draw != Current(assets, baseline, FishalogDraw)) Put(assets, baseline, FishalogDraw, draw);
+
+        if (HasCode(assets, baseline, FishalogHandleStep))
+        {
+            string handle = Current(assets, baseline, FishalogHandleStep);
+            string patched = "var jamm_track, jamm_thumb;\njamm_track = CatalogDown.y - CatalogUp.y;\njamm_thumb = max(12, jamm_track * Catalog.surfh / max(1, Catalog.surfh + Catalog.scroll_height));\nymax = max(0, jamm_track - jamm_thumb);\nimage_yscale = jamm_thumb / max(1, sprite_get_height(sprite_index));\nif (!clicked) ys = (Catalog.scroll_height > 0) ? (-Catalog.scroll_y / Catalog.scroll_height) * ymax : 0;\nys = clamp(ys, 0, ymax);\ny = yoffset + ys;";
+            Put(assets, baseline, FishalogHandleStep, patched);
+        }
+        if (HasCode(assets, baseline, FishalogHandleDrag))
+        {
+            string drag = Current(assets, baseline, FishalogHandleDrag);
+            const string oldDrag = "Catalog.scroll_y = ys / -0.03;";
+            if (drag.Contains(oldDrag, StringComparison.Ordinal))
+                Put(assets, baseline, FishalogHandleDrag, ReplaceOnce(FishalogHandleDrag, drag, oldDrag,
+                    "Catalog.scroll_y = (ymax > 0) ? -(ys / ymax) * Catalog.scroll_height : 0;"));
+        }
+
+        if (catalog.Count == 0 || !HasCode(assets, baseline, CatalogItemDraw)) return;
+        string item = Current(assets, baseline, CatalogItemDraw);
+        const string itemEnd = "Catalog.py += sprite_height;";
+        if (!item.Contains(itemEnd, StringComparison.Ordinal))
+            throw new InvalidDataException($"Cannot add fish source labels: expected the row advance in '{CatalogItemDraw}'.");
+        System.Text.StringBuilder labels = new();
+        foreach (var mapping in catalog.DistinctBy(m => (m.Area, m.Slot)))
+        {
+            string displaySource = mapping.Mod.Length > 22 ? mapping.Mod[..21] + "…" : mapping.Mod;
+            string source = displaySource.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+            labels.AppendLine($"if (size == {mapping.Area} && index == {mapping.Slot})");
+            labels.AppendLine("{");
+            labels.AppendLine("    draw_set_color(Colors.ui_dark);");
+            labels.AppendLine("    draw_text(520, Catalog.py + 8, \"Mod\");");
+            labels.AppendLine("    if (mouse_x - (Catalog.x + Catalog.surfx) >= 520 && mouse_x - (Catalog.x + Catalog.surfx) <= 560 && mouse_y - (Catalog.y + Catalog.surfy) >= Catalog.py && mouse_y - (Catalog.y + Catalog.surfy) <= Catalog.py + sprite_height)");
+            labels.AppendLine("    {");
+            labels.AppendLine("        draw_set_color(Colors.ui_light);");
+            labels.AppendLine("        draw_rectangle(365, Catalog.py + 3, 558, Catalog.py + 36, false);");
+            labels.AppendLine($"        draw_text_ext(372, Catalog.py + 8, \"Added by {source}\", 12, 180);");
+            labels.AppendLine("    }");
+            labels.AppendLine("}");
+        }
+        Put(assets, baseline, CatalogItemDraw, ReplaceOnce(CatalogItemDraw, item, itemEnd,
+            labels + itemEnd));
+    }
+
     private static string BuildCardHandlerAlarmGml() => BuildWindowedAlarmGml(
         extraLocals: "",
         initPrefix: """
@@ -191,13 +305,13 @@ internal static class MenuRuntime
             n_visible = 0;
         {{initPrefix}}
             jamm_total_rows = ceil(n_visible / card_width);
-            max_scroll_row = max(0, jamm_total_rows - visible_rows);
+            max_scroll_row = max(0, ceil(jamm_total_rows / visible_rows) - 1);
             if (scroll_row > max_scroll_row)
             {
                 scroll_row = max_scroll_row;
             }
-            window_pos = scroll_row * card_width;
-            window_end = min(n_visible, (scroll_row + visible_rows) * card_width);
+            window_pos = scroll_row * visible_rows * card_width;
+            window_end = min(n_visible, (scroll_row + 1) * visible_rows * card_width);
             x = ORIGIN_X;
             y = ORIGIN_Y;
         }
@@ -205,7 +319,7 @@ internal static class MenuRuntime
         {
             var jamm_col;
         {{spawnCard}}
-            jamm_col = (window_pos - (scroll_row * card_width)) + 1;
+            jamm_col = (window_pos - (scroll_row * visible_rows * card_width)) + 1;
             if ((jamm_col % card_width) == 0)
             {
                 x = ORIGIN_X;
@@ -231,13 +345,15 @@ internal static class MenuRuntime
         $$"""
         if (jamm_menu_init && max_scroll_row > 0)
         {
-            var jamm_delta, jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_next;
+            var jamm_delta, jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_next, jamm_mx, jamm_my;
             jamm_delta = 0;
-            jamm_bx = min(ORIGIN_X + (card_width * X_GAP) + 12, (view_xview[0] + view_wview[0]) - 48);
-            jamm_by_up = ORIGIN_Y + 80;
+            jamm_bx = display_get_gui_width() - 52;
+            jamm_by_up = max(12, (display_get_gui_height() * 0.5) - 52);
             jamm_bw = 36;
             jamm_bh = 28;
             jamm_by_down = jamm_by_up + jamm_bh + 36;
+            jamm_mx = device_mouse_x_to_gui(0);
+            jamm_my = device_mouse_y_to_gui(0);
             if (mouse_wheel_up() || keyboard_check_pressed(vk_up))
             {
                 jamm_delta -= 1;
@@ -248,13 +364,13 @@ internal static class MenuRuntime
             }
             if (mouse_check_button_pressed(mb_left))
             {
-                if (mouse_x >= jamm_bx && mouse_x <= (jamm_bx + jamm_bw))
+                if (jamm_mx >= jamm_bx && jamm_mx <= (jamm_bx + jamm_bw))
                 {
-                    if (mouse_y >= jamm_by_up && mouse_y <= (jamm_by_up + jamm_bh))
+                    if (jamm_my >= jamm_by_up && jamm_my <= (jamm_by_up + jamm_bh))
                     {
                         jamm_delta -= 1;
                     }
-                    else if (mouse_y >= jamm_by_down && mouse_y <= (jamm_by_down + jamm_bh))
+                    else if (jamm_my >= jamm_by_down && jamm_my <= (jamm_by_down + jamm_bh))
                     {
                         jamm_delta += 1;
                     }
@@ -273,8 +389,8 @@ internal static class MenuRuntime
                     x = ORIGIN_X;
                     y = ORIGIN_Y;
                     done_spawning = 0;
-                    window_pos = scroll_row * card_width;
-                    window_end = min(n_visible, (scroll_row + visible_rows) * card_width);
+                    window_pos = scroll_row * visible_rows * card_width;
+                    window_end = min(n_visible, (scroll_row + 1) * visible_rows * card_width);
                     alarm[0] = 1;
                 }
             }
@@ -283,14 +399,14 @@ internal static class MenuRuntime
 
     private static string BuildDrawGml(bool hasSmallFont)
     {
-        string fontLine = hasSmallFont ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);";
+        _ = hasSmallFont;
         return $$"""
-        if (view_current == 0 && jamm_menu_init && max_scroll_row > 0)
+        if (jamm_menu_init && max_scroll_row > 0)
         {
             var jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_cx;
             var jamm_bg, jamm_fg, jamm_dim;
-            jamm_bx = min(ORIGIN_X + (card_width * X_GAP) + 12, (view_xview[0] + view_wview[0]) - 48);
-            jamm_by_up = ORIGIN_Y + 80;
+            jamm_bx = display_get_gui_width() - 52;
+            jamm_by_up = max(12, (display_get_gui_height() * 0.5) - 52);
             jamm_bw = 36;
             jamm_bh = 28;
             jamm_by_down = jamm_by_up + jamm_bh + 36;
@@ -327,13 +443,8 @@ internal static class MenuRuntime
             draw_rectangle(jamm_bx, jamm_by_down, jamm_bx + jamm_bw, jamm_by_down + jamm_bh, true);
             draw_triangle(jamm_cx, (jamm_by_down + jamm_bh) - 6, jamm_bx + 8, jamm_by_down + 6, (jamm_bx + jamm_bw) - 8, jamm_by_down + 6, false);
 
-            {{fontLine}}
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
             draw_set_color(jamm_fg);
-            draw_text(jamm_cx, jamm_by_up + jamm_bh + 18, "Page " + string(scroll_row + 1) + "/" + string(max_scroll_row + 1));
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            draw_text(jamm_bx - 4, jamm_by_up + jamm_bh + 18, "Page " + string(scroll_row + 1) + "/" + string(max_scroll_row + 1));
         }
         """;
     }
