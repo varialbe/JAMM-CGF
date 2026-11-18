@@ -106,22 +106,67 @@ public sealed class ModDownloadService(ManagerStore store, ModHttp http, long ma
         if (header[..4].SequenceEqual("FORM"u8)) { ValidateForm(input, input.Length); return ".win"; }
         if (!header[..2].SequenceEqual("PK"u8)) throw new InvalidDataException("The source returned HTML or another unsupported file instead of a GameMaker archive/ZIP. Open source page and select a .win or ZIP.");
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
-        if (zip.Entries.Count > 4096) throw new InvalidDataException("ZIP has too many entries. Choose a ZIP containing one data.win.");
-        long expanded = 0; List<ZipArchiveEntry> candidates = [];
+        if (zip.Entries.Count > 4096) throw new InvalidDataException("ZIP has too many entries. Choose a ZIP containing one data.win or a pure-source ModKit/recipe package.");
+        long expanded = 0;
+        List<ZipArchiveEntry> dataWinCandidates = [];
+        List<ZipArchiveEntry> sourceManifests = [];
         foreach (var entry in zip.Entries)
         {
             token.ThrowIfCancellationRequested();
             ValidateZipEntry(entry);
             if (entry.Length > maximumBytes - expanded) throw new InvalidDataException("ZIP expanded data exceeds the archive safety limit.");
             expanded += entry.Length;
-            if (entry.FullName.Replace('\\', '/').Split('/').Last().Equals("data.win", StringComparison.OrdinalIgnoreCase)) candidates.Add(entry);
+            string normalized = entry.FullName.Replace('\\', '/').TrimEnd('/');
+            string fileName = normalized.Split('/').Last();
+            if (fileName.Equals("data.win", StringComparison.OrdinalIgnoreCase))
+                dataWinCandidates.Add(entry);
+            else if (fileName.Equals(ModKit.ModKitPackage.ManifestFileName, StringComparison.OrdinalIgnoreCase)
+                || fileName.Equals(ModKit.RecipePackage.ManifestFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                if (normalized.Count(c => c == '/') <= 1)
+                    sourceManifests.Add(entry);
+            }
         }
-        if (candidates.Count != 1) throw new InvalidDataException("ZIP must contain exactly one data.win; choose a different release/file.");
-        using var win = candidates[0].Open(); ValidateForm(win, candidates[0].Length);
-        byte[] buffer = new byte[65536]; long count = 8;
-        while (true) { token.ThrowIfCancellationRequested(); int read = win.Read(buffer); if (read == 0) break; count += read; if (count > maximumBytes) throw new InvalidDataException("Expanded data.win exceeds the archive safety limit."); }
-        if (count != candidates[0].Length) throw new InvalidDataException("ZIP contains an incomplete data.win. Retry the download.");
-        return ".zip";
+        if (dataWinCandidates.Count == 1 && sourceManifests.Count == 0)
+        {
+            using var win = dataWinCandidates[0].Open(); ValidateForm(win, dataWinCandidates[0].Length);
+            byte[] buffer = new byte[65536]; long count = 8;
+            while (true) { token.ThrowIfCancellationRequested(); int read = win.Read(buffer); if (read == 0) break; count += read; if (count > maximumBytes) throw new InvalidDataException("Expanded data.win exceeds the archive safety limit."); }
+            if (count != dataWinCandidates[0].Length) throw new InvalidDataException("ZIP contains an incomplete data.win. Retry the download.");
+            return ".zip";
+        }
+        if (dataWinCandidates.Count == 0 && sourceManifests.Count == 1)
+        {
+            ValidateSourceZipDecompression(zip, maximumBytes, token);
+            return ".zip";
+        }
+        throw new InvalidDataException("ZIP must contain exactly one data.win or one pure-source manifest (jamm-mod.json or jamm-recipe.json); choose a different release/file.");
+    }
+    private static void ValidateSourceZipDecompression(ZipArchive zip, long maximumBytes, CancellationToken token)
+    {
+        byte[] buffer = new byte[65536];
+        long total = 0;
+        foreach (var entry in zip.Entries)
+        {
+            token.ThrowIfCancellationRequested();
+            if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\')) continue;
+            string ext = Path.GetExtension(entry.Name);
+            if (ext.Equals(".win", StringComparison.OrdinalIgnoreCase) || ext.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Source package ZIP cannot contain binary '{entry.FullName}'.");
+            using var stream = entry.Open();
+            long entryRead = 0;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                int read = stream.Read(buffer);
+                if (read == 0) break;
+                entryRead += read;
+                total += read;
+                if (total > maximumBytes) throw new InvalidDataException("Expanded package exceeds the archive safety limit.");
+            }
+            if (entryRead != entry.Length)
+                throw new InvalidDataException($"ZIP contains an incomplete entry '{entry.FullName}'. Retry the download.");
+        }
     }
     internal static void ValidateZipEntry(ZipArchiveEntry entry)
     {

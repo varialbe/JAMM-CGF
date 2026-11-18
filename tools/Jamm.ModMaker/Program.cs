@@ -28,6 +28,7 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
+                  silo    <original.win> <out.win>
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -35,7 +36,7 @@ public static class Program
         }
         string command = args[0];
         string original = Path.GetFullPath(args[1]);
-        bool needsOutput = command is "perf" or "smooth" or "hd" or "console" or "profile" or "export-pages";
+        bool needsOutput = command is "perf" or "smooth" or "hd" or "console" or "silo" or "profile" or "export-pages";
         if (needsOutput && (args.Length < 3 || args[2].StartsWith("--", StringComparison.Ordinal)))
             throw new ArgumentException($"'{command}' requires an original file and a new output path before options.");
         string? output = needsOutput ? Path.GetFullPath(args[2]) : null;
@@ -76,6 +77,7 @@ public static class Program
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
+            case "silo": SiloMod.Apply(data); Save(data, output!); return 0;
             case "profile":
                 // Profiles a (possibly modded) data.win: instruments all object events.
                 Profiler.Apply(data); Save(data, output!); return 0;
