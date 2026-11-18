@@ -107,6 +107,7 @@ public sealed class ManagerStore
         config = key switch
         {
             "useSharedCompatibilityResults" when bool.TryParse(value, out _) => config with { UseSharedCompatibilityResults = bool.Parse(value) },
+            "checkForUpdates" when bool.TryParse(value, out _) => config with { CheckForUpdates = bool.Parse(value) },
             "showModsWithoutDownload" when bool.TryParse(value, out _) => config with { ShowModsWithoutDownload = bool.Parse(value) },
             "showLitterboxCatalog" when bool.TryParse(value, out _) => config with { ShowLitterboxCatalog = bool.Parse(value) },
             "showFirstPartyCatalog" when bool.TryParse(value, out _) => config with { ShowFirstPartyCatalog = bool.Parse(value) },

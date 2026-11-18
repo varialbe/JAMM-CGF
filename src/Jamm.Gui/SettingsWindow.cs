@@ -39,9 +39,11 @@ public sealed class SettingsWindow : Window
         Add("steam.appId", "Steam App ID", config.Steam.AppId);
         var shared = new CheckBox { Content = "Use shared compatibility results (no account, no cookies)", IsChecked = config.UseSharedCompatibilityResults };
         panel.Children.Add(shared);
+        var updates = new CheckBox { Content = "Check official GitHub releases on startup; ask before downloading an installer", IsChecked = config.CheckForUpdates };
+        panel.Children.Add(updates);
         var save = new Button { Content = "Validate & save settings", HorizontalAlignment = HorizontalAlignment.Left };
         save.Bind(IsEnabledProperty, new Binding(nameof(MainViewModel.CanEdit)));
-        save.Click += async (_, _) => { var values = fields.ToDictionary(p => p.Key, p => p.Value.Text ?? ""); values["useSharedCompatibilityResults"] = (shared.IsChecked == true).ToString(); await model.SaveSettingsAsync(values); };
+        save.Click += async (_, _) => { var values = fields.ToDictionary(p => p.Key, p => p.Value.Text ?? ""); values["useSharedCompatibilityResults"] = (shared.IsChecked == true).ToString(); values["checkForUpdates"] = (updates.IsChecked == true).ToString(); await model.SaveSettingsAsync(values); };
         panel.Children.Add(save);
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap }; status.Bind(TextBlock.TextProperty, new Binding(nameof(MainViewModel.Status))); panel.Children.Add(status);
         Content = new ScrollViewer { Content = panel };

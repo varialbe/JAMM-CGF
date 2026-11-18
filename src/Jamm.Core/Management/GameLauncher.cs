@@ -90,11 +90,16 @@ public static class GameLauncher
     }
 
     /// <summary>Starts the runner and immediately releases its process handle; does not wait for the game.</summary>
-    public static void Launch(GameLaunchCommand command)
+    public static void Launch(GameLaunchCommand command, Action<int?>? onExit = null)
     {
         Validate(command);
         if (command.FlatpakCompatDataPath is not null) Directory.CreateDirectory(command.FlatpakCompatDataPath);
         var resolved = command with { FileName = FindRunner(command.FileName)! };
-        using var process = Process.Start(resolved.ToStartInfo()) ?? throw new IOException("The game runner could not be started. Check its executable and prefix settings.");
+        var start = resolved.ToStartInfo();
+        if (start.Environment.ContainsKey("STEAM_COMPAT_DATA_PATH")) start.Environment["PROTON_LOG"] = "1";
+        var process = Process.Start(start) ?? throw new IOException("The game runner could not be started. Check its executable and prefix settings.");
+        if (onExit is null) { process.Dispose(); return; }
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => { try { onExit(process.ExitCode); } finally { process.Dispose(); } };
     }
 }

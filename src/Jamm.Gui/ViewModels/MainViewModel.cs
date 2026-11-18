@@ -137,7 +137,13 @@ public sealed partial class MainViewModel : ObservableObject
     public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); OnPropertyChanged(nameof(ShowBuiltinHeader)); } }
     /// <summary>Displays operation errors in the desktop shell as well as the status line.</summary>
     public event Action<string>? Error;
-    internal void ReportError(string text) { Message(text); Error?.Invoke(text); }
+    internal void ReportError(string text)
+    {
+        string diagnostic = Jamm.Gui.DiagnosticLog.Create(this, "manager operation", "The selected operation did not complete. Sensitive paths and configuration values are omitted.");
+        Message(text);
+        Log += diagnostic + Environment.NewLine;
+        Error?.Invoke(text);
+    }
 
     /// <summary>Guards configuration reads and settings construction, including first-run setup.</summary>
     public async Task OpenSettingsAsync(Func<Task> show, bool onlyWhenUnconfigured = false)
@@ -548,7 +554,14 @@ public sealed partial class MainViewModel : ObservableObject
                 await ReloadAsync();
             }
         }
-        await Task.Run(() => { if (store.Config().Wine.Mode == "proton" && store.Config().Proton.CompatDataPath is null) store.EnsureProtonDataDirectory(); GameLauncher.Launch(command); });
+        await Task.Run(() =>
+        {
+            if (store.Config().Wine.Mode == "proton" && store.Config().Proton.CompatDataPath is null) store.EnsureProtonDataDirectory();
+            GameLauncher.Launch(command, exitCode =>
+            {
+                if (exitCode is not 0) Jamm.Gui.DiagnosticLog.Create(this, "game process exited with failure", "Runner exit code: " + (exitCode?.ToString() ?? "unknown"));
+            });
+        });
         Message("Started " + command.Display());
     });
     /// <summary>Restores a recognized installation through Core and reports the verified original hash.</summary>
