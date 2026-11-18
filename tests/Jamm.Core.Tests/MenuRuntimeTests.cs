@@ -36,12 +36,12 @@ public sealed class MenuRuntimeTests
         var cardHandler = merged.Data.GameObjects.ByName("CardHandler");
         Assert.NotNull(cardHandler);
         Assert.Equal(MenuRuntime.CardHandlerStep, cardHandler.Events[(int)EventType.Step].Single(e => e.EventSubtype == 0).Actions[0].CodeId.Name.Content);
-        Assert.Equal(MenuRuntime.CardHandlerDraw, cardHandler.Events[(int)EventType.Draw].Single(e => e.EventSubtype == 0).Actions[0].CodeId.Name.Content);
+        Assert.Equal(MenuRuntime.CardHandlerDraw, cardHandler.Events[(int)EventType.Draw].Single(e => e.EventSubtype == (uint)EventSubtypeDraw.DrawGUI).Actions[0].CodeId.Name.Content);
 
         var upgradeMenu = merged.Data.GameObjects.ByName("UpgradeMenu");
         Assert.NotNull(upgradeMenu);
         Assert.Equal(MenuRuntime.UpgradeMenuStep, upgradeMenu.Events[(int)EventType.Step].Single(e => e.EventSubtype == 0).Actions[0].CodeId.Name.Content);
-        Assert.Equal(MenuRuntime.UpgradeMenuDraw, upgradeMenu.Events[(int)EventType.Draw].Single(e => e.EventSubtype == 0).Actions[0].CodeId.Name.Content);
+        Assert.Equal(MenuRuntime.UpgradeMenuDraw, upgradeMenu.Events[(int)EventType.Draw].Single(e => e.EventSubtype == (uint)EventSubtypeDraw.DrawGUI).Actions[0].CodeId.Name.Content);
 
         string chCreate = PatchBuilder.ReadCode(merged, MenuRuntime.CardHandlerCreate).Text;
         Assert.Contains("visible_rows = 2", chCreate);
@@ -52,6 +52,9 @@ public sealed class MenuRuntimeTests
         string chAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.CardHandlerAlarm).Text;
         Assert.Contains("visible_items[n_visible]", chAlarm);
         Assert.Contains("max_scroll_row = max(0,", chAlarm);
+        Assert.Contains("ceil(jamm_total_rows / visible_rows) - 1", chAlarm);
+        Assert.Contains("window_pos = scroll_row * visible_rows * card_width", chAlarm);
+        Assert.Contains("window_end = min(n_visible, (scroll_row + 1) * visible_rows * card_width)", chAlarm);
         Assert.Contains("window_pos < window_end", chAlarm);
         Assert.Contains("done_spawning = 1", chAlarm);
         Assert.DoesNotContain("iCard + 1", chAlarm);
@@ -62,15 +65,19 @@ public sealed class MenuRuntimeTests
         Assert.Contains("vk_up", chStep);
         Assert.Contains("vk_down", chStep);
         Assert.Contains("mouse_check_button_pressed(mb_left)", chStep);
+        Assert.Contains("device_mouse_x_to_gui(0)", chStep);
+        Assert.Contains("display_get_gui_width()", chStep);
         Assert.Contains("with (Card)", chStep);
         Assert.Contains("done_spawning = 0", chStep);
+        Assert.Contains("window_pos = scroll_row * visible_rows * card_width", chStep);
         Assert.Contains("alarm[0] = 1", chStep);
 
         string chDraw = PatchBuilder.ReadCode(merged, MenuRuntime.CardHandlerDraw).Text;
         Assert.Contains("max_scroll_row > 0", chDraw);
         Assert.Contains("draw_triangle(", chDraw);
         Assert.Contains("\"Page \"", chDraw);
-        Assert.Contains("fnt_babySmall", chDraw);
+        Assert.Contains("display_get_gui_width()", chDraw);
+        Assert.Contains("Page ", chDraw);
 
         string rodDraw = PatchBuilder.ReadCode(merged, MenuRuntime.RodMenuDraw).Text;
         Assert.Contains("event_inherited()", rodDraw);
@@ -88,6 +95,7 @@ public sealed class MenuRuntimeTests
         Assert.Contains("spawn_order[jamm_i] = jamm_i", umAlarm);
         Assert.Contains("UpgradeData.unlocks[jamm_id]", umAlarm);
         Assert.Contains("visible_items[window_pos]", umAlarm);
+        Assert.Contains("window_pos = scroll_row * visible_rows * card_width", umAlarm);
         Assert.DoesNotContain("17", umAlarm);
 
         string umStep = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeMenuStep).Text;
@@ -119,7 +127,7 @@ public sealed class MenuRuntimeTests
 
         using var merged = GameFileLoader.Load(output);
         string chDraw = PatchBuilder.ReadCode(merged, MenuRuntime.CardHandlerDraw).Text;
-        Assert.Contains("draw_set_font(-1)", chDraw);
+        Assert.Contains("draw_triangle(", chDraw);
         Assert.DoesNotContain("fnt_babySmall", chDraw);
     }
 
@@ -188,6 +196,40 @@ public sealed class MenuRuntimeTests
     }
 
     [Fact]
+    public void LayoutRepairsUseGuiControlsFishProvenanceAndValidBoatEquipIndex()
+    {
+        var baseline = new Dictionary<string, CodeText>(StringComparer.Ordinal)
+        {
+            [MenuRuntime.BoatCardClick] = new("instance_create(0, 0, BoatData.object[item_id]);", "gml", 0, 0, null, []),
+            [MenuRuntime.BoatDataCreate] = new("name[8] = \"Dark Boat\";\nobject[8] = BoatBackground;\ndisp[8] = bg_parallax;\ndesc[8] = \"The most op Boat\";", "gml", 0, 0, null, []),
+            [MenuRuntime.WaitCreate] = new("hidden_y = 0;", "gml", 0, 0, null, []),
+            [MenuRuntime.FishalogDraw] = new("if (!surface_exists(csurf)) { csurf = surface_create(570, 274); } scroll_height = py - scroll_y - CatalogItem.sprite_height; draw_surface(csurf, x + surfx, y + surfy); draw_text(x + 475, y + 10, \"Completion: \" + string(floor(Catalog.fish_completion[selected] * 100)) + \"%\");", "gml", 0, 0, null, []),
+            [MenuRuntime.FishalogHandleStep] = new("if (ys < 0) ys = 0; if (ys > ymax) ys = ymax; y = yoffset + ys; ymax = Catalog.scroll_height * 0.03; image_yscale = height - ymax; if (!clicked) ys = Catalog.scroll_y * -0.03;", "gml", 0, 0, null, []),
+            [MenuRuntime.FishalogHandleDrag] = new("Catalog.scroll_y = ys / -0.03;", "gml", 0, 0, null, []),
+            [MenuRuntime.CatalogItemDraw] = new("draw_text_ext(220, Catalog.py + 40, desc, 14, 330); Catalog.py += sprite_height;", "gml", 0, 0, null, [])
+        };
+        var plan = new BuildPlan([], []) { Catalog = [new("Harbor Pack", "jmk_fish_glowfin", 2, 5, 67)] };
+
+        var patched = MenuRuntime.PreparePlan(plan, baseline);
+
+        Assert.Contains("boat_index = item_id", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.BoatCardClick).Gml);
+        string boats = Assert.Single(patched.Assets, a => a.Name == MenuRuntime.BoatDataCreate).Gml!;
+        Assert.Contains("name[8] = \"Neon Boat\"", boats);
+        Assert.Contains("object[8] = Boat8", boats);
+        Assert.Contains("disp[8] = spr_boat_icon8", boats);
+        Assert.Contains("hidden_y = 150", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.WaitCreate).Gml);
+        string fishalog = Assert.Single(patched.Assets, a => a.Name == MenuRuntime.FishalogDraw).Gml!;
+        Assert.Contains("surface_create(surfw, surfh)", fishalog);
+        Assert.Contains("max(0, py - scroll_y", fishalog);
+        Assert.Contains("x + 350", fishalog);
+        Assert.Contains("Catalog.surfh / max(1, Catalog.surfh + Catalog.scroll_height)", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.FishalogHandleStep).Gml);
+        Assert.Contains("Catalog.scroll_height : 0", Assert.Single(patched.Assets, a => a.Name == MenuRuntime.FishalogHandleDrag).Gml);
+        string fish = Assert.Single(patched.Assets, a => a.Name == MenuRuntime.CatalogItemDraw).Gml!;
+        Assert.Contains("size == 2 && index == 67", fish);
+        Assert.Contains("Added by Harbor Pack", fish);
+    }
+
+    [Fact]
     public void MenuRuntimeComposesWithHudRuntimeInSameBuild()
     {
         using var temp = new TemporaryDirectory();
@@ -210,9 +252,7 @@ public sealed class MenuRuntimeTests
 
         using var merged = GameFileLoader.Load(output);
         string chDraw = PatchBuilder.ReadCode(merged, MenuRuntime.CardHandlerDraw).Text;
-        Assert.Contains("jamm_hud_set_font(fnt_babySmall)", chDraw);
-        Assert.Contains("jamm_hud_set_halign(fa_center)", chDraw);
-        Assert.Contains("jamm_hud_set_valign(fa_middle)", chDraw);
+        Assert.Contains("draw_triangle(", chDraw);
     }
 
     private static void WriteMinimalModel(string path, Action<UndertaleData> edit)
