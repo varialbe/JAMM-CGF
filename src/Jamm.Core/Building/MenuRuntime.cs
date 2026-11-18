@@ -11,6 +11,7 @@ internal static class MenuRuntime
     internal const string CardHandlerAlarm = "gml_Object_CardHandler_Alarm_0";
     internal const string CardHandlerStep = "gml_Object_CardHandler_Step_0";
     internal const string CardHandlerDraw = "gml_Object_CardHandler_Draw_0";
+    internal const string CardHandlerDestroy = "gml_Object_CardHandler_Destroy_0";
     internal const string RodMenuDraw = "gml_Object_RodMenu_Draw_0";
     internal const string BoatCardClick = "gml_Object_BoatCard_Other_10";
     internal const string BoatDataCreate = "gml_Object_BoatData_Create_0";
@@ -23,6 +24,7 @@ internal static class MenuRuntime
     internal const string UpgradeMenuAlarm = "gml_Object_UpgradeMenu_Alarm_0";
     internal const string UpgradeMenuStep = "gml_Object_UpgradeMenu_Step_0";
     internal const string UpgradeMenuDraw = "gml_Object_UpgradeMenu_Draw_0";
+    internal const string UpgradeMenuDestroy = "gml_Object_UpgradeMenu_Destroy_0";
 
     internal static BuildPlan PreparePlan(BuildPlan plan, IReadOnlyDictionary<string, CodeText> baseline, UndertaleData? original = null)
     {
@@ -76,12 +78,16 @@ internal static class MenuRuntime
         {
             Attach(cardHandler, EventType.Step, (uint)EventSubtypeStep.Step, CardHandlerStep);
             Attach(cardHandler, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, CardHandlerDraw);
+            if (recompile.ContainsKey(CardHandlerDestroy))
+                Attach(cardHandler, EventType.Destroy, 0u, CardHandlerDestroy);
         }
 
         if (recompile.ContainsKey(UpgradeMenuStep) && data.GameObjects.ByName("UpgradeMenu") is { } upgradeMenu)
         {
             Attach(upgradeMenu, EventType.Step, (uint)EventSubtypeStep.Step, UpgradeMenuStep);
             Attach(upgradeMenu, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, UpgradeMenuDraw);
+            if (recompile.ContainsKey(UpgradeMenuDestroy))
+                Attach(upgradeMenu, EventType.Destroy, 0u, UpgradeMenuDestroy);
         }
 
         void Attach(UndertaleGameObject obj, EventType type, uint subtype, string codeName)
@@ -118,8 +124,11 @@ internal static class MenuRuntime
         RequireAnchor(CardHandlerAlarm, alarm, "done_spawning = 1;");
         Put(assets, baseline, CardHandlerAlarm, BuildCardHandlerAlarmGml());
 
-        AppendOrPut(assets, baseline, CardHandlerStep, BuildStepGml("Card"));
+        AppendInheritedOrPut(assets, baseline, CardHandlerStep, BuildStepGml("Card"),
+            HasCode(assets, baseline, "gml_Object_Handler_Step_0"));
         AppendOrPut(assets, baseline, CardHandlerDraw, BuildDrawGml(hasSmallFont));
+        AppendInheritedOrPut(assets, baseline, CardHandlerDestroy, BuildRestoreHatButtonsGml(),
+            includeInherited: true);
 
         if (HasCode(assets, baseline, RodMenuDraw))
         {
@@ -156,8 +165,11 @@ internal static class MenuRuntime
             throw new InvalidDataException($"Cannot patch '{UpgradeMenuAlarm}': expected anchor 'iCard <= N' was not found.");
         Put(assets, baseline, UpgradeMenuAlarm, BuildUpgradeMenuAlarmGml());
 
-        AppendOrPut(assets, baseline, UpgradeMenuStep, BuildStepGml("UpgradeCard"));
+        AppendInheritedOrPut(assets, baseline, UpgradeMenuStep, BuildStepGml("UpgradeCard"),
+            HasCode(assets, baseline, "gml_Object_RowHandler_Step_0") || HasCode(assets, baseline, "gml_Object_Handler_Step_0"));
         AppendOrPut(assets, baseline, UpgradeMenuDraw, BuildDrawGml(hasSmallFont));
+        AppendInheritedOrPut(assets, baseline, UpgradeMenuDestroy, BuildRestoreHatButtonsGml(),
+            includeInherited: true);
     }
 
     private static void PatchBoatCard(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
@@ -284,7 +296,7 @@ internal static class MenuRuntime
         $$"""
         if (!jamm_menu_init)
         {
-            var jamm_i, jamm_total_rows{{extraLocals}};
+            var jamm_i, jamm_total_rows, jamm_anchor{{extraLocals}};
             jamm_menu_init = 1;
             n_visible = 0;
         {{initPrefix}}
@@ -296,12 +308,29 @@ internal static class MenuRuntime
             }
             window_pos = scroll_row * visible_rows * card_width;
             window_end = min(n_visible, (scroll_row + 1) * visible_rows * card_width);
+            jamm_anchor = asset_get_index("icon_Rods");
+            if (jamm_anchor > -1 && instance_exists(jamm_anchor))
+            {
+                ORIGIN_X = jamm_anchor.ORIGIN_X;
+                ORIGIN_Y = jamm_anchor.ORIGIN_Y;
+            }
             x = ORIGIN_X;
             y = ORIGIN_Y;
         }
         if (window_pos < window_end)
         {
-            var jamm_col;
+            var jamm_col, jamm_page_anchor;
+            if (window_pos == (scroll_row * visible_rows * card_width))
+            {
+                jamm_page_anchor = asset_get_index("icon_Rods");
+                if (jamm_page_anchor > -1 && instance_exists(jamm_page_anchor))
+                {
+                    ORIGIN_X = jamm_page_anchor.ORIGIN_X;
+                    ORIGIN_Y = jamm_page_anchor.ORIGIN_Y;
+                }
+                x = ORIGIN_X;
+                y = ORIGIN_Y;
+            }
         {{spawnCard}}
             jamm_col = (window_pos - (scroll_row * visible_rows * card_width)) + 1;
             if ((jamm_col % card_width) == 0)
@@ -325,17 +354,68 @@ internal static class MenuRuntime
         }
         """;
 
+    private static string BuildHideHatButtonsGml() => BuildHatButtonVisibilityGml(hide: true);
+
+    private static string BuildRestoreHatButtonsGml() => BuildHatButtonVisibilityGml(hide: false);
+
+    private static string BuildHatButtonVisibilityGml(bool hide)
+    {
+        string body = hide
+            ? """
+                        if (visible)
+                        {
+                            jamm_menu_hidden = 1;
+                            visible = false;
+                        }
+                """
+            : """
+                        if (variable_instance_exists(id, "jamm_menu_hidden") && jamm_menu_hidden)
+                        {
+                            jamm_menu_hidden = 0;
+                            visible = true;
+                        }
+                """;
+        return "var jamm_hat_obj;\n" + string.Join("\n", new[] { "icon_Hats", "icon_HatsNew" }.Select(name => $$"""
+            jamm_hat_obj = asset_get_index("{{name}}");
+            if (jamm_hat_obj > -1)
+            {
+                with (jamm_hat_obj)
+                {
+            {{body}}
+                }
+            }
+            """));
+    }
+
+    private static string BuildPagingGeometryGml() => """
+        var jamm_gw, jamm_gh, jamm_vw, jamm_vh, jamm_sx, jamm_sy;
+        var jamm_grid_right, jamm_grid_mid_y, jamm_bw, jamm_bh, jamm_gap, jamm_bx, jamm_by_up, jamm_by_down;
+        jamm_gw = max(1, display_get_gui_width());
+        jamm_gh = max(1, display_get_gui_height());
+        jamm_vw = view_wview[0];
+        jamm_vh = view_hview[0];
+        if (jamm_vw <= 0) jamm_vw = jamm_gw;
+        if (jamm_vh <= 0) jamm_vh = jamm_gh;
+        jamm_sx = jamm_gw / jamm_vw;
+        jamm_sy = jamm_gh / jamm_vh;
+        jamm_grid_right = (ORIGIN_X + (card_width * X_GAP) - view_xview[0]) * jamm_sx;
+        jamm_grid_mid_y = (ORIGIN_Y + (visible_rows * Y_GAP * 0.5) - view_yview[0]) * jamm_sy;
+        jamm_bw = round(36 * jamm_sx);
+        jamm_bh = round(28 * jamm_sy);
+        jamm_gap = round(36 * jamm_sy);
+        jamm_bx = clamp(jamm_grid_right + round(12 * jamm_sx), 8, max(8, jamm_gw - max(jamm_bw + round(24 * jamm_sx), round(64 * jamm_sx))));
+        jamm_by_up = clamp(jamm_grid_mid_y - jamm_bh - (jamm_gap * 0.5), 12, max(12, jamm_gh - ((jamm_bh * 2) + jamm_gap + 12)));
+        jamm_by_down = jamm_by_up + jamm_bh + jamm_gap;
+        """;
+
     private static string BuildStepGml(string cardObject) =>
         $$"""
+        {{BuildHideHatButtonsGml()}}
         if (jamm_menu_init && max_scroll_row > 0)
         {
-            var jamm_delta, jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_next, jamm_mx, jamm_my;
+        {{BuildPagingGeometryGml()}}
+            var jamm_delta, jamm_next, jamm_mx, jamm_my, jamm_anchor;
             jamm_delta = 0;
-            jamm_bx = display_get_gui_width() - 52;
-            jamm_by_up = max(12, (display_get_gui_height() * 0.5) - 52);
-            jamm_bw = 36;
-            jamm_bh = 28;
-            jamm_by_down = jamm_by_up + jamm_bh + 36;
             jamm_mx = device_mouse_x_to_gui(0);
             jamm_my = device_mouse_y_to_gui(0);
             if (mouse_wheel_up() || keyboard_check_pressed(vk_up))
@@ -370,6 +450,12 @@ internal static class MenuRuntime
                     {
                         instance_destroy();
                     }
+                    jamm_anchor = asset_get_index("icon_Rods");
+                    if (jamm_anchor > -1 && instance_exists(jamm_anchor))
+                    {
+                        ORIGIN_X = jamm_anchor.ORIGIN_X;
+                        ORIGIN_Y = jamm_anchor.ORIGIN_Y;
+                    }
                     x = ORIGIN_X;
                     y = ORIGIN_Y;
                     done_spawning = 0;
@@ -383,21 +469,18 @@ internal static class MenuRuntime
 
     private static string BuildDrawGml(bool hasSmallFont)
     {
-        _ = hasSmallFont;
+        string fontLine = hasSmallFont ? "draw_set_font(fnt_babySmall);" : "draw_set_font(-1);";
         return $$"""
         if (jamm_menu_init && max_scroll_row > 0)
         {
-            var jamm_bx, jamm_by_up, jamm_by_down, jamm_bw, jamm_bh, jamm_cx;
-            var jamm_bg, jamm_fg, jamm_dim;
-            jamm_bx = display_get_gui_width() - 52;
-            jamm_by_up = max(12, (display_get_gui_height() * 0.5) - 52);
-            jamm_bw = 36;
-            jamm_bh = 28;
-            jamm_by_down = jamm_by_up + jamm_bh + 36;
+        {{BuildPagingGeometryGml()}}
+            var jamm_cx, jamm_bg, jamm_fg, jamm_dim, jamm_prev_col, jamm_prev_alpha;
             jamm_bg = make_color_rgb(69, 77, 89);
             jamm_fg = make_color_rgb(254, 255, 189);
             jamm_dim = make_color_rgb(130, 136, 145);
             jamm_cx = jamm_bx + (jamm_bw * 0.5);
+            jamm_prev_col = draw_get_color();
+            jamm_prev_alpha = draw_get_alpha();
 
             draw_set_alpha(0.85);
             draw_set_color(jamm_bg);
@@ -414,7 +497,7 @@ internal static class MenuRuntime
                 draw_set_color(jamm_dim);
             }
             draw_rectangle(jamm_bx, jamm_by_up, jamm_bx + jamm_bw, jamm_by_up + jamm_bh, true);
-            draw_triangle(jamm_cx, jamm_by_up + 6, jamm_bx + 8, (jamm_by_up + jamm_bh) - 6, (jamm_bx + jamm_bw) - 8, (jamm_by_up + jamm_bh) - 6, false);
+            draw_triangle(jamm_cx, jamm_by_up + round(6 * jamm_sy), jamm_bx + round(8 * jamm_sx), (jamm_by_up + jamm_bh) - round(6 * jamm_sy), (jamm_bx + jamm_bw) - round(8 * jamm_sx), (jamm_by_up + jamm_bh) - round(6 * jamm_sy), false);
 
             if (scroll_row < max_scroll_row)
             {
@@ -425,21 +508,33 @@ internal static class MenuRuntime
                 draw_set_color(jamm_dim);
             }
             draw_rectangle(jamm_bx, jamm_by_down, jamm_bx + jamm_bw, jamm_by_down + jamm_bh, true);
-            draw_triangle(jamm_cx, (jamm_by_down + jamm_bh) - 6, jamm_bx + 8, jamm_by_down + 6, (jamm_bx + jamm_bw) - 8, jamm_by_down + 6, false);
+            draw_triangle(jamm_cx, (jamm_by_down + jamm_bh) - round(6 * jamm_sy), jamm_bx + round(8 * jamm_sx), jamm_by_down + round(6 * jamm_sy), (jamm_bx + jamm_bw) - round(8 * jamm_sx), jamm_by_down + round(6 * jamm_sy), false);
 
+            {{fontLine}}
+            draw_set_halign(fa_center);
+            draw_set_valign(fa_middle);
             draw_set_color(jamm_fg);
-            draw_text(jamm_bx - 4, jamm_by_up + jamm_bh + 18, "Page " + string(scroll_row + 1) + "/" + string(max_scroll_row + 1));
+            draw_text(jamm_cx, jamm_by_up + jamm_bh + (jamm_gap * 0.5), "Page " + string(scroll_row + 1) + "/" + string(max_scroll_row + 1));
+            draw_set_halign(fa_left);
+            draw_set_valign(fa_top);
+            draw_set_color(jamm_prev_col);
+            draw_set_alpha(jamm_prev_alpha);
         }
         """;
     }
 
-    private static bool HasCode(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name) =>
-        assets.Any(a => a.Family == "code" && a.Name == name) || baseline.ContainsKey(name);
+    private static bool HasCode(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name)
+    {
+        int index = assets.FindIndex(a => a.Family == "code" && a.Name == name);
+        return index >= 0 ? assets[index].Patch is not null : baseline.ContainsKey(name);
+    }
 
-    private static string Current(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name) =>
-        assets.FirstOrDefault(a => a.Family == "code" && a.Name == name)?.Gml
-        ?? baseline.GetValueOrDefault(name)?.Text
-        ?? "";
+    private static string Current(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name)
+    {
+        int index = assets.FindIndex(a => a.Family == "code" && a.Name == name);
+        if (index >= 0) return assets[index].Patch is null ? "" : assets[index].Gml ?? "";
+        return baseline.GetValueOrDefault(name)?.Text ?? "";
+    }
 
     private static string RequireExisting(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name)
     {
@@ -460,6 +555,15 @@ internal static class MenuRuntime
         if (index < 0)
             throw new InvalidDataException($"Cannot patch '{entryName}': expected anchor '{anchor}' was not found.");
         return string.Concat(text.AsSpan(0, index), replacement, text.AsSpan(index + anchor.Length));
+    }
+
+    private static void AppendInheritedOrPut(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name, string body, bool includeInherited)
+    {
+        string existing = Current(assets, baseline, name);
+        if (string.IsNullOrWhiteSpace(existing))
+            Put(assets, baseline, name, includeInherited ? "event_inherited();\n" + body : body);
+        else
+            Put(assets, baseline, name, existing.TrimEnd() + "\n" + body);
     }
 
     private static void AppendOrPut(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, string name, string body)
