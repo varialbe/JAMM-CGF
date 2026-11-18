@@ -68,6 +68,70 @@ public sealed class FlatpakLaunchTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [Theory]
+    [InlineData("/path/to/compatdata/343780")]
+    [InlineData("/path/to/compatdata/480")]
+    [InlineData("/path/to/...")]
+    [InlineData("path/to/...")]
+    [InlineData("<data-dir>/proton/<app-id>")]
+    [InlineData("<Flatpak Steam>/steamapps/compatdata/343780")]
+    public void StockCompatPlaceholdersInExistingAndNewConfigsUseFlatpakDefault(string placeholder)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "jamm-flatpak-ph-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new ManagerStore(root);
+            string steam = "/home/test/.var/app/com.valvesoftware.Steam/.local/share/Steam";
+            string expectedCompat = steam + "/steamapps/compatdata/343780";
+
+            File.WriteAllText(Path.Combine(root, "config.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                gameDir = Config.GameDir,
+                wine = new { mode = "proton-flatpak" },
+                proton = new { compatDataPath = placeholder }
+            }));
+            var loaded = new ManagerStore(root).Config();
+            Assert.Null(loaded.Proton.CompatDataPath);
+            var fromExisting = GameLauncher.Create(loaded, root, new FakeHost());
+            Assert.Equal(expectedCompat, fromExisting.FlatpakCompatDataPath);
+            Assert.Contains("STEAM_COMPAT_DATA_PATH=" + expectedCompat, fromExisting.Arguments);
+
+            store.Set("gameDir", Config.GameDir!);
+            store.Set("wine.mode", "proton-flatpak");
+            store.Set("proton.compatDataPath", placeholder);
+            Assert.Null(store.Config().Proton.CompatDataPath);
+            store.SetMany(new Dictionary<string, string> { ["proton.compatDataPath"] = placeholder });
+            Assert.Null(new ManagerStore(root).Config().Proton.CompatDataPath);
+
+            var direct = GameLauncher.Create(Config with { Proton = new() { CompatDataPath = placeholder } }, root, new FakeHost());
+            Assert.Equal(expectedCompat, direct.FlatpakCompatDataPath);
+            Assert.Contains("STEAM_COMPAT_DATA_PATH=" + expectedCompat, direct.Arguments);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Theory]
+    [InlineData("/path/to/custom")]
+    [InlineData("/tmp/<custom>/compat")]
+    [InlineData("/tmp/.../compat")]
+    public void ValidCompatOverridesIncludingNonPlaceholderSubpathsArePreserved(string customCompat)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "jamm-flatpak-custom-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new ManagerStore(root);
+            store.Set("gameDir", Config.GameDir!);
+            store.Set("wine.mode", "proton-flatpak");
+            store.Set("proton.compatDataPath", customCompat);
+            Assert.Equal(customCompat, new ManagerStore(root).Config().Proton.CompatDataPath);
+
+            var command = GameLauncher.Create(new ManagerStore(root).Config(), root, new FakeHost());
+            Assert.Equal(customCompat, command.FlatpakCompatDataPath);
+            Assert.Contains("STEAM_COMPAT_DATA_PATH=" + customCompat, command.Arguments);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private sealed class FakeHost : FlatpakLaunchHost
     {
         public string? Failure { get; init; }

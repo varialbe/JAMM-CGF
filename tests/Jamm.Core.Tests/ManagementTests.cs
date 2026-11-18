@@ -549,6 +549,76 @@ public sealed class ManagementTests : IDisposable
         Assert.Equal("A", profiles.Get("hunks").Resolutions[replaceKey]);
     }
 
+    [Theory]
+    [InlineData("/path/to/compatdata/343780")]
+    [InlineData("/path/to/compatdata/480")]
+    [InlineData("/path/to/...")]
+    [InlineData("path/to/...")]
+    [InlineData("<data-dir>/proton/<app-id>")]
+    [InlineData("<Flatpak Steam>/steamapps/compatdata/343780")]
+    public void StockCompatPlaceholdersInCliAndExistingConfigsUseNativeProtonDefaultsAndKeepRealOverrides(string placeholder)
+    {
+        string game = Path.Combine(directory, "game"); Directory.CreateDirectory(game);
+        File.Copy(original, Path.Combine(game, "data.win"));
+        File.WriteAllText(Path.Combine(game, "Cat Goes Fishing.exe"), "placeholder");
+        string proton = Path.Combine(directory, "proton-bin"); Directory.CreateDirectory(proton);
+        string runner = Path.Combine(proton, "proton");
+        File.WriteAllText(runner, "#!/bin/sh\nexit 0\n");
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(runner, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        string home = Path.Combine(directory, "home");
+        string steam = Path.Combine(home, ".steam", "steam");
+        Directory.CreateDirectory(steam);
+
+        File.WriteAllText(Path.Combine(store.Root, "config.json"), JsonSerializer.Serialize(new
+        {
+            @base = original,
+            gameDir = game,
+            wine = new { mode = "proton", binary = "wine" },
+            proton = new { path = proton, compatDataPath = placeholder, clientInstallPath = steam }
+        }));
+        var loaded = new ManagerStore(store.Root).Config();
+        Assert.Null(loaded.Proton.CompatDataPath);
+        Assert.Equal(steam, loaded.Proton.ClientInstallPath);
+        var defaultCmd = GameLauncher.Create(loaded, store.Root);
+        string expectedDefaultCompat = Path.Combine(store.Root, "proton", "343780");
+        Assert.Equal(expectedDefaultCompat, defaultCmd.Environment["STEAM_COMPAT_DATA_PATH"]);
+        Assert.Equal(steam, defaultCmd.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"]);
+
+        var setResult = Cli(["config", "set", "proton.compatDataPath", placeholder, "--data-dir", store.Root]);
+        Assert.Equal(0, setResult.Exit);
+        Assert.Contains("Cleared proton.compatDataPath", setResult.Output);
+        var showResult = Cli(["config", "show", "--data-dir", store.Root]);
+        Assert.Equal(0, showResult.Exit);
+        Assert.Contains("proton.compatDataPath = (unset)", showResult.Output);
+
+        var directCmd = GameLauncher.Create(loaded with { Proton = loaded.Proton with { CompatDataPath = placeholder } }, store.Root);
+        Assert.Equal(expectedDefaultCompat, directCmd.Environment["STEAM_COMPAT_DATA_PATH"]);
+
+        // Non-placeholder overrides (including /path/to/custom) and existing other optional-path rules stay intact.
+        store.Set("proton.compatDataPath", "/path/to/custom");
+        Assert.Equal(Path.GetFullPath("/path/to/custom"), new ManagerStore(store.Root).Config().Proton.CompatDataPath);
+        Assert.Throws<ArgumentException>(() => store.Set("wine.prefix", ""));
+        Assert.Throws<ArgumentException>(() => store.Set("proton.path", ""));
+        Assert.Throws<ArgumentException>(() => store.Set("proton.clientInstallPath", ""));
+
+        string realOverride = Path.Combine(directory, "real-compat", "343780");
+        Assert.Equal(0, Cli(["config", "set", "proton.compatDataPath", realOverride, "--data-dir", store.Root]).Exit);
+        Assert.Equal(realOverride, new ManagerStore(store.Root).Config().Proton.CompatDataPath);
+        Assert.Equal(realOverride, GameLauncher.Create(new ManagerStore(store.Root).Config(), store.Root).Environment["STEAM_COMPAT_DATA_PATH"]);
+
+        Assert.Equal(0, Cli(["config", "set", "proton.compatDataPath", "", "--data-dir", store.Root]).Exit);
+        Assert.Null(new ManagerStore(store.Root).Config().Proton.CompatDataPath);
+
+        if (OperatingSystem.IsWindows()) return;
+        var mod = new ModLibrary(store).Add(source).Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("proton-default", [mod.Id]);
+        profiles.Use("proton-default");
+        var play = Cli(["play", "--yes", "--data-dir", store.Root], environment: new() { ["HOME"] = home });
+        Assert.Equal(0, play.Exit);
+        Assert.True(Directory.Exists(expectedDefaultCompat));
+    }
+
     private static void WriteArchive(string path, short value)
     {
         using var data = UndertaleData.CreateNew();

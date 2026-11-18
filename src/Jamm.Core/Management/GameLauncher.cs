@@ -45,7 +45,8 @@ public static class GameLauncher
         if (config.Wine.Mode != "proton") throw new ArgumentException("wine.mode must be 'wine', 'proton' or 'proton-flatpak'.");
         if (config.Proton.Path is null)
             throw new ArgumentException("Proton was not found. Install Proton - Experimental through Steam's Library (Tools), then choose its folder in Settings before Play.");
-        environment["STEAM_COMPAT_DATA_PATH"] = config.Proton.CompatDataPath ?? Path.Combine(Path.GetFullPath(dataDirectory), "proton", config.Steam.AppId);
+        environment["STEAM_COMPAT_DATA_PATH"] = ManagerStore.NormalizeCompatDataPath(config.Proton.CompatDataPath)
+            ?? Path.Combine(Path.GetFullPath(dataDirectory), "proton", config.Steam.AppId);
         string? steam = config.Proton.ClientInstallPath;
         if (string.IsNullOrWhiteSpace(steam)) steam = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_CLIENT_INSTALL_PATH");
         if (string.IsNullOrWhiteSpace(steam))

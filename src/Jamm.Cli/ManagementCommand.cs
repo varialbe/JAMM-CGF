@@ -83,7 +83,12 @@ internal static class ManagementCommand
                     }
                 }
                 else if (positional.Count == 3 && positional[0] == "set" && !json)
-                { store.Set(positional[1], positional[2]); Console.WriteLine($"Set {positional[1]}."); }
+                {
+                    var updated = store.Set(positional[1], positional[2]);
+                    Console.WriteLine(positional[1] == "proton.compatDataPath" && updated.Proton.CompatDataPath is null
+                        ? $"Cleared {positional[1]} (using default)."
+                        : $"Set {positional[1]}.");
+                }
                 else throw new ArgumentException("Use config show [--json] or config set <key> <value>.");
                 break;
             case "add":

@@ -87,8 +87,15 @@ cgfmm config set wine.mode proton
 cgfmm config set proton.path "$HOME/.steam/steam/steamapps/common/Proton - Experimental"
 # Optional override; otherwise use STEAM_COMPAT_CLIENT_INSTALL_PATH or a standard Steam folder:
 cgfmm config set proton.clientInstallPath "$HOME/.steam/steam"
-# Optional existing directory; default compatibility data stays under the manager data directory:
-cgfmm config set proton.compatDataPath /path/to/compatdata/343780
+```
+
+`proton.compatDataPath` is optional. When left empty, it uses
+`<data-dir>/proton/<app-id>` (such as `~/.local/share/cgfmm/proton/343780`) in `proton`
+mode, or `<Flatpak Steam>/steamapps/compatdata/343780` in `proton-flatpak` mode. To
+clear an override, leave it blank in GUI Settings or run:
+
+```sh
+cgfmm config set proton.compatDataPath ""
 ```
 
 ## Flatpak Steam
@@ -113,7 +120,8 @@ must already be running. No wrapper script is needed.
 
 `proton.path`, `proton.clientInstallPath`, and `proton.compatDataPath` override these
 defaults. If switching from a wrapper or host Proton setup, clear these optional
-fields in GUI Settings to restore automatic detection, or set them to Flatpak-visible
+fields in GUI Settings (or run `cgfmm config set proton.compatDataPath ""` to clear the
+compatibility override) to restore automatic detection, or set them to Flatpak-visible
 locations with `config set`. Keep the whole legacy game folder in a location Steam
 can access, such as under its Flatpak data directory or an allowed `/run/media`
 location, and set `gameDir` accordingly. JAMM checks visibility from inside Steam
