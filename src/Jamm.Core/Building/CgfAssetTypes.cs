@@ -18,7 +18,8 @@ public static class CgfAssetTypes
             ["jamm_lure_register"] = (6, 7, [(3, "objects"), (4, "sprites")]),
             ["jamm_tool_register"] = (8, 9, [(4, "objects"), (5, "objects"), (6, "sprites")]),
             ["jamm_hat_register"] = (6, 9, [(1, "objects")]),
-            ["jamm_upgrade_register"] = (9, 9, [(5, "sprites"), (7, "scripts"), (8, "scripts")])
+            ["jamm_upgrade_register"] = (9, 9, [(5, "sprites"), (7, "scripts"), (8, "scripts")]),
+            ["part_type_sprite"] = (5, 5, [(1, "sprites")])
         };
     private static Dictionary<string, Definition> Read()
     {

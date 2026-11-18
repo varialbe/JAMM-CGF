@@ -34,6 +34,9 @@ public sealed partial class BuildingTests
         Assert.Contains("invalid objects index 9", Assert.Throws<InvalidDataException>(() => SemanticReferences.NameTypedLiterals("object[0] = 9;", "catalog", names)).Message);
         Assert.Equal("object[0] = 1 + offset;", SemanticReferences.NameTypedLiterals("object[0] = 1 + offset;", "catalog", names));
         Assert.Equal("fish_target_nearest_fish(mod_fish);", SemanticReferences.NameTypedLiterals("fish_target_nearest_fish(1);", "spawn", names));
+        var spriteNames = new Dictionary<string, string[]> { ["sprites"] = ["spr_old", "spr_winning_origin"] };
+        Assert.Equal("part_type_sprite(pt_bubble, spr_winning_origin, 0, 0, 1);",
+            SemanticReferences.NameTypedLiterals("part_type_sprite(pt_bubble, 1, 0, 0, 1);", "gml_Object_custom_Other_0", spriteNames));
         Assert.Equal("target = 1;", SemanticReferences.NameTypedLiterals("target = 1;", "untyped_scope", names));
     }
 
