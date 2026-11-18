@@ -63,11 +63,21 @@ internal static class BuiltinAssetArguments
         return true;
     }
 
-    private static string? Family(JsonElement type) => type.ValueKind == JsonValueKind.String ? type.GetString() switch
+    private static string? Family(JsonElement type)
     {
-        "Asset.Object" => "objects", "Asset.Sprite" => "sprites", "Asset.Sound" => "sounds",
-        "Asset.Background" or "Asset.Tileset" => "backgrounds", "Asset.Path" => "paths",
-        "Asset.Script" => "scripts", "Asset.Font" => "fonts", "Asset.Timeline" => "timelines",
-        "Asset.Room" => "rooms", "Asset.Shader" => "shaders", _ => null
-    } : null;
+        if (type.ValueKind == JsonValueKind.String) return type.GetString() switch
+        {
+            "Asset.Object" => "objects", "Asset.Sprite" => "sprites", "Asset.Sound" => "sounds",
+            "Asset.Background" or "Asset.Tileset" => "backgrounds", "Asset.Path" => "paths",
+            "Asset.Script" => "scripts", "Asset.Font" => "fonts", "Asset.Timeline" => "timelines",
+            "Asset.Room" => "rooms", "Asset.Shader" => "shaders", _ => null
+        };
+        if (type.ValueKind == JsonValueKind.Object && type.TryGetProperty("MacroType", out var kind)
+            && kind.GetString() == "Union" && type.TryGetProperty("Macros", out var macros))
+        {
+            string[] families = macros.EnumerateArray().Select(Family).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+            return families.Length == 1 ? families[0] : null;
+        }
+        return null;
+    }
 }

@@ -20,6 +20,7 @@ public static class SemanticReferences
     {
         var tokens = GmlReferences.Tokens(text);
         List<(int Start, int Length, string Name)> replacements = [];
+        replacements.AddRange(NameTypedLocalLiterals(tokens, entry, tables));
         for (int i = 0; i < tokens.Count; i++)
         {
             if (tokens[i].Kind == 'i' && i + 1 < tokens.Count && tokens[i + 1].Value == "("
@@ -82,6 +83,133 @@ public static class SemanticReferences
                 else if (value is ")" or "]" or "}") depth--;
             }
             return []; // Incomplete calls are left to the compiler.
+        }
+    }
+
+    private static List<(int Start, int Length, string Name)> NameTypedLocalLiterals(
+        IReadOnlyList<GmlReferences.Token> tokens, string entry, IReadOnlyDictionary<string, string[]> tables)
+    {
+        Dictionary<int, HashSet<string>> typedReads = [];
+        for (int i = 0; i + 1 < tokens.Count; i++)
+        {
+            if (tokens[i].Kind != 'i' || tokens[i + 1].Value != "(" || (i > 0 && tokens[i - 1].Value == ".")) continue;
+            var args = CallArguments(i + 2);
+            string[] values = args.Select(a => string.Concat(tokens.Skip(a.Start).Take(a.End - a.Start).Select(t => t.Value))).ToArray();
+            var typed = BuiltinAssetArguments.ForCall(tokens[i].Value, values).ToList();
+            for (int a = 0; a < args.Count; a++)
+                if (CgfAssetTypes.ArgumentFamily(tokens[i].Value, a) is { } family) typed.Add((a, family));
+            foreach (var (argument, family) in typed.Distinct())
+            {
+                if (argument >= args.Count) continue;
+                var (start, end) = args[argument];
+                while (end - start >= 3 && tokens[start].Value == "(" && tokens[end - 1].Value == ")") { start++; end--; }
+                if (end - start == 1 && tokens[start].Kind == 'i')
+                {
+                    if (!typedReads.TryGetValue(start, out var families)) typedReads[start] = families = new(StringComparer.Ordinal);
+                    families.Add(family);
+                }
+            }
+        }
+
+        List<(int Start, int Length, string Name)> result = [];
+        var declarations = Enumerable.Range(0, tokens.Count)
+            .Where(i => tokens[i].Value == "var" && i + 1 < tokens.Count && tokens[i + 1].Kind == 'i')
+            .Select(i => i + 1).GroupBy(i => tokens[i].Value, StringComparer.Ordinal);
+        foreach (var declaration in declarations)
+        {
+            string name = declaration.Key;
+            int[] declaredAt = declaration.ToArray();
+            if (declaredAt.Length != 1 || IsFunctionParameter(name)) continue; // Shadowed locals and parameters are ambiguous.
+            int declarationIndex = declaredAt[0];
+            List<(int Index, int ValueIndex)> writes = [];
+            List<(int Index, string Family)> reads = [];
+            bool safe = true;
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                if (tokens[i].Kind != 'i' || tokens[i].Value != name || (i > 0 && tokens[i - 1].Value == ".")) continue;
+                if (i < declarationIndex) { safe = false; continue; }
+                if (i == declarationIndex)
+                {
+                    if (i + 1 < tokens.Count && tokens[i + 1].Value == "=") writes.Add((i, i + 2));
+                    else if (i + 1 < tokens.Count && tokens[i + 1].Value is "+=" or "-=" or "*=" or "/=") safe = false;
+                    else safe = false; // An uninitialized declaration leaves the selected value unknown.
+                    continue;
+                }
+                if (i + 1 < tokens.Count && tokens[i + 1].Value == "=") { writes.Add((i, i + 2)); continue; }
+                if (i + 1 < tokens.Count && tokens[i + 1].Value is "+=" or "-=" or "*=" or "/=" or "++" or "--") { safe = false; continue; }
+                if (i > 0 && tokens[i - 1].Value is "++" or "--") { safe = false; continue; }
+                if (typedReads.TryGetValue(i, out var families) && families.Count == 1) reads.Add((i, families.Single()));
+                else safe = false; // Escapes, arithmetic, tests and other untyped uses are ambiguous.
+            }
+            if (!safe || reads.Count == 0 || reads.Select(r => r.Family).Distinct(StringComparer.Ordinal).Count() != 1) continue;
+            string selectedFamily = reads[0].Family;
+            if (!tables.TryGetValue(selectedFamily, out string[]? names)) continue;
+            List<(int Start, int Length, string Name)> localReplacements = [];
+            foreach (var (_, valueIndex) in writes)
+            {
+                if (valueIndex >= tokens.Count) { safe = false; break; }
+                int valueEnd = valueIndex + 1;
+                bool negative = tokens[valueIndex].Value == "-";
+                if (negative) valueEnd++;
+                if (valueIndex >= tokens.Count || (negative && valueEnd > tokens.Count)) { safe = false; break; }
+                if (valueEnd < tokens.Count && tokens[valueEnd].Value is not (";" or "," or ")" or "}" or "break")) { safe = false; break; }
+                var value = negative ? tokens[valueIndex + 1] : tokens[valueIndex];
+                if (value.Kind == 'n' && Number((negative ? "-" : "") + value.Value, out decimal numeric)
+                    && numeric == decimal.Truncate(numeric))
+                {
+                    if (numeric == -1) continue;
+                    if (numeric < 0 || numeric >= names.Length) { safe = false; break; }
+                    localReplacements.Add((value.Start, value.Length, AssetSymbols.SafeName(selectedFamily, names[(int)numeric])));
+                }
+                else if (!negative && value.Kind == 'i' && KnownName(value.Value, selectedFamily, names)) { }
+                else { safe = false; break; }
+            }
+            if (safe && writes.Count > 0) result.AddRange(localReplacements);
+        }
+        return result;
+
+        List<(int Start, int End)> CallArguments(int start)
+        {
+            List<(int Start, int End)> args = [];
+            int depth = 0, first = start;
+            for (int j = start; j < tokens.Count; j++)
+            {
+                if (tokens[j].Kind != 'p') continue;
+                string value = tokens[j].Value;
+                if (depth == 0 && value is "," or ")")
+                {
+                    if (j > first) args.Add((first, j));
+                    if (value == ")") return args;
+                    first = j + 1;
+                }
+                else if (value is "(" or "[" or "{") depth++;
+                else if (value is ")" or "]" or "}") depth--;
+            }
+            return [];
+        }
+
+        static bool KnownName(string value, string family, string[] names) =>
+            AssetSymbols.Parse(value, out string symbolFamily, out string symbolName)
+                ? symbolFamily == family && names.Contains(symbolName, StringComparer.Ordinal)
+                : names.Contains(value, StringComparer.Ordinal);
+
+        bool IsFunctionParameter(string name)
+        {
+            for (int i = 0; i + 1 < tokens.Count; i++)
+            {
+                if (tokens[i].Value != "function") continue;
+                int open = i + 1;
+                while (open < tokens.Count && tokens[open].Value != "(" && tokens[open].Value is not (";" or "{")) open++;
+                if (open >= tokens.Count || tokens[open].Value != "(") continue;
+                int depth = 1;
+                for (int j = open + 1; j < tokens.Count && depth > 0; j++)
+                {
+                    if (tokens[j].Value == "(") depth++;
+                    else if (tokens[j].Value == ")") depth--;
+                    else if (depth == 1 && tokens[j].Kind == 'i' && tokens[j].Value == name) return true;
+                }
+            }
+            return false;
         }
     }
 

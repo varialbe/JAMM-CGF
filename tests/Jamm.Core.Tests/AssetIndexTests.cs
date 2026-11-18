@@ -41,6 +41,32 @@ public sealed partial class BuildingTests
     }
 
     [Fact]
+    public void TypedLocalSelectorWritesBecomeNamesOnlyWhenAllUsesStayInOneTypedFamily()
+    {
+        string[] objectNames = Enumerable.Range(0, 30).Select(i => "Object" + i).ToArray();
+        objectNames[29] = "Segment4";
+        var names = new Dictionary<string, string[]> { ["objects"] = objectNames };
+        const string selector = "var spawn_obj = -1; switch (layer) { case 1: spawn_obj = 26; break; case 2: spawn_obj = 29; break; } for (var i = 0; i < 2; i++) { var instance = instance_create(x, y, spawn_obj); }";
+        Assert.Equal("var spawn_obj = -1; switch (layer) { case 1: spawn_obj = Object26; break; case 2: spawn_obj = Segment4; break; } for (var i = 0; i < 2; i++) { var instance = instance_create(x, y, spawn_obj); }",
+            SemanticReferences.NameTypedLiterals(selector, "local_selector", names));
+
+        Assert.Equal("var spawn_obj = -1; spawn_obj = 1; instance_create(x, y, spawn_obj); cash = spawn_obj;",
+            SemanticReferences.NameTypedLiterals("var spawn_obj = -1; spawn_obj = 1; instance_create(x, y, spawn_obj); cash = spawn_obj;", "local_selector", names));
+        Assert.Equal("var spawn_obj = -1; spawn_obj += 1; instance_create(x, y, spawn_obj);",
+            SemanticReferences.NameTypedLiterals("var spawn_obj = -1; spawn_obj += 1; instance_create(x, y, spawn_obj);", "local_selector", names));
+        Assert.Equal("var spawn_obj = -1; spawn_obj = dynamic_id; instance_create(x, y, spawn_obj);",
+            SemanticReferences.NameTypedLiterals("var spawn_obj = -1; spawn_obj = dynamic_id; instance_create(x, y, spawn_obj);", "local_selector", names));
+        const string beforeDeclaration = "spawn_obj = 1; var spawn_obj = -1; instance_create(x, y, spawn_obj);";
+        Assert.Equal(beforeDeclaration, SemanticReferences.NameTypedLiterals(beforeDeclaration, "local_selector", names));
+        const string sentinelExpression = "var spawn_obj = 1; spawn_obj = -1 + offset; spawn_obj = 2; instance_create(x, y, spawn_obj);";
+        Assert.Equal(sentinelExpression, SemanticReferences.NameTypedLiterals(sentinelExpression, "local_selector", names));
+        const string mixedFamilies = "var spawn_obj = 1; instance_create(x, y, spawn_obj); part_type_sprite(pt_bubble, spawn_obj, 0, 0, 1);";
+        Assert.Equal(mixedFamilies, SemanticReferences.NameTypedLiterals(mixedFamilies, "local_selector", names));
+        Assert.Equal("var spawn_obj = -1; { var spawn_obj = 2; } spawn_obj = 1; instance_create(x, y, spawn_obj);",
+            SemanticReferences.NameTypedLiterals("var spawn_obj = -1; { var spawn_obj = 2; } spawn_obj = 1; instance_create(x, y, spawn_obj);", "local_selector", names));
+    }
+
+    [Fact]
     public void SemanticVerifierCatchesWrongNumericIndexWithContainerAndBothNames()
     {
         var source = new Dictionary<string, string[]> { ["objects"] = ["Bombat", "Overbite"] };
