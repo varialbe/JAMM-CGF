@@ -13,9 +13,17 @@ internal static class DiagnosticLog
     public static string Create(MainViewModel? model, string eventName, string details)
     {
         string id = Convert.ToHexString(RandomNumberGenerator.GetBytes(5)).ToLowerInvariant();
+        string code = eventName switch
+        {
+            "manager operation" => "JAMM-GUI-OP-001",
+            "unhandled desktop exception" => "JAMM-GUI-CRASH-001",
+            "unobserved desktop task" => "JAMM-GUI-TASK-001",
+            _ when eventName.StartsWith("game process", StringComparison.Ordinal) => "JAMM-GAME-RUN-001",
+            _ => "JAMM-DIAG-001"
+        };
         var lines = new List<string>
         {
-            $"JAMM diagnostic {id}", $"UTC: {DateTimeOffset.UtcNow:O}", $"Event: {Clean(eventName)}",
+            $"Diagnostic code: {code}; incident: {id}", $"UTC: {DateTimeOffset.UtcNow:O}", $"Event: {Clean(eventName)}",
             $"Platform: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}; {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}",
             $"JAMM: {typeof(DiagnosticLog).Assembly.GetName().Version}",
             $"Profile: {Clean(model?.SelectedProfile ?? "(none)")}",
