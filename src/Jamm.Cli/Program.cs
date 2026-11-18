@@ -53,6 +53,7 @@ int Run(string[] arguments)
             JAMM-CGF — inspect, diff, check, build, install and restore
             cgfmm compat-scan --base <data.win> --db <compat.db> --export <directory>
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
+            cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
@@ -88,6 +89,7 @@ int Run(string[] arguments)
     if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..]);
     if (command == "check") return CheckCommand.Run(arguments[1..]);
     if (command == "diff") return DiffCommand.Run(arguments[1..]);
+    if (command == "lineage") return LineageCommand.Run(arguments[1..]);
     List<string> positional = [];
     Dictionary<string, string> options = new(StringComparer.Ordinal);
     var allowed = command switch
