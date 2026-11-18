@@ -416,6 +416,13 @@ public class MergingTests
         report = ConflictAnalyzer.Analyze([distinctAlpha, distinctBeta, anotherSlot]);
         Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-group");
 
+        var rodA = Patch("Rod A", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", "// rows\n",
+            "upg[0, 18] = 1;\nobject[0, 18] = 2;\n// rows\n"), null));
+        var rodB = Patch("Rod B", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", "// rows\n",
+            "upg[1, 18] = 3;\nobject[1, 18] = 4;\n// rows\n"), null));
+        report = ConflictAnalyzer.Analyze([rodA, rodB]);
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "upgrade-group");
+
         var menuA = Patch("MenuA", ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", "// menu\n",
             "spawn_order[18] = 18;\n// menu\n"), null));
         var menuB = Patch("MenuB", ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", "// menu\n",
@@ -425,7 +432,7 @@ public class MergingTests
     }
 
     [Fact]
-    public void LegacyUpgradeGroupChoiceSpansCodeAssetsAndKeepsDisjointHunks()
+    public void LegacyUpgradeGroupChoiceLeavesMenuPositionsIndependentAndKeepsDisjointHunks()
     {
         const string dataBase = "name[17] = \"base\";\ncost[17] = 1;\nalpha_flag = 0;\nbeta_flag = 0;\n";
         const string menuBase = "spawn_order[18] = 18;\nalpha_menu_flag = 0;\nbeta_menu_flag = 0;\n";
