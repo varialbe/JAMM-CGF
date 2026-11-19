@@ -51,6 +51,8 @@ internal static class ModKitCommand
             throw new ArgumentException($"modkit {sub} needs exactly one package directory.");
 
         string dir = positional[0];
+        bool isRecipe = sub != "new" && !File.Exists(Path.Combine(dir, ModKitPackage.ManifestFileName)) &&
+            File.Exists(Path.Combine(dir, RecipePackage.ManifestFileName));
         switch (sub)
         {
             case "new":
@@ -60,6 +62,11 @@ internal static class ModKitCommand
                 Console.WriteLine($"Next: edit jamm-mod.json, run 'cgfmm modkit check {dir}', then 'cgfmm modkit build {dir}' or 'cgfmm add {dir}'.");
                 return 0;
 
+            case "check" when isRecipe:
+                var recipe = RecipePackage.Load(dir);
+                Console.WriteLine($"Recipe package '{recipe.Name}' ({recipe.Id} v{recipe.Version}) is valid.");
+                return 0;
+
             case "check":
                 var pkg = ModKitPackage.Load(dir);
                 Console.WriteLine($"ModKit package '{pkg.Name}' ({pkg.Id} v{pkg.Version}) is valid: " +
@@ -67,11 +74,19 @@ internal static class ModKitCommand
                 return 0;
 
             case "build":
-                var loaded = ModKitPackage.Load(dir);
+                var buildRecipe = isRecipe ? RecipePackage.Load(dir) : null;
+                string packageId = buildRecipe?.Id ?? ModKitPackage.Load(dir).Id;
                 string? basePath = options.GetValueOrDefault("--base") ?? new ManagerStore(dataDirectory).Config().Base;
                 if (string.IsNullOrWhiteSpace(basePath))
                     throw new ArgumentException("Set the configured legacy base first ('cgfmm config set base <data.win>') or pass --base <data.win>.");
-                string outPath = options.GetValueOrDefault("--out", Path.Combine(Path.GetFullPath(dir), $"{loaded.Id}.win"));
+                string outPath = options.GetValueOrDefault("--out", Path.Combine(Path.GetFullPath(dir), $"{packageId}.win"));
+                if (buildRecipe is not null)
+                {
+                    RecipePackage.Build(dir, basePath, outPath, Console.Error.WriteLine);
+                    Console.WriteLine($"Built and verified '{Path.GetFullPath(outPath)}'.");
+                    return 0;
+                }
+
                 var result = ModKitBuilder.Build(dir, basePath, outPath, Console.Error.WriteLine);
                 Console.WriteLine($"Built and verified '{result.OutputPath}': {result.SpritesAdded} sprite(s), {result.ObjectsAdded} object(s), {result.ScriptsAdded} script(s).");
                 return 0;
