@@ -43,7 +43,10 @@ so no FPS numbers here; anything frame-rate related is marked "on the PC to veri
 * **Independent insertions**: two mods appending different blocks at one position (TGE + Colour in `ParticleSystems_Create_0`)
   used to drop one → all-7 crashed (`water_drip not set`). Pure insertions with disjoint assigned variables and no cross reads are
   now unioned automatically; explicit resolutions still win.
-* **Lures/rods/tools**: still last-mod-wins (TGE "Lantern" vs Cave "Giga Hook" on lure slot 6) — agent task in progress.
+* **Lures/tools** (table descriptors, CGF-RELOCATE-001): all-7 pack → `Lure "Giga Hook" (Cave) moved from slot 6 to 7`, TGE's
+  "Lantern" keeps 6. **Rods are deferred** with a precise analysis in `docs/reports/legacy-slot-relocation.md` (UpgradeData
+  `upg[rod, slot]` rows, hard-coded SaveManager bounds, `spr_rod` frame indexing, rod-count consumers). In the all-7 pack Cave's
+  "Mystic Rod" still loses slot 6 to TGE's "Proto-Rod".
 
 ## In-game results (VPS, auto scene, full benchmark capture = no crash)
 
@@ -58,6 +61,7 @@ so no FPS numbers here; anything frame-rate related is marked "on the PC to veri
 | **All 6 public mods** (`Antiquity,PWB,Abyss,Colour,Verdant,Cave`) — previously aborted (Dollfin) | ✅ | ✅ | not run* |
 | **All 7 mods** (+ TGE) before insertion union | CODE ERROR (`ParticleSystems.water_drip`) | – | – |
 | **All 7 mods** (`TGE,Antiquity,PWB,Abyss,Colour,Verdant,Cave`) | ✅ | ✅ | not run* |
+| All 7 mods, final main (with lure relocation) | ✅ | ✅ | not run* |
 
 *The sonar runs were stopped by Claude Code because the VPS ran low on memory while three agents were building/testing in
 parallel; per policy they were not restarted automatically. To repeat: `~/jamm-night/bin/run.sh <build.win> <label> sonar 400`.
@@ -106,3 +110,21 @@ not yet on main): `jamm-modmaker bench … --profile [--profile-scripts]` wraps 
 * Killing CGF with a signal leaves the Steam client unable to serve the next launch (`SteamAPI_InitSafe() failed`).
   `~/jamm-night/bin/run.sh` closes the window gracefully and restarts Steam (`steam-restart.sh`) when needed.
 * Codex needs `-s danger-full-access` on the VPS (AppArmor blocks bwrap); worktrees get a disabled push URL.
+
+## What is open (next steps)
+
+1. **Rod slot relocation** (Cave "Mystic Rod" vs TGE "Proto-Rod") — needs UpgradeData row + SaveManager bound + `spr_rod` frame handling.
+2. **Sonar scene** runs for the big packs (stopped by memory pressure tonight; rerun one at a time).
+3. **Real gameplay checks on the PC**: buy/equip relocated boats (Dark Boat 9, Hyper Boat 10, Mystic Boat 11), upgrades (Bulbguard 19 icon,
+   effect, unlock trigger), lure "Giga Hook" (7); load/save a game with them. The VPS runs only cover start-up + auto scenes.
+4. **Perf**: measure "Pack + Perf with F8 enabled" on the PC; investigate a spatial bucket for the fish neighbour loops.
+5. Acceptance report polish: show sanitizer-removed assets (e.g. `fpsController`, a busy-wait 60 FPS controller) as "Sanitized"
+   instead of "Lost"; Antiquity's "boat BoatBackground" entry is a table quirk (its Dark Boat uses object `BoatBackground`).
+6. Remaining genuine overlaps (e.g. several mods editing vanilla `Boat7_Create_0`) still follow load order — they are real edits of
+   the same vanilla item, i.e. "modification", not relocation candidates.
+
+## Branches merged into main tonight
+`exp/light-cull-guard`, `exp/legacy-slot-relocation`, `exp/pack-acceptance`, `exp/gamma-plus-analysis`, `exp/upgrade-relocation`,
+`exp/upgrade-effect-slots`, `exp/shared-unlock`, `exp/asset-name-relocation`, `exp/table-relocation` (+ orchestrator fixes:
+BoatData slot union, light-risk suppression, lineage via event code names, independent insertion union, renames in `check`).
+Not merged: `exp/gml-profiler` (depends on the unmerged `exp/jamm-gamma-bench`). Tests on main: 426 core + 127 GUI green.
