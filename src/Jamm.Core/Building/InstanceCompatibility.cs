@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Jamm.Core.Merging;
 using Jamm.Core.Patching;
 using UndertaleModLib;
@@ -6,13 +7,26 @@ namespace Jamm.Core.Building;
 
 internal static class InstanceCompatibility
 {
-    internal const int Revision = 1;
+    internal const int Revision = 2;
     private const string ElectronEvent = "gml_Object_Electron_Other_17";
+    private const string FishThinnerEvent = "gml_Object_FishThinner_Other_10";
     private const string OriginalCondition = "if (Lure.fish > 0 && Lure.fish.object_index == Flash.object_index)";
     private const string FixedCondition = "if (Lure.fish > 0 && Lure.fish.object_index == Flash)";
+    private const string FishCullCondition = "if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000)";
+    private const string FishCullGuardedCondition = "if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000 && !(light > 0))";
+    private const string FishCullDecision = "[CGF-INSTANCE-003] Kept fish lights alive: FishThinner no longer culls fish that own a light (prevents \"Unable to find any instance\" crashes in Magmer/Volteen draw code when merged rooms place more than 5 of them).";
+    private static readonly Regex FishCullConditionPattern = new(
+        @"if\s*\(\s*instance_number\s*\(\s*object_index\s*\)\s*>\s*5\s*&&\s*point_distance\s*\(\s*x\s*,\s*y\s*,\s*Lure\.x\s*,\s*Lure\.y\s*\)\s*>\s*2000\s*\)",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex FishCullGuardedPattern = new(
+        @"if\s*\(\s*instance_number\s*\(\s*object_index\s*\)\s*>\s*5\s*&&\s*point_distance\s*\(\s*x\s*,\s*y\s*,\s*Lure\.x\s*,\s*Lure\.y\s*\)\s*>\s*2000\s*&&\s*!\s*\(\s*light\s*>\s*0\s*\)\s*\)",
+        RegexOptions.CultureInvariant);
 
-    internal static BuildPlan Repair(BuildPlan plan, IReadOnlyList<ModPatch> patches)
+    internal static BuildPlan Repair(BuildPlan plan, IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, CodeText> baseline)
     {
+        if (patches.Count > 0)
+            plan = RepairFishThinner(plan, baseline);
+
         var electron = plan.Assets.FirstOrDefault(a => a.Family == "code" && a.Name == ElectronEvent);
         if (electron?.Gml is not { } gml) return plan;
 
@@ -27,6 +41,54 @@ internal static class InstanceCompatibility
             Decisions = [.. plan.Decisions,
                 $"[CGF-INSTANCE-001] Fixed {ModName(patches[electron.Source])} in {ElectronEvent}: compare the hooked fish with the Flash object type without requiring a live Flash."]
         };
+    }
+
+    private static BuildPlan RepairFishThinner(BuildPlan plan, IReadOnlyDictionary<string, CodeText> baseline)
+    {
+        int index = plan.Assets.ToList().FindIndex(a => a.Family == "code" && a.Name == FishThinnerEvent);
+        var selected = index >= 0 ? plan.Assets[index] : null;
+        string? text = selected?.Gml ?? baseline.GetValueOrDefault(FishThinnerEvent)?.Text;
+        if (text is null)
+        {
+            if (selected is null) return plan;
+            return AddFishThinnerWarning(plan, "the event is missing from the selected build; keep the FishThinner event from the base archive and rebuild.");
+        }
+
+        if (FishCullGuardedPattern.Matches(text).Count == 1)
+            return AddFishThinnerDecision(plan);
+
+        MatchCollection matches = FishCullConditionPattern.Matches(text);
+        if (matches.Count != 1)
+            return AddFishThinnerWarning(plan, "the event no longer matches the known culling condition; review gml_Object_FishThinner_Other_10 before rebuilding.");
+
+        Match match = matches[0];
+        string repairedText = text[..match.Index] + FishCullGuardedCondition + text[(match.Index + match.Length)..];
+        List<PlannedAsset> assets = [.. plan.Assets];
+        if (selected is not null)
+        {
+            assets[index] = selected with { Gml = repairedText };
+        }
+        else
+        {
+            var before = baseline[FishThinnerEvent];
+            var snapshot = AssetFields.Json(new { });
+            var after = before with { Text = repairedText };
+            assets.Add(new("code", FishThinnerEvent, 0,
+                new AssetPatch(FishThinnerEvent, snapshot, snapshot, [], before, after), snapshot, repairedText));
+        }
+        return AddFishThinnerDecision(plan with { Assets = assets });
+    }
+
+    private static BuildPlan AddFishThinnerDecision(BuildPlan plan) => plan.Decisions.Contains(FishCullDecision, StringComparer.Ordinal)
+        ? plan
+        : plan with { Decisions = [.. plan.Decisions, FishCullDecision] };
+
+    private static BuildPlan AddFishThinnerWarning(BuildPlan plan, string detail)
+    {
+        string warning = $"WARNING [CGF-INSTANCE-003] Could not protect fish lights in {FishThinnerEvent}: {detail}";
+        return plan.Decisions.Contains(warning, StringComparer.Ordinal)
+            ? plan
+            : plan with { Decisions = [.. plan.Decisions, warning] };
     }
 
     internal static BuildPlan Diagnose(BuildPlan plan, IReadOnlyList<ModPatch> patches, UndertaleData original, UndertaleData merged)
