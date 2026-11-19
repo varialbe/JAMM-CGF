@@ -27,13 +27,19 @@ Add what is missing so any modder can build an area:
   this also answers a modder's concern that fish spawned by rectangle can end up stuck in caves.
 * Docs: `docs/modding/areas.md` + api/modkit reference + troubleshooting. Validation errors with human messages.
 
-## Part B – Fish art (original, matching the game)
-1. Study vanilla fish sprites on the VPS (export a contact sheet of ~20 vanilla fish incl. Geiger, Noxius, Powerfin, Magmer to `~/jamm-night/silo-v2/ref/`;
-   reference images stay on the VPS, are never committed or shipped). Write down the style rules you see: outline thickness/colour, number of flat colour
-   tones, shading style, eye style, fin shapes, typical pixel sizes per size class, frame count of swim animation, palette of deep-sea fish.
-2. Draw each new fish as hand-written SVG following those rules (original drawings, not traced). Render PNG at the game's scale (+ swim frames if vanilla uses them).
-3. Make a side-by-side sheet: each new fish next to 3 vanilla fish of the same size class, on the game's water colour → `~/jamm-night/silo-v2/art-review.png`.
-   Iterate until they read as belonging to the same game. Commit SVG sources + PNGs in the mod folder.
+## Part B – Fish art: custom fish composed from vanilla fish parts
+The user's decision: the new fish are custom, but built by REUSING parts of vanilla fish (heads, fins, tails, bodies, eyes) as building blocks,
+recoloured and recombined – like a kit – so they automatically match the game's style. Own SVG parts only where no vanilla part fits (e.g. glow spots).
+* Legal/packaging rule (JAMM principle): never ship vanilla pixels. The mod ships a **composition recipe** (JSON) + only original SVG/PNG parts.
+  JAMM composes the final sprites at build time from the player's own data.win.
+* Add this as a reusable public feature (part of the API, documented): ModKit `sprites[]` entries with `compose: [ { from: "<vanilla sprite name>",
+  frame, crop {x,y,w,h} (optional), x, y, scaleX, scaleY, rotation, flip, tint / hue-shift / palette-map, opacity, z } , { file: "parts/glow.png", ... } ]`,
+  per swim frame if vanilla fish animate. Deterministic output; validation errors when a referenced vanilla sprite/frame is missing.
+* Workflow: (1) export a contact sheet of ~20 vanilla fish incl. Geiger, Noxius, Powerfin, Magmer to `~/jamm-night/silo-v2/ref/` (VPS only, never
+  committed); note style rules and which parts are reusable. (2) Mock up each fish as SVG on the VPS using the exported parts as references, then turn the
+  mockup into the composition recipe. (3) Review sheet: each new fish next to 3 vanilla fish of the same size class on the game's water colour →
+  `~/jamm-night/silo-v2/art-review.png`; iterate until they read as belonging to the game but are clearly new species (not just recolours).
+  (4) Commit only recipes + original parts.
 
 ## Part C – The mod
 * `examples/modkit/silo/` (ModKit) + any GML via the documented hooks. Zero changes to vanilla objects/events; build must report no modified vanilla code.
