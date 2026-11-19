@@ -540,6 +540,27 @@ public class MergingTests
         Assert.Equal("new", Assert.Single(report.FieldMerges).Snapshot.GetProperty("sprite").GetString());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RoomPlacementReferencesAreAttributedToTheModThatAddsThem(bool reverse)
+    {
+        const string ancestor = """{"instances":{"home":[{"object":"old"}]}}""";
+        var removing = Patch("Remove", ("objects", null, "old"),
+            ("rooms", Asset("world", ancestor, """{"instances":{}}"""), null));
+        var moving = Patch("Move", ("rooms", Asset("world", ancestor,
+            """{"instances":{"home":[{"object":"old"}],"newHome":[{"object":"old"}]}}"""), null));
+        var unrelated = Patch("Add", ("rooms", Asset("world", ancestor,
+            """{"instances":{"home":[{"object":"old"}],"hatch":[{"object":"hatch"}]}}"""), null));
+
+        var report = ConflictAnalyzer.Analyze(reverse ? [unrelated, moving, removing] : [removing, moving, unrelated]);
+
+        var finding = Assert.Single(report.Findings, f => f.Kind == "reference");
+        Assert.Equal("old", finding.Asset);
+        Assert.Equal(["Remove", "Move"], finding.Mods);
+        Assert.Equal(["rooms/world"], finding.Sources);
+    }
+
     [Fact]
     public void RemovedSourcesDoNotKeepTheirDependenciesAlive()
     {

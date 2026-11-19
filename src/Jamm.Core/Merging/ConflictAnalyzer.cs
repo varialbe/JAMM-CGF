@@ -302,6 +302,19 @@ public static class ConflictAnalyzer
                         if (changedSlots.Contains((slot.Container, slot.Index))
                             || Enumerable.Range(slot.Line, slot.EndLine - slot.Line + 1).Any(changed.Contains)) writes.Add(new(m, entry.Name, slot));
                 }
+            var declaredReferences = references.Select(r => r.ToHashSet()).ToArray();
+            var roomChanges = patches.Select(p => p.Changes.GetValueOrDefault("rooms")?.Changed
+                .ToDictionary(r => r.Name, StringComparer.Ordinal) ?? []).ToArray();
+            // A room snapshot includes every ancestor placement. An additive patch is only
+            // responsible for its new placements when the deleting mod removed the old reference.
+            const string instancePath = "/instances/";
+            var addedPlacements = roomChanges.Select(rooms => rooms.Values
+                .Where(room => room.Fields.Count > 0 && room.Fields.All(field =>
+                    field.Base is null && field.Mod is not null && field.Path.StartsWith(instancePath, StringComparison.Ordinal)
+                    && !field.Path.AsSpan(instancePath.Length).Contains('/')))
+                .ToDictionary(room => room.Name, room => room.Fields
+                    .SelectMany(field => GmlReferences.Structured("rooms", room.Name, field.Mod!.Value)).ToHashSet(),
+                    StringComparer.Ordinal)).ToArray();
             var sourceChanges = patches.SelectMany(p => p.Changes.SelectMany(c =>
                 c.Value.Added.Concat(c.Value.Changed).Select(a => (Key: (Family: c.Key, Asset: a.Name), Asset: (AssetPatch?)a, Removed: false))
                 .Concat(c.Value.Removed.Select(a => (Key: (Family: c.Key, Asset: a), Asset: (AssetPatch?)null, Removed: true)))))
@@ -321,9 +334,11 @@ public static class ConflictAnalyzer
                             if (a == b) continue;
                             // If B also removes the target there is no cross-mod survivor.
                             if (patches[b].Changes[family].Removed.Contains(removed, StringComparer.Ordinal)) continue;
-                            var users = references[b].Where(r => r.TargetFamily == family && r.Target == removed)
-                                .Select(r => $"{r.Family}/{r.Asset}").Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-                            bool dependsOnChoice = references[b].Any(r => r.TargetFamily == family && r.Target == removed && conditional.Contains((r.Family, r.Asset)))
+                            var relevant = references[b].Where(r => r.TargetFamily == family && r.Target == removed
+                                && !OnlyAddsUnrelatedPlacements(a, b, r)).ToArray();
+                            var users = relevant.Select(r => $"{r.Family}/{r.Asset}")
+                                .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+                            bool dependsOnChoice = relevant.Any(r => conditional.Contains((r.Family, r.Asset)))
                                 || sourceChanges[(family, removed)].Any(c => !c.Removed);
                             if (users.Length > 0) findings.Add(new("CONFLICT", "reference", family, removed, [names[a], names[b]],
                                 dependsOnChoice
@@ -467,6 +482,11 @@ public static class ConflictAnalyzer
                 if (!catalog.TryGetValue(asset, out var families)) catalog[asset] = families = new(StringComparer.Ordinal);
                 families.Add(family);
             }
+
+            bool OnlyAddsUnrelatedPlacements(int deletingMod, int otherMod, AssetReference reference) =>
+                reference.Family == "rooms" && addedPlacements[otherMod].TryGetValue(reference.Asset, out var added)
+                && !added.Contains(reference) && roomChanges[deletingMod].ContainsKey(reference.Asset)
+                && !declaredReferences[deletingMod].Contains(reference);
 
             IReadOnlyList<AssetReference> SurvivingReferences(string family, string asset)
             {
