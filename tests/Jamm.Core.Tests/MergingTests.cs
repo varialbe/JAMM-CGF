@@ -302,7 +302,9 @@ public class MergingTests
         const string alphaText = "name[17] = \"Existing\";\nname[18] = \"Alpha\";\ndesc[18] = \"Alpha description\";\ndesc2[18] = \"Alpha detail\";\ncost[18] = 100;\n// appended rows follow\n";
         const string betaText = "name[17] = \"Existing\";\nname[18] = \"Beta\";\ndesc[18] = \"Beta description\";\ndesc2[18] = \"Beta detail\";\ncost[18] = 200;\n// appended rows follow\n";
         var alpha = Patch("Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor, alphaText), null));
-        var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor, betaText), null));
+        var beta = Patch("Beta",
+            ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor, betaText), null),
+            ("code", CodeAsset("gml_Object_Helper_Step_0", "x = 0;\n", "var upgrade_variant = 18;\n"), null));
 
         var report = ConflictAnalyzer.Analyze([alpha, beta]);
         var merged = Assert.Single(report.CodeMerges["gml_Object_UpgradeData_Create_0"].Hunks, h => h.Status == "CONFLICT");
@@ -366,8 +368,10 @@ public class MergingTests
         const string ancestor = "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\n// appended rows\n";
         var alpha = Patch("Alpha", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
             "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\nname[18] = \"Alpha\";\ncost[18] = 100;\n// appended rows\n"), null));
-        var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
-            "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\nname[18] = \"Beta\";\ncost[18] = 200;\n// appended rows\n"), null));
+        var beta = Patch("Beta",
+            ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
+                "name[17] = \"Existing\";\nmode = 0;\nmarker_a = 0;\nmarker_b = 0;\nname[18] = \"Beta\";\ncost[18] = 200;\n// appended rows\n"), null),
+            ("code", CodeAsset("gml_Object_Helper_Step_0", "x = 0;\n", "var upgrade_variant = 18;\n"), null));
         var third = Patch("Third", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
             "name[17] = \"Existing\";\nmode = 1;\nmarker_a = 0;\nmarker_b = 0;\n// appended rows\n"), null));
         var fourth = Patch("Fourth", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", ancestor,
@@ -443,7 +447,8 @@ public class MergingTests
         var beta = Patch("Beta", ("code", CodeAsset("gml_Object_UpgradeData_Create_0", dataBase,
                 "name[17] = \"base\";\ncost[17] = 1;\nname[18] = \"Beta\";\ncost[18] = 3;\nalpha_flag = 0;\nbeta_flag = 1;\n"), null),
             ("code", CodeAsset("gml_Object_UpgradeMenu_Create_0", menuBase,
-                "spawn_order[18] = 38;\nalpha_menu_flag = 0;\nbeta_menu_flag = 1;\n"), null));
+                "spawn_order[18] = 38;\nalpha_menu_flag = 0;\nbeta_menu_flag = 1;\n"), null),
+            ("code", CodeAsset("gml_Object_Helper_Step_0", "x = 0;\n", "var upgrade_variant = 18;\n"), null));
 
         var report = ConflictAnalyzer.Analyze([alpha, beta]);
         var group = Assert.Single(report.Findings, f => f.Kind == "upgrade-group");

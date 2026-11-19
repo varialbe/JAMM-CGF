@@ -9,16 +9,23 @@ namespace Jamm.Core.Building;
 /// <summary>Relocates proven distinct legacy boat additions before ordinary conflict analysis.</summary>
 internal static partial class LegacySlotRelocation
 {
-    internal sealed record Result(ModPatch[] Patches, IReadOnlyList<string> Decisions);
+    internal sealed record Result(ModPatch[] Patches, IReadOnlyList<string> Decisions, IReadOnlyList<UpgradeIconRelocation> UpgradeIcons);
     private sealed record Boat(int Slot, string Identity, string DisplayName);
 
     internal static Result Prepare(IReadOnlyList<ModPatch> source)
     {
+        var (patches, boatDecisions) = PrepareBoats(source);
+        var upgrades = LegacyUpgradeRelocation.Prepare(patches);
+        return new(upgrades.Patches, [.. boatDecisions, .. upgrades.Decisions], upgrades.IconRelocations);
+    }
+
+    private static (ModPatch[] Patches, IReadOnlyList<string> Decisions) PrepareBoats(IReadOnlyList<ModPatch> source)
+    {
         ModPatch[] patches = source.ToArray();
         string? ancestor = patches.Select(p => Create(p)?.BaseCode?.Text).FirstOrDefault(t => t is not null);
-        if (ancestor is null) return new(patches, []);
+        if (ancestor is null) return (patches, []);
         var baseBoats = ReadBoats(ancestor);
-        if (baseBoats.Count == 0) return new(patches, []);
+        if (baseBoats.Count == 0) return (patches, []);
 
         var claims = patches.Select(p => ReadBoats(Create(p)?.ModCode?.Text ?? ancestor).Values
             .Where(b => IsAddition(b, ReadBoats(Create(p)?.ModCode?.Text ?? ancestor), baseBoats))
@@ -44,7 +51,7 @@ internal static partial class LegacySlotRelocation
                 decisions.Add($"[CGF-RELOCATE-001] Boat \"{contender.Boat.DisplayName}\" ({Name(patches[contender.Mod])}) moved from slot {slot} to {target}; rewrote {rewrittenCount.Count} typed references.");
             }
         }
-        return new(patches, decisions);
+        return (patches, decisions);
     }
 
     private static bool IsAddition(Boat boat, IReadOnlyDictionary<int, Boat> mod, IReadOnlyDictionary<int, Boat> baseline)
@@ -134,13 +141,25 @@ internal static partial class LegacySlotRelocation
     }
 
     /// <summary>
-    /// Returns merged text for a conflicting BoatData hunk whose versions differ only by writes to disjoint table slots
-    /// (lines shared by every version are kept once), or null when the hunk needs a real decision.
+    /// Returns merged text for a conflicting BoatData or UpgradeData hunk whose versions differ only by writes to
+    /// disjoint table slots or upgrade count bounds, or null when the hunk needs a real decision.
     /// </summary>
     internal static string? SlotUnion(string asset, MergeHunk hunk)
     {
-        if (!asset.Contains("gml_Object_BoatData_", StringComparison.Ordinal) || hunk.Status != "CONFLICT" || hunk.Versions.Count < 2) return null;
-        if (hunk.Kind == "list" && hunk.KeepBoth is not null) return hunk.KeepBoth;
+        if (hunk.Status != "CONFLICT" || hunk.Versions.Count < 2) return null;
+        if (asset.Contains("gml_Object_BoatData_", StringComparison.Ordinal))
+        {
+            if (hunk.Kind == "list" && hunk.KeepBoth is not null) return hunk.KeepBoth;
+            return TryUnionDisjointSlots(hunk);
+        }
+        return LegacyUpgradeRelocation.UpgradeUnion(asset, hunk);
+    }
+
+    /// <summary>
+    /// Unions versions whose non-shared lines are 1D table slot assignments to disjoint numeric indices.
+    /// </summary>
+    internal static string? TryUnionDisjointSlots(MergeHunk hunk)
+    {
         var lines = hunk.Versions.Select(v => SplitLines(v.Text)).ToArray();
         var common = lines.Skip(1).Aggregate(new HashSet<string>(lines[0].Select(l => l.Trim()), StringComparer.Ordinal),
             (set, next) => { set.IntersectWith(next.Select(l => l.Trim())); return set; });
@@ -179,7 +198,7 @@ internal static partial class LegacySlotRelocation
         return lines;
     }
 
-    [GeneratedRegex(@"^\s*(?:BoatData\.)?[A-Za-z_][A-Za-z0-9_]*\s*\[\s*(\d+)\s*\]\s*=[^=]", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*(?:BoatData\.|UpgradeData\.)?[A-Za-z_][A-Za-z0-9_]*\s*\[\s*(\d+)\s*\]\s*=[^=]", RegexOptions.CultureInvariant)]
     private static partial Regex SlotWrite();
 
     private static string Name(ModPatch patch) => patch.Mod.Name ?? Path.GetFileNameWithoutExtension(patch.Mod.FileName);

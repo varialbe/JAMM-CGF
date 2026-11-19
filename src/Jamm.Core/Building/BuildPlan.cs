@@ -21,6 +21,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
     public IReadOnlyList<DiscardedHunk> DiscardedHunks { get; init; } = [];
 
     internal bool HasResolvedHunks { get; init; }
+    internal IReadOnlyList<UpgradeIconRelocation> UpgradeIcons { get; init; } = [];
 
     /// <summary>Combines patches against one exact ancestor, resolving conflicts in load order.</summary>
     public static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions = null,
@@ -35,7 +36,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         var catalog = CatalogMerge.Prepare(patches);
         patches = catalog.Patches;
         // Analyze a single patch twice to reuse exactly the Phase 2 ancestor merge, too.
-        var report = ConflictAnalyzer.Analyze(patches.Count == 1 ? [patches[0], patches[0]] : patches);
+        var report = ConflictAnalyzer.AnalyzePrepared(patches.Count == 1 ? [patches[0], patches[0]] : patches, relocation, catalog.Mapping);
         string[] names = patches.Select(p => p.Mod.Name ?? Path.GetFileNameWithoutExtension(p.Mod.FileName)).ToArray();
         if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
             throw new ArgumentException("Build mod names must be unique. Relabel duplicate names with diff --name.");
@@ -235,6 +236,17 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             }
             if (choice == "keep-both" && ordered.Any(v => v.Asset is null))
                 throw new ArgumentException($"keep-both cannot resolve deletion of '{family}/{name}'. Choose a mod name.");
+            if (family == "sprites" && name == "spr_upgradeicons" && choice is null && relocation.UpgradeIcons.Count > 0)
+            {
+                var relocatedMods = relocation.UpgradeIcons.Select(i => i.SourceMod).ToHashSet();
+                var keptPreferred = ordered.LastOrDefault(v => relocation.UpgradeIcons.Any(i => i.KeptMod == v.Index))
+                    ?? ordered.LastOrDefault(v => !relocatedMods.Contains(v.Index));
+                if (keptPreferred is not null && !ReferenceEquals(keptPreferred, ordered[^1]))
+                {
+                    ordered.Remove(keptPreferred);
+                    ordered.Add(keptPreferred);
+                }
+            }
             var last = ordered[^1];
             if (last.Asset is null)
             {
@@ -292,7 +304,13 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 decisions.Add($"{item.Kind} {item.Family}/{item.Asset}: {decision}" +
                     (item.Kind == "index" ? " (literal slot overlap; runtime execution order still requires an in-game check)" : ""));
             }
-        return new(assets, decisions) { Catalog = catalog.Mapping, DiscardedHunks = discardedHunks, HasResolvedHunks = true };
+        return new(assets, decisions)
+        {
+            Catalog = catalog.Mapping,
+            DiscardedHunks = discardedHunks,
+            HasResolvedHunks = true,
+            UpgradeIcons = relocation.UpgradeIcons
+        };
     }
 
     private sealed record Version(int Index, string Family, string Name, AssetPatch? Asset);
