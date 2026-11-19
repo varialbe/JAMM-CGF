@@ -75,6 +75,29 @@ makes `FishThinner` cull much more aggressively (+100 per frame at 45–60 FPS) 
 Collision/arithmetic wins are already in Perf; draw/light changes need GPU profiling (on the PC to verify). Note: at the heavy
 pack's ~25 FPS, vanilla thinning culls 10 % of the fish about every second until half of them are gone.
 
+## 5. Where the heavy pack's tick goes (relative CPU profile, VPS)
+
+New tool on branch `exp/gml-profiler` (on top of `exp/jamm-gamma-bench`, not merged into main because the bench branch itself is
+not yet on main): `jamm-modmaker bench … --profile [--profile-scripts]` wraps event code with `get_timer` and writes
+`jamm_profile_<scene>.csv`. Numbers are inclusive, relative and CPU-only (draw entries are render-affected on llvmpipe).
+
+| Dock scene | Fish instances | `Fish_Step_2` (fish End Step, incl. state events) per tick | per fish |
+|---|---:|---:|---:|
+| Vanilla | ~1090 | 56 ms (39 % of loop) | 51 µs |
+| Heavy pack (TGE, Antiquity, PWB) | ~2006 | 143 ms (41 % of loop) | 71 µs |
+| Heavy pack + Perf builtin, perf mode ON (F8 setting seeded) | ~2050 | 155 ms (40 %) | 74 µs |
+
+* The heavy pack costs ~2.5× more fish-update CPU: ~1.8× more fish **and** ~1.4× more per fish, which fits the `with (Fish)`
+  neighbour loops (`fish_avoid_fish`, flocking) growing with the fish count.
+* Script breakdown (heavy pack): `fish_lunge` ~10 % of the loop (called for every fish every tick), `Fish_Other_10` (idle) 6 %,
+  `fish_avoid_fish` 4 %, `fish_avoid_wall` 3 %. `fish_lunge` → `check_lunge` already puts the cheap distance check first; this build
+  appears to short-circuit, and for such small scripts the profiler overhead is significant, so no "blind" optimization was added.
+* **Perf mode is OFF by default** (`jamm_perf.ini` `[Perf] Mode=0`, F8 toggles). The PC benchmark "Pack+Perf" therefore probably
+  measured Perf without its distant-fish scheduling. On the VPS, turning it on did not reduce fish End Step CPU either (within noise).
+  On the PC to verify: Pack+Perf with F8 enabled.
+* Most promising next step: reduce the fish count's quadratic part (neighbour queries in `fish_avoid_fish`/flocking, e.g. a spatial
+  bucket per tick) — needs careful equivalence work; and cull invisible fish updates more aggressively in Perf for large packs.
+
 ## Infrastructure notes
 
 * Steam Cloud: the first VPS test run downloaded the account's CGF saves (slots 7–9) and one 30 s vanilla run re-saved slot 9
