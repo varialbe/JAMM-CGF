@@ -17,6 +17,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
     /// <summary>Object identities and deterministic catalog relocations for this build.</summary>
     public IReadOnlyList<CatalogMapping> Catalog { get; init; } = [];
 
+    internal IReadOnlyDictionary<(int Mod, string Family, string Original), string> AssetRenames { get; init; }
+        = new Dictionary<(int, string, string), string>();
+
     /// <summary>Code conflict hunks discarded during resolution.</summary>
     public IReadOnlyList<DiscardedHunk> DiscardedHunks { get; init; } = [];
 
@@ -30,6 +33,8 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         resolutions ??= new Dictionary<string, string>();
         if (resolutions.Any(r => string.IsNullOrWhiteSpace(r.Key) || string.IsNullOrWhiteSpace(r.Value)))
             throw new ArgumentException("Resolution keys and winning mod names must be nonempty strings.");
+        var assetRelocation = AssetNameRelocation.Prepare(patches);
+        patches = assetRelocation.Patches;
         var relocation = LegacySlotRelocation.Prepare(patches);
         patches = relocation.Patches;
         var catalog = CatalogMerge.Prepare(patches);
@@ -40,6 +45,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
             throw new ArgumentException("Build mod names must be unique. Relabel duplicate names with diff --name.");
         List<string> decisions = [];
+        decisions.AddRange(assetRelocation.Decisions);
         decisions.AddRange(relocation.Decisions);
         if (catalog.Mapping.Length > 0)
             decisions.Add($"Catalog API: retained base entries and registered {catalog.Mapping.Select(m => m.Object).Distinct(StringComparer.Ordinal).Count()} mod fish by object identity; legacy ambiguous progress is retained without guessing.");
@@ -292,7 +298,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 decisions.Add($"{item.Kind} {item.Family}/{item.Asset}: {decision}" +
                     (item.Kind == "index" ? " (literal slot overlap; runtime execution order still requires an in-game check)" : ""));
             }
-        return new(assets, decisions) { Catalog = catalog.Mapping, DiscardedHunks = discardedHunks, HasResolvedHunks = true };
+        return new(assets, decisions) { Catalog = catalog.Mapping, DiscardedHunks = discardedHunks, HasResolvedHunks = true, AssetRenames = assetRelocation.Renames };
     }
 
     private sealed record Version(int Index, string Family, string Name, AssetPatch? Asset);

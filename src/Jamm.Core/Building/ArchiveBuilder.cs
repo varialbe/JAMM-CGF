@@ -65,6 +65,7 @@ public static class ArchiveBuilder
                     semantics.Base, original.Data),
                 semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
+            ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
@@ -74,7 +75,7 @@ public static class ArchiveBuilder
             plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
             var expectedReferences = semantics.Expected(plan, data);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
-            var remapped = semantics.Remapped(patches, data);
+            var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
             var counts = Counts(data);
@@ -101,6 +102,27 @@ public static class ArchiveBuilder
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         finally { foreach (var source in sources) source.Dispose(); }
+    }
+
+    private static void ApplySourceRenames(IReadOnlyList<UndertaleData> sources,
+        IReadOnlyDictionary<(int Mod, string Family, string Original), string> renames)
+    {
+        foreach (var ((mod, family, original), renamed) in renames)
+        {
+            var data = sources[mod];
+            if (ResourceCatalog.Find(ResourceCatalog.Tables(data)[family], original) is UndertaleNamedResource resource)
+                resource.Name = data.Strings.MakeString(renamed);
+            string? prefix = family switch
+            {
+                "objects" => $"gml_Object_{original}_",
+                "scripts" => $"gml_Script_{original}",
+                _ => null
+            };
+            if (prefix is null) continue;
+            foreach (var code in data.Code.Where(c => family == "scripts"
+                ? c.Name.Content == prefix : c.Name.Content.StartsWith(prefix, StringComparison.Ordinal)))
+                code.Name = data.Strings.MakeString(code.Name.Content.Replace(prefix, prefix.Replace(original, renamed, StringComparison.Ordinal), StringComparison.Ordinal));
+        }
     }
 
     private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress)
