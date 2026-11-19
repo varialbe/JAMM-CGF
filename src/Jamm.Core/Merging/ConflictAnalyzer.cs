@@ -21,11 +21,15 @@ public static class ConflictAnalyzer
             throw new InvalidDataException("Mods target different bases: " + string.Join("; ", patches.Select(p => $"{Name(p)} targets {p.Base.FileName} (SHA-256 {p.Base.Sha256})")) + ". Recompute every patch against the same --base archive.");
         if (patches.Any(p => p.FormatVersion != PatchJson.FormatVersion))
             throw new InvalidDataException("A patch uses an unsupported format. Recompute it with diff --force.");
+        var relocation = Building.LegacySlotRelocation.Prepare(patches);
+        patches = relocation.Patches;
         var catalog = Building.CatalogMerge.Prepare(patches);
         patches = catalog.Patches;
         // Labels remain unambiguous even when display names happen to match.
         string[] names = patches.Select((p, i) => patches.Count(q => Name(q) == Name(p)) > 1 ? $"{Name(p)} [{i + 1}]" : Name(p)).ToArray();
         List<ConflictItem> findings = [];
+        foreach (string warning in relocation.Decisions.Where(d => d.StartsWith("WARNING:", StringComparison.Ordinal)))
+            findings.Add(new("WARNING", "relocation", "code", "boat-slot", names, warning));
         if (catalog.Mapping.Length > 0)
             findings.Add(new("AUTO", "catalog", "code", Building.CatalogMerge.Create,
                 names.Distinct(StringComparer.Ordinal).ToArray(),
@@ -108,10 +112,14 @@ public static class ConflictAnalyzer
             codeMerges[asset] = merge;
             if (versions.Count < 2) return;
             foreach (var hunk in merge.Hunks.Where(h => h.Versions.Count > 1))
-                findings.Add(new(hunk.Status, hunk.Kind, "code", asset, hunk.Versions.Select(v => v.Name).ToArray(),
+            {
+                bool slotUnion = asset.StartsWith("gml_Object_BoatData_", StringComparison.Ordinal)
+                    && hunk.Kind == "list" && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null;
+                findings.Add(new(slotUnion ? "AUTO" : hunk.Status, hunk.Kind, "code", asset, hunk.Versions.Select(v => v.Name).ToArray(),
                     $"Ancestor line {hunk.Start + 1}: " + (hunk.Status == "INFO" ? "identical code changes." : hunk.Kind == "list"
                     ? "different insertions at the same position (shared list/catalog)." : hunk.Kind == "addition" ? "same-name code additions have different definitions." : "overlapping code edits require a decision."),
-                    SuggestedResolution: hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
+                    SuggestedResolution: slotUnion ? "Disjoint boat table slot writes are unioned automatically." : hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
+            }
             if (merge.Hunks.Any(h => h.Versions.Count == 1))
                 findings.Add(new("AUTO", "code", "code", asset, versions.Select(v => names[v.Mod]).ToArray(), "Non-overlapping code hunks are retained automatically in the merge preview."));
             // Counts/parent/children and the semantic snapshot remain independent of text.

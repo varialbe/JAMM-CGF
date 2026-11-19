@@ -22,6 +22,8 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         resolutions ??= new Dictionary<string, string>();
         if (resolutions.Any(r => string.IsNullOrWhiteSpace(r.Key) || string.IsNullOrWhiteSpace(r.Value)))
             throw new ArgumentException("Resolution keys and winning mod names must be nonempty strings.");
+        var relocation = LegacySlotRelocation.Prepare(patches);
+        patches = relocation.Patches;
         var catalog = CatalogMerge.Prepare(patches);
         patches = catalog.Patches;
         // Analyze a single patch twice to reuse exactly the Phase 2 ancestor merge, too.
@@ -30,6 +32,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
             throw new ArgumentException("Build mod names must be unique. Relabel duplicate names with diff --name.");
         List<string> decisions = [];
+        decisions.AddRange(relocation.Decisions);
         if (catalog.Mapping.Length > 0)
             decisions.Add($"Catalog API: retained base entries and registered {catalog.Mapping.Select(m => m.Object).Distinct(StringComparer.Ordinal).Count()} mod fish by object identity; legacy ambiguous progress is retained without guessing.");
         for (int i = 0; i < patches.Count; i++)
@@ -299,7 +302,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             text.Append(string.Concat(lines[cursor..hunk.Start]));
             bool catalogUnion = asset.StartsWith("code/gml_Object_CatalogData_", StringComparison.Ordinal)
                 && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null && CatalogMerge.DisjointWrites(hunk.Versions.Select(v => v.Text));
-            text.Append(hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion) ? hunk.KeepBoth
+            bool slotUnion = asset.StartsWith("code/gml_Object_BoatData_", StringComparison.Ordinal)
+                && hunk.Kind == "list" && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null;
+            text.Append(hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion || slotUnion) ? hunk.KeepBoth
                 : hunk.Versions.LastOrDefault(v => v.Name == hunkChoice)?.Text ?? hunk.Versions[^1].Text);
             cursor = hunk.Start + hunk.Length;
         }
