@@ -58,3 +58,14 @@ recoloured and recombined – like a kit – so they automatically match the gam
 ## Rules
 AGENTS.md. Branch `exp/silo-v2` in `~/jamm-wt/silo-v2`, based on main. Zero warnings, tests green. Commit on branch OK; no push/merge. Never copy TGE/PWB
 or vanilla art off the VPS. Report `docs/reports/silo-v2.md` with style rules, art-review path, run table, open points.
+
+## Addendum (user, 2026-11-19): the opening animation is a MUST
+* Background from Vel (TGE author): the vanilla `canOpen` variable and the broken opening animation were a deliberate troll by the lead developer to
+  confuse modders. The pitch of this mod is "the silo finally opens" – the opening must look great.
+* Requirement: a smooth, clearly visible opening sequence of the silo when the player comes close (boat above the trench and/or lure/line within range):
+  hatch doors slide/rotate open over ~1–2 s, a puff of bubbles/silt, the faint green glow from inside fades in and lights the surrounding rocks, optional
+  low mechanical sound if a fitting vanilla sound exists. It stays open afterwards (persist "opened" per save) so the chamber is always reachable later.
+* Use `spr_silomask` / `spr_silo` frames where they work; where the vanilla frames are broken, build the doors via the sprite compose recipe from the
+  vanilla silo sprite parts (no shipped vanilla pixels) and animate them in an own overlay object. Never edit MissileSilo's events.
+* Must work when another mod moved the silo (Cave Expansion: follow anchor).
+* Tests: screenshot sequence of the opening (closed / mid / open / glow on rocks), opened state after save+reload, works in the all-7 pack.
