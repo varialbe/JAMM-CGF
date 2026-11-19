@@ -125,7 +125,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 : resolutions.TryGetValue(key.Name, out var bare)
                     && (bare != "keep-both" || key.Family == "code")
                     && (familyCounts[key.Name] == 1
-                        || report.Findings.Any(f => f.Severity == "CONFLICT" && f.Family == key.Family && f.Asset == key.Name))
+                        // Auto-unioned insertion hunks stay explicitly resolvable, like real conflicts.
+                        || report.Findings.Any(f => (f.Severity == "CONFLICT" || f.Severity == "AUTO" && f.Kind == "list")
+                            && f.Family == key.Family && f.Asset == key.Name))
                     ? key.Name : null;
             string? choice = resolutionKey is null ? hasGroupChoice ? groupChoice.Winner : null : resolutions[resolutionKey];
             if (resolutionKey is not null)
@@ -366,7 +368,8 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 hunkText = slotUnion;
                 activeMods = hunk.Versions.Select(v => modIndexByName[v.Name]).Distinct().ToArray();
             }
-            else if (hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion))
+            else if (hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion
+                || (hunkChoice is null && IndependentInsertions.CanUnion(hunk))))
             {
                 hunkText = hunk.KeepBoth!;
                 activeMods = hunk.Versions.Select(v => modIndexByName[v.Name]).Distinct().ToArray();

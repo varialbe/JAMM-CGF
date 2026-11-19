@@ -16,8 +16,11 @@ public sealed partial class BuildingTests
     {
         var a = Patch("A", "start\nend\n", "start\na = 1;\nend\n");
         var b = Patch("B", "start\nend\n", "start\nb = 2;\nend\n");
-        Assert.Equal("start\nb = 2;\nend\n", Assert.Single(BuildPlan.Create([a, b]).Assets).Gml);
+        // Independent insertions (disjoint variables, no cross reads) are kept together without a resolution.
+        Assert.Equal("start\na = 1;\nb = 2;\nend\n", Assert.Single(BuildPlan.Create([a, b]).Assets).Gml);
         Assert.Equal("start\na = 1;\nb = 2;\nend\n", Assert.Single(BuildPlan.Create([a, b], new Dictionary<string, string> { ["test_code"] = "keep-both" }).Assets).Gml);
+        var same = Patch("B", "start\nend\n", "start\na = 2;\nend\n");
+        Assert.Equal("start\na = 2;\nend\n", Assert.Single(BuildPlan.Create([a, same]).Assets).Gml);
         Assert.Equal("start\na = 1;\nend\n", Assert.Single(BuildPlan.Create([a, b], new Dictionary<string, string> { ["test_code"] = "A" }).Assets).Gml);
         Assert.Throws<ArgumentException>(() => BuildPlan.Create([a, b], new Dictionary<string, string> { ["test_code"] = "unknown" }));
         b = Patch("B", "start\nend\n", "changed\nend\n");

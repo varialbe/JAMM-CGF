@@ -143,12 +143,14 @@ public static class ConflictAnalyzer
             if (versions.Count < 2) return;
             foreach (var hunk in merge.Hunks.Where(h => h.Versions.Count > 1))
             {
-                bool slotUnion = Building.LegacySlotRelocation.SlotUnion(asset, hunk) is not null;
+                bool slotUnion = Building.LegacySlotRelocation.SlotUnion(asset, hunk) is not null || IndependentInsertions.CanUnion(hunk);
                 findings.Add(new(slotUnion ? "AUTO" : hunk.Status, hunk.Kind, "code", asset, hunk.Versions.Select(v => v.Name).ToArray(),
                     $"Ancestor line {hunk.Start + 1}: " + (hunk.Status == "INFO" ? "identical code changes." : hunk.Kind == "list"
                     ? "different insertions at the same position (shared list/catalog)." : hunk.Kind == "addition" ? "same-name code additions have different definitions." : "overlapping code edits require a decision."),
                     SuggestedResolution: slotUnion
-                        ? (asset.StartsWith("gml_Object_BoatData_", StringComparison.Ordinal)
+                        ? (Building.LegacySlotRelocation.SlotUnion(asset, hunk) is null
+                            ? "Independent insertions (disjoint variables, no cross reads) are kept together automatically."
+                            : asset.StartsWith("gml_Object_BoatData_", StringComparison.Ordinal)
                             ? "Disjoint boat table slot writes are unioned automatically."
                             : "Disjoint upgrade table writes, case clauses, or count bounds are merged automatically.")
                         : hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
