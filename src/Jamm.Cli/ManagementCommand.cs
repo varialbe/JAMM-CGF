@@ -5,7 +5,7 @@ namespace Jamm.Cli;
 
 internal static class ManagementCommand
 {
-    internal static int Run(string command, string[] arguments, string? dataDirectory)
+    internal static int Run(string command, string[] arguments, string? dataDirectory, bool verbose = false)
     {
         var store = new ManagerStore(dataDirectory);
         var library = new ModLibrary(store);
@@ -163,6 +163,11 @@ internal static class ManagementCommand
                     {
                         foreach (string decision in prepared.Build.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
                         foreach (string warning in prepared.Build.Verification!.Warnings) Console.Error.WriteLine($"WARNING: {warning}");
+                        if (prepared.Build.Acceptance is { } acceptance)
+                        {
+                            Console.Write(TextReport.AcceptanceSummary(acceptance));
+                            if (verbose) Console.Write(TextReport.AcceptanceDetails(acceptance));
+                        }
                         Console.WriteLine($"Built and verified profile '{prepared.Profile.Name}' ({prepared.Build.SizeBytes:N0} bytes). Install into '{prepared.Config.GameDir}'?");
                         if (!flags.Contains("--yes"))
                         {

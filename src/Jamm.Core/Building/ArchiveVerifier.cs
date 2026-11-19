@@ -65,7 +65,7 @@ public static class ArchiveVerifier
         return new(loaded.Inspection, count, warnings, expectedReferences?.Count ?? 0);
     }
 
-    internal static void ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default, AnalysisOptions? options = null, string? expectedCatalog = null)
+    internal static IReadOnlyDictionary<string, string> ValidateSemantics(UndertaleData data, IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>> expected, CancellationToken cancellationToken = default, AnalysisOptions? options = null, string? expectedCatalog = null)
     {
         options ??= AnalysisOptions.Default;
         var entries = CodeDecompiler.ReadAll(data, "merged archive", _ => { }, AssetSymbols.Ambiguous([SemanticReferences.Names(data)]), options,
@@ -82,6 +82,7 @@ public static class ArchiveVerifier
             if (text.Format != "gml") throw new InvalidDataException($"Cannot verify references in code '{code.Name.Content}': decompilation failed.");
             SemanticReferences.Verify(code.Name.Content, references, SemanticReferences.Resolve(text.Text, code.Name.Content, names));
         }
+        return entries.ToDictionary(p => p.Key, p => p.Value.Text, StringComparer.Ordinal);
     }
 
     internal static void Compile(CompileGroup compiler, string context)

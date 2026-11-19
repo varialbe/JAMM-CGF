@@ -1,4 +1,5 @@
 using System.Collections;
+using Jamm.Core.Acceptance;
 using Jamm.Core.Patching;
 using UndertaleModLib;
 using UndertaleModLib.Compiler;
@@ -12,7 +13,8 @@ public sealed record BuildInput(ModPatch Patch, string ArchivePath);
 /// <summary>A completed build or an in-memory dry run, including decisions and archive counts.</summary>
 public sealed record BuildResult(BuildPlan Plan, GameInspection Base, VerificationResult? Verification,
     IReadOnlyDictionary<AssetKind, int> Counts, long SizeBytes,
-    IReadOnlyDictionary<string, int>? RemappedReferences = null, int SemanticEntries = 0);
+    IReadOnlyDictionary<string, int>? RemappedReferences = null, int SemanticEntries = 0,
+    PackAcceptanceReport? Acceptance = null);
 
 /// <summary>Builds a new archive from an exact base and verified local mod payloads.</summary>
 public static class ArchiveBuilder
@@ -71,12 +73,13 @@ public static class ArchiveBuilder
                 Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
             plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
             var expectedReferences = semantics.Expected(plan, data);
-            ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
+            var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
             var counts = Counts(data);
-            if (dryRun) return new(plan, original.Inspection, null, counts, 0, remapped, expectedReferences.Count);
+            var acceptance = AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
+            if (dryRun) return new(plan, original.Inspection, null, counts, 0, remapped, expectedReferences.Count, acceptance);
             string destination = Path.GetFullPath(output);
             string directory = Path.GetDirectoryName(destination)!;
             Directory.CreateDirectory(directory);
@@ -93,7 +96,7 @@ public static class ArchiveBuilder
                 BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
                 cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporary, destination, overwrite: true);
-                return new(plan, original.Inspection, verification, counts, new FileInfo(destination).Length, remapped, expectedReferences.Count);
+                return new(plan, original.Inspection, verification, counts, new FileInfo(destination).Length, remapped, expectedReferences.Count, acceptance);
             }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
@@ -431,6 +434,28 @@ public static class ArchiveBuilder
         if (modSnap.TryGetProperty("marginTop", out var mt)) targetSprite.MarginTop = mt.GetInt32();
         if (modSnap.TryGetProperty("marginBottom", out var mb)) targetSprite.MarginBottom = mb.GetInt32();
         return true;
+    }
+
+    private static PackAcceptanceReport AnalyzeAcceptance(
+        UndertaleData baseData,
+        IReadOnlyList<BuildInput> inputs,
+        IReadOnlyList<LoadedGameFile> sources,
+        IReadOnlyList<ModPatch> patches,
+        BuildPlan plan,
+        UndertaleData mergedData,
+        SemanticCode semantics,
+        IReadOnlyDictionary<string, string> mergedCode)
+    {
+        var modInputs = inputs.Select((input, i) => new AcceptanceModInput(
+            patches[i].Mod.Name ?? Path.GetFileNameWithoutExtension(patches[i].Mod.FileName),
+            patches[i].Mod.FileName,
+            sources[i].Data,
+            patches[i])).ToArray();
+        var baseCode = semantics.Base.ToDictionary(p => p.Key, p => p.Value.Text, StringComparer.Ordinal);
+        var modCodes = semantics.Mods
+            .Select(m => (IReadOnlyDictionary<string, string>)m.ToDictionary(p => p.Key, p => p.Value.Text, StringComparer.Ordinal))
+            .ToArray();
+        return PackAcceptance.Analyze(baseData, modInputs, plan, mergedData, baseCode, modCodes, mergedCode);
     }
 
     private static IReadOnlyDictionary<AssetKind, int> Counts(UndertaleData data)

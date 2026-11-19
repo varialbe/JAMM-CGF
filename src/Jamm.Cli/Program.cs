@@ -55,7 +55,7 @@ int Run(string[] arguments)
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
-            cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--dry-run] [--verbose]
+            cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
             cgfmm add <file.win|file.zip|modkit dir> [--name <name>]
@@ -85,8 +85,8 @@ int Run(string[] arguments)
     if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
-        return ManagementCommand.Run(command, arguments[1..], dataDirectory);
-    if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..]);
+        return ManagementCommand.Run(command, arguments[1..], dataDirectory, verbose);
+    if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..], verbose);
     if (command == "check") return CheckCommand.Run(arguments[1..]);
     if (command == "diff") return DiffCommand.Run(arguments[1..]);
     if (command == "lineage") return LineageCommand.Run(arguments[1..]);

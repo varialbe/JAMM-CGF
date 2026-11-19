@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Jamm.Core;
 using Jamm.Core.Building;
 using Jamm.Core.Patching;
@@ -8,14 +9,21 @@ namespace Jamm.Cli;
 
 internal static class BuildCommand
 {
-    internal static int Run(string command, string[] arguments)
+    private static readonly JsonSerializerOptions AcceptanceJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    internal static int Run(string command, string[] arguments, bool verbose = false)
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         List<string> positional = [];
         bool dryRun = false;
         string[] allowed = command switch
         {
-            "build" => ["--base", "--order", "--out", "--resolve", "--install"],
+            "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json"],
             "restore" => ["--game"], _ => []
         };
         for (int i = 0; i < arguments.Length; i++)
@@ -59,6 +67,9 @@ internal static class BuildCommand
             : JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(resolvePath))
                 ?? throw new InvalidDataException("The resolution file must be a JSON object mapping asset names to mod names or keep-both.");
         string baseHash = BuildFiles.Hash(basePath);
+        string? acceptanceJson = options.GetValueOrDefault("--acceptance-json");
+        if (acceptanceJson is not null)
+            OutputFile.Validate(acceptanceJson, [.. protectedPaths, output]);
         string? install = options.GetValueOrDefault("--install");
         if (install is not null)
             BuildFiles.ValidateNewOutput(output, new[] { "data.win", "data.win.cgfmm-original", "data.win.cgfmm-build.json" }.Select(n => Path.Combine(install, n)), dryRun);
@@ -94,6 +105,8 @@ internal static class BuildCommand
         }
         protectedPaths = [.. protectedPaths, .. inputs.Select(i => i.ArchivePath)];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
+        if (acceptanceJson is not null)
+            OutputFile.Validate(acceptanceJson, [.. protectedPaths, output]);
         if (install is not null) GameInstaller.Validate(install, baseHash, [.. protectedPaths.Skip(1), output], basePath);
         var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress);
         foreach (string decision in result.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
@@ -101,6 +114,16 @@ internal static class BuildCommand
             Console.WriteLine($"Remapped references: {item.Key}: {item.Value} (changed/added source alternatives; conflict selections verified separately)");
         Console.WriteLine($"Semantic reference verification: PASS ({result.SemanticEntries} code entries; selected mod hunks and unchanged base).");
         Counts(result.Counts);
+        if (result.Acceptance is { } acceptance)
+        {
+            Console.Write(TextReport.AcceptanceSummary(acceptance));
+            if (verbose) Console.Write(TextReport.AcceptanceDetails(acceptance));
+            if (acceptanceJson is not null)
+            {
+                OutputFile.Write(acceptanceJson, JsonSerializer.Serialize(acceptance, AcceptanceJsonOptions) + Environment.NewLine, [.. protectedPaths, output]);
+                Console.WriteLine($"Acceptance JSON: {Path.GetFullPath(acceptanceJson)}");
+            }
+        }
         if (dryRun)
             Console.WriteLine($"Dry run: merge and compilation passed; would write '{Path.GetFullPath(output)}'" +
                 (install is null ? ". No files written." : $" and install in '{Path.GetFileName(install)}'. No files written."));
