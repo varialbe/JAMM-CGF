@@ -911,11 +911,11 @@ internal static partial class LegacyUpgradeRelocation
         return (new(sourceMod, keptMod, oldSlot, newSlot, sourceFrame, targetFrame, Fallback: false), null);
     }
 
-    private static AssetPatch? FindSpritePatch(ModPatch patch, string name) =>
+    internal static AssetPatch? FindSpritePatch(ModPatch patch, string name) =>
         patch.Changes.GetValueOrDefault("sprites")?.Changed.FirstOrDefault(s => s.Name == name)
         ?? patch.Changes.GetValueOrDefault("sprites")?.Added.FirstOrDefault(s => s.Name == name);
 
-    private static bool TryReadSpriteDimensions(JsonElement snap, out int width, out int height, out int frameCount)
+    internal static bool TryReadSpriteDimensions(JsonElement snap, out int width, out int height, out int frameCount)
     {
         width = height = frameCount = 0;
         if (snap.ValueKind != JsonValueKind.Object) return false;
@@ -1070,7 +1070,7 @@ internal static partial class LegacyUpgradeRelocation
         return result;
     }
 
-    private static bool TryMatchCountBoundLoop(
+    internal static bool TryMatchCountBoundLoop(
         IReadOnlyList<GmlReferences.Token> tokens,
         int forIndex,
         out string? loopVar,

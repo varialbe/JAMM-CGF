@@ -57,7 +57,7 @@ public static class ArchiveBuilder
                     ItemsRuntime.PreparePlan(
                         HudRuntime.PreparePlan(
                             MenuRuntime.PreparePlan(
-                                BuildPlan.Create(patches, resolutions, baseReferences),
+                                BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base),
                                 semantics.Base, original.Data),
                             semantics.Base),
                         semantics.Base,
@@ -274,6 +274,8 @@ public static class ArchiveBuilder
         {
             AppendRelocatedUpgradeIconFrames(baseUpgradeIcons, plan.UpgradeIcons, sources, importers, extraDecisions);
         }
+        if (plan.RodFrames.Count > 0)
+            ApplyRodFrames(data, plan.RodFrames, patches, sources, importers);
         foreach (var entry in data.GeneralInfo.RoomOrder.Where(e => !data.Rooms.Contains(e.Resource)).ToArray()) data.GeneralInfo.RoomOrder.Remove(entry);
         foreach (var room in data.Rooms)
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
@@ -526,6 +528,28 @@ public static class ArchiveBuilder
             {
                 extraDecisions.Add($"WARNING: could not append spr_upgradeicons frame {reloc.SourceFrame} at {reloc.TargetFrame}; kept duplicated/blank icon frame.");
             }
+        }
+    }
+
+    private static void ApplyRodFrames(
+        UndertaleData data,
+        IReadOnlyList<RodFrame> frames,
+        IReadOnlyList<ModPatch> patches,
+        IReadOnlyList<UndertaleData> sources,
+        ResourceImporter[] importers)
+    {
+        var target = data.Sprites.First(s => s.Name.Content == LegacyRodRelocation.Sprite);
+        foreach (var frame in frames.OrderBy(f => f.TargetFrame))
+        {
+            var source = sources[frame.Mod].Sprites.FirstOrDefault(s => s.Name.Content == LegacyRodRelocation.Sprite);
+            if (source is null || source.Width != target.Width || source.Height != target.Height
+                || source.Textures.Count <= frame.SourceFrame || source.Textures[frame.SourceFrame]?.Texture is null)
+                throw new InvalidDataException($"Cannot copy spr_rod frame {frame.SourceFrame} from '{patches[frame.Mod].Mod.FileName}'. Use compatible rod sprites and rebuild.");
+
+            var texture = (UndertaleSprite.TextureEntry)importers[frame.Mod].Copy(source.Textures[frame.SourceFrame]);
+            while (target.Textures.Count <= frame.TargetFrame)
+                target.Textures.Add(new UndertaleSprite.TextureEntry { Texture = texture.Texture });
+            target.Textures[frame.TargetFrame] = texture;
         }
     }
 

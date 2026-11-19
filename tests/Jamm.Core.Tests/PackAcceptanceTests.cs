@@ -295,6 +295,36 @@ public sealed class PackAcceptanceTests
         Assert.Contains($"Beta {repB.TotalCount}/{repB.TotalCount} present", summary, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, AcceptanceStatus.Relocated)]
+    [InlineData(false, AcceptanceStatus.Lost)]
+    public void RenamedFishMustHaveItsOwnMergedCatalogEntry(bool includeRenamedFish, string expectedStatus)
+    {
+        const string catalog = "gml_Object_CatalogData_Create_0";
+        const string originalFish = "TwinFish";
+        const string renamedFish = "TwinFish_jamm_later";
+        const string originalEntry = "object[0, 1] = TwinFish;\nname[0, 1] = \"Twin\";\nmap[0, 1] = 1;\ndesc[0, 1] = \"Fish\";\n";
+        const string renamedEntry = "object[0, 2] = TwinFish_jamm_later;\nname[0, 2] = \"Twin\";\nmap[0, 2] = 1;\ndesc[0, 2] = \"Fish\";\n";
+        using var baseline = UndertaleData.CreateNew();
+        using var source = UndertaleData.CreateNew();
+        using var merged = UndertaleData.CreateNew();
+        AddObject(source, renamedFish);
+        AddObject(merged, originalFish);
+        AddObject(merged, renamedFish);
+        var plan = new BuildPlan([], [])
+        {
+            AssetRenames = new Dictionary<(int, string, string), string> { [(0, "objects", originalFish)] = renamedFish }
+        };
+        var report = PackAcceptance.Analyze(baseline, [new("Later", "later.win", source)], plan, merged,
+            modCodes: [new Dictionary<string, string> { [catalog] = originalEntry }],
+            mergedCode: new Dictionary<string, string> { [catalog] = originalEntry + (includeRenamedFish ? renamedEntry : "") });
+
+        var fish = Assert.Single(report.Mods.Single().Items, i => i.Kind == AcceptanceKind.Fish);
+        Assert.Equal(originalFish, fish.Identity);
+        Assert.Equal(expectedStatus, fish.Status);
+        Assert.Contains(renamedFish, fish.Detail);
+    }
+
     [Fact]
     public void RoomPlacementCountsDetectPresentAndLostPlacements()
     {

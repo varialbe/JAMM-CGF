@@ -7,14 +7,16 @@ using Jamm.Core.Patching;
 
 namespace Jamm.Core.Building;
 
-/// <summary>Relocates proven distinct legacy boat, lure, and tool additions before ordinary conflict analysis.</summary>
+/// <summary>Relocates proven distinct legacy boat, lure, tool, and rod additions before ordinary conflict analysis.</summary>
 internal static partial class LegacySlotRelocation
 {
     internal sealed record Result(
         ModPatch[] Patches,
         IReadOnlyList<string> Decisions,
         IReadOnlyList<UpgradeIconRelocation> UpgradeIcons,
-        IReadOnlyList<SharedUnlockHunk> SharedUnlocks);
+        IReadOnlyList<SharedUnlockHunk> SharedUnlocks,
+        IReadOnlyList<RodFrame> RodFrames,
+        int RodCount);
 
     private sealed record TableDescriptor(
         string Kind,
@@ -66,24 +68,38 @@ internal static partial class LegacySlotRelocation
         IndexedArrays: [],
         ContextKeyword: "tool");
 
-    private static readonly TableDescriptor[] Tables = [BoatTable, LureTable, ToolTable];
+    private static readonly TableDescriptor RodTable = new(
+        Kind: "Rod",
+        LowerKind: "rod",
+        TableObject: "RodData",
+        CreateEntry: LegacyRodRelocation.RodCreate,
+        LocalEventPrefix: "gml_Object_RodData_",
+        IndexVariables: ["rod_id", "item_id"],
+        ScopedItemIdPrefixes: ["gml_Object_RodData_", "gml_Object_RodCard_", "gml_Object_RodMenu_", "gml_Object_Rod_"],
+        CallSinks: ["rod_was_unlocked", "rod_was_purchased", "buy_rod"],
+        IndexedArrays: [],
+        ContextKeyword: "rod");
+
+    private static readonly TableDescriptor[] Tables = [BoatTable, LureTable, ToolTable, RodTable];
 
     internal static Result Prepare(IReadOnlyList<ModPatch> source)
     {
         ModPatch[] patches = source.ToArray();
         List<string> decisions = [];
+        List<RodFrame> rodFrames = [];
+        int rodCount = 0;
         foreach (var table in Tables)
-            PrepareTable(table, patches, decisions);
+            rodCount = Math.Max(rodCount, PrepareTable(table, patches, decisions, rodFrames));
         var upgrades = LegacyUpgradeRelocation.Prepare(patches);
-        return new(upgrades.Patches, [.. decisions, .. upgrades.Decisions], upgrades.IconRelocations, upgrades.SharedUnlocks);
+        return new(upgrades.Patches, [.. decisions, .. upgrades.Decisions], upgrades.IconRelocations, upgrades.SharedUnlocks, rodFrames, rodCount);
     }
 
-    private static void PrepareTable(TableDescriptor table, ModPatch[] patches, List<string> decisions)
+    private static int PrepareTable(TableDescriptor table, ModPatch[] patches, List<string> decisions, List<RodFrame> rodFrames)
     {
         string? ancestor = patches.Select(p => Create(table, p)?.BaseCode?.Text).FirstOrDefault(t => t is not null);
-        if (ancestor is null) return;
+        if (ancestor is null) return 0;
         var baseItems = ReadItems(table, ancestor);
-        if (baseItems.Count == 0) return;
+        if (baseItems.Count == 0) return 0;
 
         var modItems = patches.Select(p => ReadItems(table, Create(table, p)?.ModCode?.Text ?? ancestor)).ToArray();
         var claims = modItems.Select(items => items.Values
@@ -125,6 +141,12 @@ internal static partial class LegacySlotRelocation
                         failed = true;
                         break;
                     }
+                    if (table == RodTable && !LegacyRodRelocation.HasCompatibleFrames(patches, contenders[0].Mod, contender.Mod, slot))
+                    {
+                        decisions.Add($"WARNING: rod slot {slot} in '{Name(patches[contender.Mod])}' was not relocated: spr_rod frame {slot} is missing or incompatible.");
+                        failed = true;
+                        break;
+                    }
                     pending.Add((contender.Mod, rewritten.Patch, rewritten.Count, contender.Item.DisplayName));
                 }
                 if (failed) continue;
@@ -132,10 +154,19 @@ internal static partial class LegacySlotRelocation
                 foreach (var item in pending)
                 {
                     patches[item.Mod] = item.Patch;
-                    decisions.Add($"[CGF-RELOCATE-001] {table.Kind} \"{item.DisplayName}\" ({Name(patches[item.Mod])}) moved from slot {slot} to {target}; rewrote {item.Count} typed references.");
+                    string code = table == RodTable ? "CGF-RELOCATE-006" : "CGF-RELOCATE-001";
+                    string suffix = table == RodTable ? $"; spr_rod frame {slot}->{target}" : ".";
+                    decisions.Add($"[{code}] {table.Kind} \"{item.DisplayName}\" ({Name(patches[item.Mod])}) moved from slot {slot} to {target}; rewrote {item.Count} typed references{suffix}");
+                }
+                if (table == RodTable)
+                {
+                    if (!rodFrames.Any(f => f.TargetFrame == slot))
+                        rodFrames.Add(new(contenders[0].Mod, slot, slot));
+                    rodFrames.Add(new(pending[^1].Mod, slot, target));
                 }
             }
         }
+        return table == RodTable && rodFrames.Count > 0 ? next : 0;
     }
 
     private static bool IsAddition(TableItem item, IReadOnlyDictionary<int, TableItem> mod, IReadOnlyDictionary<int, TableItem> baseline)
@@ -183,16 +214,16 @@ internal static partial class LegacySlotRelocation
             }
         }
 
-        if (objects.Count > 0)
+        if (objects.Count > 0 && table != RodTable)
         {
             return objects.ToDictionary(
                 pair => pair.Key,
                 pair => new TableItem(pair.Key, pair.Value, names.GetValueOrDefault(pair.Key) ?? pair.Value));
         }
 
-        return names.ToDictionary(
-            pair => pair.Key,
-            pair => new TableItem(pair.Key, pair.Value, pair.Value));
+        return names.Keys.Concat(objects.Keys).Distinct().ToDictionary(slot => slot,
+            slot => new TableItem(slot, objects.GetValueOrDefault(slot) ?? names[slot],
+                names.GetValueOrDefault(slot) ?? objects[slot]));
     }
 
     private static bool TryRewriteMod(
@@ -226,7 +257,7 @@ internal static partial class LegacySlotRelocation
             if (uncertain) { warning = $"'{asset.Name}' contains a {table.LowerKind}-typed use that cannot be classified"; return false; }
 
             if (asset.Name == table.CreateEntry)
-                rewritten = BumpCreateCountAssignment(table, rewritten, newSlot + 1);
+                rewritten = BumpCreateCountAssignment(rewritten, table.TableObject, newSlot + 1);
 
             int totalCount = count + placeholderCount;
             if (totalCount > 0 || !string.Equals(rewritten, text, StringComparison.Ordinal))
@@ -277,17 +308,18 @@ internal static partial class LegacySlotRelocation
                 break;
             }
         }
-        if (oldIdx < 0) return modText;
+        bool inherited = oldIdx < 0;
+        if (inherited && (table != RodTable || !modLines.Contains(basePlaceholder))) return modText;
         // If an untouched base placeholder for oldSlot still exists, this was an appended write rather than an in-place edit.
-        for (int i = 0; i < modLines.Count; i++)
+        for (int i = 0; !inherited && i < modLines.Count; i++)
         {
             if (!changedLines.Contains(i + 1) && oldPlaceholderRegex.IsMatch(modLines[i]))
                 return modText;
         }
 
         string movedLine = new Regex(@"(\[\s*)" + oldSlot.ToString(CultureInfo.InvariantCulture) + @"(\s*\])", RegexOptions.CultureInvariant)
-            .Replace(modLines[oldIdx], $"${{1}}{newSlot}${{2}}", 1);
-        modLines[oldIdx] = basePlaceholder;
+            .Replace(inherited ? basePlaceholder : modLines[oldIdx], $"${{1}}{newSlot}${{2}}", 1);
+        if (!inherited) modLines[oldIdx] = basePlaceholder;
 
         var newPlaceholderRegex = new Regex(prefixPattern + newSlot.ToString(CultureInfo.InvariantCulture) + @"\s*\]\s*=\s*-\d+\s*;?\s*$", RegexOptions.CultureInvariant);
         int newIdx = -1;
@@ -314,17 +346,17 @@ internal static partial class LegacySlotRelocation
             modLines.Insert(lastUnlocked >= 0 ? lastUnlocked + 1 : oldIdx + 1, movedLine);
         }
 
-        movedCount = 1;
+        movedCount = inherited ? 0 : 1;
         return string.Concat(modLines);
     }
 
-    private static string BumpCreateCountAssignment(TableDescriptor table, string text, int minCount)
+    internal static string BumpCreateCountAssignment(string text, string tableObject, int minCount)
     {
         var tokens = GmlReferences.Tokens(text);
         for (int i = 0; i + 2 < tokens.Count; i++)
         {
             int countIdx = i;
-            if (tokens[i].Kind == 'i' && tokens[i].Value == table.TableObject && i + 1 < tokens.Count && tokens[i + 1].Value == ".")
+            if (tokens[i].Kind == 'i' && tokens[i].Value == tableObject && i + 1 < tokens.Count && tokens[i + 1].Value == ".")
                 countIdx = i + 2;
             else if (i > 0 && tokens[i - 1].Value == ".")
                 continue;
@@ -371,14 +403,14 @@ internal static partial class LegacySlotRelocation
         string literal = oldSlot.ToString(CultureInfo.InvariantCulture);
         string replacement = newSlot.ToString(CultureInfo.InvariantCulture);
 
-        ComputeScopes(table, tokens, entry, out bool[] inTableScope, out bool[] inCardScope);
+        ComputeScopes(table, tokens, entry, out bool[] inTableScope, out bool[] inCardScope, out bool[] inUpgradeScope);
 
         bool LineOwned(GmlReferences.Token token) => changedLines is null || changedLines.Contains(token.Line);
 
         // 1. Array indexing: TableObject.field[N], local field[N] in TableObject scope, and dedicated slot-indexed arrays.
         for (int i = 1; i + 2 < tokens.Count; i++)
         {
-            if (tokens[i].Value != "[" || tokens[i + 1].Kind != 'n' || tokens[i + 1].Value != literal || tokens[i + 2].Value != "]")
+            if (tokens[i].Value != "[" || tokens[i + 1].Kind != 'n' || tokens[i + 1].Value != literal)
                 continue;
             if (!LineOwned(tokens[i + 1]) || tokens[i - 1].Kind != 'i')
                 continue;
@@ -387,7 +419,23 @@ internal static partial class LegacySlotRelocation
                 && (i == 3 || tokens[i - 4].Value != ".");
             bool localTable = inTableScope[i] && (i < 2 || tokens[i - 2].Value != ".");
             bool indexedArray = table.IndexedArrays.Contains(tokens[i - 1].Value, StringComparer.Ordinal);
-            if (!qualified && !localTable && !indexedArray)
+            bool matrix = false;
+            if (table == RodTable)
+            {
+                bool upgradeField = i >= 3 && tokens[i - 2].Value == "." && tokens[i - 3].Value == "UpgradeData"
+                    && (i == 3 || tokens[i - 4].Value != ".")
+                    || inUpgradeScope[i] && (i < 2 || tokens[i - 2].Value != ".");
+                string field = tokens[i - 1].Value;
+                matrix = upgradeField && field is "upg" or "object";
+                indexedArray = upgradeField && field == "cost_base"
+                    || LegacyRodRelocation.IsRodArray(entry, field) && (i < 2 || tokens[i - 2].Value != ".");
+                if ((qualified || localTable || indexedArray || matrix) && tokens[i + 2].Value != (matrix ? "," : "]"))
+                {
+                    uncertain = true;
+                    return text;
+                }
+            }
+            if (!matrix && (tokens[i + 2].Value != "]" || !qualified && !localTable && !indexedArray))
                 continue;
 
             edits[(tokens[i + 1].Start, tokens[i + 1].Length)] = replacement;
@@ -414,6 +462,14 @@ internal static partial class LegacySlotRelocation
                 || (tokens[i].Value == "item_id" && inCardScope[i])
                 || (table == LureTable && tokens[i].Value is "purchased" or "type"
                     && (isLureQuestEntry || (i >= 2 && tokens[i - 1].Value == "." && tokens[i - 2].Value == "LureQuest")));
+            if (table == RodTable)
+            {
+                bool qualified = i >= 2 && tokens[i - 1].Value == ".";
+                knownVar = table.IndexVariables.Contains(tokens[i].Value, StringComparer.Ordinal)
+                    && (qualified
+                        ? (i == 2 || tokens[i - 3].Value != ".") && tokens[i - 2].Value is "Rod" or "RodData" or "RodCard" or "RodMenu"
+                        : inCardScope[i]);
+            }
             if (!knownVar) continue;
             if (tokens[i + 1].Value is not ("=" or "==" or "!=" or "<" or ">")) continue;
             if (tokens[i + 2].Kind != 'n' || tokens[i + 2].Value != literal || !LineOwned(tokens[i + 2])) continue;
@@ -429,8 +485,10 @@ internal static partial class LegacySlotRelocation
                 || edits.ContainsKey((tokens[i].Start, tokens[i].Length)))
                 continue;
             int from = Math.Max(0, i - 5), to = Math.Min(tokens.Count - 1, i + 5);
-            bool context = Enumerable.Range(from, to - from + 1)
-                .Any(j => tokens[j].Kind == 'i' && tokens[j].Value.Contains(table.ContextKeyword, StringComparison.OrdinalIgnoreCase));
+            bool context = table == RodTable
+                ? HasRodContext(tokens, i, from, to)
+                : Enumerable.Range(from, to - from + 1).Any(j => tokens[j].Kind == 'i'
+                    && tokens[j].Value.Contains(table.ContextKeyword, StringComparison.OrdinalIgnoreCase));
             if (context) { uncertain = true; return text; }
         }
 
@@ -440,17 +498,40 @@ internal static partial class LegacySlotRelocation
         return text;
     }
 
+    private static bool HasRodContext(IReadOnlyList<GmlReferences.Token> tokens, int index, int from, int to)
+    {
+        for (int i = index - 1; i >= from && tokens[i].Value is not (";" or "{" or "}"); i--)
+            if (MentionsRod(tokens[i])) return true;
+        for (int i = index + 1; i <= to && tokens[i].Value is not (";" or "{" or "}"); i++)
+            if (MentionsRod(tokens[i])) return true;
+        return false;
+
+        static bool MentionsRod(GmlReferences.Token token) => token.Kind switch
+        {
+            's' => token.Value.Contains("rod", StringComparison.OrdinalIgnoreCase),
+            'i' => token.Value.StartsWith("rod", StringComparison.OrdinalIgnoreCase)
+                || token.Value.Contains("_rod", StringComparison.OrdinalIgnoreCase)
+                || token.Value.Contains("Rod", StringComparison.Ordinal)
+                || token.Value.EndsWith("rod", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
     private static void ComputeScopes(
         TableDescriptor table,
         IReadOnlyList<GmlReferences.Token> tokens,
         string entry,
         out bool[] inTableScope,
-        out bool[] inCardScope)
+        out bool[] inCardScope,
+        out bool[] inUpgradeScope)
     {
         bool baseTable = entry.StartsWith(table.LocalEventPrefix, StringComparison.Ordinal);
         bool baseCard = table.ScopedItemIdPrefixes.Any(p => entry.StartsWith(p, StringComparison.Ordinal));
         inTableScope = Enumerable.Repeat(baseTable, tokens.Count).ToArray();
         inCardScope = Enumerable.Repeat(baseCard, tokens.Count).ToArray();
+        inUpgradeScope = table == RodTable
+            ? Enumerable.Repeat(entry.StartsWith("gml_Object_UpgradeData_", StringComparison.Ordinal), tokens.Count).ToArray()
+            : [];
 
         var matchingParen = MatchDelimiters(tokens, "(", ")");
         var matchingBrace = MatchDelimiters(tokens, "{", "}");
@@ -474,11 +555,13 @@ internal static partial class LegacySlotRelocation
             }
 
             bool targetIsTable = target == table.TableObject;
-            bool targetIsCard = target == table.TableObject || target == cardObj || target == menuObj;
+            bool targetIsCard = target == table.TableObject || target == cardObj || target == menuObj
+                || table == RodTable && target == "Rod";
             for (int j = closeParen + 1; j <= end && j < tokens.Count; j++)
             {
                 inTableScope[j] = targetIsTable;
                 inCardScope[j] = targetIsCard;
+                if (table == RodTable) inUpgradeScope[j] = target == "UpgradeData";
             }
         }
     }
@@ -496,7 +579,7 @@ internal static partial class LegacySlotRelocation
     }
 
     /// <summary>
-    /// Returns merged text for a conflicting BoatData, LureData, ToolData, or UpgradeData hunk whose versions differ
+    /// Returns merged text for a conflicting BoatData, LureData, ToolData, RodData, or UpgradeData hunk whose versions differ
     /// only by writes to disjoint table slots, table count assignments, or upgrade count bounds, or null when the
     /// hunk needs a real decision.
     /// </summary>
@@ -507,6 +590,11 @@ internal static partial class LegacySlotRelocation
         {
             if (hunk.Kind == "list" && hunk.KeepBoth is not null) return hunk.KeepBoth;
             return TryUnionDisjointSlots(hunk);
+        }
+        if (asset == LegacyRodRelocation.UpgradeCreate || asset == $"code/{LegacyRodRelocation.UpgradeCreate}")
+        {
+            string? rows = LegacyRodRelocation.UnionUpgradeRows(hunk);
+            if (rows is not null) return rows;
         }
         return LegacyUpgradeRelocation.UpgradeUnion(asset, hunk);
     }
