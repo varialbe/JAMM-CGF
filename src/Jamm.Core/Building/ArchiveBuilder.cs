@@ -62,7 +62,7 @@ public static class ArchiveBuilder
                         semantics.BaseNames),
                     semantics.Base, original.Data),
                 semantics.Base);
-            plan = InstanceCompatibility.Repair(plan, patches);
+            plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
