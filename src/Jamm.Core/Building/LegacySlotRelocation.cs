@@ -9,14 +9,18 @@ namespace Jamm.Core.Building;
 /// <summary>Relocates proven distinct legacy boat additions before ordinary conflict analysis.</summary>
 internal static partial class LegacySlotRelocation
 {
-    internal sealed record Result(ModPatch[] Patches, IReadOnlyList<string> Decisions, IReadOnlyList<UpgradeIconRelocation> UpgradeIcons);
+    internal sealed record Result(
+        ModPatch[] Patches,
+        IReadOnlyList<string> Decisions,
+        IReadOnlyList<UpgradeIconRelocation> UpgradeIcons,
+        IReadOnlyList<SharedUnlockHunk> SharedUnlocks);
     private sealed record Boat(int Slot, string Identity, string DisplayName);
 
     internal static Result Prepare(IReadOnlyList<ModPatch> source)
     {
         var (patches, boatDecisions) = PrepareBoats(source);
         var upgrades = LegacyUpgradeRelocation.Prepare(patches);
-        return new(upgrades.Patches, [.. boatDecisions, .. upgrades.Decisions], upgrades.IconRelocations);
+        return new(upgrades.Patches, [.. boatDecisions, .. upgrades.Decisions], upgrades.IconRelocations, upgrades.SharedUnlocks);
     }
 
     private static (ModPatch[] Patches, IReadOnlyList<string> Decisions) PrepareBoats(IReadOnlyList<ModPatch> source)
