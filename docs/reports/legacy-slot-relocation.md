@@ -35,3 +35,14 @@ entries; icon frame 19->20`; vanilla `case 14` intact.
 too. After relocation both upgrades exist, but buying Zoom also switches on Bulbguard's effect until the rod is recalculated. Next step:
 detect effect slots ≥ the vanilla maximum (21) that two claimants use with different meanings and relocate the slot of the moved
 claimant (all `Rod.upgrades[K]` uses in its unique hunks, plus `array_length_1d(Rod.upgrades) > K` guards).
+
+## Effect-slot relocation (CGF-RELOCATE-004) — added 2026-11-19
+
+Effect slots `Rod.upgrades[K]` with K > 21 that the relocated claimant and another claimant both use in their unique hunks are moved
+for the relocated claimant. Real heavy pack: `Effect slot Rod.upgrades[22] of "Bulbguard" (PWB) moved to 23 (also used by "Zoom" (TGE))`.
+
+**Remaining lineage gap:** the byte-identical (shared) `Rod_Step_0` hunk in TGE and PWB reads
+`if (CatalogData.count[1, 42] > 0 && bulbguardUnlocked == 0) { if (upgrades[22] < 1) { UnlockUpgrade(18); … } }`. Because shared
+hunks keep the original id, this now unlocks Zoom (18), which matches TGE's own behavior, but Bulbguard (19) is no longer unlocked by
+that trigger. Needs an in-game check whether Bulbguard is still obtainable; possible fix: emit an extra unlock for the relocated id when
+the only unlock site of an upgrade is a shared hunk.

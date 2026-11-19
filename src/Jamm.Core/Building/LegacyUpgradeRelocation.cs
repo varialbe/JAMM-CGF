@@ -60,6 +60,8 @@ internal static partial class LegacyUpgradeRelocation
         List<string> decisions = [];
         List<UpgradeIconRelocation> iconRelocations = [];
         int maxClaimSlot = claims.SelectMany(c => c).Select(u => u.Slot).DefaultIfEmpty(-1).Max();
+        HashSet<int> baseEffectSlots = FindBaseEffectSlots(patches);
+        int nextEffectSlot = Math.Max(VanillaMaxEffectSlot, FindMaxEffectSlotAcrossAllMods(patches)) + 1;
 
         for (int slot = 0; slot <= maxClaimSlot; slot++)
         {
@@ -71,6 +73,9 @@ internal static partial class LegacyUpgradeRelocation
                 continue;
 
             var uniqueLinesByMod = ComputeUniqueLines(patches, contenders.Select(c => (c.Mod, c.Upgrade.Identity)).ToArray());
+            var currentUniqueEffectSlotsByMod = contenders.ToDictionary(
+                c => c.Mod,
+                c => CollectUniqueEffectSlots(patches[c.Mod], uniqueLinesByMod[c.Mod], baseEffectSlots));
             int keptMod = ChooseKeptMod(patches, contenders, uniqueLinesByMod, slot);
             string keptIdentity = contenders.First(c => c.Mod == keptMod).Upgrade.Identity;
 
@@ -123,6 +128,19 @@ internal static partial class LegacyUpgradeRelocation
                         $"[CGF-RELOCATE-003] Upgrade \"{identityGroup.Key}\" ({Name(patches[item.Mod])}) moved from slot {slot} to {target}; " +
                         $"rewrote {item.Outcome.ReferenceCount} typed references in {item.Outcome.CodeEntryCount} code entries; {iconPhrase}.");
                 }
+
+                RelocateEffectSlotsForGroup(
+                    patches,
+                    contenders,
+                    keptMod,
+                    keptIdentity,
+                    identityGroup.Key,
+                    pending.Select(p => p.Mod).ToArray(),
+                    uniqueLinesByMod,
+                    baseEffectSlots,
+                    currentUniqueEffectSlotsByMod,
+                    ref nextEffectSlot,
+                    decisions);
             }
         }
 
@@ -1093,6 +1111,13 @@ internal static partial class LegacyUpgradeRelocation
             if (slotMerged is not null) return slotMerged;
         }
 
+        if (asset.Contains("gml_Object_Rod_", StringComparison.Ordinal)
+            && IsRodUpgradeSlotWriteHunk(hunk)
+            && LegacySlotRelocation.TryUnionDisjointSlots(hunk) is { } rodSlotMerged)
+        {
+            return rodSlotMerged;
+        }
+
         if ((asset.Contains("gml_Object_UpgradeCard_Other_10", StringComparison.Ordinal)
                 || asset.Contains("gml_Object_Rod_Other_10", StringComparison.Ordinal))
             && hunk.Kind == "list" && hunk.KeepBoth is not null
@@ -1257,10 +1282,14 @@ internal static partial class LegacyUpgradeRelocation
     }
 
     private static bool IsExpressionEnd(IReadOnlyList<GmlReferences.Token> tokens, int nextIndex) =>
-        nextIndex >= tokens.Count || tokens[nextIndex].Value is (";" or ")" or "," or "}" or "]" or "&&" or "||" or "and" or "or");
+        nextIndex >= tokens.Count
+        || tokens[nextIndex].Value is (";" or ")" or "," or "}" or "]" or "&&" or "||" or "and" or "or")
+        || (nextIndex + 1 < tokens.Count && tokens[nextIndex].Value is ("&" or "|") && tokens[nextIndex + 1].Value == tokens[nextIndex].Value);
 
     private static bool IsExpressionStart(IReadOnlyList<GmlReferences.Token> tokens, int prevIndex) =>
-        prevIndex < 0 || tokens[prevIndex].Value is ("(" or "{" or ";" or "," or "&&" or "||" or "and" or "or" or "!" or "if" or "else" or "while" or "return");
+        prevIndex < 0
+        || tokens[prevIndex].Value is ("(" or "{" or ";" or "," or "&&" or "||" or "and" or "or" or "!" or "if" or "else" or "while" or "return")
+        || (prevIndex > 0 && tokens[prevIndex].Value is ("&" or "|") && tokens[prevIndex - 1].Value == tokens[prevIndex].Value);
 
     private static int CountLines(string text)
     {

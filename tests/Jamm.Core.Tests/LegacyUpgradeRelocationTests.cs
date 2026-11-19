@@ -274,6 +274,124 @@ public sealed class LegacyUpgradeRelocationTests
         }
     }
 
+    [Fact]
+    public void CollidingEffectSlotsAbove21MoveInUniqueHunksAndUnionInitWhileSharedAndVanillaStayUntouched()
+    {
+        const string rodOtherBase =
+            "upgrades[20] = 0;\nupgrades[21] = 0;\nattract[0] = 0;\n" +
+            "switch (UpgradeData.upg[rod_id, i])\n{\n    case 17:\n        upgrades[21] = 1;\n        break;\n}\n";
+        const string rodStepBase = "if (!rodDataLoaded) { rodDataLoaded = 1; }\nswitch (state)\n{\n    case 0:\n        break;\n}\n";
+        const string cardOtherBase = "switch (card_id)\n{\n    case 0:\n        break;\n}\n";
+        const string sharedStepInsert =
+            "if (!rodDataLoaded) { rodDataLoaded = 1; }\n" +
+            "if (CatalogData.count[1, 42] > 0 && unlocked == 0)\n{\n    if (upgrades[22] < 1)\n    {\n        UnlockUpgrade(18);\n    }\n}\n" +
+            "switch (state)\n{\n    case 0:\n        break;\n}\n";
+
+        // Zoom (ModA, kept at upgrade 18) uses effect slot 22 in unique hunks and vanilla slot 17.
+        var zoom = Patch("ModA",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Zoom\";\n"),
+            ("gml_Object_Rod_Other_10", rodOtherBase,
+                "upgrades[20] = 0;\nupgrades[21] = 0;\nupgrades[22] = 0;\nattract[0] = 0;\n" +
+                "switch (UpgradeData.upg[rod_id, i])\n{\n    case 17:\n        upgrades[21] = 1;\n        break;\n}\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, sharedStepInsert),
+            ("gml_Object_UpgradeCard_Other_10", cardOtherBase,
+                "switch (card_id)\n{\n    case 0:\n        break;\n    case 18:\n        if (array_length_1d(Rod.upgrades) > 17 && Rod.upgrades[17]) { allowPurchase = 0; }\n" +
+                "        if (array_length_1d(Rod.upgrades) > 22 && Rod.upgrades[22]) { allowPurchase = 0; }\n" +
+                "        if (array_length_1d(Rod.upgrades) >= 23 && 22 < array_length_1d(Rod.upgrades) && 23 <= array_length_1d(Rod.upgrades)) { Rod.upgrades[22] = 1; }\n        break;\n}\n"));
+
+        // Bulbguard (ModB, relocated from upgrade 18 -> 19) also uses effect slot 22 in unique hunks AND shares upgrades[22] = 0; + Rod_Step_0.
+        var bulbguard = Patch("ModB",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Bulbguard\";\n"),
+            ("gml_Object_Rod_Other_10", rodOtherBase,
+                "upgrades[20] = 0;\nupgrades[21] = 0;\nupgrades[22] = 0;\nattract[0] = 0;\n" +
+                "switch (UpgradeData.upg[rod_id, i])\n{\n    case 17:\n        upgrades[21] = 1;\n        break;\n    case 18:\n        upgrades[22] = 1;\n        break;\n}\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, sharedStepInsert),
+            ("gml_Object_UpgradeCard_Other_10", cardOtherBase,
+                "switch (card_id)\n{\n    case 0:\n        break;\n    case 18:\n        if (array_length_1d(Rod.upgrades) > 22 && Rod.upgrades[22]) { allowPurchase = 0; }\n" +
+                "        if (array_length_1d(Rod.upgrades) >= 23 && Rod.upgrades[21] == 0) { allowPurchase = 0; }\n        break;\n}\n"),
+            ("gml_Object_Lightbulb_Create_0", "lit = 0;\n", "lit = 0;\nif (Rod.upgrades[22] == 1 && Rod.upgrades[21] == 0) { lit = 1; }\n"));
+
+        // Unrelated third mod already uses slot 24, so next free effect slot across all mods is 25.
+        var unrelated = Patch("ModC",
+            ("gml_Object_OtherMod_Step_0", "x = 0;\n", "x = 0;\nif (Rod.upgrades[24] > 0) { x = 1; }\n"));
+
+        var report = ConflictAnalyzer.Analyze([zoom, bulbguard, unrelated]);
+        string allFindings = string.Join("\n", report.Findings.Select(f => $"{f.Severity} {f.Kind} {f.Asset}: {f.Message}"));
+        Assert.True(report.Findings.Any(f => f.Severity == "INFO" && f.Kind == "relocation"
+            && f.Message.Contains("[CGF-RELOCATE-004] Effect slot Rod.upgrades[22] of \"Bulbguard\" (ModB) moved to 25 (also used by \"Zoom\" (ModA))", StringComparison.Ordinal)),
+            allFindings);
+        Assert.DoesNotContain(report.Findings, f => f.Severity == "CONFLICT" && f.Asset == "gml_Object_Rod_Other_10");
+        Assert.DoesNotContain(report.Findings, f => f.Severity == "CONFLICT" && f.Asset == "gml_Object_UpgradeCard_Other_10");
+
+        var plan = BuildPlan.Create([zoom, bulbguard, unrelated]);
+        string rodOther = plan.Assets.Single(a => a.Name == "gml_Object_Rod_Other_10").Gml!;
+        string rodStep = plan.Assets.Single(a => a.Name == "gml_Object_Rod_Step_0").Gml!;
+        string cardOther = plan.Assets.Single(a => a.Name == "gml_Object_UpgradeCard_Other_10").Gml!;
+        string lightbulb = plan.Assets.Single(a => a.Name == "gml_Object_Lightbulb_Create_0").Gml!;
+
+        // Vanilla slots <= 21 never move.
+        Assert.Contains("upgrades[21] = 1;", rodOther);
+        Assert.Contains("Rod.upgrades[21] == 0", cardOther);
+        Assert.Contains("Rod.upgrades[21] == 0", lightbulb);
+        Assert.Contains("array_length_1d(Rod.upgrades) > 17 && Rod.upgrades[17]", cardOther);
+
+        // Shared hunk in Rod_Step_0 stays untouched.
+        Assert.Contains("if (upgrades[22] < 1)", rodStep);
+        Assert.DoesNotContain("upgrades[25]", rodStep);
+
+        // Relocated Bulbguard init and unique hunks move 22 -> 25 (and >= 23 -> >= 26), while Zoom stays on 22.
+        Assert.Contains("upgrades[22] = 0;", rodOther);
+        Assert.Contains("upgrades[25] = 0;", rodOther);
+        Assert.Contains("case 19:\n        upgrades[25] = 1;", rodOther);
+        Assert.Contains("case 18:\n        if (array_length_1d(Rod.upgrades) > 17", cardOther);
+        Assert.Contains("array_length_1d(Rod.upgrades) > 22 && Rod.upgrades[22]", cardOther);
+        Assert.Contains("array_length_1d(Rod.upgrades) >= 23", cardOther);
+        Assert.Contains("22 < array_length_1d(Rod.upgrades) && 23 <= array_length_1d(Rod.upgrades)", cardOther);
+        Assert.Contains("case 19:\n        if (array_length_1d(Rod.upgrades) > 25 && Rod.upgrades[25])", cardOther);
+        Assert.Contains("array_length_1d(Rod.upgrades) >= 26", cardOther);
+        Assert.Contains("Rod.upgrades[25] == 1", lightbulb);
+
+        Assert.Contains(plan.Decisions, d =>
+            d.StartsWith("[CGF-RELOCATE-004] Effect slot Rod.upgrades[22] of \"Bulbguard\" (ModB) moved to 25 (also used by \"Zoom\" (ModA)); rewrote ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void NonCollidingEffectSlotStaysUntouchedAndDynamicIndexNearKFailsClosed()
+    {
+        const string cardOtherBase = "switch (card_id)\n{\n    case 0:\n        break;\n}\n";
+
+        // 1. Disjoint effect slots (ModA uses 22, ModB uses 23): no collision -> no CGF-RELOCATE-004.
+        var alpha = Patch("Alpha",
+            (Create, BaseCreate, BaseCreate + "\nname[18] = \"Alpha\";\n"),
+            ("gml_Object_UpgradeCard_Other_10", cardOtherBase,
+                "switch (card_id)\n{\n    case 0:\n        break;\n    case 18:\n        Rod.upgrades[22] = 1;\n        break;\n}\n"));
+        var betaDisjoint = Patch("Beta",
+            (Create, BaseCreate, BaseCreate + "\nname[18] = \"Beta\";\n"),
+            ("gml_Object_UpgradeCard_Other_10", cardOtherBase,
+                "switch (card_id)\n{\n    case 0:\n        break;\n    case 18:\n        Rod.upgrades[23] = 1;\n        break;\n}\n"));
+
+        var disjointPlan = BuildPlan.Create([alpha, betaDisjoint]);
+        Assert.DoesNotContain(disjointPlan.Decisions, d => d.Contains("[CGF-RELOCATE-004]", StringComparison.Ordinal));
+        Assert.Contains("Rod.upgrades[23] = 1;", disjointPlan.Assets.Single(a => a.Name == "gml_Object_UpgradeCard_Other_10").Gml!);
+
+        // 2. Colliding effect slot 22 with a dynamic index near 22 fails closed with WARNING and leaves slot 22 untouched.
+        var betaDynamic = Patch("BetaDyn",
+            (Create, BaseCreate, BaseCreate + "\nname[18] = \"BetaDyn\";\n"),
+            ("gml_Object_UpgradeCard_Other_10", cardOtherBase,
+                "switch (card_id)\n{\n    case 0:\n        break;\n    case 18:\n        if (Rod.upgrades[22]) { allowPurchase = 0; }\n        break;\n}\n"),
+            ("gml_Object_Helper_Step_0", "x = 0;\n", "x = 0;\nvar eff = 22;\nRod.upgrades[eff] = 1;\n"));
+
+        var dynReport = ConflictAnalyzer.Analyze([alpha, betaDynamic]);
+        Assert.Contains(dynReport.Findings, f => f.Severity == "WARNING" && f.Kind == "relocation" && f.Asset == "upgrade-slot"
+            && f.Message.Contains("effect slot Rod.upgrades[22]", StringComparison.Ordinal));
+
+        var dynPlan = BuildPlan.Create([alpha, betaDynamic]);
+        Assert.Contains(dynPlan.Decisions, d => d.Contains("[CGF-RELOCATE-003]", StringComparison.Ordinal));
+        Assert.Contains(dynPlan.Decisions, d => d.StartsWith("WARNING: effect slot Rod.upgrades[22]", StringComparison.Ordinal));
+        Assert.DoesNotContain(dynPlan.Decisions, d => d.Contains("[CGF-RELOCATE-004]", StringComparison.Ordinal));
+        Assert.Contains("Rod.upgrades[eff] = 1;", dynPlan.Assets.Single(a => a.Name == "gml_Object_Helper_Step_0").Gml!);
+    }
+
     private static void WriteSyntheticArchive(string path, int iconFrameCount, byte? frame19Colour, (string Name, string HookObject, string HelperCode)? extraUpgradeCode)
     {
         using var data = UndertaleData.CreateNew();
