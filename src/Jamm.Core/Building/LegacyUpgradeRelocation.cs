@@ -28,16 +28,17 @@ internal static partial class LegacyUpgradeRelocation
     internal sealed record Result(
         ModPatch[] Patches,
         IReadOnlyList<string> Decisions,
-        IReadOnlyList<UpgradeIconRelocation> IconRelocations);
+        IReadOnlyList<UpgradeIconRelocation> IconRelocations,
+        IReadOnlyList<SharedUnlockHunk> SharedUnlocks);
 
     internal static Result Prepare(IReadOnlyList<ModPatch> source)
     {
         ModPatch[] patches = source.ToArray();
         string? ancestor = patches.Select(p => Create(p)?.BaseCode?.Text).FirstOrDefault(t => t is not null);
-        if (ancestor is null) return new(patches, [], []);
+        if (ancestor is null) return new(patches, [], [], []);
 
         var baseUpgrades = ReadBaseUpgrades(ancestor);
-        if (baseUpgrades.Count == 0) return new(patches, [], []);
+        if (baseUpgrades.Count == 0) return new(patches, [], [], []);
 
         var modUpgrades = new Dictionary<int, Upgrade>[patches.Length];
         var claims = new Upgrade[patches.Length][];
@@ -59,6 +60,7 @@ internal static partial class LegacyUpgradeRelocation
 
         List<string> decisions = [];
         List<UpgradeIconRelocation> iconRelocations = [];
+        List<SharedUnlockHunk> sharedUnlocks = [];
         int maxClaimSlot = claims.SelectMany(c => c).Select(u => u.Slot).DefaultIfEmpty(-1).Max();
         HashSet<int> baseEffectSlots = FindBaseEffectSlots(patches);
         int nextEffectSlot = Math.Max(VanillaMaxEffectSlot, FindMaxEffectSlotAcrossAllMods(patches)) + 1;
@@ -72,7 +74,7 @@ internal static partial class LegacyUpgradeRelocation
             if (contenders.Select(c => c.Upgrade.Identity).Distinct(StringComparer.Ordinal).Count() < 2)
                 continue;
 
-            var uniqueLinesByMod = ComputeUniqueLines(patches, contenders.Select(c => (c.Mod, c.Upgrade.Identity)).ToArray());
+            var (uniqueLinesByMod, sharedHunks) = ComputeUniqueLines(patches, contenders.Select(c => (c.Mod, c.Upgrade.Identity)).ToArray());
             var currentUniqueEffectSlotsByMod = contenders.ToDictionary(
                 c => c.Mod,
                 c => CollectUniqueEffectSlots(patches[c.Mod], uniqueLinesByMod[c.Mod], baseEffectSlots));
@@ -141,6 +143,15 @@ internal static partial class LegacyUpgradeRelocation
                     currentUniqueEffectSlotsByMod,
                     ref nextEffectSlot,
                     decisions);
+
+                CollectSharedUnlockHunksForGroup(
+                    sharedHunks,
+                    slot,
+                    target,
+                    identityGroup.Key,
+                    keptMod,
+                    pending.Select(p => p.Mod).ToArray(),
+                    sharedUnlocks);
             }
         }
 
@@ -150,7 +161,7 @@ internal static partial class LegacyUpgradeRelocation
                 patches[m] = NormalizeUpgradeBounds(patches[m], highestAllocated);
         }
 
-        return new(patches, decisions, iconRelocations);
+        return new(patches, decisions, iconRelocations, sharedUnlocks);
     }
 
     private static AssetPatch? Create(ModPatch patch) =>
@@ -229,11 +240,12 @@ internal static partial class LegacyUpgradeRelocation
         return upgrades;
     }
 
-    private static Dictionary<int, Dictionary<string, HashSet<int>>> ComputeUniqueLines(
+    private static (Dictionary<int, Dictionary<string, HashSet<int>>> UniqueLines, List<ContenderSharedHunk> SharedHunks) ComputeUniqueLines(
         IReadOnlyList<ModPatch> patches,
         IReadOnlyList<(int Mod, string Identity)> contenders)
     {
         var result = contenders.ToDictionary(c => c.Mod, _ => new Dictionary<string, HashSet<int>>(StringComparer.Ordinal));
+        List<ContenderSharedHunk> sharedHunks = [];
         var entriesByMod = contenders.ToDictionary(c => c.Mod, c =>
         {
             var code = patches[c.Mod].Changes.GetValueOrDefault("code");
@@ -250,6 +262,16 @@ internal static partial class LegacyUpgradeRelocation
             if (firstAsset.BaseCode is null)
             {
                 // Added code entry: shared if byte-identical to any distinct-identity contender's added entry.
+                var addedGml = participants
+                    .Select(p => (Participant: p, Gml: entriesByMod[p.Mod][entryName].ModCode))
+                    .Where(x => x.Gml is { Format: "gml" })
+                    .Select(x => (x.Participant, Norm: LineDiff.Normalize(x.Gml!.Text)))
+                    .ToArray();
+                foreach (var group in addedGml.GroupBy(x => x.Norm, StringComparer.Ordinal))
+                {
+                    if (group.Select(x => x.Participant.Identity).Distinct(StringComparer.Ordinal).Count() >= 2)
+                        sharedHunks.Add(new(entryName, group.Select(x => x.Participant.Mod).ToHashSet(), IsAdded: true, 0, 0, group.Key));
+                }
                 foreach (var p in participants)
                 {
                     var asset = entriesByMod[p.Mod][entryName];
@@ -277,6 +299,16 @@ internal static partial class LegacyUpgradeRelocation
                     LineDiff.Normalize(entriesByMod[p.Mod][entryName].ModCode!.Text)))
                 .ToArray();
             var merge = ThreeWayMerge.Merge(ancestor, versions);
+
+            foreach (var hunk in merge.Hunks)
+            {
+                foreach (var textGroup in hunk.Versions.GroupBy(v => v.Text, StringComparer.Ordinal))
+                {
+                    var mods = textGroup.Select(v => int.Parse(v.Name, CultureInfo.InvariantCulture)).ToHashSet();
+                    if (mods.Select(m => contenders.First(c => c.Mod == m).Identity).Distinct(StringComparer.Ordinal).Count() >= 2)
+                        sharedHunks.Add(new(entryName, mods, IsAdded: false, hunk.Start, hunk.Length, textGroup.Key));
+                }
+            }
 
             foreach (var p in gmlParticipants)
             {
@@ -310,7 +342,7 @@ internal static partial class LegacyUpgradeRelocation
                 result[p.Mod][entryName] = unique;
             }
         }
-        return result;
+        return (result, sharedHunks);
     }
 
     private static int ChooseKeptMod(

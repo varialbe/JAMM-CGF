@@ -148,6 +148,23 @@ public static class ConflictAnalyzer
             }
             if (merge.Hunks.Any(h => h.Versions.Count == 1))
                 findings.Add(new("AUTO", "code", "code", asset, versions.Select(v => names[v.Mod]).ToArray(), "Non-overlapping code hunks are retained automatically in the merge preview."));
+            var sharedUnlockCandidates = relocation.SharedUnlocks.Where(s => s.CodeEntry == asset).ToArray();
+            if (sharedUnlockCandidates.Length > 0)
+            {
+                string ancestorText = versions[0].Added ? "" : LineDiff.Normalize(entries[0].BaseCode!.Text);
+                string[] ancestorSplit = ancestorText.Split('\n');
+                string[] ancestorLines = ancestorText.Length == 0 ? [] : ancestorSplit.Select((s, i) => i < ancestorSplit.Length - 1 ? s + "\n" : s).Where(s => s.Length > 0).ToArray();
+                foreach (var hunk in merge.Hunks.Where(h => h.Status != "CONFLICT" && h.Versions.Count > 1))
+                {
+                    int[] activeMods = hunk.Versions.Select(v => Array.IndexOf(names, v.Name)).Where(i => i >= 0).ToArray();
+                    string hunkText = hunk.Versions[^1].Text;
+                    foreach (var su in sharedUnlockCandidates)
+                    {
+                        if (Building.LegacyUpgradeRelocation.HunkMatchesSharedUnlock(su, asset, versions[0].Added, hunk, hunkText, activeMods, ancestorLines, out _, out _))
+                            findings.Add(new("INFO", "relocation", "code", "upgrade-slot", names, Building.LegacyUpgradeRelocation.SharedUnlockDecision(su)));
+                    }
+                }
+            }
             // Counts/parent/children and the semantic snapshot remain independent of text.
             CompareFields("code", asset, versions, metadata: true);
         }

@@ -40,6 +40,11 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         string[] names = patches.Select(p => p.Mod.Name ?? Path.GetFileNameWithoutExtension(p.Mod.FileName)).ToArray();
         if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
             throw new ArgumentException("Build mod names must be unique. Relabel duplicate names with diff --name.");
+        var modIndexByName = Enumerable.Range(0, names.Length).ToDictionary(i => names[i], i => i, StringComparer.Ordinal);
+        var sharedUnlocksByEntry = relocation.SharedUnlocks
+            .GroupBy(s => s.CodeEntry, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<SharedUnlockHunk>)g.ToArray(), StringComparer.Ordinal);
+        HashSet<(string CodeEntry, int OldSlot, int NewSlot, string UpgradeName)> emittedSharedUnlocks = [];
         List<string> decisions = [];
         decisions.AddRange(relocation.Decisions);
         if (catalog.Mapping.Length > 0)
@@ -288,7 +293,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                     ?? throw new InvalidDataException($"Missing GML for '{name}'. Regenerate the patch."))).ToArray();
                 MergeResult merge = ordered[0].Asset!.BaseCode is { Format: "gml" } ancestor
                     ? ThreeWayMerge.Merge(ancestor.Text, texts) : ThreeWayMerge.Added(texts);
-                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", effectiveResolutions, used, decisions, discardedHunks);
+                bool isAddedCode = ordered[0].Asset!.BaseCode is not { Format: "gml" };
+                IReadOnlyList<SharedUnlockHunk> entrySharedUnlocks = sharedUnlocksByEntry.GetValueOrDefault(name) ?? [];
+                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", effectiveResolutions, used, decisions, discardedHunks, isAddedCode, entrySharedUnlocks, modIndexByName, emittedSharedUnlocks);
             }
             else if (choice == "keep-both") throw new ArgumentException($"keep-both is only valid for code insertion conflicts ('{family}/{name}').");
             return new(family, name, last.Index, last.Asset, snapshot, gml);
@@ -317,11 +324,13 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
 
     private static string ResolveCode(string ancestor, MergeResult merge, string? choice, string asset,
         IReadOnlyDictionary<string, string> resolutions, HashSet<string> used, List<string> decisions,
-        List<DiscardedHunk> discardedHunks)
+        List<DiscardedHunk> discardedHunks, bool isAddedCode, IReadOnlyList<SharedUnlockHunk> entrySharedUnlocks,
+        IReadOnlyDictionary<string, int> modIndexByName,
+        HashSet<(string CodeEntry, int OldSlot, int NewSlot, string UpgradeName)> emittedSharedUnlocks)
     {
         if (choice == "keep-both" && (!merge.HasConflicts || merge.Hunks.Any(h => h.Status == "CONFLICT" && h.KeepBoth is null && !resolutions.ContainsKey($"{asset}#{h.Start}"))))
             throw new ArgumentException("keep-both requires only list/insertion conflicts in the selected code entry. Choose a mod for overlapping replacements.");
-        if (!merge.HasConflicts) return merge.Text;
+        if (!merge.HasConflicts && entrySharedUnlocks.Count == 0) return merge.Text;
         string[] split = ancestor.Split('\n');
         string[] lines = ancestor.Length == 0 ? [] : split.Select((s, i) => i < split.Length - 1 ? s + "\n" : s).Where(s => s.Length > 0).ToArray();
         StringBuilder text = new();
@@ -343,23 +352,49 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             bool catalogUnion = asset.StartsWith("code/gml_Object_CatalogData_", StringComparison.Ordinal)
                 && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null && CatalogMerge.DisjointWrites(hunk.Versions.Select(v => v.Text));
             string? slotUnion = LegacySlotRelocation.SlotUnion(asset, hunk);
+            string hunkText;
+            int[] activeMods;
             if (slotUnion is not null)
             {
-                text.Append(slotUnion);
+                hunkText = slotUnion;
+                activeMods = hunk.Versions.Select(v => modIndexByName[v.Name]).Distinct().ToArray();
             }
             else if (hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion))
             {
-                text.Append(hunk.KeepBoth);
+                hunkText = hunk.KeepBoth!;
+                activeMods = hunk.Versions.Select(v => modIndexByName[v.Name]).Distinct().ToArray();
             }
             else
             {
                 var winner = hunk.Versions.LastOrDefault(v => v.Name == hunkChoice) ?? hunk.Versions[^1];
-                text.Append(winner.Text);
+                hunkText = winner.Text;
+                activeMods = hunk.Versions
+                    .Where(v => string.Equals(v.Text, winner.Text, StringComparison.Ordinal))
+                    .Select(v => modIndexByName[v.Name])
+                    .Distinct()
+                    .ToArray();
                 if (hunk.Status == "CONFLICT")
                     foreach (var version in hunk.Versions)
                         if (version.Name != winner.Name && !string.Equals(version.Text, winner.Text, StringComparison.Ordinal))
                             discardedHunks.Add(new(version.Name, entryName, hunk.Start + 1, winner.Name));
             }
+            if (entrySharedUnlocks.Count > 0)
+            {
+                hunkText = LegacyUpgradeRelocation.ApplySharedUnlocksToHunk(
+                    entryName,
+                    isAddedCode,
+                    hunk,
+                    hunkText,
+                    activeMods,
+                    lines,
+                    entrySharedUnlocks,
+                    su =>
+                    {
+                        if (emittedSharedUnlocks.Add((su.CodeEntry, su.OldSlot, su.NewSlot, su.UpgradeName)))
+                            decisions.Add(LegacyUpgradeRelocation.SharedUnlockDecision(su));
+                    });
+            }
+            text.Append(hunkText);
             cursor = hunk.Start + hunk.Length;
         }
         return text.Append(string.Concat(lines[cursor..])).ToString();

@@ -32,7 +32,7 @@ public sealed class LegacyUpgradeRelocationTests
         // ModA (earlier) has a shared hunk in Rod_Step_0 PLUS a unique hunk in Camera_Step_0.
         // ModB (later) has ONLY the shared hunk in Rod_Step_0 -> ModB is the lineage origin, so ModA relocates 18 -> 19!
         const string rodStepBase = "if (state == 0) { angle = 0; }\n";
-        const string sharedRodHunk = "if (state == 0) { angle = 0; }\nif (UnlockCondition) { UnlockUpgrade(18); }\n";
+        const string sharedRodHunk = "if (state == 0) { angle = 0; }\nif (UnlockCondition) { UnlockUpgrade(18); }\nif (UpgradeData.upg[0, 0] == 18) { angle = 1; }\n";
         const string cameraBase = "zoom = 1;\n";
         const string uniqueCameraHunk = "zoom = 1;\nif (UpgradeData.upg[Rod.rod_id, 0] == 18) { zoom = 2; }\n";
 
@@ -57,10 +57,15 @@ public sealed class LegacyUpgradeRelocationTests
         Assert.Contains("cost[19] = 0.7;", create);
         Assert.Contains("for (i = 0; i <= 19; i++)", create);
         Assert.Contains("UnlockUpgrade(18);", rodStep);
-        Assert.DoesNotContain("UnlockUpgrade(19);", rodStep);
+        Assert.Contains("if (!UpgradeData.unlocks[19]) { UnlockUpgrade(19); }", rodStep);
+        Assert.Single(rodStep.Split("UnlockUpgrade(19)", StringSplitOptions.None)[1..]);
+        Assert.Contains("UpgradeData.upg[0, 0] == 18", rodStep);
+        Assert.DoesNotContain("UpgradeData.upg[0, 0] == 19", rodStep);
         Assert.Contains("UpgradeData.upg[Rod.rod_id, 0] == 19", camera);
         Assert.Contains(plan.Decisions, d =>
             d.Contains("[CGF-RELOCATE-003] Upgrade \"Derived\" (ModA) moved from slot 18 to 19", StringComparison.Ordinal));
+        Assert.Contains(plan.Decisions, d =>
+            d == "[CGF-RELOCATE-005] Shared unlock of upgrade 18 in gml_Object_Rod_Step_0 also unlocks relocated \"Derived\" (19).");
         Assert.DoesNotContain(plan.Assets, a => a.Gml?.Contains("<<<<<<<", StringComparison.Ordinal) == true);
     }
 
@@ -392,7 +397,136 @@ public sealed class LegacyUpgradeRelocationTests
         Assert.Contains("Rod.upgrades[eff] = 1;", dynPlan.Assets.Single(a => a.Name == "gml_Object_Helper_Step_0").Gml!);
     }
 
-    private static void WriteSyntheticArchive(string path, int iconFrameCount, byte? frame19Colour, (string Name, string HookObject, string HelperCode)? extraUpgradeCode)
+    [Fact]
+    public void SharedUnlockGuardedOnceUniqueHunksUnaffectedAndNoRelocationNoChange()
+    {
+        const string rodStepBase = "if (!rodDataLoaded)\n{\n    rodDataLoaded = 1;\n}\n";
+        const string sharedRodStep =
+            "if (!rodDataLoaded)\n{\n    rodDataLoaded = 1;\n}\n" +
+            "if (CatalogData.count[1, 42] > 0)\n{\n    UnlockUpgrade(18);\n    upgrade_was_purchased(18);\n}\n";
+        const string boatBase = "x = 0;\n";
+        const string helperBase = "y = 0;\n";
+
+        // 1. Shared hunk unlock duplicated once with guard; unique hunks in kept and moved mods unaffected by 005.
+        var kept = Patch("Zoom",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Zoom\";\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, sharedRodStep),
+            ("gml_Object_BoatData_Step_0", boatBase, "x = 0;\nif (!UpgradeData.unlocks[18])\n{\n    UnlockUpgrade(18);\n}\n"));
+        var moved = Patch("Bulbguard",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Bulbguard\";\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, sharedRodStep),
+            ("gml_Object_Helper_Step_0", helperBase, "y = 0;\nUnlockUpgrade(18);\n"));
+
+        var plan = BuildPlan.Create([kept, moved]);
+        string rodStep = plan.Assets.Single(a => a.Name == "gml_Object_Rod_Step_0").Gml!;
+        string boatStep = plan.Assets.Single(a => a.Name == "gml_Object_BoatData_Step_0").Gml!;
+        string helperStep = plan.Assets.Single(a => a.Name == "gml_Object_Helper_Step_0").Gml!;
+
+        Assert.Contains("    UnlockUpgrade(18);\n    if (!UpgradeData.unlocks[19])\n    {\n        UnlockUpgrade(19);\n    }\n", rodStep);
+        Assert.Equal(1, CountOccurrences(rodStep, "UnlockUpgrade(19)"));
+        // upgrade_was_purchased is a purchase callback, not an unlock call.
+        Assert.Contains("upgrade_was_purchased(18);", rodStep);
+        Assert.DoesNotContain("upgrade_was_purchased(19)", rodStep);
+
+        // Unique hunks stay single-target (18 in kept mod, 19 in moved mod).
+        Assert.Contains("UnlockUpgrade(18);", boatStep);
+        Assert.DoesNotContain("19", boatStep);
+        Assert.Contains("UnlockUpgrade(19);", helperStep);
+        Assert.DoesNotContain("18", helperStep);
+        Assert.Equal(1, CountOccurrences(helperStep, "UnlockUpgrade(19)"));
+
+        Assert.Contains(plan.Decisions, d =>
+            d == "[CGF-RELOCATE-005] Shared unlock of upgrade 18 in gml_Object_Rod_Step_0 also unlocks relocated \"Bulbguard\" (19).");
+
+        // 2. Idempotence: if the shared hunk already carries the guarded 19 unlock right after 18, do not duplicate it.
+        const string alreadyGuardedRodStep =
+            "if (!rodDataLoaded)\n{\n    rodDataLoaded = 1;\n}\n" +
+            "if (CatalogData.count[1, 42] > 0)\n{\n    UnlockUpgrade(18);\n    if (!UpgradeData.unlocks[19])\n    {\n        UnlockUpgrade(19);\n    }\n}\n";
+        var keptIdem = Patch("Zoom",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Zoom\";\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, alreadyGuardedRodStep));
+        var movedIdem = Patch("Bulbguard",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Bulbguard\";\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, alreadyGuardedRodStep),
+            ("gml_Object_Helper_Step_0", helperBase, "y = 0;\nUnlockUpgrade(18);\n"));
+        var idemPlan = BuildPlan.Create([keptIdem, movedIdem]);
+        string idemRodStep = idemPlan.Assets.Single(a => a.Name == "gml_Object_Rod_Step_0").Gml!;
+        Assert.Equal(1, CountOccurrences(idemRodStep, "UnlockUpgrade(19)"));
+        Assert.DoesNotContain(idemPlan.Decisions, d => d.Contains("[CGF-RELOCATE-005]", StringComparison.Ordinal));
+
+        // 3. When an overriding third mod replaces the shared hunk so the merged result does not contain it, 005 does not fire.
+        var overrider = Patch("Overrider",
+            ("gml_Object_Rod_Step_0", rodStepBase, "if (!rodDataLoaded)\n{\n    rodDataLoaded = 1;\n}\nstate = 1;\n"));
+        var overriddenPlan = BuildPlan.Create([kept, moved, overrider]);
+        string overriddenRodStep = overriddenPlan.Assets.Single(a => a.Name == "gml_Object_Rod_Step_0").Gml!;
+        Assert.DoesNotContain("UnlockUpgrade(19)", overriddenRodStep);
+        Assert.DoesNotContain(overriddenPlan.Decisions, d => d.Contains("[CGF-RELOCATE-005]", StringComparison.Ordinal));
+
+        // 4. No relocation (same upgrade identity or disjoint slots) -> no change, no CGF-RELOCATE-005.
+        var sameA = Patch("SameA",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Shared\";\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, sharedRodStep));
+        var sameB = Patch("SameB",
+            (Create, BaseCreate, BaseCreate.Replace("i <= 17", "i <= 18", StringComparison.Ordinal) + "\nname[18] = \"Shared\";\n"),
+            ("gml_Object_Rod_Step_0", rodStepBase, sharedRodStep));
+        var samePlan = BuildPlan.Create([sameA, sameB]);
+        string sameRodStep = samePlan.Assets.Single(a => a.Name == "gml_Object_Rod_Step_0").Gml!;
+        Assert.Equal(1, CountOccurrences(sameRodStep, "UnlockUpgrade(18)"));
+        Assert.DoesNotContain("UnlockUpgrade(19)", sameRodStep);
+        Assert.DoesNotContain(samePlan.Decisions, d => d.Contains("[CGF-RELOCATE-005]", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SyntheticArchivesSharedUnlockPassesCompileAndSemanticVerification()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string alphaPath = temp.PathFor("alpha.win");
+        string betaPath = temp.PathFor("beta.win");
+
+        const string sharedRod = "if (1) { UnlockUpgrade(18); }";
+        WriteSyntheticArchive(basePath, iconFrameCount: 19, frame19Colour: null, extraUpgradeCode: null, rodStepCode: "var ready = 1;");
+        WriteSyntheticArchive(alphaPath, iconFrameCount: 20, frame19Colour: 111,
+            extraUpgradeCode: ("Zoom", "AlphaHook", "if (!UpgradeData.unlocks[18]) { UnlockUpgrade(18); }"),
+            rodStepCode: "var ready = 1;\n" + sharedRod);
+        WriteSyntheticArchive(betaPath, iconFrameCount: 20, frame19Colour: 222,
+            extraUpgradeCode: ("Bulbguard", "BetaHook", "if (!UpgradeData.unlocks[18]) { UnlockUpgrade(18); }"),
+            rodStepCode: "var ready = 1;\n" + sharedRod);
+
+        using var original = GameFileLoader.Load(basePath);
+        using var alphaMod = GameFileLoader.Load(alphaPath);
+        using var betaMod = GameFileLoader.Load(betaPath);
+        var alphaPatch = PatchBuilder.Create(original, alphaMod, "Alpha");
+        var betaPatch = PatchBuilder.Create(original, betaMod, "Beta");
+
+        string mergedPath = temp.PathFor("merged.win");
+        var build = ArchiveBuilder.Build(basePath, [new(alphaPatch, alphaPath), new(betaPatch, betaPath)], mergedPath);
+        Assert.NotNull(build.Verification);
+        Assert.Contains(build.Plan.Decisions, d =>
+            d == "[CGF-RELOCATE-005] Shared unlock of upgrade 18 in gml_Object_Rod_Step_0 also unlocks relocated \"Bulbguard\" (19).");
+
+        using var merged = GameFileLoader.Load(mergedPath);
+        string rodStep = PatchBuilder.ReadCode(merged, "gml_Object_Rod_Step_0").Text;
+        Assert.Contains("UnlockUpgrade(18)", rodStep);
+        Assert.Contains("!UpgradeData.unlocks[19]", rodStep);
+        Assert.Equal(1, CountOccurrences(rodStep, "UnlockUpgrade(19)"));
+        Assert.Contains("UnlockUpgrade(18)", PatchBuilder.ReadCode(merged, "gml_Object_AlphaHook_Step_0").Text);
+        Assert.Contains("UnlockUpgrade(19)", PatchBuilder.ReadCode(merged, "gml_Object_BetaHook_Step_0").Text);
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        int count = 0, idx = 0;
+        while ((idx = text.IndexOf(value, idx, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += value.Length;
+        }
+        return count;
+    }
+
+    private static void WriteSyntheticArchive(string path, int iconFrameCount, byte? frame19Colour,
+        (string Name, string HookObject, string HelperCode)? extraUpgradeCode, string? rodStepCode = null)
     {
         using var data = UndertaleData.CreateNew();
         data.GeneralInfo.Major = 1;
@@ -400,6 +534,8 @@ public sealed class LegacyUpgradeRelocationTests
         data.GeneralInfo.BytecodeVersion = 16;
 
         data.GameObjects.Add(new() { Name = data.Strings.MakeString("UpgradeData") });
+        if (rodStepCode is not null)
+            data.GameObjects.Add(new() { Name = data.Strings.MakeString("Rod") });
         if (extraUpgradeCode is { } hook)
             data.GameObjects.Add(new() { Name = data.Strings.MakeString(hook.HookObject) });
 
@@ -454,6 +590,11 @@ public sealed class LegacyUpgradeRelocationTests
         var compiler = new CompileGroup(data);
         compiler.QueueCodeReplace(unlockCode, "UpgradeData.unlocks[argument0] = 1;");
         compiler.QueueCodeReplace(createCode, createGml);
+        if (rodStepCode is not null)
+        {
+            var rodCode = data.GameObjects.ByName("Rod")!.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data);
+            compiler.QueueCodeReplace(rodCode, rodStepCode);
+        }
         if (extraUpgradeCode is { } extraHook)
         {
             var helperCode = data.GameObjects.ByName(extraHook.HookObject)!.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data);
