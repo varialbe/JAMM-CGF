@@ -47,7 +47,8 @@ public static class ConflictAnalyzer
                     ? "upgrade-slot" : "boat-slot";
                 findings.Add(new("WARNING", "relocation", "code", target, names, decision));
             }
-            else if (decision.StartsWith("[CGF-RELOCATE-003]", StringComparison.Ordinal))
+            else if (decision.StartsWith("[CGF-RELOCATE-003]", StringComparison.Ordinal)
+                || decision.StartsWith("[CGF-RELOCATE-004]", StringComparison.Ordinal))
             {
                 findings.Add(new("INFO", "relocation", "code", "upgrade-slot", names, decision));
             }

@@ -198,7 +198,7 @@ internal static partial class LegacySlotRelocation
         return lines;
     }
 
-    [GeneratedRegex(@"^\s*(?:BoatData\.|UpgradeData\.)?[A-Za-z_][A-Za-z0-9_]*\s*\[\s*(\d+)\s*\]\s*=[^=]", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*(?:BoatData\.|UpgradeData\.|Rod\.)?[A-Za-z_][A-Za-z0-9_]*\s*\[\s*(\d+)\s*\]\s*=[^=]", RegexOptions.CultureInvariant)]
     private static partial Regex SlotWrite();
 
     private static string Name(ModPatch patch) => patch.Mod.Name ?? Path.GetFileNameWithoutExtension(patch.Mod.FileName);
