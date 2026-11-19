@@ -35,7 +35,15 @@ so no FPS numbers here; anything frame-rate related is marked "on the PC to veri
   guarded by `unlocks[19]`, so both upgrades stay obtainable.
 * **Asset names are IDs too** (new finding): TGE and Antiquity both add an object `Boat8` (different objects) — today Antiquity's
   wins and Echo-9 runs with the wrong boat object. Antiquity and cave-expansion both add `Dollfin` (small vs medium fish) —
-  the build aborts (`Catalog fish 'Dollfin' changes size category`). Task in progress (rename + remap, CGF-RELOCATE-002).
+  the build aborted (`Catalog fish 'Dollfin' changes size category`).
+  **CGF-RELOCATE-002** now renames the later claimant's asset (`Dollfin_jamm_cave`, `Boat8_jamm_antiquity`, …) and rewrites its
+  structured, GML and asset-index references; identical/clearly modified copies keep the old merge. Object lineage uses the
+  snapshot's event code names (TGE names events freely — the first version mistook TGE's Boat8 for codeless). Applied in `check`
+  too (INFO findings). All-6/all-7 packs: 10–13 assets renamed, boats on slots 8/9/10/11.
+* **Independent insertions**: two mods appending different blocks at one position (TGE + Colour in `ParticleSystems_Create_0`)
+  used to drop one → all-7 crashed (`water_drip not set`). Pure insertions with disjoint assigned variables and no cross reads are
+  now unioned automatically; explicit resolutions still win.
+* **Lures/rods/tools**: still last-mod-wins (TGE "Lantern" vs Cave "Giga Hook" on lure slot 6) — agent task in progress.
 
 ## In-game results (VPS, auto scene, full benchmark capture = no crash)
 
@@ -47,6 +55,9 @@ so no FPS numbers here; anything frame-rate related is marked "on the PC to veri
 | Public 5-pack (`Antiquity,PWB,Abyss,Colour,Verdant`) | ✅ | ✅ | not run* |
 | Heavy pack (`TGE,Antiquity,PWB`) | ✅ | ✅ | not run* |
 | Heavy pack with boat + upgrade relocation | ✅ | – | – |
+| **All 6 public mods** (`Antiquity,PWB,Abyss,Colour,Verdant,Cave`) — previously aborted (Dollfin) | ✅ | ✅ | not run* |
+| **All 7 mods** (+ TGE) before insertion union | CODE ERROR (`ParticleSystems.water_drip`) | – | – |
+| **All 7 mods** (`TGE,Antiquity,PWB,Abyss,Colour,Verdant,Cave`) | ✅ | ✅ | not run* |
 
 *The sonar runs were stopped by Claude Code because the VPS ran low on memory while three agents were building/testing in
 parallel; per policy they were not restarted automatically. To repeat: `~/jamm-night/bin/run.sh <build.win> <label> sonar 400`.
