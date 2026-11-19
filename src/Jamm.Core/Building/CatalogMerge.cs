@@ -8,6 +8,8 @@ namespace Jamm.Core.Building;
 /// <summary>A stable object identity and its source and merged catalog coordinates.</summary>
 public sealed record CatalogMapping(string Mod, string Object, int Area, int SourceSlot, int Slot);
 
+internal sealed record CatalogEntry(int Area, int Slot, string Object);
+
 /// <summary>Statically relocates legacy fish additions before ordinary GML conflict resolution.</summary>
 public static class CatalogMerge
 {
@@ -128,6 +130,11 @@ public static class CatalogMerge
         foreach (var pair in values) defaults[pair.Key] = pair.Value;
         return defaults;
     }
+
+    internal static IReadOnlyList<CatalogEntry> ReadEntries(string text) =>
+        Cells(text).Where(c => c.Field == "object")
+            .Select(c => new CatalogEntry(c.Area, c.Slot, ObjectName(c.Value)))
+            .ToArray();
 
     private static Dictionary<(int Area, int Slot), string> Objects(IEnumerable<Cell> cells) => cells.Where(c => c.Field == "object")
         .GroupBy(c => (c.Area, c.Slot)).ToDictionary(g => g.Key, g => g.Last().Value);

@@ -8,11 +8,19 @@ namespace Jamm.Core.Building;
 /// <summary>A selected semantic asset, with its verified payload source and optional merged GML.</summary>
 public sealed record PlannedAsset(string Family, string Name, int Source, AssetPatch? Patch, JsonElement? Snapshot, string? Gml);
 
+/// <summary>A conflict hunk from a mod that was discarded in favor of another version.</summary>
+public sealed record DiscardedHunk(string Mod, string CodeEntry, int Line, string Winner);
+
 /// <summary>Deterministic asset choices and human-readable decisions for a build.</summary>
 public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<string> Decisions)
 {
     /// <summary>Object identities and deterministic catalog relocations for this build.</summary>
     public IReadOnlyList<CatalogMapping> Catalog { get; init; } = [];
+
+    /// <summary>Code conflict hunks discarded during resolution.</summary>
+    public IReadOnlyList<DiscardedHunk> DiscardedHunks { get; init; } = [];
+
+    internal bool HasResolvedHunks { get; init; }
 
     /// <summary>Combines patches against one exact ancestor, resolving conflicts in load order.</summary>
     public static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions = null,
@@ -37,6 +45,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 foreach (string asset in family.Value.Removed)
                     decisions.Add($"INFO: retained {family.Key}/{asset} (removed by {names[i]}) so numeric indices stay valid");
         List<PlannedAsset> assets = [];
+        List<DiscardedHunk> discardedHunks = [];
         HashSet<string> used = new(StringComparer.Ordinal);
         var versions = patches.SelectMany((p, i) => p.Changes.SelectMany(c =>
             c.Value.Added.Concat(c.Value.Changed).Select(a => new Version(i, c.Key, a.Name, a))
@@ -129,6 +138,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 if (!requiredCode && (choices.ContainsKey((removed.Family, removed.Name)) || winner <= removed.Source)) continue;
                 var surviving = versions[(removed.Family, removed.Name)].Where(v => v.Asset is not null).ToList();
                 assets.Remove(removed);
+                if (removed.Family == "code") discardedHunks.RemoveAll(h => h.CodeEntry == removed.Name);
                 if (surviving.Count > 0) assets.Add(Select(removed.Family, removed.Name, surviving, null)!);
                 string reason = requiredCode ? $"surviving {references.First(r => r.Structured).Source}" : names[winner];
                 referenceChoices[(removed.Family, removed.Name)] = reason;
@@ -206,6 +216,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                     if (baselineIndex >= 0 && patches[baselineIndex].BaseAssets?.GetValueOrDefault(family)?.Contains(name, StringComparer.Ordinal) == true)
                     {
                         decisions.Add($"{family}/{name}: {choice} selects the unchanged base asset.");
+                        if (family == "code")
+                            foreach (var v in ordered.Where(v => v.Asset is not null))
+                                discardedHunks.Add(new(names[v.Index], name, 1, choice));
                         return null;
                     }
                     throw new ArgumentException($"Resolution for '{family}/{name}' selects '{choice}', which does not change this asset. Choose {string.Join(", ", ordered.Select(v => names[v.Index]))}.");
@@ -229,13 +242,20 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 }
                 if (family is "strings" or "variables" or "functions")
                 { decisions.Add($"INFO {family}/{name}: retain base definition; bytecode may reference it."); return null; }
+                if (family == "code")
+                    foreach (var v in ordered.Where(v => v.Asset is not null))
+                        discardedHunks.Add(new(names[v.Index], name, 1, names[last.Index]));
                 return new(family, name, last.Index, null, null, null);
             }
             // Indexed removals are ignored completely, including their position in edit history.
             // Code and other non-indexed deletions still reset their load-order history.
+            int lastRemoval = ordered.FindLastIndex(v => v.Asset is null);
+            if (!CgfAssetTypes.IndexedFamilies.Contains(family, StringComparer.Ordinal) && lastRemoval >= 0 && family == "code")
+                foreach (var v in ordered.Take(lastRemoval).Where(v => v.Asset is not null))
+                    discardedHunks.Add(new(names[v.Index], name, 1, names[ordered[lastRemoval].Index]));
             ordered = CgfAssetTypes.IndexedFamilies.Contains(family, StringComparer.Ordinal)
                 ? ordered.Where(v => v.Asset is not null).ToList()
-                : ordered.Skip(ordered.FindLastIndex(v => v.Asset is null) + 1).ToList();
+                : ordered.Skip(lastRemoval + 1).ToList();
             JsonElement snapshot = last.Asset.Mod;
             bool wholeAssetGroup = upgradeAssetChoices.ContainsKey((family, name));
             if (!wholeAssetGroup && (family is "objects" or "rooms" or "scripts" or "functions" or "paths" or "timelines" or "fonts" or "sprites")
@@ -253,7 +273,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                     ?? throw new InvalidDataException($"Missing GML for '{name}'. Regenerate the patch."))).ToArray();
                 MergeResult merge = ordered[0].Asset!.BaseCode is { Format: "gml" } ancestor
                     ? ThreeWayMerge.Merge(ancestor.Text, texts) : ThreeWayMerge.Added(texts);
-                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", effectiveResolutions, used, decisions);
+                gml = ResolveCode(ordered[0].Asset!.BaseCode?.Text ?? "", merge, name == CatalogMerge.Create && choice == "keep-both" ? null : choice, $"code/{name}", effectiveResolutions, used, decisions, discardedHunks);
             }
             else if (choice == "keep-both") throw new ArgumentException($"keep-both is only valid for code insertion conflicts ('{family}/{name}').");
             return new(family, name, last.Index, last.Asset, snapshot, gml);
@@ -269,13 +289,14 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 decisions.Add($"{item.Kind} {item.Family}/{item.Asset}: {decision}" +
                     (item.Kind == "index" ? " (literal slot overlap; runtime execution order still requires an in-game check)" : ""));
             }
-        return new(assets, decisions) { Catalog = catalog.Mapping };
+        return new(assets, decisions) { Catalog = catalog.Mapping, DiscardedHunks = discardedHunks, HasResolvedHunks = true };
     }
 
     private sealed record Version(int Index, string Family, string Name, AssetPatch? Asset);
 
     private static string ResolveCode(string ancestor, MergeResult merge, string? choice, string asset,
-        IReadOnlyDictionary<string, string> resolutions, HashSet<string> used, List<string> decisions)
+        IReadOnlyDictionary<string, string> resolutions, HashSet<string> used, List<string> decisions,
+        List<DiscardedHunk> discardedHunks)
     {
         if (choice == "keep-both" && (!merge.HasConflicts || merge.Hunks.Any(h => h.Status == "CONFLICT" && h.KeepBoth is null && !resolutions.ContainsKey($"{asset}#{h.Start}"))))
             throw new ArgumentException("keep-both requires only list/insertion conflicts in the selected code entry. Choose a mod for overlapping replacements.");
@@ -284,6 +305,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         string[] lines = ancestor.Length == 0 ? [] : split.Select((s, i) => i < split.Length - 1 ? s + "\n" : s).Where(s => s.Length > 0).ToArray();
         StringBuilder text = new();
         int cursor = 0;
+        string entryName = asset.StartsWith("code/", StringComparison.Ordinal) ? asset["code/".Length..] : asset;
         foreach (var hunk in merge.Hunks)
         {
             string key = $"{asset}#{hunk.Start}";
@@ -299,8 +321,19 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             text.Append(string.Concat(lines[cursor..hunk.Start]));
             bool catalogUnion = asset.StartsWith("code/gml_Object_CatalogData_", StringComparison.Ordinal)
                 && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null && CatalogMerge.DisjointWrites(hunk.Versions.Select(v => v.Text));
-            text.Append(hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion) ? hunk.KeepBoth
-                : hunk.Versions.LastOrDefault(v => v.Name == hunkChoice)?.Text ?? hunk.Versions[^1].Text);
+            if (hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion))
+            {
+                text.Append(hunk.KeepBoth);
+            }
+            else
+            {
+                var winner = hunk.Versions.LastOrDefault(v => v.Name == hunkChoice) ?? hunk.Versions[^1];
+                text.Append(winner.Text);
+                if (hunk.Status == "CONFLICT")
+                    foreach (var version in hunk.Versions)
+                        if (version.Name != winner.Name && !string.Equals(version.Text, winner.Text, StringComparison.Ordinal))
+                            discardedHunks.Add(new(version.Name, entryName, hunk.Start + 1, winner.Name));
+            }
             cursor = hunk.Start + hunk.Length;
         }
         return text.Append(string.Concat(lines[cursor..])).ToString();

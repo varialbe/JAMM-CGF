@@ -1,5 +1,6 @@
 using System.Text;
 using Jamm.Core;
+using Jamm.Core.Acceptance;
 
 namespace Jamm.Cli;
 
@@ -138,5 +139,59 @@ internal static class TextReport
         text.AppendLine("Fingerprints use SHA-256: code hashes UTML instruction disassembly with relative jumps and entry offset/argument count, without decompilation; sprites hash dimensions, origin, frame count, ordered decoded BGRA frame rectangles, placement geometry, masks and flags; objects hash sprite/parent/mask names, flags/physics and event types/subtypes/code names; rooms hash size, flags, position-keyed instances/transforms/creation-code names, views/backgrounds, legacy tiles and GMS2 layer metadata with instance, tile and background elements (plus legacy tiles and sprites in asset layers); sounds hash flags, playback metadata and embedded audio bytes; texture pages hash embedded encoded texture data; scripts hash referenced code name/content and constructor flag; variables hash instance type; functions hash classification; fonts hash glyph metrics/kerning and texture region; backgrounds hash flags, texture region and tileset metadata. Variables/functions omit table IDs and usage chains. Atlas repacking may change texture-page results while leaving sprite regions identical.\n");
         text.AppendLine("This is a feasibility fingerprint, not an exhaustive serialized diff. Event action parameters, sequences, particles, text/effect layers and external audio files/groups are outside Phase 0's content model. External textures, Spine/SWF sprites and out-of-range texture regions produce warnings and deterministic unsupported:&lt;reason&gt; fingerprints without aborting the file. Equal unsupported markers do not establish equal content. Scripts referencing code absent from the CODE table use a stable missing-code marker and a warning. Only one decoded texture page is cached at a time. UTML's detected version is a format lower bound. Version/name mismatches are reported separately from the code similarity verdict.\n");
         return text.ToString().TrimEnd() + Environment.NewLine;
+    }
+
+    internal static string AcceptanceSummary(PackAcceptanceReport report)
+    {
+        StringBuilder text = new();
+        string modWord = report.Mods.Count == 1 ? "mod" : "mods";
+        var parts = report.Mods.Select(FormatModSummary);
+        text.AppendLine($"Pack acceptance: {report.Mods.Count} {modWord} — {string.Join(", ", parts)}");
+        if (report.Risks.Count > 0)
+        {
+            var grouped = report.Risks
+                .GroupBy(r => r.Code, StringComparer.Ordinal)
+                .Select(g => $"{g.Key} x{g.Count()}");
+            text.AppendLine($"Pack acceptance risks ({report.Risks.Count}): {string.Join(", ", grouped)}");
+        }
+        return text.ToString();
+
+        static string FormatModSummary(ModAcceptance mod)
+        {
+            var lost = mod.Items.Where(i => i.Status == AcceptanceStatus.Lost).ToArray();
+            var overridden = mod.Items.Where(i => i.Status == AcceptanceStatus.ModifiedByOther).ToArray();
+            if (lost.Length == 0 && overridden.Length == 0)
+                return $"{Safe(mod.Mod)} {mod.ArrivedCount}/{mod.TotalCount} present";
+
+            List<string> notes = [];
+            if (lost.Length > 0)
+                notes.Add("lost: " + FormatSample(lost));
+            if (overridden.Length > 0)
+                notes.Add("modified: " + FormatSample(overridden));
+            return $"{Safe(mod.Mod)} {mod.ArrivedCount}/{mod.TotalCount} ({string.Join("; ", notes)})";
+        }
+
+        static string FormatSample(ContentItem[] items)
+        {
+            var head = items.Take(3).Select(i => $"{Safe(i.Kind)} {Safe(i.Identity)}");
+            string joined = string.Join(", ", head);
+            return items.Length > 3 ? $"{joined} (+{items.Length - 3} more)" : joined;
+        }
+    }
+
+    internal static string AcceptanceDetails(PackAcceptanceReport report)
+    {
+        StringBuilder text = new();
+        foreach (var mod in report.Mods)
+        {
+            text.AppendLine($"  Mod: {Safe(mod.Mod)} ({mod.ArrivedCount}/{mod.TotalCount} arrived, {mod.RelocatedCount} relocated, {mod.ModifiedByOtherCount} modified-by-other, {mod.LostCount} lost, {mod.ApiRegistrationCount} API calls)");
+            foreach (var item in mod.Items)
+                text.AppendLine($"    [{item.Status}] {Safe(item.Kind)} {Safe(item.Identity)} — {Safe(item.Detail)}");
+        }
+        if (report.ApiRegistrations is { Count: > 0 })
+            text.AppendLine($"  API registrations: {string.Join(", ", report.ApiRegistrations.Select(p => $"{Safe(p.Key)}={p.Value}"))}");
+        foreach (var risk in report.Risks)
+            text.AppendLine($"  RISK [{Safe(risk.Code)}] {Safe(risk.Target)}: {Safe(risk.Message)}");
+        return text.ToString();
     }
 }
