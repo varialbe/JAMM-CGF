@@ -57,9 +57,9 @@ public sealed class PackAcceptanceTests
         Assert.Equal(AcceptanceStatus.Present, repA.Items.Single(i => i.Kind == AcceptanceKind.Script && i.Identity == "scr_alpha").Status);
 
         Assert.Equal(AcceptanceStatus.ModifiedByOther, repA.Items.Single(i => i.Kind == AcceptanceKind.Object && i.Identity == "obj_shared").Status);
-        Assert.Equal(AcceptanceStatus.ModifiedByOther, repA.Items.Single(i => i.Kind == AcceptanceKind.Script && i.Identity == "scr_shared").Status);
+        Assert.Equal(AcceptanceStatus.Present, repA.Items.Single(i => i.Kind == AcceptanceKind.Script && i.Identity == "scr_shared").Status);
         Assert.Equal(AcceptanceStatus.Present, repB.Items.Single(i => i.Kind == AcceptanceKind.Object && i.Identity == "obj_shared").Status);
-        Assert.Equal(AcceptanceStatus.Present, repB.Items.Single(i => i.Kind == AcceptanceKind.Script && i.Identity == "scr_shared").Status);
+        Assert.Equal(AcceptanceStatus.Relocated, repB.Items.Single(i => i.Kind == AcceptanceKind.Script && i.Identity == "scr_shared_jamm_modb").Status);
     }
 
     [Fact]

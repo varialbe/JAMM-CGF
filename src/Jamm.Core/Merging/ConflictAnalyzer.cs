@@ -21,9 +21,16 @@ public static class ConflictAnalyzer
             throw new InvalidDataException("Mods target different bases: " + string.Join("; ", patches.Select(p => $"{Name(p)} targets {p.Base.FileName} (SHA-256 {p.Base.Sha256})")) + ". Recompute every patch against the same --base archive.");
         if (patches.Any(p => p.FormatVersion != PatchJson.FormatVersion))
             throw new InvalidDataException("A patch uses an unsupported format. Recompute it with diff --force.");
-        var relocation = Building.LegacySlotRelocation.Prepare(patches);
+        // Same preparation order as BuildPlan.Create: asset renames, then slot relocations, then the catalog.
+        var assetRelocation = Building.AssetNameRelocation.Prepare(patches);
+        var relocation = Building.LegacySlotRelocation.Prepare(assetRelocation.Patches);
         var catalog = Building.CatalogMerge.Prepare(relocation.Patches);
-        return AnalyzePrepared(catalog.Patches, relocation, catalog.Mapping, allowSingle, cancellationToken);
+        var report = AnalyzePrepared(catalog.Patches, relocation, catalog.Mapping, allowSingle, cancellationToken);
+        if (assetRelocation.Decisions.Count == 0) return report;
+        string[] modNames = patches.Select(Name).ToArray();
+        var renames = assetRelocation.Decisions.Select(d => new ConflictItem(d.StartsWith("WARNING", StringComparison.Ordinal) ? "WARNING" : "INFO",
+            "relocation", "assets", "asset-name", modNames, d));
+        return report with { Findings = [.. renames, .. report.Findings] };
     }
 
     internal static ConflictReport AnalyzePrepared(

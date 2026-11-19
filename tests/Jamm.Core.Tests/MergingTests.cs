@@ -617,7 +617,9 @@ public class MergingTests
         var report = ConflictAnalyzer.Analyze([a, b]);
         Assert.Equal(JsonSerializer.Serialize(report), JsonSerializer.Serialize(ConflictAnalyzer.Analyze([a, b])));
         Assert.Equal(new[] { "A", "B" }, report.LoadOrder.Select(m => m.Name));
-        Assert.Contains(report.Findings, f => f.Kind == "addition" && f.Severity == "CONFLICT");
+        // Two different sprites added under one name are kept apart by CGF-RELOCATE-002 instead of conflicting.
+        Assert.DoesNotContain(report.Findings, f => f.Kind == "addition" && f.Severity == "CONFLICT");
+        Assert.Contains(report.Findings, f => f.Kind == "relocation" && f.Message.Contains("[CGF-RELOCATE-002]", StringComparison.Ordinal));
     }
 
     [RealFilesFact]

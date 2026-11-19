@@ -113,14 +113,14 @@ internal sealed class SemanticCode
         return expected;
     }
 
-    internal IReadOnlyDictionary<string, int> Remapped(IReadOnlyList<ModPatch> patches, UndertaleData merged)
+    internal IReadOnlyDictionary<string, int> Remapped(IReadOnlyList<ModPatch> patches, UndertaleData merged,
+        IReadOnlyDictionary<(int Mod, string Family, string Original), string>? renames = null)
     {
         var target = SemanticReferences.Names(merged);
         Dictionary<string, int> counts = new(StringComparer.Ordinal);
         for (int i = 0; i < patches.Count; i++)
         {
             int count = 0;
-            var maps = modNames[i].ToDictionary(t => t.Key, t => new AssetIndexMap(t.Value, target[t.Key]));
             // Count all changed/added source references requiring relocation, including alternatives
             // intentionally dropped by conflict decisions. The selected stream is verified separately.
             foreach (var asset in patches[i].Changes["code"].Added.Concat(patches[i].Changes["code"].Changed))
@@ -128,8 +128,10 @@ internal sealed class SemanticCode
                 {
                     int index = Array.IndexOf(modNames[i][r.Family], r.Name);
                     // Dropped conflict alternatives may legitimately name an omitted added asset.
-                    if (!target[r.Family].Contains(r.Name, StringComparer.Ordinal)) continue;
-                    if (maps[r.Family].Resolve(index, r.Family, $"mod '{patches[i].Mod.Name}', code '{asset.Name}'") != index) count++;
+                    string destinationName = renames?.GetValueOrDefault((i, r.Family, r.Name)) ?? r.Name;
+                    int destinationIndex = Array.IndexOf(target[r.Family], destinationName);
+                    if (destinationIndex < 0) continue;
+                    if (destinationIndex != index) count++;
                 }
             counts[patches[i].Mod.Name ?? patches[i].Mod.FileName] = count;
         }

@@ -149,7 +149,11 @@ public static class PackAcceptance
                 var modSet = TableNames(mod.Data, family);
                 foreach (string name in modSet.Where(n => !baseSet.Contains(n)).OrderBy(n => n, StringComparer.Ordinal))
                 {
-                    items.Add(EvaluateAddedAsset(kind, family, name, m, mods, modReaders, mergedSet, planByKey));
+                    bool relocated = plan.AssetRenames.Any(r => r.Key.Mod == m && r.Key.Family == family && r.Value == name);
+                    items.Add(relocated
+                        ? new ContentItem(kind, name, mergedSet.Contains(name) ? AcceptanceStatus.Relocated : AcceptanceStatus.Lost,
+                            mergedSet.Contains(name) ? $"Relocated to {name} to preserve both additions" : $"Relocated asset '{name}' is missing from merged archive")
+                        : EvaluateAddedAsset(kind, family, name, m, mods, modReaders, mergedSet, planByKey));
                 }
             }
 
