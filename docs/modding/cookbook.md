@@ -330,10 +330,16 @@ jamm_rod_register(
     11.5,       // reel_speed
     5200,       // sinker_distance
     spr_carbon_rod,
-    7,          // upgrade_slots (0..8)
+    7,          // upgrade_slots: 0..16 explicit (default 8), or -1 for vanilla rule (best rod + 1)
     0           // unlocked (0 = in shop)
 );
+```
 
+For `upgrade_slots`, you have two options:
+* **Simple (`8` slots, default, or `0..16`)**: Keep the vanilla Master Rod cap (`8`) or pick any explicit slot count up to `16`.
+* **Vanilla rule (`-1`)**: Automatically give your rod one more upgrade slot than the strongest rod registered before it (`9`, `10`, … up to `16`), matching how vanilla rods gain `+1` slot per tier.
+
+```gml
 jamm_lure_register(
     "angler-gear:flare-lure",
     "Flare Lure",

@@ -149,13 +149,15 @@ public sealed class MenuRuntimeTests
         var build = ArchiveBuilder.Build(basePath, [new(patch, modPath)], output);
         Assert.NotNull(build.Verification);
         Assert.DoesNotContain(build.Plan.Decisions, d => d.Contains("Menu paging:", StringComparison.Ordinal));
-        Assert.DoesNotContain(build.Plan.Assets, a => a.Name.Contains("CardHandler", StringComparison.Ordinal) || a.Name.Contains("UpgradeMenu", StringComparison.Ordinal));
+        Assert.DoesNotContain(build.Plan.Assets, a => a.Name.Contains("CardHandler", StringComparison.Ordinal) || a.Name.Contains("UpgradeMenu", StringComparison.Ordinal) || a.Name.Contains("UpgradeSlotMenu", StringComparison.Ordinal));
 
         using var merged = GameFileLoader.Load(output);
         Assert.Null(merged.Data.Code.ByName(MenuRuntime.CardHandlerStep));
         Assert.Null(merged.Data.Code.ByName(MenuRuntime.CardHandlerDraw));
         Assert.Null(merged.Data.Code.ByName(MenuRuntime.UpgradeMenuStep));
         Assert.Null(merged.Data.Code.ByName(MenuRuntime.UpgradeMenuDraw));
+        Assert.Null(merged.Data.Code.ByName(MenuRuntime.UpgradeSlotMenuStep));
+        Assert.Null(merged.Data.Code.ByName(MenuRuntime.UpgradeSlotMenuDraw));
     }
 
     [Fact]
@@ -410,6 +412,131 @@ public sealed class MenuRuntimeTests
             Assert.DoesNotContain("Hint B", rodDraw);
             Assert.Contains("event_inherited()", rodDraw);
         }
+    }
+
+    [Fact]
+    public void UpgradeSlotMenuPagingHandlesMoreThanEightSlotsAndSkipsBrokenAnchors()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string modPath = temp.PathFor("mod.win");
+        string output = temp.PathFor("merged.win");
+
+        WriteMenuModel(basePath, includeFont: true, includeHud: false, modEdit: d =>
+        {
+            var slotObj = new UndertaleGameObject { Name = d.Strings.MakeString("UpgradeSlot"), Visible = true };
+            slotObj.ParentId = d.GameObjects.ByName("Card");
+            d.GameObjects.Add(slotObj);
+
+            var slotMenu = new UndertaleGameObject { Name = d.Strings.MakeString("UpgradeSlotMenu"), Visible = true };
+            slotMenu.ParentId = d.GameObjects.ByName("RowHandler");
+            d.GameObjects.Add(slotMenu);
+
+            var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(slotMenu.EventHandlerFor(EventType.Alarm, 0u, d),
+                """
+                while (iCard < 8 && UpgradeData.upg[Rod.rod_id, iCard] == -2)
+                {
+                    iCard++;
+                }
+                if (iCard < 8)
+                {
+                    r = instance_create(x, y, UpgradeSlot);
+                    r.slot_id = iCard;
+                    if (((iCard + 1) % 2) == 0)
+                    {
+                        x = ORIGIN_X;
+                        y += Y_GAP;
+                    }
+                    else
+                    {
+                        x += X_GAP;
+                    }
+                    iCard++;
+                    alarm[0] = DELAY;
+                }
+                else
+                {
+                    done_spawning = 1;
+                }
+                """);
+            Assert.True(compiler.Compile().Successful);
+        });
+        WriteMenuModel(modPath, includeFont: true, includeHud: false, modEdit: d =>
+        {
+            var slotObj = new UndertaleGameObject { Name = d.Strings.MakeString("UpgradeSlot"), Visible = true };
+            slotObj.ParentId = d.GameObjects.ByName("Card");
+            d.GameObjects.Add(slotObj);
+
+            var slotMenu = new UndertaleGameObject { Name = d.Strings.MakeString("UpgradeSlotMenu"), Visible = true };
+            slotMenu.ParentId = d.GameObjects.ByName("RowHandler");
+            d.GameObjects.Add(slotMenu);
+
+            var compiler = new CompileGroup(d);
+            compiler.QueueCodeReplace(slotMenu.EventHandlerFor(EventType.Alarm, 0u, d),
+                """
+                while (iCard < 8 && UpgradeData.upg[Rod.rod_id, iCard] == -2)
+                {
+                    iCard++;
+                }
+                if (iCard < 8)
+                {
+                    r = instance_create(x, y, UpgradeSlot);
+                    r.slot_id = iCard;
+                    if (((iCard + 1) % 2) == 0)
+                    {
+                        x = ORIGIN_X;
+                        y += Y_GAP;
+                    }
+                    else
+                    {
+                        x += X_GAP;
+                    }
+                    iCard++;
+                    alarm[0] = DELAY;
+                }
+                else
+                {
+                    done_spawning = 1;
+                }
+                """);
+            Assert.True(compiler.Compile().Successful);
+        });
+
+        using var original = GameFileLoader.Load(basePath);
+        using var mod = GameFileLoader.Load(modPath);
+        var build = ArchiveBuilder.Build(basePath, [new(PatchBuilder.Create(original, mod, "SlotMenuMod"), modPath)], output);
+        Assert.NotNull(build.Verification);
+        Assert.Contains(build.Plan.Decisions, d => d.Contains("UpgradeSlotMenu (4 rows)", StringComparison.Ordinal));
+
+        using var merged = GameFileLoader.Load(output);
+        var menuObj = merged.Data.GameObjects.ByName("UpgradeSlotMenu");
+        Assert.NotNull(menuObj);
+        Assert.Equal(MenuRuntime.UpgradeSlotMenuCreate, menuObj.Events[(int)EventType.Create].Single(e => e.EventSubtype == 0).Actions[0].CodeId.Name.Content);
+        Assert.Equal(MenuRuntime.UpgradeSlotMenuStep, menuObj.Events[(int)EventType.Step].Single(e => e.EventSubtype == 0).Actions[0].CodeId.Name.Content);
+        Assert.Equal(MenuRuntime.UpgradeSlotMenuDraw, menuObj.Events[(int)EventType.Draw].Single(e => e.EventSubtype == (uint)EventSubtypeDraw.DrawGUI).Actions[0].CodeId.Name.Content);
+
+        string slotCreate = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeSlotMenuCreate).Text;
+        Assert.Contains("card_width = 2", slotCreate);
+        Assert.Contains("visible_rows = 4", slotCreate);
+        Assert.Contains("ORIGIN_Y = y", slotCreate);
+
+        string slotAlarm = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeSlotMenuAlarm).Text;
+        Assert.Contains("array_length_2d(UpgradeData.upg, jamm_rod)", slotAlarm);
+        Assert.Contains("!= -2", slotAlarm);
+        Assert.Contains("r.slot_id = visible_items[window_pos]", slotAlarm);
+        Assert.DoesNotContain("iCard < 8", slotAlarm);
+
+        string slotStep = PatchBuilder.ReadCode(merged, MenuRuntime.UpgradeSlotMenuStep).Text;
+        Assert.Contains("with (UpgradeSlot)", slotStep);
+
+        var brokenBaseline = new Dictionary<string, CodeText>(StringComparer.Ordinal)
+        {
+            [MenuRuntime.UpgradeSlotMenuAlarm] = new("// custom mod layout", "gml", 0, 0, null, [])
+        };
+        var skippedPlan = MenuRuntime.PreparePlan(new BuildPlan([], []), brokenBaseline);
+        Assert.Empty(skippedPlan.Assets);
+        Assert.Contains(skippedPlan.Decisions, d => d.Contains("Menu paging skipped for UpgradeSlotMenu", StringComparison.Ordinal));
     }
 
     private static void WriteMinimalModel(string path, Action<UndertaleData> edit)

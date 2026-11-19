@@ -26,10 +26,17 @@ internal static class MenuRuntime
     internal const string UpgradeMenuDraw = "gml_Object_UpgradeMenu_Draw_0";
     internal const string UpgradeMenuDestroy = "gml_Object_UpgradeMenu_Destroy_0";
 
+    internal const string UpgradeSlotMenuCreate = "gml_Object_UpgradeSlotMenu_Create_0";
+    internal const string UpgradeSlotMenuAlarm = "gml_Object_UpgradeSlotMenu_Alarm_0";
+    internal const string UpgradeSlotMenuStep = "gml_Object_UpgradeSlotMenu_Step_0";
+    internal const string UpgradeSlotMenuDraw = "gml_Object_UpgradeSlotMenu_Draw_0";
+    internal const string UpgradeSlotMenuDestroy = "gml_Object_UpgradeSlotMenu_Destroy_0";
+
     internal static BuildPlan PreparePlan(BuildPlan plan, IReadOnlyDictionary<string, CodeText> baseline, UndertaleData? original = null)
     {
         bool hasCardHandler = baseline.ContainsKey(CardHandlerCreate);
         bool hasUpgradeMenu = baseline.ContainsKey(UpgradeMenuCreate);
+        bool hasUpgradeSlotMenu = baseline.ContainsKey(UpgradeSlotMenuAlarm);
         var assets = plan.Assets.ToList();
         var decisions = plan.Decisions.ToList();
         bool hasSmallFont = original?.Fonts.ByName("fnt_babySmall") is not null;
@@ -39,7 +46,9 @@ internal static class MenuRuntime
             TryPatch("CardHandler (2 rows)", () => PatchCardHandler(assets, baseline, hasSmallFont));
         if (hasUpgradeMenu)
             TryPatch("UpgradeMenu (9 rows)", () => PatchUpgradeMenu(assets, baseline, hasSmallFont));
-        if (hasCardHandler || hasUpgradeMenu)
+        if (hasUpgradeSlotMenu)
+            TryPatch("UpgradeSlotMenu (4 rows)", () => PatchUpgradeSlotMenu(assets, baseline, hasSmallFont));
+        if (hasCardHandler || hasUpgradeMenu || hasUpgradeSlotMenu)
             TryPatchOptional("hat icon shop visibility", () => PatchHatIconSteps(assets, baseline));
 
         TryPatchOptional("Boat card equip index", () => PatchBoatCard(assets, baseline));
@@ -90,6 +99,16 @@ internal static class MenuRuntime
             Attach(upgradeMenu, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, UpgradeMenuDraw);
             if (recompile.ContainsKey(UpgradeMenuDestroy))
                 Attach(upgradeMenu, EventType.Destroy, 0u, UpgradeMenuDestroy);
+        }
+
+        if (recompile.ContainsKey(UpgradeSlotMenuStep) && data.GameObjects.ByName("UpgradeSlotMenu") is { } upgradeSlotMenu)
+        {
+            if (recompile.ContainsKey(UpgradeSlotMenuCreate))
+                Attach(upgradeSlotMenu, EventType.Create, 0u, UpgradeSlotMenuCreate);
+            Attach(upgradeSlotMenu, EventType.Step, (uint)EventSubtypeStep.Step, UpgradeSlotMenuStep);
+            Attach(upgradeSlotMenu, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, UpgradeSlotMenuDraw);
+            if (recompile.ContainsKey(UpgradeSlotMenuDestroy))
+                Attach(upgradeSlotMenu, EventType.Destroy, 0u, UpgradeSlotMenuDestroy);
         }
 
         void Attach(UndertaleGameObject obj, EventType type, uint subtype, string codeName)
@@ -171,6 +190,36 @@ internal static class MenuRuntime
             HasCode(assets, baseline, "gml_Object_RowHandler_Step_0") || HasCode(assets, baseline, "gml_Object_Handler_Step_0"));
         AppendOrPut(assets, baseline, UpgradeMenuDraw, BuildDrawGml(hasSmallFont));
         AppendInheritedOrPut(assets, baseline, UpgradeMenuDestroy, BuildRestoreHatButtonsGml(),
+            includeInherited: true);
+    }
+
+    private static void PatchUpgradeSlotMenu(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline, bool hasSmallFont)
+    {
+        string alarm = RequireExisting(assets, baseline, UpgradeSlotMenuAlarm);
+        RequireAnchor(UpgradeSlotMenuAlarm, alarm, "UpgradeSlot");
+        RequireAnchor(UpgradeSlotMenuAlarm, alarm, "UpgradeData.upg");
+
+        AppendInheritedOrPut(assets, baseline, UpgradeSlotMenuCreate,
+            """
+            visible = true;
+            ORIGIN_Y = y;
+            card_width = 2;
+            visible_rows = 4;
+            scroll_row = 0;
+            max_scroll_row = 0;
+            n_visible = 0;
+            window_pos = 0;
+            window_end = 0;
+            jamm_menu_init = 0;
+            """,
+            HasCode(assets, baseline, "gml_Object_RowHandler_Create_0") || HasCode(assets, baseline, "gml_Object_Handler_Create_0"));
+
+        Put(assets, baseline, UpgradeSlotMenuAlarm, BuildUpgradeSlotMenuAlarmGml());
+
+        AppendInheritedOrPut(assets, baseline, UpgradeSlotMenuStep, BuildStepGml("UpgradeSlot"),
+            HasCode(assets, baseline, "gml_Object_RowHandler_Step_0") || HasCode(assets, baseline, "gml_Object_Handler_Step_0"));
+        AppendOrPut(assets, baseline, UpgradeSlotMenuDraw, BuildDrawGml(hasSmallFont));
+        AppendInheritedOrPut(assets, baseline, UpgradeSlotMenuDestroy, BuildRestoreHatButtonsGml(),
             includeInherited: true);
     }
 
@@ -292,6 +341,28 @@ internal static class MenuRuntime
         spawnCard: """
                 r = instance_create(x, y, UpgradeCard);
                 r.card_id = visible_items[window_pos];
+            """);
+
+    private static string BuildUpgradeSlotMenuAlarmGml() => BuildWindowedAlarmGml(
+        extraLocals: ", jamm_rod, jamm_slen",
+        initPrefix: """
+                jamm_rod = Rod.rod_id;
+                if (instance_exists(UpgradeData) && jamm_rod >= 0 && jamm_rod < array_height_2d(UpgradeData.upg))
+                {
+                    jamm_slen = array_length_2d(UpgradeData.upg, jamm_rod);
+                    for (jamm_i = 0; jamm_i < jamm_slen; jamm_i += 1)
+                    {
+                        if (UpgradeData.upg[jamm_rod, jamm_i] != -2)
+                        {
+                            visible_items[n_visible] = jamm_i;
+                            n_visible += 1;
+                        }
+                    }
+                }
+            """,
+        spawnCard: """
+                r = instance_create(x, y, UpgradeSlot);
+                r.slot_id = visible_items[window_pos];
             """);
 
     private static string BuildWindowedAlarmGml(string extraLocals, string initPrefix, string spawnCard) =>

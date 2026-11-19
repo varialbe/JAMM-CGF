@@ -28,6 +28,7 @@ When building from the legacy 2023 archive, JAMM injects row-windowed paging int
 | `LureMenu` | `CardHandler` | 3 | 2 | 6 |
 | `ToolMenu` | `CardHandler` | 3 | 2 | 6 |
 | `UpgradeMenu` | `RowHandler` | 2 | 9 | 18 |
+| `UpgradeSlotMenu` | `RowHandler` | 2 | 4 | 8 |
 
 Note that `Hatalog` and `Fishalog` use surface-based continuous scrolling natively and do not use `CardHandler` or `RowHandler`.
 
@@ -37,6 +38,7 @@ On menu open, JAMM scans all items and collects only visible entries into `visib
 
 * **`CardHandler`**: includes every `i` in `0 .. data_object.nItems - 1` where `data_object.unlocked[i] >= 0`.
 * **`UpgradeMenu`**: includes every `id` where `UpgradeData.unlocks[id]` is truthy.
+* **`UpgradeSlotMenu`**: includes every `slot` in `0 .. array_length_2d(UpgradeData.upg, Rod.rod_id) - 1` where `UpgradeData.upg[Rod.rod_id, slot] != -2`. For rods with `<= 8` slots, `max_scroll_row` is `0` so the menu looks identical to vanilla; for rods with `9..16` slots, slots `8+` appear cleanly on page 2 without shrinking cards or overflowing off-screen.
 
 Only the active slice `[scroll_row * card_width .. min(n_visible, (scroll_row + visible_rows) * card_width) - 1]` is spawned, and column wrapping is computed from the position inside `visible_items[]`. This also fixes a base-game bug where skipping hidden (`unlocked < 0`) items misaligned subsequent rows.
 
@@ -49,6 +51,6 @@ The unmodded game hardcodes `18` upgrades (`0..17`) in `UpgradeData` and `iCard 
 
 ### Lifecycle details to keep in mind
 
-* **`done_spawning`**: Changing `scroll_row` destroys active `Card` / `UpgradeCard` instances, resets `done_spawning = 0`, resets `(x, y)` to `(ORIGIN_X, ORIGIN_Y)`, and triggers `alarm[0] = 1` to spawn the new window (`done_spawning` returns to `1` once the window finishes). UI scripts that check `CardHandler.done_spawning` (such as `Wallet`) wait cleanly during page transitions.
+* **`done_spawning`**: Changing `scroll_row` destroys active `Card` / `UpgradeCard` / `UpgradeSlot` instances, resets `done_spawning = 0`, resets `(x, y)` to `(ORIGIN_X, ORIGIN_Y)`, and triggers `alarm[0] = 1` to spawn the new window (`done_spawning` returns to `1` once the window finishes). UI scripts that check `CardHandler.done_spawning` (such as `Wallet`) wait cleanly during page transitions.
 * **`RodMenu_Draw_0`**: `RodMenu` overrides `Draw_0` to draw upgrade hint text to the right of the 3-column grid. JAMM prepends `event_inherited();` to `RodMenu_Draw_0` so the `CardHandler` paging buttons and `Page x/y` label still render.
-* **Custom menu overrides**: Paging is treated as a safe enhancement—if a legacy mod heavily rewrote `CardHandler` or `UpgradeMenu` so the expected anchors are missing, JAMM skips paging for that menu, logs a build decision, and preserves the mod's layout instead of failing the build.
+* **Custom menu overrides**: Paging is treated as a safe enhancement—if a legacy mod heavily rewrote `CardHandler`, `UpgradeMenu`, or `UpgradeSlotMenu` so the expected anchors are missing, JAMM skips paging for that menu, logs a build decision, and preserves the mod's layout instead of failing the build.

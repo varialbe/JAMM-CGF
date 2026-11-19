@@ -215,6 +215,13 @@ internal static class ItemsRuntimePatches
             new Regex(@"for\s*\(\s*ix\s*=\s*0\s*;\s*ix\s*(?:<=\s*\d+|<\s*(?:\d+|RodData\.nItems|array_height_2d\(upg\)))\s*;\s*ix\s*(?:\+\+|\+=\s*1)\s*\)"),
             $"for (ix = 0; ix < {rodBound}; ix++)",
             "with (UpgradeData) rod-slot loop");
+        var iyRegex = new Regex(@"for\s*\(\s*iy\s*=\s*0\s*;\s*iy\s*(?:<=\s*\d+|<\s*(?:\d+|array_length_2d\(upg,\s*ix\)|jamm_max_slots|min\(\s*\d+\s*,\s*array_length_2d\(upg,\s*ix\)\s*\)))\s*;\s*iy\s*(?:\+\+|\+=\s*1)\s*\)");
+        if (iyRegex.IsMatch(block))
+        {
+            block = RegexReplaceOnce(block, entry, iyRegex,
+                "for (iy = 0; iy < min(10, array_length_2d(upg, ix)); iy++)",
+                "with (UpgradeData) slot-column loop");
+        }
         return string.Concat(text.AsSpan(0, open), block, text.AsSpan(pos));
     }
 
@@ -259,6 +266,13 @@ internal static class ItemsRuntimePatches
         if (!hasUpgradeData || text.Contains("jamm_upg", StringComparison.Ordinal)) return text;
         if (!text.Contains("RodData.disp", StringComparison.Ordinal) && !text.Contains("image_index = rod_id;", StringComparison.Ordinal))
             throw new InvalidDataException("Cannot patch 'gml_Object_Rod_Other_10' for Items API: expected rod equip anchor not found.");
+        var vanillaSlotLoop = new Regex(@"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=\s*(?:7|8)|<\s*(?:8|9))\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)(?=\s*\{[\s\S]{0,400}?UpgradeData\.upg\s*\[\s*rod_id\s*,\s*i\s*\])");
+        if (vanillaSlotLoop.IsMatch(text))
+        {
+            text = RegexReplaceOnce(text, "gml_Object_Rod_Other_10", vanillaSlotLoop,
+                "for (i = 0; i < array_length_2d(UpgradeData.upg, rod_id); i++)",
+                "Rod_Other_10 upgrade slot loop");
+        }
         return text.TrimEnd() + "\n" + """
             if (instance_exists(UpgradeData))
             {
@@ -270,7 +284,7 @@ internal static class ItemsRuntimePatches
                 }
                 if ((!variable_instance_exists(id, "allowUpgrades") || allowUpgrades) && variable_instance_exists(id, "rod_id") && rod_id >= 0 && rod_id < array_height_2d(UpgradeData.upg))
                 {
-                    jamm_ulen = min(8, array_length_2d(UpgradeData.upg, rod_id));
+                    jamm_ulen = array_length_2d(UpgradeData.upg, rod_id);
                     for (jamm_si = 0; jamm_si < jamm_ulen; jamm_si += 1)
                     {
                         jamm_uid = UpgradeData.upg[rod_id, jamm_si];
@@ -572,6 +586,13 @@ internal static class ItemsRuntimePatches
     private static string PatchUpgradeDataDraw(string text)
     {
         if (text.Contains("UpgradeData.disp", StringComparison.Ordinal)) return text;
+        var slotLoop = new Regex(@"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=\s*(?:7|8)|<\s*(?:8|9))\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)(?=\s*\{[\s\S]{0,400}?UpgradeData\.upg\s*\[\s*Rod\.rod_id\s*,\s*i\s*\])");
+        if (slotLoop.IsMatch(text))
+        {
+            text = RegexReplaceOnce(text, "gml_Object_UpgradeData_Draw_0", slotLoop,
+                "for (i = 0; i < array_length_2d(UpgradeData.upg, Rod.rod_id); i++)",
+                "UpgradeData_Draw_0 slot loop");
+        }
         return ReplaceOnce(text, "gml_Object_UpgradeData_Draw_0",
             "draw_sprite_ext(spr_upgradeicons, 1 + UpgradeData.upg[Rod.rod_id, i], icon_x, icon_y, icon_scale, icon_scale, 0, c_white, 1);",
             BuildUpgradeIconDraw("UpgradeData.upg[Rod.rod_id, i]"));
@@ -609,7 +630,7 @@ internal static class ItemsRuntimePatches
                 {
                     var jamm_stacks, jamm_si, jamm_slen;
                     jamm_stacks = 0;
-                    jamm_slen = min(8, array_length_2d(UpgradeData.upg, Rod.rod_id));
+                    jamm_slen = array_length_2d(UpgradeData.upg, Rod.rod_id);
                     for (jamm_si = 0; jamm_si < jamm_slen; jamm_si += 1)
                     {
                         if (UpgradeData.upg[Rod.rod_id, jamm_si] == card_id)

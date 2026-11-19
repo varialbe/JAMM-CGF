@@ -4,6 +4,7 @@ namespace Jamm.Core.Building;
 
 internal static class ItemsRuntimeScripts
 {
+    internal const int JammMaxRodSlots = 16;
     internal const string ApiInitName = "jamm_api_init";
     internal const string ApiInitCode = "gml_Script_" + ApiInitName;
     internal const string ApiControllerName = "obj_jamm_api";
@@ -132,20 +133,38 @@ internal static class ItemsRuntimeScripts
         bool hasGirl)
     {
         StringBuilder sb = new();
-        sb.AppendLine("var jamm_i, jamm_ix, jamm_iy;");
+        sb.AppendLine("var jamm_i, jamm_ix, jamm_iy, jamm_rlen, jamm_open;");
         if (hasBoatData)
-            sb.AppendLine(DataEnsureBlock("BoatData", "nItems", "boat", "unlocked", setDisp: false));
+            sb.AppendLine(DataEnsureBlock("BoatData", "nItems", "boat", "unlocked", setDisp: false, setRodSlots: false));
         if (hasRodData)
-            sb.AppendLine(DataEnsureBlock("RodData", "nItems", "rod", "unlocked", setDisp: true));
+            sb.AppendLine(DataEnsureBlock("RodData", "nItems", "rod", "unlocked", setDisp: true, setRodSlots: true));
         if (hasLureData)
-            sb.AppendLine(DataEnsureBlock("LureData", "nItems", "lure", "unlocked", setDisp: false));
+            sb.AppendLine(DataEnsureBlock("LureData", "nItems", "lure", "unlocked", setDisp: false, setRodSlots: false));
         if (hasToolData)
-            sb.AppendLine(DataEnsureBlock("ToolData", "nItems", "tool", "unlocked", setDisp: true));
+            sb.AppendLine(DataEnsureBlock("ToolData", "nItems", "tool", "unlocked", setDisp: true, setRodSlots: false));
         if (hasGearData)
-            sb.AppendLine(DataEnsureBlock("GearData", "n_gear", "hat", "unlocked", setDisp: false));
+            sb.AppendLine(DataEnsureBlock("GearData", "n_gear", "hat", "unlocked", setDisp: false, setRodSlots: false));
         if (hasUpgradeData)
         {
-            sb.AppendLine("""
+            string rodSlotsEnsure = hasRodData
+                ? """
+                                if (instance_exists(RodData)) {
+                                    for (jamm_ix = 0; jamm_ix < RodData.jamm_base_count; jamm_ix += 1) {
+                                        jamm_open = 0;
+                                        if (jamm_ix < array_height_2d(upg)) {
+                                            jamm_rlen = array_length_2d(upg, jamm_ix);
+                                            for (jamm_iy = 0; jamm_iy < jamm_rlen; jamm_iy += 1) {
+                                                if (upg[jamm_ix,jamm_iy] != -2) {
+                                                    jamm_open += 1;
+                                                }
+                                            }
+                                        }
+                                        RodData.jamm_slots[jamm_ix] = jamm_open;
+                                    }
+                                }
+                    """
+                : "";
+            sb.AppendLine($$"""
                 if (instance_exists(UpgradeData)) {
                     with (UpgradeData) {
                         if (!variable_instance_exists(id, "jamm_base_count")) {
@@ -160,11 +179,17 @@ internal static class ItemsRuntimeScripts
                                 jamm_step[jamm_i] = -1;
                                 jamm_is_api[jamm_i] = 0;
                             }
+                            jamm_max_slots = 0;
                             for (jamm_ix = 0; jamm_ix < array_height_2d(upg); jamm_ix += 1) {
-                                for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(upg, jamm_ix); jamm_iy += 1) {
+                                jamm_rlen = array_length_2d(upg, jamm_ix);
+                                if (jamm_rlen > jamm_max_slots) {
+                                    jamm_max_slots = jamm_rlen;
+                                }
+                                for (jamm_iy = 0; jamm_iy < jamm_rlen; jamm_iy += 1) {
                                     jamm_default_upg[jamm_ix,jamm_iy] = upg[jamm_ix,jamm_iy];
                                 }
                             }
+                {{rodSlotsEnsure}}
                         }
                     }
                 }
@@ -185,9 +210,10 @@ internal static class ItemsRuntimeScripts
         sb.Append("return 1;");
         return sb.ToString();
 
-        static string DataEnsureBlock(string obj, string countField, string type, string unlockField, bool setDisp)
+        static string DataEnsureBlock(string obj, string countField, string type, string unlockField, bool setDisp, bool setRodSlots)
         {
             string dispLine = setDisp ? "\n                disp[jamm_i] = -1;" : "";
+            string slotsLine = setRodSlots ? "\n                jamm_slots[jamm_i] = 8;" : "";
             return $$"""
                 if (instance_exists({{obj}})) {
                     with ({{obj}}) {
@@ -195,7 +221,7 @@ internal static class ItemsRuntimeScripts
                             jamm_base_count = {{countField}};
                             for (jamm_i = 0; jamm_i < {{countField}}; jamm_i += 1) {
                                 jamm_key[jamm_i] = "base:{{type}}" + string(jamm_i);
-                                jamm_default_unlocked[jamm_i] = {{unlockField}}[jamm_i];{{dispLine}}
+                                jamm_default_unlocked[jamm_i] = {{unlockField}}[jamm_i];{{dispLine}}{{slotsLine}}
                             }
                         }
                     }
@@ -273,10 +299,29 @@ internal static class ItemsRuntimeScripts
     private static string BuildRodRegister(bool hasRodData, bool hasUpgradeData)
     {
         if (!hasRodData) return "return -1;";
+        string upgradeScanBlock = hasUpgradeData
+            ? """
+                        if (instance_exists(UpgradeData)) {
+                            for (jamm_i = 0; jamm_i < array_height_2d(UpgradeData.upg); jamm_i += 1) {
+                                jamm_open = 0;
+                                jamm_rlen = array_length_2d(UpgradeData.upg, jamm_i);
+                                for (jamm_iy = 0; jamm_iy < jamm_rlen; jamm_iy += 1) {
+                                    if (UpgradeData.upg[jamm_i,jamm_iy] != -2) {
+                                        jamm_open += 1;
+                                    }
+                                }
+                                if (jamm_open > jamm_best_slots) {
+                                    jamm_best_slots = jamm_open;
+                                }
+                            }
+                        }
+                """
+            : "";
         string upgradeBlock = hasUpgradeData
             ? """
                 if (instance_exists(UpgradeData)) {
-                    for (jamm_iy = 0; jamm_iy < 8; jamm_iy += 1) {
+                    jamm_row_cols = max(8, jamm_slots);
+                    for (jamm_iy = 0; jamm_iy < jamm_row_cols; jamm_iy += 1) {
                         if (jamm_iy < jamm_slots) {
                             UpgradeData.upg[jamm_slot,jamm_iy] = -1;
                         } else {
@@ -285,12 +330,15 @@ internal static class ItemsRuntimeScripts
                         UpgradeData.object[jamm_slot,jamm_iy] = -1;
                         UpgradeData.jamm_default_upg[jamm_slot,jamm_iy] = UpgradeData.upg[jamm_slot,jamm_iy];
                     }
+                    if (!variable_instance_exists(UpgradeData.id, "jamm_max_slots") || jamm_row_cols > UpgradeData.jamm_max_slots) {
+                        UpgradeData.jamm_max_slots = jamm_row_cols;
+                    }
                 }
                 """
             : "";
         return $$"""
             var jamm_key, jamm_name, jamm_cost, jamm_cs, jamm_rp, jamm_rpf, jamm_rs, jamm_sd, jamm_disp;
-            var jamm_slots, jamm_unl, jamm_existing, jamm_slot, jamm_iy;
+            var jamm_slots, jamm_unl, jamm_existing, jamm_slot, jamm_iy, jamm_best_slots, jamm_i, jamm_open, jamm_rlen, jamm_row_cols;
             if (argument_count < 9 || !instance_exists(RodData)) return -1;
             jamm_key = argument0; jamm_name = argument1; jamm_cost = argument2;
             jamm_cs = argument3; jamm_rp = argument4; jamm_rpf = argument5;
@@ -303,7 +351,7 @@ internal static class ItemsRuntimeScripts
             if (argument_count > 9) {
                 if (!is_real(argument9)) return -1;
                 jamm_slots = argument9;
-                if (jamm_slots < 0 || jamm_slots > 8 || floor(jamm_slots) != jamm_slots) return -1;
+                if (jamm_slots < -1 || jamm_slots > {{JammMaxRodSlots}} || floor(jamm_slots) != jamm_slots) return -1;
             }
             jamm_unl = 0;
             if (argument_count > 10) {
@@ -313,6 +361,18 @@ internal static class ItemsRuntimeScripts
             jamm_items_ensure_base();
             jamm_existing = jamm_item_find("rod", jamm_key);
             if (jamm_existing > -1) return jamm_existing;
+            if (jamm_slots == -1) {
+                jamm_best_slots = 0;
+                if (variable_instance_exists(RodData.id, "jamm_slots")) {
+                    for (jamm_i = 0; jamm_i < RodData.nItems; jamm_i += 1) {
+                        if (jamm_i < array_length_1d(RodData.jamm_slots) && RodData.jamm_slots[jamm_i] > jamm_best_slots) {
+                            jamm_best_slots = RodData.jamm_slots[jamm_i];
+                        }
+                    }
+                }
+            {{upgradeScanBlock}}
+                jamm_slots = min({{JammMaxRodSlots}}, jamm_best_slots + 1);
+            }
             jamm_slot = RodData.nItems;
             RodData.jamm_key[jamm_slot] = jamm_key;
             RodData.name[jamm_slot] = jamm_name;
@@ -323,6 +383,7 @@ internal static class ItemsRuntimeScripts
             RodData.reel_speed[jamm_slot] = jamm_rs;
             RodData.sinker_distance[jamm_slot] = jamm_sd;
             RodData.disp[jamm_slot] = jamm_disp;
+            RodData.jamm_slots[jamm_slot] = jamm_slots;
             RodData.unlocked[jamm_slot] = jamm_unl;
             RodData.jamm_default_unlocked[jamm_slot] = jamm_unl;
             RodData.nItems = jamm_slot + 1;
@@ -528,7 +589,7 @@ internal static class ItemsRuntimeScripts
             if (variable_instance_exists(Rod.id, "allowUpgrades") && !Rod.allowUpgrades) return 0;
             if (Rod.rod_id < 0 || Rod.rod_id >= array_height_2d(UpgradeData.upg)) return 0;
             jamm_cnt = 0;
-            jamm_slen = min(8, array_length_2d(UpgradeData.upg, Rod.rod_id));
+            jamm_slen = array_length_2d(UpgradeData.upg, Rod.rod_id);
             for (jamm_si = 0; jamm_si < jamm_slen; jamm_si += 1) {
                 if (UpgradeData.upg[Rod.rod_id, jamm_si] == jamm_id) {
                     jamm_cnt += 1;
@@ -612,7 +673,7 @@ internal static class ItemsRuntimeScripts
                 if (instance_exists(RodData) && instance_exists(UpgradeData)) {
                     for (jamm_ix = 0; jamm_ix < RodData.nItems && jamm_ix < array_height_2d(UpgradeData.upg); jamm_ix += 1) {
                         jamm_rkey = RodData.jamm_key[jamm_ix];
-                        for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
+                        for (jamm_iy = 0; jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
                             jamm_u = UpgradeData.upg[jamm_ix,jamm_iy];
                             jamm_ukey = "";
                             if (jamm_u == -2) {
@@ -621,7 +682,10 @@ internal static class ItemsRuntimeScripts
                                 jamm_ukey = UpgradeData.jamm_key[jamm_u];
                             }
                             ini_write_string("JAMM_Items", "slot:" + jamm_rkey + ":" + string(jamm_iy), jamm_ukey);
-                            jamm_obj = UpgradeData.object[jamm_ix,jamm_iy];
+                            jamm_obj = -1;
+                            if (jamm_ix < array_height_2d(UpgradeData.object) && jamm_iy < array_length_2d(UpgradeData.object, jamm_ix)) {
+                                jamm_obj = UpgradeData.object[jamm_ix,jamm_iy];
+                            }
                             jamm_okey = "";
                             if (jamm_obj > -1 && object_exists(jamm_obj)) {
                                 jamm_okey = object_get_name(jamm_obj);
@@ -706,7 +770,7 @@ internal static class ItemsRuntimeScripts
                     if (instance_exists(RodData) && instance_exists(UpgradeData)) {
                         for (jamm_ix = 0; jamm_ix < RodData.nItems && jamm_ix < array_height_2d(UpgradeData.upg); jamm_ix += 1) {
                             jamm_rkey = RodData.jamm_key[jamm_ix];
-                            for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
+                            for (jamm_iy = 0; jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
                                 jamm_skey = "slot:" + jamm_rkey + ":" + string(jamm_iy);
                                 if (ini_key_exists("JAMM_Items", jamm_skey)) {
                                     jamm_uval = ini_read_string("JAMM_Items", jamm_skey, "");
@@ -737,7 +801,7 @@ internal static class ItemsRuntimeScripts
                                             UpgradeData.object[jamm_ix,jamm_iy] = -1;
                                         }
                                     }
-                                } else if (jamm_ix >= RodData.jamm_base_count) {
+                                } else if (jamm_ix >= RodData.jamm_base_count || jamm_iy >= 10) {
                                     UpgradeData.upg[jamm_ix,jamm_iy] = UpgradeData.jamm_default_upg[jamm_ix,jamm_iy];
                                     UpgradeData.object[jamm_ix,jamm_iy] = -1;
                                 } else if (UpgradeData.upg[jamm_ix,jamm_iy] >= UpgradeData.jamm_base_count) {
@@ -846,15 +910,18 @@ internal static class ItemsRuntimeScripts
             sb.AppendLine("""
                     if (instance_exists(RodData) && instance_exists(UpgradeData)) {
                         for (jamm_ix = 0; jamm_ix < RodData.jamm_base_count && jamm_ix < array_height_2d(UpgradeData.upg); jamm_ix += 1) {
-                            for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
-                                if (UpgradeData.upg[jamm_ix,jamm_iy] >= UpgradeData.jamm_base_count) {
+                            for (jamm_iy = 0; jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
+                                if (jamm_iy >= 10) {
+                                    UpgradeData.upg[jamm_ix,jamm_iy] = UpgradeData.jamm_default_upg[jamm_ix,jamm_iy];
+                                    UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                } else if (UpgradeData.upg[jamm_ix,jamm_iy] >= UpgradeData.jamm_base_count) {
                                     UpgradeData.upg[jamm_ix,jamm_iy] = -1;
                                     UpgradeData.object[jamm_ix,jamm_iy] = -1;
                                 }
                             }
                         }
                         for (jamm_ix = RodData.jamm_base_count; jamm_ix < RodData.nItems && jamm_ix < array_height_2d(UpgradeData.upg); jamm_ix += 1) {
-                            for (jamm_iy = 0; jamm_iy < 8 && jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
+                            for (jamm_iy = 0; jamm_iy < array_length_2d(UpgradeData.upg, jamm_ix); jamm_iy += 1) {
                                 UpgradeData.upg[jamm_ix,jamm_iy] = UpgradeData.jamm_default_upg[jamm_ix,jamm_iy];
                                 UpgradeData.object[jamm_ix,jamm_iy] = -1;
                             }
