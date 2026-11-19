@@ -70,7 +70,12 @@ public static class ArchiveBuilder
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
             var data = working.Data;
             using (new AnalysisPhase(options, "build/compile"))
-                Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress);
+            {
+                List<string> extraDecisions = [];
+                Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress, extraDecisions);
+                if (extraDecisions.Count > 0)
+                    plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
+            }
             plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
             var expectedReferences = semantics.Expected(plan, data);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
@@ -103,7 +108,7 @@ public static class ArchiveBuilder
         finally { foreach (var source in sources) source.Dispose(); }
     }
 
-    private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress)
+    private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress, List<string> extraDecisions)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -217,7 +222,8 @@ public static class ArchiveBuilder
             object target = ResourceCatalog.Find(tables[asset.Family], asset.Name)!;
             if (asset.Family is "objects" or "rooms" or "scripts" or "paths" or "timelines") structured.Apply(target, asset.Snapshot!.Value, asset.Source);
             else if (target is UndertaleSprite targetSprite && sourceAsset is UndertaleSprite sourceSprite
-                && TryApplyHybridSpriteFrames(targetSprite, sourceSprite, asset, patches, sources, importers))
+                && (TryApplyRelocatedUpgradeIcons(targetSprite, sourceSprite, asset, plan.UpgradeIcons, patches, sources, importers, extraDecisions)
+                    || TryApplyHybridSpriteFrames(targetSprite, sourceSprite, asset, patches, sources, importers)))
             {
                 continue;
             }
@@ -239,6 +245,12 @@ public static class ArchiveBuilder
                     structured.Apply(font, asset.Snapshot.Value);
                 }
             }
+        }
+        if (plan.UpgradeIcons.Count > 0
+            && !plan.Assets.Any(a => a.Family == "sprites" && a.Name == "spr_upgradeicons")
+            && data.Sprites.FirstOrDefault(s => s.Name.Content == "spr_upgradeicons") is { } baseUpgradeIcons)
+        {
+            AppendRelocatedUpgradeIconFrames(baseUpgradeIcons, plan.UpgradeIcons, sources, importers, extraDecisions);
         }
         foreach (var entry in data.GeneralInfo.RoomOrder.Where(e => !data.Rooms.Contains(e.Resource)).ToArray()) data.GeneralInfo.RoomOrder.Remove(entry);
         foreach (var room in data.Rooms)
@@ -434,6 +446,65 @@ public static class ArchiveBuilder
         if (modSnap.TryGetProperty("marginTop", out var mt)) targetSprite.MarginTop = mt.GetInt32();
         if (modSnap.TryGetProperty("marginBottom", out var mb)) targetSprite.MarginBottom = mb.GetInt32();
         return true;
+    }
+
+    private static bool TryApplyRelocatedUpgradeIcons(
+        UndertaleSprite targetSprite,
+        UndertaleSprite sourceSprite,
+        PlannedAsset asset,
+        IReadOnlyList<UpgradeIconRelocation> upgradeIcons,
+        IReadOnlyList<ModPatch> patches,
+        IReadOnlyList<UndertaleData> sources,
+        ResourceImporter[] importers,
+        List<string> extraDecisions)
+    {
+        if (targetSprite.Name.Content != "spr_upgradeicons" || upgradeIcons.Count == 0)
+            return false;
+
+        bool sourceIsRelocated = upgradeIcons.Any(u => u.SourceMod == asset.Source);
+        if (!sourceIsRelocated)
+        {
+            if (!TryApplyHybridSpriteFrames(targetSprite, sourceSprite, asset, patches, sources, importers))
+                importers[asset.Source].Populate(sourceSprite, targetSprite);
+        }
+
+        AppendRelocatedUpgradeIconFrames(targetSprite, upgradeIcons, sources, importers, extraDecisions);
+        return true;
+    }
+
+    private static void AppendRelocatedUpgradeIconFrames(
+        UndertaleSprite targetSprite,
+        IReadOnlyList<UpgradeIconRelocation> upgradeIcons,
+        IReadOnlyList<UndertaleData> sources,
+        ResourceImporter[] importers,
+        List<string> extraDecisions)
+    {
+        var fallbackTexture = targetSprite.Textures.FirstOrDefault(t => t?.Texture is not null)?.Texture;
+        foreach (var reloc in upgradeIcons.OrderBy(r => r.TargetFrame))
+        {
+            var relocSprite = sources[reloc.SourceMod].Sprites.FirstOrDefault(s => s.Name.Content == "spr_upgradeicons");
+            var padTexture = fallbackTexture ?? relocSprite?.Textures.FirstOrDefault(t => t?.Texture is not null)?.Texture;
+            while (targetSprite.Textures.Count <= reloc.TargetFrame)
+                targetSprite.Textures.Add(new UndertaleSprite.TextureEntry { Texture = padTexture! });
+
+            bool canCopy = !reloc.Fallback
+                && relocSprite is not null
+                && reloc.SourceFrame >= 0
+                && reloc.SourceFrame < relocSprite.Textures.Count
+                && relocSprite.Width == targetSprite.Width
+                && relocSprite.Height == targetSprite.Height
+                && relocSprite.Textures[reloc.SourceFrame]?.Texture is not null;
+
+            if (canCopy)
+            {
+                targetSprite.Textures[reloc.TargetFrame] =
+                    (UndertaleSprite.TextureEntry)importers[reloc.SourceMod].Copy(relocSprite!.Textures[reloc.SourceFrame]);
+            }
+            else if (!reloc.Fallback)
+            {
+                extraDecisions.Add($"WARNING: could not append spr_upgradeicons frame {reloc.SourceFrame} at {reloc.TargetFrame}; kept duplicated/blank icon frame.");
+            }
+        }
     }
 
     private static PackAcceptanceReport AnalyzeAcceptance(

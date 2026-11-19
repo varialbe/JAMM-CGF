@@ -22,15 +22,37 @@ public static class ConflictAnalyzer
         if (patches.Any(p => p.FormatVersion != PatchJson.FormatVersion))
             throw new InvalidDataException("A patch uses an unsupported format. Recompute it with diff --force.");
         var relocation = Building.LegacySlotRelocation.Prepare(patches);
-        patches = relocation.Patches;
-        var catalog = Building.CatalogMerge.Prepare(patches);
-        patches = catalog.Patches;
+        var catalog = Building.CatalogMerge.Prepare(relocation.Patches);
+        return AnalyzePrepared(catalog.Patches, relocation, catalog.Mapping, allowSingle, cancellationToken);
+    }
+
+    internal static ConflictReport AnalyzePrepared(
+        IReadOnlyList<ModPatch> patches,
+        Building.LegacySlotRelocation.Result relocation,
+        Building.CatalogMapping[] catalogMapping,
+        bool allowSingle = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (patches.Count == 0 || patches.Count < 2 && !allowSingle) throw new ArgumentException("check needs at least two mods or patches.");
+        string baseHash = patches[0].Base.Sha256;
         // Labels remain unambiguous even when display names happen to match.
         string[] names = patches.Select((p, i) => patches.Count(q => Name(q) == Name(p)) > 1 ? $"{Name(p)} [{i + 1}]" : Name(p)).ToArray();
         List<ConflictItem> findings = [];
-        foreach (string warning in relocation.Decisions.Where(d => d.StartsWith("WARNING:", StringComparison.Ordinal)))
-            findings.Add(new("WARNING", "relocation", "code", "boat-slot", names, warning));
-        if (catalog.Mapping.Length > 0)
+        foreach (string decision in relocation.Decisions)
+        {
+            if (decision.StartsWith("WARNING:", StringComparison.Ordinal))
+            {
+                string target = decision.Contains("upgrade", StringComparison.OrdinalIgnoreCase)
+                    || decision.Contains("spr_upgradeicons", StringComparison.OrdinalIgnoreCase)
+                    ? "upgrade-slot" : "boat-slot";
+                findings.Add(new("WARNING", "relocation", "code", target, names, decision));
+            }
+            else if (decision.StartsWith("[CGF-RELOCATE-003]", StringComparison.Ordinal))
+            {
+                findings.Add(new("INFO", "relocation", "code", "upgrade-slot", names, decision));
+            }
+        }
+        if (catalogMapping.Length > 0)
             findings.Add(new("AUTO", "catalog", "code", Building.CatalogMerge.Create,
                 names.Distinct(StringComparer.Ordinal).ToArray(),
                 "Catalog API retains base fish and allocates distinct slots by object identity; no manual Create winner is needed. See docs/catalog-api.md for legacy save migration."));
@@ -117,7 +139,11 @@ public static class ConflictAnalyzer
                 findings.Add(new(slotUnion ? "AUTO" : hunk.Status, hunk.Kind, "code", asset, hunk.Versions.Select(v => v.Name).ToArray(),
                     $"Ancestor line {hunk.Start + 1}: " + (hunk.Status == "INFO" ? "identical code changes." : hunk.Kind == "list"
                     ? "different insertions at the same position (shared list/catalog)." : hunk.Kind == "addition" ? "same-name code additions have different definitions." : "overlapping code edits require a decision."),
-                    SuggestedResolution: slotUnion ? "Disjoint boat table slot writes are unioned automatically." : hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
+                    SuggestedResolution: slotUnion
+                        ? (asset.StartsWith("gml_Object_BoatData_", StringComparison.Ordinal)
+                            ? "Disjoint boat table slot writes are unioned automatically."
+                            : "Disjoint upgrade table writes, case clauses, or count bounds are merged automatically.")
+                        : hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
             }
             if (merge.Hunks.Any(h => h.Versions.Count == 1))
                 findings.Add(new("AUTO", "code", "code", asset, versions.Select(v => names[v.Mod]).ToArray(), "Non-overlapping code hunks are retained automatically in the merge preview."));
@@ -145,6 +171,18 @@ public static class ConflictAnalyzer
             {
                 bool equal = versions.All(v => SameSnapshot(family, versions[0].Asset!.Mod, v.Asset!.Mod));
                 bool unsupported = versions.Any(v => v.Asset!.Mod.GetRawText().Contains("unsupported:", StringComparison.Ordinal));
+                if (!unsupported && !equal && family == "sprites" && asset == "spr_upgradeicons"
+                    && relocation.UpgradeIcons.Count > 0 && relocation.UpgradeIcons.All(i => !i.Fallback))
+                {
+                    var relocatedMods = relocation.UpgradeIcons.Select(i => i.SourceMod).ToHashSet();
+                    var nonRelocated = versions.Where(v => !relocatedMods.Contains(v.Mod)).ToArray();
+                    if (nonRelocated.Length <= 1 || nonRelocated.Skip(1).All(v => SameSnapshot(family, nonRelocated[0].Asset!.Mod, v.Asset!.Mod)))
+                    {
+                        findings.Add(new("AUTO", "upgrade-icons", family, asset, versions.Select(v => names[v.Mod]).ToArray(),
+                            "Relocated upgrade icon frames are appended automatically to spr_upgradeicons."));
+                        return;
+                    }
+                }
                 findings.Add(new(unsupported ? "CONFLICT" : equal ? "INFO" : "CONFLICT", "binary", family, asset,
                     versions.Select(v => names[v.Mod]).ToArray(), unsupported ? "Unsupported content cannot prove equality; inspect or choose a version."
                     : equal ? "Identical content in every mod." : "Different content; later mod wins by default in Phase 3, subject to your decision.",
