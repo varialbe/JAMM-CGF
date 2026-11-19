@@ -20,7 +20,7 @@ internal static class BuildCommand
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         List<string> positional = [];
-        bool dryRun = false;
+        bool dryRun = false, noRepack = false;
         string[] allowed = command switch
         {
             "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json"],
@@ -31,6 +31,8 @@ internal static class BuildCommand
             string arg = arguments[i];
             if (command == "build" && arg == "--dry-run")
             { if (dryRun) throw new ArgumentException("--dry-run was given twice."); dryRun = true; }
+            else if (command == "build" && arg == "--no-repack")
+            { if (noRepack) throw new ArgumentException("--no-repack was given twice."); noRepack = true; }
             else if (allowed.Contains(arg, StringComparer.Ordinal))
             {
                 if (++i == arguments.Length || arguments[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{arg} needs a value.");
@@ -108,7 +110,7 @@ internal static class BuildCommand
         if (acceptanceJson is not null)
             OutputFile.Validate(acceptanceJson, [.. protectedPaths, output]);
         if (install is not null) GameInstaller.Validate(install, baseHash, [.. protectedPaths.Skip(1), output], basePath);
-        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress);
+        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress, noRepack: noRepack);
         foreach (string decision in result.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
         foreach (var item in result.RemappedReferences ?? new Dictionary<string, int>())
             Console.WriteLine($"Remapped references: {item.Key}: {item.Value} (changed/added source alternatives; conflict selections verified separately)");

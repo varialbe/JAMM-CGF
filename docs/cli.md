@@ -23,6 +23,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `profile use <name>` | Select a profile for apply/play |
 | `profile delete <name>` | Delete a profile, clearing the active selection if needed |
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
+| `profile repack <name> on\|off` | Enable or disable texture repacking for this profile's multi-mod builds |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
 | `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
 | `restore` | Restore the configured game directory and retain all original backups |
@@ -149,6 +150,11 @@ beside the patches or in `JAMM_MODS_DIR`. `--out` defaults to `./build/data.win`
 installed archives and original backups are protected. Normal
 builds publish only after the temporary archive reloads and passes reference and GML
 decompile/compile checks. A dry run compiles in memory and writes nothing.
+
+Builds with at least two enabled mods repack the legacy texture atlas by default.
+The `CGF-TEX-001` build decision reports the page count and estimated uncompressed
+texture memory before and after repacking. Pass `--no-repack` to `cgfmm build` or
+run `cgfmm profile repack <name> off` to keep the merged source atlas for debugging.
 
 Resolutions are a JSON object mapping `family/name` (or an unambiguous bare asset name) to a winning mod display name, or
 `"keep-both"` for code insertion conflicts, for example

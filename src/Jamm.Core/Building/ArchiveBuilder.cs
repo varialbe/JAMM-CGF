@@ -21,7 +21,8 @@ public static class ArchiveBuilder
 {
     /// <summary>Compiles a merged working copy; publishes only after the temporary output passes verification.</summary>
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
-        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
+        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
+        CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false)
     {
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
@@ -78,6 +79,17 @@ public static class ArchiveBuilder
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
             plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
+            if (inputs.Count >= 2 && !noRepack && (data.EmbeddedTextures.Count > 0 || data.TexturePageItems.Count > 0))
+            {
+                using var phase = new AnalysisPhase(options, "build/texture-repack");
+                string decision;
+                try { decision = TextureRepacker.Repack(data, progress, cancellationToken); }
+                catch (Exception ex) when (ex is not (OutOfMemoryException or OperationCanceledException))
+                {
+                    throw new InvalidDataException($"Could not repack textures while building '{Path.GetFileName(output)}'. Retry with --no-repack or turn repacking off for the profile. {ex.Message}", ex);
+                }
+                plan = plan with { Decisions = [.. plan.Decisions, decision] };
+            }
             var expectedReferences = semantics.Expected(plan, data);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);

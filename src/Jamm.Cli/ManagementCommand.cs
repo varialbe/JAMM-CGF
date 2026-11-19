@@ -108,7 +108,7 @@ internal static class ManagementCommand
             case "remove":
                 Count(1); library.Remove(positional[0]); Console.WriteLine($"Removed '{positional[0]}' from the library. Backups retained."); break;
             case "profile":
-                if (positional.Count == 0) throw new ArgumentException("Use profile create/list/show/use/delete/resolve. See 'cgfmm --help'.");
+                if (positional.Count == 0) throw new ArgumentException("Use profile create/list/show/use/delete/resolve/repack. See 'cgfmm --help'.");
                 string action = positional[0];
                 if (options.Count > 0 && action != "create" || json && action is not "show" and not "list")
                     throw new ArgumentException("--mods is for profile create; --json is for profile show/list.");
@@ -135,9 +135,20 @@ internal static class ManagementCommand
                             Console.WriteLine($"Profile {profile.Name} (later participating mods win overlaps):");
                             foreach (string id in profile.Mods) Console.WriteLine($"  {library.Find(id).Name} ({id})");
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
+                            Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for multi-mod builds")}");
                         }
                         break;
                     case "use": Count(2); profiles.Use(positional[1]); Console.WriteLine($"Active profile: {positional[1]}."); break;
+                    case "repack":
+                        Count(3);
+                        bool enabled = positional[2] switch
+                        {
+                            "on" => true, "off" => false,
+                            _ => throw new ArgumentException("Use profile repack <name> on|off.")
+                        };
+                        profiles.SetRepack(positional[1], enabled);
+                        Console.WriteLine($"Texture repacking for '{positional[1]}': {positional[2]}.");
+                        break;
                     case "delete": Count(2); profiles.Delete(positional[1]); Console.WriteLine($"Deleted profile '{positional[1]}'."); break;
                     case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3], Console.WriteLine); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
                     default: throw new ArgumentException($"Unknown profile action '{action}'. See 'cgfmm --help'.");

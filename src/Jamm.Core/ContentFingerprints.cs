@@ -104,27 +104,34 @@ public sealed class ContentFingerprints
             // Drop the previous atlas before decoding the next one.
             decodedPage = null;
             decodedPixels = null;
-            var source = page.TextureData.Image;
-            if (source.Format is GMImage.ImageFormat.Png or GMImage.ImageFormat.Dds)
-            {
-                using var decoded = source.GetMagickImage();
-                decoded.Alpha(ImageMagick.AlphaOption.Set);
-                decodedPixels = GMImage.FromMagickImage(decoded);
-            }
-            else decodedPixels = source.ConvertToRawBgra();
+            decodedPixels = DecodeTexture(page.TextureData.Image);
             decodedPage = page;
         }
         var image = decodedPixels!;
         if ((long)item.SourceX + item.SourceWidth > image.Width || (long)item.SourceY + item.SourceHeight > image.Height)
             return Unsupported("out-of-range region", item.Name?.Content);
+        pixels[item] = HashTextureRegion(image, item);
+        return Of(new { item.SourceWidth, item.SourceHeight, item.TargetX, item.TargetY,
+            item.TargetWidth, item.TargetHeight, item.BoundingWidth, item.BoundingHeight,
+            Pixels = pixels[item] });
+    }
+
+    internal static GMImage DecodeTexture(GMImage source)
+    {
+        if (source.Format is not (GMImage.ImageFormat.Png or GMImage.ImageFormat.Dds))
+            return source.ConvertToRawBgra();
+        using var decoded = source.GetMagickImage();
+        decoded.Alpha(ImageMagick.AlphaOption.Set);
+        return GMImage.FromMagickImage(decoded);
+    }
+
+    internal static string HashTextureRegion(GMImage image, UndertaleTexturePageItem item)
+    {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var bytes = image.GetRawImageData();
         for (int y = item.SourceY; y < item.SourceY + item.SourceHeight; y++)
             hash.AppendData(bytes.Slice(checked((y * image.Width + item.SourceX) * 4), item.SourceWidth * 4));
-        pixels[item] = Convert.ToHexStringLower(hash.GetHashAndReset());
-        return Of(new { item.SourceWidth, item.SourceHeight, item.TargetX, item.TargetY,
-            item.TargetWidth, item.TargetHeight, item.BoundingWidth, item.BoundingHeight,
-            Pixels = pixels[item] });
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 
     /// <summary>Dimensions, origin, flags, collision masks and an ordered hash of each frame region.</summary>

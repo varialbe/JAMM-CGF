@@ -81,6 +81,10 @@ public sealed class ProfileLibrary(ManagerStore store)
     /// <summary>Selects an existing profile as the default for apply and play.</summary>
     public void Use(string name) { Get(name); store.SaveConfig(store.Config() with { ActiveProfile = name }); }
 
+    /// <summary>Sets whether multi-mod builds of this profile should repack textures.</summary>
+    public void SetRepack(string name, bool enabled) =>
+        store.Write(FilePath(name), Get(name) with { NoRepack = !enabled });
+
     /// <summary>Deletes a profile and clears its active selection if necessary.</summary>
     public void Delete(string name)
     {
