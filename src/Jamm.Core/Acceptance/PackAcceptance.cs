@@ -303,7 +303,9 @@ public static class PackAcceptance
         List<RuntimeRisk> risks = [];
         CheckTableLengths(mergedReader, risks);
         CheckInstanceDecisions(plan, risks);
-        CheckLightCullRisks(mergedData, mergedReader, risks);
+        // CGF-INSTANCE-003 stops FishThinner from culling light owners, so the risk only remains when that repair was not applied.
+        if (!plan.Decisions.Any(d => d.StartsWith("[CGF-INSTANCE-003]", StringComparison.Ordinal)))
+            CheckLightCullRisks(mergedData, mergedReader, risks);
 
         return new(modResults, risks, apiRegistrations.Count > 0 ? apiRegistrations : null);
     }

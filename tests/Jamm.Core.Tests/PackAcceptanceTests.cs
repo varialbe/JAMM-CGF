@@ -63,7 +63,7 @@ public sealed class PackAcceptanceTests
     }
 
     [Fact]
-    public void AddedBoatLostAndHunkLostWhenConflictPicksOtherMod()
+    public void DistinctBoatsOnOneSlotBothArriveAfterRelocation()
     {
         using var temp = new TemporaryDirectory();
         string basePath = temp.PathFor("base.win");
@@ -134,16 +134,15 @@ public sealed class PackAcceptanceTests
         var repA = result.Acceptance.Mods.Single(m => m.Mod == "ModA");
         var repB = result.Acceptance.Mods.Single(m => m.Mod == "ModB");
 
+        // Distinct boats on the same slot are relocated (CGF-RELOCATE-001): both survive and no hunk is lost.
         var boatA = Assert.Single(repA.Items, i => i.Kind == AcceptanceKind.Boat && i.Identity == "BoatAlpha");
-        Assert.Equal(AcceptanceStatus.Lost, boatA.Status);
-
-        var hunkA = Assert.Single(repA.Items, i => i.Kind == AcceptanceKind.Hunk);
-        Assert.Equal(AcceptanceStatus.Lost, hunkA.Status);
-        Assert.StartsWith("gml_Object_BoatData_Create_0:", hunkA.Identity, StringComparison.Ordinal);
+        Assert.Equal(AcceptanceStatus.Present, boatA.Status);
+        Assert.DoesNotContain(repA.Items, i => i.Kind == AcceptanceKind.Hunk);
 
         var boatB = Assert.Single(repB.Items, i => i.Kind == AcceptanceKind.Boat && i.Identity == "BoatBeta");
-        Assert.Equal(AcceptanceStatus.Present, boatB.Status);
+        Assert.Equal(AcceptanceStatus.Relocated, boatB.Status);
         Assert.DoesNotContain(repB.Items, i => i.Kind == AcceptanceKind.Hunk);
+        Assert.Contains(result.Plan.Decisions, d => d.StartsWith("[CGF-RELOCATE-001]", StringComparison.Ordinal));
     }
 
     [Fact]

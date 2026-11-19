@@ -324,9 +324,12 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             text.Append(string.Concat(lines[cursor..hunk.Start]));
             bool catalogUnion = asset.StartsWith("code/gml_Object_CatalogData_", StringComparison.Ordinal)
                 && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null && CatalogMerge.DisjointWrites(hunk.Versions.Select(v => v.Text));
-            bool slotUnion = asset.StartsWith("code/gml_Object_BoatData_", StringComparison.Ordinal)
-                && hunk.Kind == "list" && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null;
-            if (hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion || slotUnion))
+            string? slotUnion = LegacySlotRelocation.SlotUnion(asset, hunk);
+            if (slotUnion is not null)
+            {
+                text.Append(slotUnion);
+            }
+            else if (hunk.Status == "CONFLICT" && (hunkChoice == "keep-both" || catalogUnion))
             {
                 text.Append(hunk.KeepBoth);
             }

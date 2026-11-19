@@ -113,8 +113,7 @@ public static class ConflictAnalyzer
             if (versions.Count < 2) return;
             foreach (var hunk in merge.Hunks.Where(h => h.Versions.Count > 1))
             {
-                bool slotUnion = asset.StartsWith("gml_Object_BoatData_", StringComparison.Ordinal)
-                    && hunk.Kind == "list" && hunk.Status == "CONFLICT" && hunk.KeepBoth is not null;
+                bool slotUnion = Building.LegacySlotRelocation.SlotUnion(asset, hunk) is not null;
                 findings.Add(new(slotUnion ? "AUTO" : hunk.Status, hunk.Kind, "code", asset, hunk.Versions.Select(v => v.Name).ToArray(),
                     $"Ancestor line {hunk.Start + 1}: " + (hunk.Status == "INFO" ? "identical code changes." : hunk.Kind == "list"
                     ? "different insertions at the same position (shared list/catalog)." : hunk.Kind == "addition" ? "same-name code additions have different definitions." : "overlapping code edits require a decision."),

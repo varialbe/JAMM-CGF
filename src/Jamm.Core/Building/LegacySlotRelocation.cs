@@ -133,6 +133,55 @@ internal static partial class LegacySlotRelocation
         return text;
     }
 
+    /// <summary>
+    /// Returns merged text for a conflicting BoatData hunk whose versions differ only by writes to disjoint table slots
+    /// (lines shared by every version are kept once), or null when the hunk needs a real decision.
+    /// </summary>
+    internal static string? SlotUnion(string asset, MergeHunk hunk)
+    {
+        if (!asset.Contains("gml_Object_BoatData_", StringComparison.Ordinal) || hunk.Status != "CONFLICT" || hunk.Versions.Count < 2) return null;
+        if (hunk.Kind == "list" && hunk.KeepBoth is not null) return hunk.KeepBoth;
+        var lines = hunk.Versions.Select(v => SplitLines(v.Text)).ToArray();
+        var common = lines.Skip(1).Aggregate(new HashSet<string>(lines[0].Select(l => l.Trim()), StringComparer.Ordinal),
+            (set, next) => { set.IntersectWith(next.Select(l => l.Trim())); return set; });
+        var claimed = new HashSet<int>();
+        var unique = new List<string>[lines.Length];
+        for (int v = 0; v < lines.Length; v++)
+        {
+            unique[v] = lines[v].Where(l => !common.Contains(l.Trim())).ToList();
+            var slots = new HashSet<int>();
+            foreach (string line in unique[v].Where(l => l.Trim().Length > 0))
+            {
+                var match = SlotWrite().Match(line);
+                if (!match.Success) return null;
+                slots.Add(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
+            }
+            if (slots.Overlaps(claimed)) return null;
+            claimed.UnionWith(slots);
+        }
+        // Insert the other versions' slot writes right after the first version's own unique lines, so shared trailing
+        // lines such as an nItems computation stay after every slot write.
+        var result = new List<string>(lines[0]);
+        int anchor = unique[0].Count == 0 ? -1 : result.FindLastIndex(l => !common.Contains(l.Trim()));
+        if (anchor < 0) anchor = result.FindIndex(l => l.Contains("nItems", StringComparison.Ordinal)) - 1;
+        if (anchor < -1) anchor = result.Count - 1;
+        result.InsertRange(anchor + 1, unique.Skip(1).SelectMany(u => u));
+        return string.Concat(result);
+    }
+
+    private static List<string> SplitLines(string text)
+    {
+        var lines = new List<string>();
+        int start = 0;
+        for (int i = 0; i < text.Length; i++)
+            if (text[i] == '\n') { lines.Add(text[start..(i + 1)]); start = i + 1; }
+        if (start < text.Length) lines.Add(text[start..] + "\n");
+        return lines;
+    }
+
+    [GeneratedRegex(@"^\s*(?:BoatData\.)?[A-Za-z_][A-Za-z0-9_]*\s*\[\s*(\d+)\s*\]\s*=[^=]", RegexOptions.CultureInvariant)]
+    private static partial Regex SlotWrite();
+
     private static string Name(ModPatch patch) => patch.Mod.Name ?? Path.GetFileNameWithoutExtension(patch.Mod.FileName);
 
     [GeneratedRegex(@"(?:BoatData\.)?object\s*\[\s*(\d+)\s*\]\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", RegexOptions.CultureInvariant)]
