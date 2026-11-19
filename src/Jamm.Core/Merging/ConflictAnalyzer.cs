@@ -51,7 +51,10 @@ public static class ConflictAnalyzer
             {
                 string target = decision.Contains("upgrade", StringComparison.OrdinalIgnoreCase)
                     || decision.Contains("spr_upgradeicons", StringComparison.OrdinalIgnoreCase)
-                    ? "upgrade-slot" : "boat-slot";
+                    ? "upgrade-slot"
+                    : decision.Contains("lure slot", StringComparison.OrdinalIgnoreCase) ? "lure-slot"
+                    : decision.Contains("tool slot", StringComparison.OrdinalIgnoreCase) ? "tool-slot"
+                    : "boat-slot";
                 findings.Add(new("WARNING", "relocation", "code", target, names, decision));
             }
             else if (decision.StartsWith("[CGF-RELOCATE-003]", StringComparison.Ordinal)
@@ -150,7 +153,11 @@ public static class ConflictAnalyzer
                     SuggestedResolution: slotUnion
                         ? (asset.StartsWith("gml_Object_BoatData_", StringComparison.Ordinal)
                             ? "Disjoint boat table slot writes are unioned automatically."
-                            : "Disjoint upgrade table writes, case clauses, or count bounds are merged automatically.")
+                            : asset.StartsWith("gml_Object_LureData_", StringComparison.Ordinal)
+                                ? "Disjoint lure table slot writes are unioned automatically."
+                                : asset.StartsWith("gml_Object_ToolData_", StringComparison.Ordinal)
+                                    ? "Disjoint tool table slot writes are unioned automatically."
+                                    : "Disjoint upgrade table writes, case clauses, or count bounds are merged automatically.")
                         : hunk.KeepBoth is null ? null : "keepBoth: keep both insertions in load order"));
             }
             if (merge.Hunks.Any(h => h.Versions.Count == 1))

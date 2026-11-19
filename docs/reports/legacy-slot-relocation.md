@@ -46,3 +46,24 @@ for the relocated claimant. Real heavy pack: `Effect slot Rod.upgrades[22] of "B
 hunks keep the original id, this now unlocks Zoom (18), which matches TGE's own behavior, but Bulbguard (19) is no longer unlocked by
 that trigger. Needs an in-game check whether Bulbguard is still obtainable; possible fix: emit an extra unlock for the relocated id when
 the only unlock site of an upgrade is a shared hunk.
+
+## Lure and tool slot relocation (CGF-RELOCATE-001) — added 2026-11-19
+
+Generalized `LegacySlotRelocation` via `TableDescriptor` across `BoatData`, `LureData`, and `ToolData`:
+
+- **Identity:** `object[i]` when present (`BoatData`), otherwise `name[i]` (`LureData`, `ToolData`). Using `name[i]` for `LureData` avoids colliding on shared item objects (e.g. `cave-expansion` sets `item[6] = BigHook2`, the same object as vanilla `item[4]` "Mega Hook", with `name[6] = "Giga Hook"`). `PackAcceptance` also uses `["object"]` then `["name"]` for `LureData` and `ToolData`.
+- **Typed sinks (rewritten only in the relocated claimant's added/changed lines):**
+  - Boats: `BoatData.<field>[N]`, bare `<field>[N]` in `BoatData` events / `with (BoatData)`, `boat_was_unlocked(N)`, `boat`/`boat_index`, and `item_id` in `BoatData`/`BoatCard`/`BoatMenu` scope.
+  - Lures: `LureData.<field>[N]`, bare `<field>[N]` in `LureData` events / `with (LureData)`, `gear_lure_scalar[N]` and `lure_scalar[N]`, `buy_lure(N)`, `lure_was_purchased(N)`, `lure_index`/`active_lure`, `LureQuest.purchased`/`type`, and `item_id` in `LureData`/`LureCard`/`LureMenu` scope.
+  - Tools: `ToolData.<field>[N]`, bare `<field>[N]` in `ToolData` events / `with (ToolData)`, `tool_was_purchased(N)`, `tool_index`/`active_tool`, and `item_id` in `ToolData`/`ToolCard`/`ToolMenu` scope.
+- **Unclassified literal guard & table unions:** Any remaining literal `N` on an added/changed line within +/-5 tokens of `"boat"` / `"lure"` / `"tool"` fails closed with a `WARNING` (`boat-slot` / `lure-slot` / `tool-slot`) and skips relocating that claimant. `SlotUnion` handles `gml_Object_BoatData_*`, `gml_Object_LureData_*`, and `gml_Object_ToolData_*` (disjoint slot writes, list insertions, and max `nItems = <int>` assignments).
+- **`ToolData_Create_0` placeholders & `nItems`:** Vanilla `ToolData_Create_0` defines `nItems = 3;` plus placeholder lines `unlocked[3] = -1; unlocked[4] = -1;`. When a relocated tool modified an `unlocked[oldSlot]` placeholder in-place, relocation restores `unlocked[oldSlot]` to its base line, places `unlocked[newSlot]` into `unlocked[newSlot]`'s placeholder (or after the `unlocked` block), and bumps literal `nItems` to at least `newSlot + 1`.
+
+## Why rod slot relocation (`RodData`) is deferred
+
+Inspected vanilla `RodData_Create_0`, `UpgradeData_Create_0`, `SaveManager_Other_13..15`, `Rod_Other_10`, `RodCard_Other_11`, `Rocket_Step_2`, `start_quest_dist`, and real mods (`TGE.win`, `cave-expansion.win`). Rods are left un-relocated because of four coupled dependencies:
+
+1. **2D `UpgradeData.upg[rod, slot]` and `UpgradeData.object[rod, slot]` rows:** Every rod id indexes a row in `UpgradeData_Create_0` (vanilla initializes `0..5 x 0..7`). A relocated rod `rod'` needs row `upg[rod', ...]` and `object[rod', ...]` initialized, yet real mods are asymmetric: `TGE` adds `Proto-Rod` at slot 6 and edits `UpgradeData_Create_0` (`upg[6, 0..8] = -1`, `for (ix = 0; ix < 7; ix++)`), whereas `cave-expansion` adds `Mystic Rod` at slot 6 without touching `UpgradeData_Create_0` at all (so no `upg[6, ...]` row exists in `cave-expansion` to move to row 7).
+2. **Hardcoded `SaveManager` 2D loop bounds:** `SaveManager_Other_13/14/15` loop `with (UpgradeData)` with literal `for (ix = 0; ix < 6; ix++)` (`< 7` in `TGE`), which must also be raised to `rod' + 1` or upgrade slots on rod `>= 7` are lost on save/load.
+3. **`spr_rod` atlas frame indexing:** Vanilla `RodData` has no `disp[]` array (`RodCard_Other_11` and `Rod_Other_10` index `spr_rod` directly by `item_id`/`rod_id`). Both `TGE` and `cave-expansion` modify `spr_rod`, so rod relocation also requires `spr_rod` frame relocation (like `spr_upgradeicons` in `LegacyUpgradeRelocation`) or injecting `disp[]` patching.
+4. **Consumer bounds and `Create_0` quirks:** `Rocket_Step_2` (`target_distance[0..5]`), `start_quest_dist` (`dist[0..5]`, `dpth[0..5]`), and `UpgradeData_Create_0` (`cost_base[0..5]`) assume vanilla rod counts; `RodData_Create_0` also uses hardcoded `nItems = 6` plus placeholder `unlocked[6..7] = -2` (`TGE` keeps `-2` until quest unlock and clamps `unlocked[6] < -1` in `SaveManager_Other_13`; `cave-expansion` leaves `nItems = 6` unchanged and edits vanilla slot 5).

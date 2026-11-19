@@ -146,6 +146,100 @@ public sealed class PackAcceptanceTests
     }
 
     [Fact]
+    public void DistinctLuresOnOneSlotBothArriveAfterRelocation()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string modAPath = temp.PathFor("modA.win");
+        string modBPath = temp.PathFor("modB.win");
+
+        WriteSyntheticArchive(basePath, d =>
+        {
+            AddObject(d, "LureData");
+            AddObject(d, "BigHook2");
+            AddSprite(d, "spr_mega");
+            CompileObjectCreate(d, "LureData", """
+                unlocked[0] = -1;
+                cost[0] = 50000;
+                name[0] = "Mega Hook";
+                item[0] = BigHook2;
+                disp[0] = spr_mega;
+                desc[0] = "Mega";
+                nItems = array_length_1d(unlocked);
+                """);
+        });
+        WriteSyntheticArchive(modAPath, d =>
+        {
+            AddObject(d, "LureData");
+            AddObject(d, "BigHook2");
+            AddObject(d, "LanternObj");
+            AddSprite(d, "spr_mega");
+            AddSprite(d, "spr_lantern");
+            CompileObjectCreate(d, "LureData", """
+                unlocked[0] = -1;
+                unlocked[1] = -1;
+                cost[0] = 50000;
+                cost[1] = 10000;
+                name[0] = "Mega Hook";
+                item[0] = BigHook2;
+                disp[0] = spr_mega;
+                desc[0] = "Mega";
+                name[1] = "Lantern";
+                item[1] = LanternObj;
+                disp[1] = spr_lantern;
+                desc[1] = "Lantern";
+                nItems = array_length_1d(unlocked);
+                """);
+        });
+        WriteSyntheticArchive(modBPath, d =>
+        {
+            AddObject(d, "LureData");
+            AddObject(d, "BigHook2");
+            AddSprite(d, "spr_mega");
+            AddSprite(d, "spr_giga");
+            CompileObjectCreate(d, "LureData", """
+                unlocked[0] = -1;
+                unlocked[1] = -1;
+                cost[0] = 50000;
+                cost[1] = 125000;
+                name[0] = "Mega Hook";
+                item[0] = BigHook2;
+                disp[0] = spr_mega;
+                desc[0] = "Mega";
+                name[1] = "Giga Hook";
+                item[1] = BigHook2;
+                disp[1] = spr_giga;
+                desc[1] = "Giga";
+                nItems = array_length_1d(unlocked);
+                """);
+        });
+
+        using var original = GameFileLoader.Load(basePath);
+        using var modA = GameFileLoader.Load(modAPath);
+        using var modB = GameFileLoader.Load(modBPath);
+        var pa = PatchBuilder.Create(original, modA, "ModA");
+        var pb = PatchBuilder.Create(original, modB, "ModB");
+
+        string output = temp.PathFor("merged.win");
+        var result = ArchiveBuilder.Build(basePath, [new(pa, modAPath), new(pb, modBPath)], output);
+        Assert.NotNull(result.Acceptance);
+
+        var repA = result.Acceptance.Mods.Single(m => m.Mod == "ModA");
+        var repB = result.Acceptance.Mods.Single(m => m.Mod == "ModB");
+
+        var lureA = Assert.Single(repA.Items, i => i.Kind == AcceptanceKind.Lure && i.Identity == "Lantern");
+        Assert.Equal(AcceptanceStatus.Present, lureA.Status);
+        Assert.Equal("LureData slot 1", lureA.Detail);
+        Assert.DoesNotContain(repA.Items, i => i.Kind == AcceptanceKind.Hunk);
+
+        var lureB = Assert.Single(repB.Items, i => i.Kind == AcceptanceKind.Lure && i.Identity == "Giga Hook");
+        Assert.Equal(AcceptanceStatus.Relocated, lureB.Status);
+        Assert.Equal("LureData slot 1 -> 2", lureB.Detail);
+        Assert.DoesNotContain(repB.Items, i => i.Kind == AcceptanceKind.Hunk);
+        Assert.Contains(result.Plan.Decisions, d => d.StartsWith("[CGF-RELOCATE-001] Lure \"Giga Hook\" (ModB) moved from slot 1 to 2;", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void FishRelocatedInCatalogStillCountsAsArrived()
     {
         using var temp = new TemporaryDirectory();
