@@ -31,7 +31,9 @@ public sealed record BenchmarkOptions(
     double DeepY = 7200.0,
     int BoatSlot = 7,
     bool DeepSonar = false,
-    bool ShowHud = false);
+    bool ShowHud = false,
+    bool Profile = false,
+    bool ProfileScripts = false);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -80,6 +82,9 @@ public static partial class BenchmarkMod
         options ??= new BenchmarkOptions();
         ValidateOptions(options);
 
+        if (options.Profile)
+            GmlCpuProfiler.Instrument(data, options.ProfileScripts);
+
         if (data.Rooms.ByName("NewWorld") is null)
             throw new InvalidDataException("Required room 'NewWorld' was not found: use a Cat Goes Fishing legacy archive (original or modded).");
 
@@ -94,7 +99,7 @@ public static partial class BenchmarkMod
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStepGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), EndStepGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), DrawGuiGml(data));
-        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), DrawGuiEndGml());
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), DrawGuiEndGml(options.Profile));
         ModObjects.Compile(compiler);
 
         ModObjects.PlaceInstance(data, "NewWorld", bench, first: true);
@@ -168,6 +173,7 @@ public static partial class BenchmarkMod
             jamm_b_boat_slot = {{o.BoatSlot}};
             jamm_b_deep_sonar = {{(o.DeepSonar ? 1 : 0)}};
             jamm_b_show_hud = {{(o.ShowHud ? 1 : 0)}};
+            {{(o.Profile ? "jamm_b_profile = 1;" : "")}}
 
             if (file_exists("jamm_bench.ini"))
             {
@@ -218,6 +224,7 @@ public static partial class BenchmarkMod
             jamm_b_warmup_frames = 0;
             jamm_b_step_samples = 0;
             jamm_b_summary_line = "";
+            {{(o.Profile ? "global.__jamm_prof_us = ds_map_create();\nglobal.__jamm_prof_n = ds_map_create();\nglobal.__jamm_prof_on = 0;" : "")}}
             """;
     }
 
@@ -570,7 +577,7 @@ public static partial class BenchmarkMod
             """;
     }
 
-    private static string DrawGuiEndGml() => """
+    private static string DrawGuiEndGml(bool profile) => $$"""
         var jamm_b_now = get_timer();
         if (jamm_b_state == 1)
         {
@@ -583,6 +590,7 @@ public static partial class BenchmarkMod
                 jamm_b_capture_start = jamm_b_now;
                 jamm_b_prev_gui_t = jamm_b_now;
                 jamm_b_has_step = 0;
+                {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_n);\nglobal.__jamm_prof_on = 1;" : "")}}
                 jamm_b_state = 2;
             }
         }
@@ -601,6 +609,7 @@ public static partial class BenchmarkMod
 
             if ((jamm_b_now - jamm_b_capture_start) >= (jamm_b_capture_sec * 1000000) || ds_list_size(jamm_b_frame_list) >= jamm_b_max_samples)
             {
+                {{(profile ? "global.__jamm_prof_on = 0;" : "")}}
                 var jamm_b_wall_us = max(1, jamm_b_now - jamm_b_capture_start);
                 var jamm_b_n = ds_list_size(jamm_b_frame_list);
 
@@ -704,6 +713,8 @@ public static partial class BenchmarkMod
                     file_text_close(jamm_b_f);
                 }
 
+                {{(profile ? ProfileWriterGml() : "")}}
+
                 ds_list_destroy(jamm_b_sorted);
                 ds_list_destroy(jamm_b_loop_sorted);
                 jamm_b_summary_line = "Bench " + jamm_b_scene + ": n=" + string(jamm_b_n) + " fps=" + string(jamm_b_avg_fps) + " p50_us=" + string(round(jamm_b_f_p50)) + " p95_us=" + string(round(jamm_b_f_p95)) + " file=" + jamm_b_output_file;
@@ -720,6 +731,49 @@ public static partial class BenchmarkMod
                 jamm_b_phase_start = jamm_b_now;
                 jamm_b_warmup_frames = 0;
             }
+        }
+        """;
+
+    private static string ProfileWriterGml() => """
+        var jamm_p_name = "jamm_profile_" + jamm_b_scene + ".csv";
+        var jamm_p_f = file_text_open_write(jamm_p_name);
+        if (jamm_p_f >= 0)
+        {
+            file_text_write_string(jamm_p_f, "# ticks=" + string(jamm_b_loop_n) + " loop_us_mean=" + string(round(jamm_b_l_mean)) + " overhead=get_timer_start_and_end_per_invocation; relative_cpu_only; draw_entries_render_affected");
+            file_text_writeln(jamm_p_f);
+            file_text_write_string(jamm_p_f, "code_entry,calls,total_us,us_per_tick,share_of_loop");
+            file_text_writeln(jamm_p_f);
+            var jamm_p_keys = ds_list_create();
+            var jamm_p_key = ds_map_find_first(global.__jamm_prof_us);
+            while (!is_undefined(jamm_p_key))
+            {
+                ds_list_add(jamm_p_keys, jamm_p_key);
+                jamm_p_key = ds_map_find_next(global.__jamm_prof_us, jamm_p_key);
+            }
+            var jamm_p_i, jamm_p_j, jamm_p_left, jamm_p_right;
+            for (jamm_p_i = 0; jamm_p_i < ds_list_size(jamm_p_keys); jamm_p_i += 1)
+            {
+                for (jamm_p_j = jamm_p_i + 1; jamm_p_j < ds_list_size(jamm_p_keys); jamm_p_j += 1)
+                {
+                    jamm_p_left = ds_list_find_value(jamm_p_keys, jamm_p_i);
+                    jamm_p_right = ds_list_find_value(jamm_p_keys, jamm_p_j);
+                    if (ds_map_find_value(global.__jamm_prof_us, jamm_p_right) > ds_map_find_value(global.__jamm_prof_us, jamm_p_left))
+                    {
+                        ds_list_replace(jamm_p_keys, jamm_p_i, jamm_p_right);
+                        ds_list_replace(jamm_p_keys, jamm_p_j, jamm_p_left);
+                    }
+                }
+            }
+            for (jamm_p_i = 0; jamm_p_i < ds_list_size(jamm_p_keys); jamm_p_i += 1)
+            {
+                jamm_p_key = ds_list_find_value(jamm_p_keys, jamm_p_i);
+                var jamm_p_us = ds_map_find_value(global.__jamm_prof_us, jamm_p_key);
+                var jamm_p_calls = ds_map_find_value(global.__jamm_prof_n, jamm_p_key);
+                file_text_write_string(jamm_p_f, string(jamm_p_key) + "," + string(jamm_p_calls) + "," + string(round(jamm_p_us)) + "," + string(round(jamm_p_us / max(1, jamm_b_loop_n))) + "," + string(jamm_p_us / max(1, jamm_b_loop_sum)));
+                file_text_writeln(jamm_p_f);
+            }
+            ds_list_destroy(jamm_p_keys);
+            file_text_close(jamm_p_f);
         }
         """;
 }

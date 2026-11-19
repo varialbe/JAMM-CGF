@@ -152,6 +152,58 @@ public class BenchmarkTests
     }
 
     [Fact]
+    public void ProfiledBenchWrapsEventsAndScriptsAndCountsAfterExitPaths()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var fish = data.GameObjects.ByName("Fish")!;
+        var exitEvent = fish.EventHandlerFor(EventType.Alarm, 0u, data);
+        var script = UndertaleCode.CreateEmptyEntry(data, "gml_Script_profile_test");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("profile_test"), Code = script });
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(exitEvent, "if (x > 0) exit; return 7;");
+        compiler.QueueCodeReplace(script, "if (argument0) exit; return argument0;");
+        ModObjects.Compile(compiler);
+
+        var options = new BenchmarkOptions(Profile: true, ProfileScripts: true);
+        BenchmarkMod.Apply(data, options);
+
+        var wrappedEvent = fish.Events[(int)EventType.Alarm][0].Actions[0].CodeId;
+        string eventStub = ModObjects.Decompile(data, wrappedEvent);
+        Assert.Contains("__jamm_prof_original_", eventStub);
+        Assert.Contains("ds_map_set(global.__jamm_prof_us", eventStub);
+        Assert.Contains("get_timer() - __jamm_prof_start", eventStub);
+
+        var wrappedScript = data.Scripts.Single(s => s.Name.Content == "profile_test").Code;
+        string scriptStub = ModObjects.Decompile(data, wrappedScript);
+        Assert.Contains("switch (argument_count)", scriptStub);
+        Assert.Contains("return __jamm_prof_result", scriptStub);
+        Assert.Contains("ds_map_set(global.__jamm_prof_n", scriptStub);
+
+        string benchCreate = Code(data, "Create_0");
+        string drawEnd = Code(data, "Draw_75");
+        Assert.Contains("jamm_b_profile = 1", benchCreate);
+        Assert.Contains("global.__jamm_prof_on = 1", drawEnd);
+        Assert.Contains("global.__jamm_prof_on = 0", drawEnd);
+        Assert.Contains("jamm_profile_", drawEnd);
+        Assert.Contains("code_entry,calls,total_us,us_per_tick,share_of_loop", drawEnd);
+        Assert.Contains("get_timer_start_and_end_per_invocation", drawEnd);
+    }
+
+    [Fact]
+    public void UnprofiledBenchLeavesExistingCodeUnchanged()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var fishStep = data.GameObjects.ByName("Fish")!.EventHandlerFor(EventType.Step, 2u, data);
+        string before = ModObjects.Decompile(data, fishStep);
+
+        BenchmarkMod.Apply(data, new BenchmarkOptions(Profile: false));
+
+        Assert.Equal(before, ModObjects.Decompile(data, fishStep));
+        Assert.Null(data.Code.ByName("gml_Script___jamm_prof_original_0"));
+        Assert.DoesNotContain("global.__jamm_prof_on", Code(data, "Draw_75"));
+    }
+
+    [Fact]
     public void ModMakerBenchCliPreservesInputArchiveAndVerifiesOutput()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "jamm-bench-test-" + Guid.NewGuid().ToString("N"));

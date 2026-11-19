@@ -30,7 +30,7 @@ public static class Program
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
                   silo    <original.win> <out.win>
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -115,6 +115,8 @@ public static class Program
         int boatSlot = 7;
         bool deepSonar = false;
         bool showHud = false;
+        bool profile = false;
+        bool profileScripts = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -126,6 +128,8 @@ public static class Program
                 case "--no-exit": autoExit = false; break;
                 case "--deep-sonar": deepSonar = true; break;
                 case "--show-hud": showHud = true; break;
+                case "--profile": profile = true; break;
+                case "--profile-scripts": profile = true; profileScripts = true; break;
                 case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
                 case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
                 case "--duration": duration = ParseDouble(RequireValue(args, ref i, arg), arg); break;
@@ -140,7 +144,7 @@ public static class Program
             }
         }
 
-        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud);
+        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts);
     }
 
     private static string RequireValue(string[] args, ref int i, string option)
