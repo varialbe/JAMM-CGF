@@ -25,10 +25,14 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
 
     internal bool HasResolvedHunks { get; init; }
     internal IReadOnlyList<UpgradeIconRelocation> UpgradeIcons { get; init; } = [];
+    internal IReadOnlyList<RodFrame> RodFrames { get; init; } = [];
 
     /// <summary>Combines patches against one exact ancestor, resolving conflicts in load order.</summary>
     public static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions = null,
-        IReadOnlyList<AssetReference>? baseReferences = null)
+        IReadOnlyList<AssetReference>? baseReferences = null) => Create(patches, resolutions, baseReferences, null);
+
+    internal static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions,
+        IReadOnlyList<AssetReference>? baseReferences, IReadOnlyDictionary<string, CodeText>? baseCode)
     {
         if (patches.Count == 0) throw new ArgumentException("build needs at least one mod.");
         resolutions ??= new Dictionary<string, string>();
@@ -319,12 +323,15 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
                 decisions.Add($"{item.Kind} {item.Family}/{item.Asset}: {decision}" +
                     (item.Kind == "index" ? " (literal slot overlap; runtime execution order still requires an in-game check)" : ""));
             }
+        if (relocation.RodCount > 0)
+            LegacyRodRelocation.CompleteCode(assets, patches, baseCode, relocation.RodCount);
         return new(assets, decisions)
         {
             Catalog = catalog.Mapping,
             DiscardedHunks = discardedHunks,
             HasResolvedHunks = true,
             UpgradeIcons = relocation.UpgradeIcons,
+            RodFrames = relocation.RodFrames,
             AssetRenames = assetRelocation.Renames
         };
     }

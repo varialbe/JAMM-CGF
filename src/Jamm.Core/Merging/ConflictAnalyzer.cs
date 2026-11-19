@@ -49,7 +49,8 @@ public static class ConflictAnalyzer
         {
             if (decision.StartsWith("WARNING:", StringComparison.Ordinal))
             {
-                string target = decision.Contains("upgrade", StringComparison.OrdinalIgnoreCase)
+                string target = decision.StartsWith("WARNING: rod slot", StringComparison.Ordinal) ? "rod-slot"
+                    : decision.Contains("upgrade", StringComparison.OrdinalIgnoreCase)
                     || decision.Contains("spr_upgradeicons", StringComparison.OrdinalIgnoreCase)
                     ? "upgrade-slot"
                     : decision.Contains("lure slot", StringComparison.OrdinalIgnoreCase) ? "lure-slot"
@@ -62,6 +63,8 @@ public static class ConflictAnalyzer
             {
                 findings.Add(new("INFO", "relocation", "code", "upgrade-slot", names, decision));
             }
+            else if (decision.StartsWith("[CGF-RELOCATE-006]", StringComparison.Ordinal))
+                findings.Add(new("INFO", "relocation", "code", "rod-slot", names, decision));
         }
         if (catalogMapping.Length > 0)
             findings.Add(new("AUTO", "catalog", "code", Building.CatalogMerge.Create,

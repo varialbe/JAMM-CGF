@@ -61,7 +61,9 @@ Generalized `LegacySlotRelocation` via `TableDescriptor` across `BoatData`, `Lur
 
 ## Why rod slot relocation (`RodData`) is deferred
 
-Inspected vanilla `RodData_Create_0`, `UpgradeData_Create_0`, `SaveManager_Other_13..15`, `Rod_Other_10`, `RodCard_Other_11`, `Rocket_Step_2`, `start_quest_dist`, and real mods (`TGE.win`, `cave-expansion.win`). Rods are left un-relocated because of four coupled dependencies:
+CGF-RELOCATE-006 now addresses the dependencies listed below. Vanilla identifies rods by `name[]` and initializes each `cost_base[id]` from `RodData.cost[id]`. Relocation preserves a claimant's explicit upgrade costs and uses the vanilla formula with that rod's own shop price when a value is missing. Missing Rocket and distance/depth quest values inherit the nearest preceding configured rod's value.
+
+The original investigation inspected vanilla `RodData_Create_0`, `UpgradeData_Create_0`, `SaveManager_Other_13..15`, `Rod_Other_10`, `RodCard_Other_11`, `Rocket_Step_2`, `start_quest_dist`, and real mods (`TGE.win`, `cave-expansion.win`).
 
 1. **2D `UpgradeData.upg[rod, slot]` and `UpgradeData.object[rod, slot]` rows:** Every rod id indexes a row in `UpgradeData_Create_0` (vanilla initializes `0..5 x 0..7`). A relocated rod `rod'` needs row `upg[rod', ...]` and `object[rod', ...]` initialized, yet real mods are asymmetric: `TGE` adds `Proto-Rod` at slot 6 and edits `UpgradeData_Create_0` (`upg[6, 0..8] = -1`, `for (ix = 0; ix < 7; ix++)`), whereas `cave-expansion` adds `Mystic Rod` at slot 6 without touching `UpgradeData_Create_0` at all (so no `upg[6, ...]` row exists in `cave-expansion` to move to row 7).
 2. **Hardcoded `SaveManager` 2D loop bounds:** `SaveManager_Other_13/14/15` loop `with (UpgradeData)` with literal `for (ix = 0; ix < 6; ix++)` (`< 7` in `TGE`), which must also be raised to `rod' + 1` or upgrade slots on rod `>= 7` are lost on save/load.

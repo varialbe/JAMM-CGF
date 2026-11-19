@@ -173,23 +173,28 @@ public static class PackAcceptance
             }
             foreach (var (fishObj, loc) in modCatalogAdded.OrderBy(p => p.Key, StringComparer.Ordinal))
             {
-                if (mergedCatalogLocations.TryGetValue(fishObj, out var mergedLoc))
+                string mergedFish = plan.AssetRenames.GetValueOrDefault((m, "objects", fishObj), fishObj);
+                bool renamed = mergedFish != fishObj;
+                string renameDetail = renamed ? $"; object renamed to {mergedFish}" : "";
+                if (mergedCatalogLocations.TryGetValue(mergedFish, out var mergedLoc))
                 {
                     if (loc.Area is { } sa && loc.Slot is { } ss && (mergedLoc.Area != sa || mergedLoc.Slot != ss))
-                        items.Add(new(AcceptanceKind.Fish, fishObj, AcceptanceStatus.Relocated, $"Catalog [{sa}, {ss}] -> [{mergedLoc.Area}, {mergedLoc.Slot}]"));
+                        items.Add(new(AcceptanceKind.Fish, fishObj, AcceptanceStatus.Relocated, $"Catalog [{sa}, {ss}] -> [{mergedLoc.Area}, {mergedLoc.Slot}]{renameDetail}"));
                     else
-                        items.Add(new(AcceptanceKind.Fish, fishObj, AcceptanceStatus.Present, $"Catalog [{mergedLoc.Area}, {mergedLoc.Slot}]"));
+                        items.Add(new(AcceptanceKind.Fish, fishObj, renamed ? AcceptanceStatus.Relocated : AcceptanceStatus.Present,
+                            $"Catalog [{mergedLoc.Area}, {mergedLoc.Slot}]{renameDetail}"));
                 }
-                else if (mergedApiFish.Contains(fishObj))
+                else if (mergedApiFish.Contains(mergedFish))
                 {
-                    items.Add(new(AcceptanceKind.Fish, fishObj, AcceptanceStatus.Present, "Registered via JAMM catalog/fish API"));
+                    items.Add(new(AcceptanceKind.Fish, fishObj, renamed ? AcceptanceStatus.Relocated : AcceptanceStatus.Present,
+                        $"Registered via JAMM catalog/fish API{renameDetail}"));
                 }
                 else
                 {
                     string detail = loc.Area is { } sa && loc.Slot is { } ss
                         ? $"Missing from merged catalog (was [{sa}, {ss}])"
                         : "Missing from merged catalog and active API registrations";
-                    items.Add(new(AcceptanceKind.Fish, fishObj, AcceptanceStatus.Lost, detail));
+                    items.Add(new(AcceptanceKind.Fish, fishObj, AcceptanceStatus.Lost, detail + renameDetail));
                 }
             }
 
