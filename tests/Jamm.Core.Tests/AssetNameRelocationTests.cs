@@ -97,6 +97,27 @@ public sealed class AssetNameRelocationTests
         Assert.Equal("Foo_jamm_two", instance[0].GetProperty("object").GetString());
     }
 
+    [Fact]
+    public void ObjectWithFreelyNamedEventCodeIsNotLineageOfCodelessNamesake()
+    {
+        // The first mod's object names its event code "FooCreate" (not gml_Object_Foo_*); the later mod's namesake has no events.
+        var withEvents = JsonSerializer.SerializeToElement(new
+        {
+            parent = "Boat", sprite = "spr",
+            events = new Dictionary<string, object> { ["0:0"] = new { otherObject = (string?)null, code = new[] { "FooCreate" } } }
+        });
+        var first = Patch("First", withEvents, "", "Boat", "spr");
+        var code = first.Changes["code"];
+        first.Changes["code"] = code with { Added = [new AssetPatch("FooCreate", null, JsonSerializer.SerializeToElement(new { }), [], null,
+            new("speed = 2;\n", "gml", 0, 0, null, []), 0)] };
+        var codeless = Patch("Later", JsonSerializer.SerializeToElement(new { parent = "Boat", sprite = "spr", events = new { } }), "", "Boat", "spr");
+        codeless.Changes["code"] = codeless.Changes["code"] with { Added = [] };
+
+        var prepared = AssetNameRelocation.Prepare([first, codeless]);
+        Assert.Contains(prepared.Decisions, d => d.StartsWith("[CGF-RELOCATE-002] Object \"Foo\" (Later) renamed", StringComparison.Ordinal));
+        Assert.DoesNotContain(prepared.Decisions, d => d.Contains("shares lineage", StringComparison.Ordinal));
+    }
+
     private static ModPatch Patch(string mod, JsonElement obj, string code, string parent, string sprite, JsonElement? spriteSnapshot = null, JsonElement? roomSnapshot = null)
     {
         var changes = new SortedDictionary<string, AssetChanges>(StringComparer.Ordinal);

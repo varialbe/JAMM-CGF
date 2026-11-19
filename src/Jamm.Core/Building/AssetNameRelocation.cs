@@ -58,7 +58,7 @@ internal static class AssetNameRelocation
     }
 
     private static bool Identical(AssetPatch a, AssetPatch b, ModPatch first, ModPatch second, string family) => a.Mod.GetRawText() == b.Mod.GetRawText()
-        && a.ModCode?.Text == b.ModCode?.Text && EventTexts(first, a.Name, family).SequenceEqual(EventTexts(second, b.Name, family), StringComparer.Ordinal);
+        && a.ModCode?.Text == b.ModCode?.Text && EventTexts(first, a.Name, family, a).SequenceEqual(EventTexts(second, b.Name, family, b), StringComparer.Ordinal);
 
     private static string? ModificationReason(string family, AssetPatch first, AssetPatch next, ModPatch[] patches, int firstMod, int nextMod)
     {
@@ -66,8 +66,8 @@ internal static class AssetNameRelocation
             && p1.GetRawText() == p2.GetRawText()
             && first.Mod.TryGetProperty("sprite", out var s1) && next.Mod.TryGetProperty("sprite", out var s2) && s1.GetRawText() == s2.GetRawText())
         {
-            string[] a = EventTexts(patches[firstMod], first.Name, family), b = EventTexts(patches[nextMod], next.Name, family);
-            if (a.Length == 0 && b.Length == 0) return "same parent/sprite with no owned event code";
+            string[] a = EventTexts(patches[firstMod], first.Name, family, first), b = EventTexts(patches[nextMod], next.Name, family, next);
+            if (a.Length == 0 && b.Length == 0 && EventKeys(first) == EventKeys(next)) return "same parent/sprite with no owned event code";
             if (a.Length > 0 && b.Length > 0 && Similarity(a, b) >= 0.6) return "same parent/sprite and at least 60% shared event code";
         }
         if (family == "scripts")
@@ -81,11 +81,30 @@ internal static class AssetNameRelocation
         return null;
     }
 
-    private static string[] EventTexts(ModPatch patch, string name, string family) => patch.Changes.GetValueOrDefault("code")?.Added
-        .Concat(patch.Changes.GetValueOrDefault("code")?.Changed ?? []).Where(a => family == "objects"
-            ? a.Name.StartsWith($"gml_Object_{name}_", StringComparison.Ordinal)
-            : family == "scripts" && a.Name == $"gml_Script_{name}")
-        .Select(a => a.ModCode?.Text ?? "").ToArray() ?? [];
+    private static string[] EventTexts(ModPatch patch, string name, string family, AssetPatch? asset = null)
+    {
+        var code = (patch.Changes.GetValueOrDefault("code")?.Added ?? []).Concat(patch.Changes.GetValueOrDefault("code")?.Changed ?? []).ToArray();
+        // Objects may name their event code freely (e.g. "Boat8create"); the snapshot's event table is authoritative.
+        var owned = family == "objects" ? EventCodeNames(asset) : [];
+        return code.Where(a => family == "objects"
+                ? owned.Contains(a.Name) || a.Name.StartsWith($"gml_Object_{name}_", StringComparison.Ordinal)
+                : family == "scripts" && a.Name == $"gml_Script_{name}")
+            .Select(a => a.ModCode?.Text ?? "").ToArray();
+    }
+
+    private static HashSet<string> EventCodeNames(AssetPatch? asset)
+    {
+        HashSet<string> names = new(StringComparer.Ordinal);
+        if (asset is null || !asset.Mod.TryGetProperty("events", out var events) || events.ValueKind != System.Text.Json.JsonValueKind.Object) return names;
+        foreach (var ev in events.EnumerateObject())
+            if (ev.Value.TryGetProperty("code", out var list) && list.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (var item in list.EnumerateArray())
+                    if (item.ValueKind == System.Text.Json.JsonValueKind.String) names.Add(item.GetString()!);
+        return names;
+    }
+
+    private static string EventKeys(AssetPatch asset) => asset.Mod.TryGetProperty("events", out var events) && events.ValueKind == System.Text.Json.JsonValueKind.Object
+        ? string.Join(",", events.EnumerateObject().Select(e => e.Name).Order(StringComparer.Ordinal)) : "";
 
     private static double Similarity(string[] a, string[] b)
     {
