@@ -35,8 +35,11 @@ Whenever any API or ModKit item/upgrade mod is in your build, JAMM appends `[JAM
 | `eq:boat` | Key of currently equipped boat (`""` for none) | `eq:boat=my-mod:raft` |
 | `eq:rod` | Key of currently equipped rod | `eq:rod=base:rod2` |
 | `eq:hat` | Key of currently equipped hat (`""` for none) | `eq:hat=my-mod:crown` |
-| `slot:<rodkey>:<iy>` | Upgrade installed in rod slot `0..7` (`""` empty, `"#locked"` unavailable) | `slot:base:rod2:0=showcase-upgrades:turbo` |
+| `slot:<rodkey>:<iy>` | Upgrade installed in rod slot `0..N-1` (where `N` is the rod's `UpgradeData.upg` column count, up to `16`; `""` empty, `"#locked"` unavailable) | `slot:base:rod2:0=showcase-upgrades:turbo` |
 | `slotobj:<rodkey>:<iy>` | Fish object name for Attract/Repel (`""` otherwise) | `slotobj:base:rod2:1=Goldfish` |
+
+> [!NOTE]
+> **Rods with 9+ upgrade slots**: `[JAMM_Items]` writes and restores every column in `UpgradeData.upg[rod, 0..N-1]` (`slot:<rodkey>:<iy>` / `slotobj:<rodkey>:<iy>`) for every rod—both API rods and pre-API/legacy rows—so slots `>= 8` round-trip by rod key and upgrade key. In the legacy `[Upgrades]` section (`SaveManager` `Other_13`–`Other_15`), keys are `"upg" + string(ix) + string(iy)` and `"obj" + string(ix) + string(iy)`, which would collide once `iy >= 10` (for example, `(ix=1, iy=10)` and `(ix=11, iy=0)` both produce `upg110`). JAMM therefore clamps the `[Upgrades]` column loop to `min(10, array_length_2d(upg, ix))` (`iy` `0..9`): 9-column legacy rows still persist unambiguously in `[Upgrades]`, while slots `>= 10` persist only via `[JAMM_Items]` (and loading `[Upgrades]` never touches `iy >= 10`).
 
 Base-game items automatically receive stable built-in keys: `base:boat0`..`base:boat7`, `base:rod0`..`base:rod5`, `base:lure0`..`base:lure5`, `base:tool0`..`base:tool2`, `base:hat0`..`base:hat29`, and `base:upgrade0`..`base:upgrade17`.
 

@@ -93,7 +93,7 @@ Appends a boat to `BoatData` (`name`, `cost`, `disp`, `object`, `desc`, `unlocke
 jamm_rod_register(key, name, cost, cast_speed, rod_power, rod_power_flat, reel_speed, sinker_distance, disp_sprite [, upgrade_slots, unlocked])
 ```
 
-Appends a rod to `RodData` and initializes its `UpgradeData.upg` / `UpgradeData.object` row (`8` columns: `-1` for unlocked slots, `-2` for locked slots). `RodCard` and `Rod` draw `RodData.disp[slot]` when `> -1`.
+Appends a rod to `RodData`, stores its open slot count in `RodData.jamm_slots[slot]`, and initializes its `UpgradeData.upg` / `UpgradeData.object` row (at least `8` columns, expanded up to `JAMM_MAX_ROD_SLOTS = 16`, with `UpgradeData.jamm_max_slots` tracking the highest column count in use; `-1` for unlocked slots, `-2` for locked slots). `RodCard` and `Rod` draw `RodData.disp[slot]` when `> -1`.
 
 | Arg | Parameter | Type | Default | Description |
 | :---: | :--- | :--- | :---: | :--- |
@@ -106,9 +106,12 @@ Appends a rod to `RodData` and initializes its `UpgradeData.upg` / `UpgradeData.
 | 6 | `reel_speed` | real | Required | Reel speed (vanilla: `8..12`). |
 | 7 | `sinker_distance` | real | Required | Sinker depth limit (vanilla: `1200..7500`). |
 | 8 | `disp_sprite` | sprite / `-1` | Required | Custom rod sprite, or `-1` to fall back to `spr_rod`. |
-| 9 | `upgrade_slots` | int | `8` | Integer `0..8`: number of open upgrade slots on this rod. |
+| 9 | `upgrade_slots` | int | `8` | `0..16` (`JAMM_MAX_ROD_SLOTS = 16`) explicit slot count (default `8`), or `-1` for vanilla progression (best existing rod's slots `+ 1`, clamped to `16`). |
 | 10 | `unlocked` | real | `0` | `0` = purchasable in shop, `1` = owned at start, `-1` = hidden. |
 
+* **Choosing `upgrade_slots` (simple vs. vanilla rule)**:
+  * **Simple: `8` slots (default) or explicit `0..16`**: Omit `upgrade_slots` (or pass `8`) to match the vanilla Master Rod cap, or pass an explicit count in `0..16`.
+  * **Vanilla rule (`-1`)**: In the unmodded game, each rod has one more upgrade slot than the previous one (`3, 4, 5, 6, 7, 8`). Pass `-1` to follow that progression: your rod receives `(max slot count of all rods registered or existing before it) + 1`, clamped to `16` (so the first `-1` rod after vanilla gets `9`, the next gets `10`, and so on).
 * **Returns**: Slot index (`>= 0`), existing slot if `key` is already registered, or `-1` on invalid input / missing `RodData`.
 * **Example**:
   ```gml
@@ -224,7 +227,7 @@ Appends a custom rod upgrade to `UpgradeData` (dynamically at `array_length_1d(U
 | 3 | `desc2` | string | Short description shown inside equipped `UpgradeSlot`. |
 | 4 | `cost` | real | Cost multiplier (`>= 0`) relative to `RodData.cost[rod_id]` (e.g. `0.35`). |
 | 5 | `icon_sprite` | sprite / `-1` | Icon sprite (origin `0,0`, scaled to `spr_upgradeicons`), or `-1` for default icon. |
-| 6 | `max_stacks` | int / `-1` | Positive integer `>= 1` max stacks per rod, or `-1` for no extra limit (up to 8 rod slots). |
+| 6 | `max_stacks` | int / `-1` | Positive integer `>= 1` max stacks per rod, or `-1` for no extra limit (up to the rod's slot count, max `16`). |
 | 7 | `apply_script` | script / `-1` | Script called by `Rod` `Other_10` with `argument0 = stacks` (`> 0`), or `-1`. |
 | 8 | `step_script` | script / `-1` | Script called every `Begin Step` by `obj_jamm_api` with `argument0 = stacks` (`> 0`), or `-1`. |
 
