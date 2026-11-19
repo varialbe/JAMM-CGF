@@ -123,7 +123,7 @@
     "id": "jamm-silo",
     "name": "The Silo",
     "author": "JAMM",
-    "description": "Non-default optional isolated mod. Activates the Missile Silo hatch with animation, lets you descend into a calm sanctuary, and exit safely.",
+    "description": "Dive through the maintenance hatch near the Missile Silo. Explore the flooded launch shaft, refill air and recover four salvage items for cash.",
     "fileUrl": "https://varialbe.xyz/cgf-mods/packages/jamm-silo.zip",
     "isPreview": false,
     "categories": [
@@ -139,8 +139,8 @@
     "packageType": "recipe",
     "manifestFile": "jamm-recipe.json",
     "isDefault": false,
-    "version": "1.0.0",
-    "sha256": "582e3e27211b92f5d0b6b31732701c5a23e227be1667818c8b704cbfe25bbef6",
-    "sizeBytes": 6442
+    "version": "2.0.0",
+    "sha256": "7564a1bf1cfcc902cf4bcceaceceac0a10a223859d6c725b7e28f204b138a860",
+    "sizeBytes": 6411
   }
 ]

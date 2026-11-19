@@ -4,6 +4,7 @@ using System.Text.Json;
 using Jamm.Core.Browsing;
 using Jamm.Core.Building;
 using Jamm.Core.Management;
+using Jamm.Core.Merging;
 using Jamm.Core.ModKit;
 using Jamm.Core.Patching;
 using Jamm.ModMaker;
@@ -41,30 +42,31 @@ public sealed class SiloAndSiteTests
 
         Assert.NotNull(mod.Data.Rooms.ByName(SiloMod.SanctuaryRoomName));
         Assert.NotNull(mod.Data.GameObjects.ByName(SiloMod.ControllerObjectName));
+        Assert.Null(mod.Data.GameObjects.ByName(SiloMod.HatchObjectName)!.ParentId);
         Assert.NotNull(mod.Data.GameObjects.ByName(SiloMod.BeaconObjectName));
         Assert.NotNull(mod.Data.GameObjects.ByName(SiloMod.AreaObjectName));
         Assert.NotNull(mod.Data.Sprites.ByName("spr_jamm_silo_glow"));
         Assert.NotNull(mod.Data.Sprites.ByName("spr_jamm_silo_diver"));
         Assert.NotNull(mod.Data.Sprites.ByName("spr_jamm_silo_fish"));
-        Assert.NotNull(mod.Data.Code.ByName("gml_Object_MissileSilo_Create_0"));
-        Assert.NotNull(mod.Data.Code.ByName("gml_Object_MissileSilo_Step_0"));
-        Assert.NotNull(mod.Data.Code.ByName("gml_Object_MissileSilo_Draw_0"));
+        Assert.Equal(orig.Data.GeneralInfo.RoomOrder.Select(r => r.Resource.Name.Content),
+            mod.Data.GeneralInfo.RoomOrder.Take(orig.Data.GeneralInfo.RoomOrder.Count).Select(r => r.Resource.Name.Content));
+        Assert.False(mod.Data.Rooms.ByName(SiloMod.SanctuaryRoomName)!.Persistent);
 
-        string areaGui = PatchBuilder.ReadCode(mod, $"gml_Object_{SiloMod.AreaObjectName}_Draw_64").Text;
-        Assert.Contains("display_get_gui_width()", areaGui);
-        Assert.Contains("string_width_ext", areaGui);
-        Assert.Contains("string_height_ext", areaGui);
-        Assert.Contains("draw_text_ext", areaGui);
-        Assert.DoesNotContain("draw_rectangle(14, 12, 786, 40", areaGui);
-
-        string ctrlGui = PatchBuilder.ReadCode(mod, $"gml_Object_{SiloMod.ControllerObjectName}_Draw_64").Text;
-        Assert.Contains("display_get_gui_width()", ctrlGui);
-        Assert.Contains("draw_text_ext", ctrlGui);
-
-        string siloDraw = PatchBuilder.ReadCode(mod, "gml_Object_MissileSilo_Draw_0").Text;
-        Assert.Contains("string_width(label)", siloDraw);
-
+        AssertVanillaBytecode(orig.Data, mod.Data);
         var patch = PatchBuilder.Create(orig, mod, "The Silo");
+        Assert.Empty(patch.Changes["code"].Changed);
+        Assert.Empty(patch.Changes["code"].Removed);
+        Assert.All(patch.Changes["code"].Added, code => Assert.Contains("obj_jamm_silo_", code.Name));
+        Assert.All(patch.Changes["objects"].Added, asset => Assert.StartsWith("obj_jamm_silo_", asset.Name));
+        Assert.Empty(patch.Changes["objects"].Changed);
+        Assert.Empty(patch.Changes["sprites"].Changed);
+        var world = Assert.Single(patch.Changes["rooms"].Changed);
+        Assert.Equal("NewWorld", world.Name);
+        var added = Assert.Single(world.Fields);
+        Assert.StartsWith("/instances/", added.Path);
+        Assert.Null(added.Base);
+        Assert.Equal(SiloMod.HatchObjectName, Assert.Single(mod.Data.Rooms.ByName("NewWorld")!.GameObjects,
+            i => i.ObjectDefinition.Name.Content.StartsWith("obj_jamm_silo_", StringComparison.Ordinal)).ObjectDefinition.Name.Content);
         Assert.True(ModSanitizer.IsJammMod(patch));
         var sanitized = ModSanitizer.Sanitize(patch);
         Assert.Empty(sanitized.Report.Removed);
@@ -77,6 +79,133 @@ public sealed class SiloAndSiteTests
         data.Rooms.Add(new UndertaleRoom { Name = data.Strings.MakeString("NewWorld") });
         var ex = Assert.Throws<InvalidDataException>(() => SiloMod.Apply(data));
         Assert.Contains("MissileSilo", ex.Message);
+    }
+
+    [Fact]
+    public void SiloModPreservesAlreadyModdedEventsAndRoomSettingsAndRejectsASecondApplication()
+    {
+        using var temp = new TempDir();
+        string basePath = temp.PathFor("modded.win");
+        WriteSyntheticSiloBase(basePath, modded: true);
+        using var original = GameFileLoader.Load(basePath);
+        using var working = GameFileLoader.Load(basePath);
+
+        SiloMod.Apply(working.Data);
+
+        AssertVanillaBytecode(original.Data, working.Data);
+        var world = working.Data.Rooms.ByName("NewWorld")!;
+        Assert.True(world.Persistent);
+        Assert.Equal(60u, world.Speed);
+        Assert.Equal(34020, world.GameObjects[0].X);
+        Assert.Equal("AnotherMod", world.GameObjects[1].ObjectDefinition.Name.Content);
+        var codeCount = working.Data.Code.Count;
+        var instanceCount = world.GameObjects.Count;
+
+        var error = Assert.Throws<InvalidDataException>(() => SiloMod.Apply(working.Data));
+        Assert.Contains("already contains Silo assets", error.Message);
+        Assert.Equal(codeCount, working.Data.Code.Count);
+        Assert.Equal(instanceCount, world.GameObjects.Count);
+    }
+
+    [Fact]
+    public void SiloModRejectsAnOccupiedHatchSiteBeforeAddingAssets()
+    {
+        using var temp = new TempDir();
+        string basePath = temp.PathFor("occupied.win");
+        WriteSyntheticSiloBase(basePath, modded: true);
+        using var loaded = GameFileLoader.Load(basePath);
+        var world = loaded.Data.Rooms.ByName("NewWorld")!;
+        world.GameObjects[1].X = 34136;
+        world.GameObjects[1].Y = 11496;
+
+        var error = Assert.Throws<InvalidDataException>(() => SiloMod.Apply(loaded.Data));
+
+        Assert.Contains("occupies the Silo hatch site", error.Message);
+        Assert.Null(loaded.Data.GameObjects.ByName(SiloMod.HatchObjectName));
+        Assert.Null(loaded.Data.Rooms.ByName(SiloMod.SanctuaryRoomName));
+    }
+
+    [SiloRealFilesFact]
+    public void RecipeMergesWithEachOfTheSevenLocalModArchives()
+    {
+        string basePath = Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!;
+        string modsRoot = Environment.GetEnvironmentVariable("JAMM_SILO_INPUTS")!;
+        string recipe = Path.Combine(RepoRoot(), "site", "cgf-mods", "sources", "jamm-silo");
+        string[] sources =
+        [
+            "private-vel/TGE.win", "mods/pack-inputs/Antiquity.win", "private-vel/PWB.win",
+            "mods/pack-inputs/Abyss.win", "mods/pack-inputs/Colour.win", "mods/pack-inputs/Verdant.win",
+            "mods/cave-expansion.win"
+        ];
+        using var original = GameFileLoader.Load(basePath);
+        using var temp = new TempDir();
+        string siloPath = temp.PathFor("silo.win");
+        RecipePackage.Build(recipe, basePath, siloPath);
+        using var silo = GameFileLoader.Load(siloPath);
+        const string siloName = "The Silo";
+        const string vanillaEntry = "gml_Object_MissileSilo_Create_0";
+        var siloPatch = PatchBuilder.Create(original, silo, siloName);
+        Assert.Empty(siloPatch.Changes["code"].Changed);
+        Assert.Empty(siloPatch.Changes["code"].Removed);
+
+        foreach (string source in sources)
+        {
+            string path = Path.Combine(modsRoot, source);
+            Assert.True(File.Exists(path), $"Missing local Silo integration input '{path}'.");
+            string name = Path.GetFileNameWithoutExtension(path);
+            using var mod = GameFileLoader.Load(path);
+            var patch = PatchBuilder.Create(original, mod, name);
+            var check = ConflictAnalyzer.Analyze([patch, siloPatch]);
+            Assert.DoesNotContain(check.Findings, f => f.Severity == "CONFLICT" && f.Mods.Contains(siloName));
+            string output = temp.PathFor(name + "-silo.win");
+            var build = ArchiveBuilder.Build(basePath, [new(patch, path), new(siloPatch, siloPath)], output);
+            Assert.NotNull(build.Verification);
+            using var merged = GameFileLoader.Load(output);
+            Assert.NotNull(merged.Data.Rooms.ByName(SiloMod.SanctuaryRoomName));
+            var world = merged.Data.Rooms.ByName("NewWorld")!;
+            Assert.Single(world.GameObjects, i => i.ObjectDefinition.Name.Content == SiloMod.HatchObjectName);
+            Assert.Equal(ContentFingerprints.Code(mod.Data.Code.ByName(vanillaEntry)!),
+                ContentFingerprints.Code(merged.Data.Code.ByName(vanillaEntry)!));
+            File.Delete(output);
+        }
+    }
+
+    private static void AssertVanillaBytecode(UndertaleData original, UndertaleData mod)
+    {
+        // Serializing individual opcodes resolves reference chains back to symbol IDs, so the
+        // comparison measures exact instruction words without file-global relocation offsets.
+        var entries = original.Code.Select(c => c.Name.Content).ToArray();
+        var before = InstructionBytes(original, entries);
+        var after = InstructionBytes(mod, entries);
+        foreach (string name in entries)
+        {
+            Assert.Equal(before[name], after[name]);
+            Assert.Equal(ContentFingerprints.Code(original.Code.ByName(name)!), ContentFingerprints.Code(mod.Code.ByName(name)!));
+        }
+
+        static Dictionary<string, byte[]> InstructionBytes(UndertaleData data, string[] names)
+        {
+            using var memory = new MemoryStream();
+            using var writer = new UndertaleWriter(memory);
+            writer.WriteUndertaleData(data);
+            var result = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            foreach (string name in names)
+            {
+                long from = memory.Position;
+                foreach (var instruction in data.Code.ByName(name)!.Instructions)
+                {
+                    // A string's already written reference object cannot be registered twice
+                    // with the same writer. A fresh reference resolves to the same string ID.
+                    var reference = instruction.ValueString;
+                    if (reference is not null)
+                        instruction.ValueString = new(reference.Resource, reference.CachedId);
+                    try { instruction.Serialize(writer); }
+                    finally { if (reference is not null) instruction.ValueString = reference; }
+                }
+                result[name] = memory.GetBuffer().AsSpan((int)from, (int)(memory.Position - from)).ToArray();
+            }
+            return result;
+        }
     }
 
     [Fact]
@@ -248,7 +377,7 @@ public sealed class SiloAndSiteTests
         Assert.NotNull(merged.Data.GameObjects.ByName("jmk_example_fish_goldie"));
     }
 
-    private static void WriteSyntheticSiloBase(string path)
+    private static void WriteSyntheticSiloBase(string path, bool modded = false)
     {
         using var data = UndertaleData.CreateNew();
         data.GeneralInfo.Major = 1;
@@ -270,6 +399,8 @@ public sealed class SiloAndSiteTests
         missileSilo.TextureMaskId = sprSiloMask;
         AddObj(data, "Girl", null, null, persistent: false);
         AddObj(data, "Lure", null, null, persistent: false);
+        AddObj(data, "Boat", null, null, persistent: false);
+        AddObj(data, "Rod", null, null, persistent: false);
         AddObj(data, "CatSwim", null, null, persistent: false);
         AddObj(data, "Camera", null, null, persistent: false);
         AddObj(data, "SaveManager", null, null, persistent: true);
@@ -290,7 +421,8 @@ public sealed class SiloAndSiteTests
             Name = data.Strings.MakeString("NewWorld"),
             Width = 40000,
             Height = 13000,
-            Speed = 30
+            Speed = modded ? 60u : 30u,
+            Persistent = modded
         };
         data.Rooms.Add(newWorld);
         data.GeneralInfo.RoomOrder.Add(new(newWorld, 0));
@@ -298,12 +430,24 @@ public sealed class SiloAndSiteTests
         {
             InstanceID = ++data.GeneralInfo.LastObj,
             ObjectDefinition = missileSilo,
-            X = 33984,
+            X = modded ? 34020 : 33984,
             Y = 11570
         });
 
+        if (modded)
+        {
+            var other = AddObj(data, "AnotherMod", null, null, persistent: false);
+            newWorld.GameObjects.Add(new()
+            {
+                InstanceID = ++data.GeneralInfo.LastObj,
+                ObjectDefinition = other,
+                X = 34290,
+                Y = 11447
+            });
+        }
+
         var compiler = new CompileGroup(data);
-        compiler.QueueCodeReplace(missileSilo.EventHandlerFor(EventType.Create, 0u, data), "image_speed = 0;\ncanOpen = 0;\n");
+        compiler.QueueCodeReplace(missileSilo.EventHandlerFor(EventType.Create, 0u, data), modded ? "image_speed = 0; canOpen = 1;" : "image_speed = 0; canOpen = 0;");
         compiler.QueueCodeReplace(missileSilo.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data), "");
         compiler.QueueCodeReplace(abstractLight.EventHandlerFor(EventType.Create, 0u, data), "add_blend = 0;\nsub_blend = 0;\nimage_scale = 2;\n");
         compiler.QueueCodeReplace(data.GameObjects.ByName("SaveManager")!.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data), "if (!loaded) { loaded = 1; }\n");
@@ -363,5 +507,16 @@ public sealed class SiloAndSiteTests
         internal TempDir() => Directory.CreateDirectory(root);
         internal string PathFor(string name) => Path.Combine(root, name);
         public void Dispose() { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+}
+
+/// <summary>Opts into the test that reads the seven local Silo pack inputs without redistributing them.</summary>
+public sealed class SiloRealFilesFactAttribute : FactAttribute
+{
+    public SiloRealFilesFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JAMM_ORIGINAL")) ||
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JAMM_SILO_INPUTS")))
+            Skip = "Set JAMM_ORIGINAL and JAMM_SILO_INPUTS to opt into the seven Silo archive merges.";
     }
 }

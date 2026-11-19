@@ -212,7 +212,10 @@ public sealed class HeadlessTests
             compatBox.Text = "/path/to/compatdata/343780";
             var save = settings.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Validate & save settings"));
             save.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            while (vm.IsBusy) await Task.Delay(10);
+            // The click handler clears the field after the view model finishes saving.
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            while ((vm.IsBusy || !string.IsNullOrEmpty(compatBox.Text)) && wait.Elapsed < TimeSpan.FromSeconds(5))
+                await Task.Delay(10);
             Dispatcher.UIThread.RunJobs();
             Assert.Null(files.Store.Config().Proton.CompatDataPath);
             Assert.True(string.IsNullOrEmpty(compatBox.Text));

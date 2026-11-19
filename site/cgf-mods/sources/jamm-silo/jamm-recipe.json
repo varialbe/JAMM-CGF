@@ -5,8 +5,8 @@
   "generatorVersion": "1",
   "stableId": "jamm-silo",
   "name": "The Silo",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "JAMM",
-  "description": "Optional isolated exploration mod. Activates the Missile Silo hatch in your own game with an opening animation, lets you descend into a calm underwater sanctuary, and lets you exit safely back to the ocean.",
+  "description": "Dive through the maintenance hatch near the Missile Silo. Explore the flooded launch shaft, refill air and recover four salvage items for cash.",
   "default": false
 }
