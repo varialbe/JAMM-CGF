@@ -30,8 +30,9 @@ so no FPS numbers here; anything frame-rate related is marked "on the PC to veri
   3 code entries; icon frame 19->20`; "Zoom" (TGE) keeps 18; both names, costs and icons present. Byte-identical hunks (TGE inherits
   PWB code) are shared lineage and keep the old id. Orchestrator correction: `Rod.upgrades[]` is an effect-slot array (vanilla maps
   id 14 → `upgrades[18]`), not an id — the first agent version broke vanilla upgrade 14; fixed and covered by tests.
-  Known gap: TGE's Zoom purchase sets effect slot `Rod.upgrades[22]`, the same slot PWB uses for Bulbguard → buying Zoom also turns
-  on Bulbguard's effect until the rod recalculates. Next: effect-slot relocation (details in `docs/reports/legacy-slot-relocation.md`).
+* **Effect slots (CGF-RELOCATE-004)**: TGE's Zoom and PWB's Bulbguard both used `Rod.upgrades[22]`; Bulbguard's effect moves to 23.
+* **Shared unlocks (CGF-RELOCATE-005)**: the inherited `Rod_Step_0` trigger `UnlockUpgrade(18)` now also unlocks Bulbguard (19),
+  guarded by `unlocks[19]`, so both upgrades stay obtainable.
 * **Asset names are IDs too** (new finding): TGE and Antiquity both add an object `Boat8` (different objects) — today Antiquity's
   wins and Echo-9 runs with the wrong boat object. Antiquity and cave-expansion both add `Dollfin` (small vs medium fish) —
   the build aborts (`Catalog fish 'Dollfin' changes size category`). Task in progress (rename + remap, CGF-RELOCATE-002).
