@@ -343,9 +343,11 @@ public static partial class ModKitBuilder
     private static List<SpriteImportSpec> CollectSpriteSpecs(ModKitManifest package, string modIdent)
     {
         var specs = new List<SpriteImportSpec>();
+        var tiledWeatherSprites = package.Weathers.SelectMany(w => w.Background)
+            .Where(layer => layer.Repeat).Select(layer => layer.Sprite).ToHashSet(StringComparer.Ordinal);
         foreach (var recipe in package.Sprites)
             specs.Add(new(CompositionName(modIdent, recipe.Key), "", recipe.Frames.Count, recipe.Origin,
-                CenterOrigin: true, GenerateMask: true, recipe));
+                CenterOrigin: true, GenerateMask: true, recipe, WrapHorizontal: tiledWeatherSprites.Contains(recipe.Key)));
 
         foreach (var fish in package.Fish.Where(f => f.SpriteKey is null))
         {

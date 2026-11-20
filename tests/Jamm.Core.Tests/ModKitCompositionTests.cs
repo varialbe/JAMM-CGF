@@ -51,6 +51,40 @@ public sealed class ModKitCompositionTests
         }
     }
 
+    [Fact]
+    public void RepeatedWeatherSpriteWrapsAtlasSamplesOutsideItsFrame()
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        using var data = UndertaleData.CreateNew();
+        string package = temp.Package("""
+            {"id":"kit","name":"Cloud Test",
+             "sprites":[{"key":"cloud","width":4,"height":2,"origin":[1,0],"compose":[{"file":"cloud.png"}]}],
+             "weathers":[{"id":"cloudy","name":"Cloudy","background":[{"sprite":"cloud"}]}]}
+            """);
+        using (var tile = new MagickImage(MagickColors.Transparent, 4, 2))
+        {
+            byte[] row = [220, 50, 70, 128, 160, 90, 100, 128, 95, 170, 160, 128, 36, 220, 194, 128];
+            using (var pixels = tile.GetPixels())
+                pixels.SetArea(0, 0, 4, 2, row.Concat(row).ToArray().AsSpan());
+            tile.Write(Path.Combine(package, "cloud.png"));
+        }
+
+        ModKitBuilder.Apply(data, ModKitPackage.Load(package));
+        var sprite = data.Sprites.ByName("jmk_kit_recipe_cloud")!;
+        var frame = sprite.Textures[0].Texture;
+        Assert.Equal((uint)4, sprite.Width);
+        Assert.Equal(1, sprite.OriginX);
+        Assert.Equal((ushort)4, frame.SourceWidth);
+        Assert.Equal(frame.SourceWidth, frame.TargetWidth);
+        Assert.Equal(frame.SourceWidth, frame.BoundingWidth);
+        using var atlas = frame.TexturePage.TextureData.Image.GetMagickImage();
+        using var atlasPixels = atlas.GetPixels();
+        Assert.Equal(atlasPixels.GetArea(frame.SourceX + 2, frame.SourceY, 2, 2),
+            atlasPixels.GetArea(frame.SourceX - 2, frame.SourceY, 2, 2));
+        Assert.Equal(atlasPixels.GetArea(frame.SourceX, frame.SourceY, 2, 2),
+            atlasPixels.GetArea(frame.SourceX + 4, frame.SourceY, 2, 2));
+    }
+
     [Theory]
     [InlineData("[90, 45]")]
     [InlineData("[90, \"45\"]")]

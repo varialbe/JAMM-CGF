@@ -1,7 +1,7 @@
 {
   "id": "weather-pack",
   "name": "Weather Pack",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "JAMM",
   "description": "Four daylight weathers with new surface fish, animated skies, and original sound.",
   "weathers": [
@@ -500,241 +500,635 @@
     },
     {
       "key": "bask",
-      "width": 120,
-      "height": 76,
+      "width": 126,
+      "height": 92,
       "origin": [
-        26,
-        54
+        24,
+        63
       ],
       "compose": [
         {
-          "from": "spr_fish_s6",
+          "from": "spr_fish_s10",
+          "crop": {
+            "x": 84,
+            "y": 4,
+            "w": 24,
+            "h": 36
+          },
+          "x": 78,
+          "y": 36,
+          "scaleX": 1.55,
+          "scaleY": 1.18,
           "tones": {
             "colors": [
-              "#50383b",
-              "#d58341",
-              "#f4af58"
+              "#b9674c",
+              "#d98b55",
+              "#f3b86b"
             ],
             "cutoffs": [
-              103,
+              218,
+              237
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 17,
+            "y": 0,
+            "w": 71,
+            "h": 44
+          },
+          "x": 24,
+          "y": 1,
+          "scaleX": 0.78,
+          "scaleY": 1.02,
+          "tones": {
+            "colors": [
+              "#b9674c",
+              "#e1a460"
+            ],
+            "cutoffs": [
+              165
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s6",
+          "crop": {
+            "x": 4,
+            "y": 14,
+            "w": 84,
+            "h": 60
+          },
+          "x": 10,
+          "y": 25,
+          "scaleX": 1.01,
+          "scaleY": 0.91,
+          "tones": {
+            "colors": [
+              "#624050",
+              "#cb7e58",
+              "#f0ba78"
+            ],
+            "cutoffs": [
+              107,
               173
             ]
           }
         },
         {
           "file": "parts/bask.svg",
-          "x": 48,
-          "y": 34
+          "x": 50,
+          "y": 48
         }
       ]
     },
     {
       "key": "flaret",
-      "width": 192,
-      "height": 78,
+      "width": 212,
+      "height": 114,
       "origin": [
-        58,
-        58
+        57,
+        69
       ],
       "compose": [
         {
-          "from": "spr_fish_m1",
+          "from": "spr_fish_m6",
+          "crop": {
+            "x": 35,
+            "y": 0,
+            "w": 95,
+            "h": 31
+          },
+          "x": 63,
+          "y": 6,
+          "scaleX": 0.94,
+          "scaleY": 1.16,
           "tones": {
             "colors": [
-              "#64392e",
-              "#d2734d",
-              "#f3b76c"
+              "#b65952",
+              "#d9956b",
+              "#efc88d"
             ],
             "cutoffs": [
-              96,
-              201
+              117,
+              162
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m1",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 192,
+            "h": 78
+          },
+          "x": 8,
+          "y": 25,
+          "scaleX": 1.03,
+          "scaleY": 1.04,
+          "tones": {
+            "colors": [
+              "#653b3d",
+              "#c87961",
+              "#e7a574"
+            ],
+            "cutoffs": [
+              98,
+              200
             ]
           }
         },
         {
           "file": "parts/flaret.svg",
-          "x": 81,
-          "y": 34
+          "x": 89,
+          "y": 58
         }
       ]
     },
     {
       "key": "drizzit",
-      "width": 120,
-      "height": 82,
+      "width": 140,
+      "height": 88,
       "origin": [
-        12,
-        54
+        24,
+        51
       ],
       "compose": [
         {
-          "from": "spr_fish_s2b",
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 110,
+            "y": 33,
+            "w": 36,
+            "h": 56
+          },
+          "x": 75,
+          "y": 28,
+          "scaleX": 1.36,
+          "scaleY": 0.67,
           "tones": {
             "colors": [
-              "#364355",
-              "#657e99",
-              "#9ab7c4"
+              "#576c96",
+              "#758aab"
             ],
             "cutoffs": [
-              118,
-              150
+              155
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 47,
+            "y": 78,
+            "w": 64,
+            "h": 28
+          },
+          "x": 48,
+          "y": 57,
+          "scaleX": 0.74,
+          "scaleY": 0.9,
+          "tones": {
+            "colors": [
+              "#536888",
+              "#8eb3c4"
+            ],
+            "cutoffs": [
+              168
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 47,
+            "y": 78,
+            "w": 64,
+            "h": 28
+          },
+          "x": 65,
+          "y": 53,
+          "scaleX": 0.7,
+          "scaleY": 0.68,
+          "tones": {
+            "colors": [
+              "#536888",
+              "#8eb3c4"
+            ],
+            "cutoffs": [
+              168
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s2b",
+          "crop": {
+            "x": 0,
+            "y": 19,
+            "w": 66,
+            "h": 52
+          },
+          "x": 9,
+          "y": 28,
+          "scaleX": 1.22,
+          "scaleY": 0.7,
+          "tones": {
+            "colors": [
+              "#344760",
+              "#637797",
+              "#a3c1d1"
+            ],
+            "cutoffs": [
+              119,
+              152
             ]
           }
         },
         {
           "file": "parts/drizzit.svg",
-          "x": 27,
-          "y": 33
+          "x": 38,
+          "y": 41
         }
       ]
     },
     {
       "key": "lowbelly",
-      "width": 220,
-      "height": 108,
+      "width": 215,
+      "height": 132,
       "origin": [
-        60,
-        80
+        54,
+        86
       ],
       "compose": [
         {
-          "from": "spr_fish_m9",
+          "from": "spr_tim",
+          "crop": {
+            "x": 38,
+            "y": 43,
+            "w": 36,
+            "h": 27
+          },
+          "x": 73,
+          "y": 79,
+          "scaleX": 1.66,
+          "scaleY": 1.78,
           "tones": {
             "colors": [
-              "#384c60",
-              "#426b83",
-              "#86b3c3"
+              "#607997",
+              "#7b95ac"
             ],
             "cutoffs": [
-              95,
-              196
+              179
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m9",
+          "crop": {
+            "x": 6,
+            "y": 4,
+            "w": 209,
+            "h": 101
+          },
+          "x": 7,
+          "y": 8,
+          "scaleX": 0.93,
+          "scaleY": 1.07,
+          "tones": {
+            "colors": [
+              "#31465f",
+              "#607997",
+              "#9bb6c5"
+            ],
+            "cutoffs": [
+              92,
+              197
             ]
           }
         },
         {
           "file": "parts/lowbelly.svg",
-          "x": 73,
-          "y": 50
+          "x": 72,
+          "y": 55
         }
       ]
     },
     {
       "key": "kest",
-      "width": 108,
-      "height": 48,
+      "width": 138,
+      "height": 85,
       "origin": [
-        12,
-        24
+        24,
+        52
       ],
       "compose": [
         {
-          "from": "spr_fish_s10",
+          "from": "spr_fish_s20",
+          "crop": {
+            "x": 36,
+            "y": 0,
+            "w": 108,
+            "h": 40
+          },
+          "x": 42,
+          "y": 4,
+          "scaleX": 0.76,
+          "scaleY": 0.95,
           "tones": {
             "colors": [
-              "#4b4256",
-              "#718c89",
-              "#b5cfac"
+              "#61784f",
+              "#a5ba80"
             ],
             "cutoffs": [
-              68,
-              158
+              132
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s10",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 108,
+            "h": 48
+          },
+          "x": 6,
+          "y": 27,
+          "scaleX": 1.13,
+          "scaleY": 1.02,
+          "tones": {
+            "colors": [
+              "#3c4c3a",
+              "#829668",
+              "#c1cf98"
+            ],
+            "cutoffs": [
+              111,
+              234
             ]
           }
         },
         {
           "file": "parts/kest.svg",
-          "x": 44,
-          "y": 1
+          "x": 40,
+          "y": 43
         }
       ]
     },
     {
       "key": "tack",
-      "width": 188,
-      "height": 80,
+      "width": 222,
+      "height": 106,
       "origin": [
-        43,
-        65
+        32,
+        71
       ],
       "compose": [
         {
-          "from": "spr_airy",
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 17,
+            "y": 0,
+            "w": 72,
+            "h": 44
+          },
+          "x": 26,
+          "y": 12,
+          "scaleX": 1.46,
+          "scaleY": 1.04,
           "tones": {
             "colors": [
-              "#364b53",
-              "#689d94",
-              "#a4cbb2"
+              "#739d91",
+              "#afcbbc"
             ],
             "cutoffs": [
-              68,
-              158
+              162
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m7",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 192,
+            "h": 72
+          },
+          "x": 9,
+          "y": 41,
+          "scaleX": 1.06,
+          "scaleY": 0.79,
+          "tones": {
+            "colors": [
+              "#294e4e",
+              "#5e948b",
+              "#a4c5b2"
+            ],
+            "cutoffs": [
+              104,
+              192
             ]
           }
         },
         {
           "file": "parts/tack.svg",
-          "x": 89,
-          "y": 37
+          "x": 70,
+          "y": 55
         }
       ]
     },
     {
       "key": "mote",
-      "width": 96,
-      "height": 72,
+      "width": 111,
+      "height": 105,
       "origin": [
-        16,
-        60
+        25,
+        64
       ],
       "compose": [
         {
-          "from": "spr_fish_s1",
+          "from": "spr_fish_s7",
+          "crop": {
+            "x": 88,
+            "y": 14,
+            "w": 31,
+            "h": 36
+          },
+          "x": 69,
+          "y": 38,
+          "scaleX": 1.14,
+          "scaleY": 1.08,
           "tones": {
             "colors": [
-              "#55526e",
-              "#a69ab1",
-              "#c8bacd"
+              "#9a7383",
+              "#cfadb0"
             ],
             "cutoffs": [
-              120,
+              156
+            ]
+          }
+        },
+        {
+          "from": "spr_tim",
+          "crop": {
+            "x": 38,
+            "y": 40,
+            "w": 33,
+            "h": 31
+          },
+          "x": 41,
+          "y": 69,
+          "scaleX": 0.68,
+          "scaleY": 0.95,
+          "tones": {
+            "colors": [
+              "#926b80",
+              "#d2abac"
+            ],
+            "cutoffs": [
+              173
+            ]
+          }
+        },
+        {
+          "from": "spr_tim",
+          "crop": {
+            "x": 38,
+            "y": 40,
+            "w": 33,
+            "h": 31
+          },
+          "x": 53,
+          "y": 68,
+          "scaleX": 0.64,
+          "scaleY": 0.76,
+          "tones": {
+            "colors": [
+              "#986d80",
+              "#d7b0af"
+            ],
+            "cutoffs": [
+              173
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s1",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 63,
+            "h": 72
+          },
+          "x": 8,
+          "y": 11,
+          "scaleX": 1.03,
+          "scaleY": 0.94,
+          "tones": {
+            "colors": [
+              "#624f67",
+              "#986f8b",
+              "#ceb1c2"
+            ],
+            "cutoffs": [
+              123,
               164
             ]
           }
         },
         {
           "file": "parts/mote.svg",
-          "x": 25,
-          "y": 34
+          "x": 32,
+          "y": 50
         }
       ]
     },
     {
       "key": "veilmouth",
-      "width": 215,
-      "height": 106,
+      "width": 208,
+      "height": 122,
       "origin": [
-        34,
-        79
+        48,
+        74
       ],
       "compose": [
         {
-          "from": "spr_fish_m27",
+          "from": "spr_fish_m12",
+          "crop": {
+            "x": 130,
+            "y": 20,
+            "w": 61,
+            "h": 63
+          },
+          "x": 116,
+          "y": 40,
+          "scaleX": 1.22,
+          "scaleY": 0.96,
           "tones": {
             "colors": [
-              "#4d4c66",
-              "#8c8399",
-              "#b2aabd"
+              "#687971",
+              "#87998b",
+              "#b6c2aa"
             ],
             "cutoffs": [
-              68,
+              95,
+              157
+            ]
+          }
+        },
+        {
+          "from": "spr_bloop",
+          "crop": {
+            "x": 117,
+            "y": 123,
+            "w": 78,
+            "h": 67
+          },
+          "x": 50,
+          "y": 73,
+          "scaleX": 1.06,
+          "scaleY": 0.67,
+          "tones": {
+            "colors": [
+              "#687971",
+              "#a1ae98"
+            ],
+            "cutoffs": [
               158
             ]
           }
         },
         {
+          "from": "spr_fish_m27",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 124,
+            "h": 106
+          },
+          "x": 8,
+          "y": 6,
+          "scaleX": 0.99,
+          "scaleY": 0.92,
+          "tones": {
+            "colors": [
+              "#3b4d4b",
+              "#87998b",
+              "#b6c2aa"
+            ],
+            "cutoffs": [
+              95,
+              157
+            ]
+          }
+        },
+        {
           "file": "parts/veilmouth.svg",
-          "x": 53,
-          "y": 48
+          "x": 44,
+          "y": 65
         }
       ]
     }
