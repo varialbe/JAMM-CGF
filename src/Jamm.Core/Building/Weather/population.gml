@@ -25,6 +25,8 @@ for (var j = 0; j < weather_species[w]; j += 1)
         var fish = instance_create(sx, sy, species);
         if (instance_exists(fish))
         {
+            // Rod normally seeds this on its own Step. A new school can move before that Step runs.
+            fish.base_lunge_mod = 1;
             fish.jamm_weather_owner = w;
             fish.jamm_weather_school_anchor = anchor;
             fish.stayOutAtNight = (weather_rule[w, 1] & 8) != 0;

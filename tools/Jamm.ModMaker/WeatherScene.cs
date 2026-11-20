@@ -8,8 +8,8 @@ internal static class WeatherScene
 {
     private const string Probe = "obj_jamm_bench_weather";
     private const string Controller = "obj_jamm_weather";
-    private static readonly string[] Scenarios = ["clear", "super-sunny", "rainy", "windy", "fog", "clear", "fog"];
-    private static readonly string[] Captures = ["day", "super-sunny", "rainy", "windy", "fog", "clear-restored", "night"];
+    private static readonly string[] Scenarios = ["clear", "super-sunny", "rainy", "windy", "fog", "clear", "fog", "fog"];
+    private static readonly string[] Captures = ["day", "super-sunny", "rainy", "windy", "fog", "clear-restored", "before-dusk", "night"];
 
     internal static bool Requested(string[] args)
     {
@@ -39,6 +39,7 @@ internal static class WeatherScene
             """));
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Create, 0u, data), $$"""
             {{setup}}
+            global.jamm_weather_bench_night = false;
             bench_stage = -1;
             bench_start = current_time;
             bench_minute = 25;
@@ -46,7 +47,7 @@ internal static class WeatherScene
             bench_shot = "";
             bench_daylight = 1;
             var log = file_text_open_write("jamm_bench_weather.csv");
-            file_text_write_string(log, "capture,active,night,vanilla_surface,weather_surface,parked,catalog,playing,seed,day,forecast,start,end,elapsed_ms");
+            file_text_write_string(log, "capture,active,night,vanilla_surface,weather_surface,parked,catalog,playing,seed,day,forecast,start,end,elapsed_ms,minute,lock_day,vanilla_night");
             file_text_writeln(log);
             file_text_close(log);
             """);
@@ -92,6 +93,7 @@ internal static class WeatherScene
             Camera.ORIGIN_X = Camera.x;
             Camera.ORIGIN_Y = Camera.y;
             Camera.atOrigin = 1;
+            with (Message) instance_destroy();
             """);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), $$"""
             if (bench_shot == "") exit;
@@ -102,6 +104,7 @@ internal static class WeatherScene
             {
                 bench_minute = 56;
                 bench_daylight = 0;
+                global.jamm_weather_bench_night = true;
             }
             jamm_weather_command(bench_weather[bench_stage]);
             """);
@@ -135,7 +138,8 @@ internal static class WeatherScene
                     + "," + string(vanilla) + "," + string(custom) + "," + string(ds_list_size(weather_parked))
                     + "," + string(catalog) + "," + string(voices) + "," + string(weather_seed)
                     + "," + string(weather_day) + "," + key + "," + string(weather_begin) + "," + string(weather_finish)
-                    + "," + string(elapsed));
+                    + "," + string(elapsed) + "," + string(AmbianceController.minute) + "," + string(AmbianceController.lockDay)
+                    + "," + string(is_it_night()));
                 file_text_writeln(log);
             }
             file_text_close(log);
@@ -164,7 +168,15 @@ internal static class WeatherScene
                 LightingSystem.overcast_coefficient = max(minimumOvercast, {{Probe}}.bench_daylight);
             }
             """);
-        ModObjects.PlaceInstance(data, "NewWorld", probe, first: false);
+        // Control the native phase predicate as well as the visual clock. This gives legacy
+        // gear and daylight locks the same day/night input across profiles.
+        var night = data.Code.ByName("gml_Script_is_it_night")
+            ?? throw new InvalidDataException("The dock scene requires the legacy day/night predicate.");
+        compiler.QueueCodeReplace(night, """
+            if (room == NewWorld && variable_global_exists("jamm_weather_bench_night"))
+                return global.jamm_weather_bench_night;
+            """ + "\n" + ModObjects.Decompile(data, night));
+        ModObjects.PlaceInstance(data, "NewWorld", probe, first: true);
         ModObjects.Compile(compiler);
     }
 }

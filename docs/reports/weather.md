@@ -26,3 +26,15 @@ Use `dotnet build -c Release`, `dotnet test -c Release`, and `node --test script
 The source archive adds 27 code entries, eight fish objects, 18 sprites and eight sounds. It edits zero existing code entries, objects or rooms. Pairwise checks produced zero weather conflicts with TGE, Antiquity, PWB, Abyss, Colour, Verdant and Cave. Cave adds a sprite called `spr`. The combined build caught a GM 1.4 compiler symbol collision with that name; the runtime now uses a namespaced sprite variable.
 
 The dock probe is available through `jamm-modmaker bench <profile.win> <new.win> --scene weather`. It loads a disposable save, uses the console command handler to trigger each weather, holds the camera at the dock, and records the active ID, lighting phase, vanilla and custom surface fish counts, catalog registration and playback voices. It captures clear day, all four weathers, clear restoration, and vanilla night with a daytime weather requested. The VPS runner checks for a game process and acquires the shared game lock before launch, with a 600-second limit per profile.
+
+### Archive matrix
+
+| Profile | Existing legacy conflicts | Weather Pack conflicts | Weather Pack content | Archive verification |
+| --- | ---: | ---: | ---: | --- |
+| Weather Pack | 0 | 0 | 53/53 | Passed |
+| Weather Pack + five-pack | 25 | 0 | 53/53 | Passed |
+| Weather Pack + all seven | 78 | 0 | 53/53 | Passed |
+
+The established five-pack order is Antiquity, PWB, Abyss, Colour and Verdant. The all-seven profile also uses TGE and Cave. Both builds used the existing default load-order decisions and texture repacking. Their build logs retain the legacy texture-geometry diagnostics. Managed folder import also accepted the Weather Pack and added it to a profile.
+
+The Release build passed with zero warnings. The default .NET suites passed 598 tests with 16 opt-in real-file tests skipped. All four GML harness tests passed. The final archive and pairwise check logs are in `~/jamm-night/weather/`.
