@@ -22,6 +22,8 @@ I resolved object indices against the archive's object table and inspected the d
 | `FishSmallSwarm_Other_10` | Global nearest of medium, early large and huge fish, plus a same-species nearest from an offset leader position. | Multiple unbounded native selections. |
 | `Chaw_Other_10`, `Cuddlefish_Other_10`, `Clownfish_Other_10`, `Conpas_Other_10`, `Dire_Trillow_Other_10`, `Red_Skitter_Other_10`, `Snobfish_Other_10`, `Tetra_Other_10`, `Trillow_Other_10` | Global nearest of two or more fish classes, followed by state- and display-size-dependent fleeing, pairing or follow logic. Snobfish also chooses small fish and Nightfish. | Unbounded choices and engine ties. |
 | `Akuma_Other_13`, `Blooper_Other_10`, `Bulbfish_Other_10`, `Bullfish_Other_10`, `Gallina_Other_13`, `Smarty_Other_13`, `Tappy_Other_10` | Global nearest against large, huge, medium or species selectors. Some distance checks use the lure or a second target as the origin after selection. | Preserve the selected instance even when it is outside a local circle. |
+| `Ceephalio_Other_10` | Unbounded engine nearest of Cephalopoid. | Native target selection retained. |
+| `Centy_Create_0`, `Chrono_Create_0`, `Thermo_Create_0`, `Ghost_Create_0`, `Goldfish_Create_0`, `Torby_Create_0` | Whole-species initialization traversal or first indexed instance. Runs at creation. | Initialization order and partner references retained. |
 | `Bagu_Other_13`, `Curby_Other_13` | Global same-species nearest with self handling and post-selection possession tests. Bagu uses 300 and 500, Curby 100. | Native nearest and activation behavior retained. |
 | `Cave_Shark_Other_13`, `Chaw_Step_0`, `Cuddlebig_Other_10`, `Cuddlered_Other_13`, `Fennec_Other_10`, `Flechette_Create_0`, `Flechette_Other_10`, `Fumer_Other_18`, `Kingfish_Other_10`, `Lil_Cheesefin_Other_10`, `Magmer_Step_0`, `Maw_Create_0`, `Maw_Other_10`, `Nightfish_Other_18`, `Rogachev_Other_18`, `Sibilfin_Other_13`, `Spallow_Other_13`, `Thermo_Other_10` | Unbounded engine target/partner lookups. Species, offset origins and post-search checks differ. | Engine tie, mask and fallback semantics retained. |
 | `Bluecheek_Frog_Other_10`, `Bluecheek_Frog_Step_0` | Global nearest followed by a 250-unit test in the user event. The Step selects the first nearest fish within 250 after self, state and size checks. Present in both packs. | Different selection and Step phase, left in place. |
@@ -47,7 +49,7 @@ The Release solution build completed with zero warnings. The .NET suite passed 4
 
 The benchmark runs used Wine, the same 1200×720 viewport for performance captures, default scene coordinates and seed 1337. F8 scheduling was off. Each pair uses the same benchmark archive with a different `jamm_perf.ini` setting. The trace freezes simulation-facing time, date, frame delta and the FPS input to FishThinner. It suppresses raster submission while retaining Draw events. Hashes cover the active Fish traversal, binary positions, velocities, scale, path state and selected fish state variables. The RNG column counts explicit calls reachable from GML.
 
-### Script call rates
+### Script and event call rates
 
 Each cell reports entry calls per tick / percentage of the profiled loop. A dash means the capture was unavailable.
 
@@ -71,6 +73,61 @@ Each cell reports entry calls per tick / percentage of the profiled loop. A dash
 | `fish_lunge` | 1392.20 / 11.91% | 2182.24 / 9.81% | — |
 | `check_lunge` | 1379.64 / 0.98% | 2169.29 / 0.81% | — |
 | `check_lunge_catswim` | 1379.64 / 0.53% | 2169.29 / 0.42% | — |
+| `Akuma_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Bagu_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Blooper_Other_10` | 2.80 / 0.24% | 4.68 / 0.26% | — |
+| `Bluecheek_Frog_Other_10` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Bluecheek_Frog_Step_0` | 0.00 / 0.00% | 2.00 / 0.91% | — |
+| `Boom_Puff_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Bulbfish_Other_10` | 77.00 / 1.30% | 98.32 / 0.95% | — |
+| `Bullfish_Other_10` | 7.31 / 0.11% | 7.88 / 0.07% | — |
+| `Cave_Shark_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Ceephalio_Other_10` | 0.00 / 0.00% | 10.88 / 0.09% | — |
+| `Centy_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Chaw_Other_10` | 101.99 / 1.67% | 122.02 / 1.05% | — |
+| `Chaw_Step_0` | 103.54 / 0.12% | 122.41 / 0.07% | — |
+| `Chrono_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Clownfish_Other_10` | 5.00 / 0.09% | 5.00 / 0.06% | — |
+| `Conpas_Other_10` | 10.05 / 0.16% | 12.00 / 0.10% | — |
+| `Cuddlebig_Other_10` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Cuddlefish_Other_10` | 167.66 / 3.30% | 213.83 / 2.17% | — |
+| `Curby_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Dire_Trillow_Other_10` | 6.74 / 0.10% | 8.44 / 0.06% | — |
+| `Felish_Other_25` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `FishSmallSwarm_Other_10` | 57.16 / 1.38% | 63.95 / 0.90% | — |
+| `FishYinYang_Other_10` | 6.00 / 0.14% | 6.00 / 0.15% | — |
+| `FishYinYang_Other_17` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Flechette_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Flechette_Other_10` | 5.00 / 0.10% | 5.00 / 0.05% | — |
+| `Fumer_Other_18` | 16.59 / 0.20% | 17.76 / 0.12% | — |
+| `Gallina_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Ghost_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Goldfish_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Kingfish_Other_10` | 68.36 / 1.71% | 82.63 / 1.14% | — |
+| `Lil_Cheesefin_Other_10` | 7.33 / 0.12% | 9.00 / 0.08% | — |
+| `Magmer_Step_0` | 2.00 / 0.01% | 2.00 / 0.01% | — |
+| `Maw_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Maw_Other_10` | 1.00 / 0.01% | 1.00 / 0.01% | — |
+| `Nightfish_Other_18` | 7.87 / 0.19% | 7.88 / 0.18% | — |
+| `Nightfish_Sire_Other_10` | 3.00 / 0.10% | 5.46 / 0.15% | — |
+| `Puff_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Red_Skitter_Other_10` | 4.00 / 0.06% | 4.00 / 0.03% | — |
+| `Red_Skitter_Other_16` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Rogachev_Other_18` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Sibilfin_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Skitter_Other_10` | 31.89 / 0.55% | 38.32 / 0.39% | — |
+| `Smarty_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Snobfish_Other_10` | 72.69 / 1.13% | 83.44 / 0.72% | — |
+| `Spallow_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Spotter_Other_25` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Stalker_Other_10` | 1.95 / 0.01% | 2.00 / 0.01% | — |
+| `Tangfin_Other_13` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Tappy_Other_10` | 9.60 / 0.14% | 10.44 / 0.08% | — |
+| `Tetra_Other_10` | 15.78 / 0.22% | 19.44 / 0.15% | — |
+| `Thermo_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Thermo_Other_10` | 4.00 / 0.08% | 4.00 / 0.04% | — |
+| `Torby_Create_0` | 0.00 / 0.00% | 0.00 / 0.00% | — |
+| `Trillow_Other_10` | 7.15 / 0.10% | 8.88 / 0.07% | — |
 
 ### Before and after
 
@@ -83,7 +140,7 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | vanilla | deepwater | 0 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 1 | — | — | — | — | — | — | — |
 | heavy | dock | 0 | 58 | 2229.64 | 181.92 | 81.59 | 427.81 | 0.000 | 0.00 |
-| heavy | dock | 1 | — | — | — | — | — | — | — |
+| heavy | dock | 1 | 54 | 2263.39 | 191.29 | 84.51 | 457.86 | 0.750 | 8.33 |
 | heavy | deepwater | 0 | — | — | — | — | — | — | — |
 | heavy | deepwater | 1 | — | — | — | — | — | — | — |
 | all7 | dock | 0 | — | — | — | — | — | — | — |
@@ -97,7 +154,7 @@ A 30-tick vanilla dock smoke pair produced byte-identical files with SHA-256 `f4
 
 | Pack | Scene | OFF ticks | ON ticks | Comparison |
 |---|---|---:|---:|---|
-| vanilla | dock | 0 | 0 | No matched captures |
+| vanilla | dock | 1800 | 1800 | Identical |
 | vanilla | deepwater | 0 | 0 | No matched captures |
 | heavy | dock | 0 | 0 | No matched captures |
 | heavy | deepwater | 0 | 0 | No matched captures |
