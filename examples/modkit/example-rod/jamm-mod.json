@@ -1,0 +1,21 @@
+{
+  "id": "example-rod",
+  "name": "Example Rod",
+  "version": "1.0.0",
+  "description": "Adds the Copper Current rod to the rod shop.",
+  "rods": [
+    {
+      "key": "copper-current",
+      "name": "Copper Current",
+      "cost": 25000,
+      "cast_speed": 13,
+      "rod_power": 1.85,
+      "rod_power_flat": 4,
+      "reel_speed": 10.5,
+      "sinker_distance": 4200,
+      "sprite": "art/copper-current.png",
+      "origin": [19, 69],
+      "upgrade_slots": "vanilla"
+    }
+  ]
+}

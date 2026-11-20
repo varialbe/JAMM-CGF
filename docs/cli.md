@@ -15,6 +15,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `modkit new <dir> [--template fish\|upgrade\|boat\|hat]` | Scaffold a starter ModKit folder package (`jamm-mod.json` + PNG + hook) |
 | `modkit check <dir>` | Validate `jamm-mod.json`, PNG headers/frames, and hook paths without building |
 | `modkit build <dir> [--base <data.win>] [--out <file.win>] [--no-repack]` | Compile a ModKit folder onto the legacy base (defaults to `config.base` and `<dir>/<id>.win`) |
+| `check <mod-or-patch> [...] --base <data.win>` | Check conflicts and inspect legacy boat and rod unlock paths |
 | `list [--json]` | Show IDs, names, base hash/timestamp/version compatibility and patch cache validity |
 | `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
 | `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
@@ -24,6 +25,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `profile delete <name>` | Delete a profile, clearing the active selection if needed |
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
 | `profile repack <name> on\|off` | Enable or disable texture repacking for builds of this profile |
+| `profile unlockfix <profile> <mod> on\|off` | Opt a mod into legacy boat and rod shop repair for this profile. Defaults to off. |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
 | `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
 | `restore` | Restore the configured game directory and retain all original backups |
@@ -31,6 +33,8 @@ for schemas, compatibility reporting, backups and all launch settings.
 Use full IDs or unique case-sensitive names/source stems for `<mod>`. Names containing
 spaces must be quoted, including the entire comma-separated `--mods` value.
 Management commands return 0 on success, 1 for errors or declined installation.
+
+`check` reports `CGF-UNLOCK-001` for boats and `CGF-UNLOCK-002` for rods when it finds no unlock path. The finding names the item, slot, and source tables or events. Use `profile unlockfix` to make eligible items buyable on the next build. The build lists each repaired item and its price.
 
 `wine.mode` accepts `wine`, `proton`, or `proton-flatpak`. For Flatpak Steam, start
 Steam first; see the [Flatpak Steam setup](user-guide.md#flatpak-steam) for defaults

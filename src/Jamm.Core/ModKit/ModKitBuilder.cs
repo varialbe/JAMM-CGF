@@ -103,6 +103,7 @@ public static class ModKitBuilder
         // Placeholder stubs for called jamm_* API functions so the mod compiles standalone.
         if (package.Fish.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_fish_register")) scriptsAdded++;
         if (package.Boats.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_boat_register")) scriptsAdded++;
+        if (package.Rods.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_rod_register")) scriptsAdded++;
         if (package.Hats.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_hat_register")) scriptsAdded++;
         if (package.Upgrades.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_upgrade_register")) scriptsAdded++;
 
@@ -232,6 +233,12 @@ public static class ModKitBuilder
                 $"{cardName}, {objName}, {GmlString(boat.Description)}, {(boat.Unlocked ? 1 : 0)});");
         }
 
+        foreach (var rod in package.Rods)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            initBody.AppendLine(RodRegistration(package.Id, rod));
+        }
+
         foreach (var hat in package.Hats)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -318,6 +325,10 @@ public static class ModKitBuilder
             specs.Add(new($"jmk_{modIdent}_{keyIdent}_spr", boat.SpritePath, 1, boat.Origin, CenterOrigin: true, GenerateMask: false));
             specs.Add(new($"jmk_{modIdent}_{keyIdent}_card", boat.CardPath, 1, null, CenterOrigin: true, GenerateMask: false));
         }
+        foreach (var rod in package.Rods)
+        {
+            specs.Add(new(RodSpriteName(modIdent, rod), rod.SpritePath, 1, rod.Origin, CenterOrigin: true, GenerateMask: false));
+        }
         foreach (var hat in package.Hats)
         {
             string keyIdent = SanitizeIdent(hat.Key);
@@ -387,7 +398,32 @@ public static class ModKitBuilder
 
     internal static string SanitizeIdent(string value) => value.Replace('-', '_');
 
+    internal static string RodRegistration(string id, ModKitRod rod) =>
+        $"jamm_rod_register({GmlString($"{id}:{rod.Key}")}, {GmlString(rod.Name)}, {RodNumber(rod.Cost)}, {RodNumber(rod.CastSpeed)}, " +
+        $"{RodNumber(rod.RodPower)}, {RodNumber(rod.RodPowerFlat)}, {RodNumber(rod.ReelSpeed)}, {RodNumber(rod.SinkerDistance)}, " +
+        $"{RodSpriteName(SanitizeIdent(id), rod)}, {rod.UpgradeSlots}, {(rod.Unlocked ? 1 : 0)});";
+
+    private static string RodSpriteName(string modIdent, ModKitRod rod) => $"jmk_{modIdent}_{SanitizeIdent(rod.Key)}_rod_sprite";
+
     private static string Num(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
+
+    private static string RodNumber(double value)
+    {
+        // The legacy compiler accepts plain decimal literals. Keep the parsed number's precision.
+        string literal = Math.Abs(value).ToString("R", CultureInfo.InvariantCulture);
+        int exponent = literal.IndexOf('E');
+        if (exponent >= 0)
+        {
+            string mantissa = literal[..exponent];
+            int point = mantissa.IndexOf('.');
+            int offset = (point < 0 ? mantissa.Length : point)
+                + int.Parse(literal.AsSpan(exponent + 1), CultureInfo.InvariantCulture);
+            string digits = mantissa.Replace(".", "", StringComparison.Ordinal);
+            literal = offset <= 0 ? "0." + new string('0', -offset) + digits
+                : offset >= digits.Length ? digits.PadRight(offset, '0') : digits.Insert(offset, ".");
+        }
+        return value < 0 ? "-" + literal : literal;
+    }
 
     private static string GmlString(string value)
     {

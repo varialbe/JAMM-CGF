@@ -54,7 +54,7 @@ int Run(string[] arguments)
             cgfmm compat-scan --base <data.win> --db <compat.db> --export <directory>
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
-            cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
+            cgfmm check <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
@@ -66,6 +66,7 @@ int Run(string[] arguments)
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
             cgfmm profile resolve <name> <asset> <mod|keep-both>
             cgfmm profile repack <name> on|off
+            cgfmm profile unlockfix <profile> <mod> on|off
             cgfmm apply [--profile <name>] [--yes]
             cgfmm play [--profile <name>] [--yes]
             cgfmm restore [--game <game dir>] [--verbose]

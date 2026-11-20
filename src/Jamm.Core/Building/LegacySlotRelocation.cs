@@ -30,7 +30,24 @@ internal static partial class LegacySlotRelocation
         string[] IndexedArrays,
         string ContextKeyword);
 
-    private sealed record TableItem(int Slot, string Identity, string DisplayName);
+    internal sealed record TableItem(int Slot, string Identity, string DisplayName);
+
+    internal static IEnumerable<(string Kind, string Table, string Create, TableItem Item)> UnlockCandidates(ModPatch patch)
+    {
+        foreach (var table in new[] { BoatTable, RodTable })
+        {
+            if (Create(table, patch) is not { BaseCode: { Format: "gml" } before, ModCode: { Format: "gml" } after })
+                continue;
+            var baseline = ReadItems(table, before.Text);
+            var items = ReadItems(table, after.Text);
+            foreach (var item in items.Values.OrderBy(i => i.Slot))
+                if (IsAddition(item, items, baseline))
+                    yield return (table.LowerKind, table.TableObject, table.CreateEntry, item);
+        }
+    }
+
+    internal static TableItem? UnlockItem(string kind, string text, int slot) =>
+        ReadItems(kind == "rod" ? RodTable : BoatTable, text).GetValueOrDefault(slot);
 
     private static readonly TableDescriptor BoatTable = new(
         Kind: "Boat",

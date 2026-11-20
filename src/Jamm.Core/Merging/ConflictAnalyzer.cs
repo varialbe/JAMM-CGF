@@ -26,11 +26,16 @@ public static class ConflictAnalyzer
         var relocation = Building.LegacySlotRelocation.Prepare(assetRelocation.Patches);
         var catalog = Building.CatalogMerge.Prepare(relocation.Patches);
         var report = AnalyzePrepared(catalog.Patches, relocation, catalog.Mapping, allowSingle, cancellationToken);
-        if (assetRelocation.Decisions.Count == 0) return report;
         string[] modNames = patches.Select(Name).ToArray();
         var renames = assetRelocation.Decisions.Select(d => new ConflictItem(d.StartsWith("WARNING", StringComparison.Ordinal) ? "WARNING" : "INFO",
             "relocation", "assets", "asset-name", modNames, d));
-        return report with { Findings = [.. renames, .. report.Findings] };
+        List<ConflictItem> unlocks = [];
+        for (int i = 0; i < relocation.Patches.Length; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            unlocks.AddRange(Building.LegacyItemUnlocks.Analyze(relocation.Patches[i]).Select(f => f.ToConflict(report.LoadOrder[i].Name)));
+        }
+        return report with { Findings = [.. renames, .. report.Findings, .. unlocks] };
     }
 
     internal static ConflictReport AnalyzePrepared(

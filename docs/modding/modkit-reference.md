@@ -25,12 +25,13 @@ my-mod/
 ```
 
 * **JSON syntax**: `jamm-mod.json` is strict standard JSON—**no trailing commas** and **no `//` or `/* */` comments**. Property names are matched case-insensitively.
-* **Identifiers (`id` and `key`)**: Must be non-empty strings matching `^[a-z0-9_-]+$` (lowercase letters, digits, underscores, hyphens). Each item `key` must be unique within its array (`fish`, `boats`, `hats`, `upgrades`).
+* **Identifiers (`id` and `key`)**: Must be non-empty strings matching `^[a-z0-9_-]+$` (lowercase letters, digits, underscores, hyphens). Each item `key` must be unique within its array (`fish`, `boats`, `rods`, `hats`, `upgrades`).
 * **Paths**: Every `sprite`, `card`, `icon`, and `hooks.*` path must be a **relative path inside the package directory** (no `..` parent traversal and no absolute paths).
 * **Generated asset names**:
   * Hyphens (`-`) become underscores (`_`) in GML asset names while the string registration key remains `"<id>:<key>"`.
   * Fish: object `jmk_<id>_<key>`, sprite `jmk_<id>_<key>_spr`, optional hooks `jmk_<id>_<key>_{create,step,caught,draw}`.
   * Boats: object `jmk_<id>_<key>`, world sprite `jmk_<id>_<key>_spr`, shop card `jmk_<id>_<key>_card`.
+  * Rods: sprite `jmk_<id>_<key>_rod_sprite`.
   * Hats: object `jmk_<id>_<key>`, sprite `jmk_<id>_<key>_spr`, optional hook `jmk_<id>_<key>_effect`.
   * Upgrades: icon sprite `jmk_<id>_<key>_icon`, optional hooks `jmk_<id>_<key>_{apply,step}`.
   * Init script: `jamm_init_<id>` (with hyphens replaced by underscores).
@@ -49,6 +50,7 @@ my-mod/
 | `description` | string | No | `""` | Package summary. |
 | `fish` | array | No | `[]` | Custom fish definitions. |
 | `boats` | array | No | `[]` | Custom boat definitions. |
+| `rods` | array | No | `[]` | Custom fishing rod definitions. |
 | `hats` | array | No | `[]` | Custom hat (`Gear`) definitions. |
 | `upgrades` | array | No | `[]` | Custom rod upgrade definitions. |
 
@@ -117,6 +119,29 @@ Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. Boats
 | `unlocked` | bool | No | `false` | `false` (`0`, purchasable in shop) or `true` (`1`, already owned). |
 | `stats` | object | No | See right | `maxSpeed` (`4`, min `0.1`), `capacity` (`4`, int min `1`), `maxDistance` (`4500`, min `500`), `moveBonus` (`0`, min `0`). |
 | `origin` | `[x, y]` | No | center | 2-integer origin for the world `sprite` (the `card` sprite is always centered). |
+
+---
+
+## `rods` Entries
+
+ModKit calls `jamm_rod_register` from the package's generated init script. The merged game uses the same rod shop, upgrade grid, and save behavior as a rod registered in GML.
+
+| Field | Type | Required | Default | Constraints / Notes |
+| :--- | :--- | :---: | :--- | :--- |
+| `key` | string | Yes | — | Unique in `rods`. Keys that differ only in hyphens and underscores share a GML asset name. |
+| `name` | string | Yes | — | Non-empty shop display name. |
+| `cost` | number | Yes | — | Nonnegative purchase price, using the same field as boats. |
+| `cast_speed` | number | Yes | — | Casting speed. |
+| `rod_power` | number | Yes | — | Reeling power multiplier. |
+| `rod_power_flat` | number | Yes | — | Flat reeling power bonus. |
+| `reel_speed` | number | Yes | — | Reeling speed. |
+| `sinker_distance` | number | Yes | — | Maximum sinker distance. |
+| `sprite` | string | Yes | — | Relative path to a single-frame PNG used in the shop and when equipped. |
+| `origin` | `[x, y]` | No | center | Two integer sprite coordinates, using the same rules as boats and hats. |
+| `upgrade_slots` | integer or `"vanilla"` | No | `8` | Choose `0..16` or one slot more than the highest slot count among existing rods, capped at 16. |
+| `unlocked` | bool | No | `false` | `false` makes the rod purchasable. `true` starts it owned, as with boats. |
+
+Use `cost` and `unlocked` for shop availability and ownership. See [the rod cookbook example](cookbook.md#9-a-custom-rod-in-the-shop) and [the registration API](api-reference.md#2-jamm_rod_register).
 
 ---
 

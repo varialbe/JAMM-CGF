@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jamm.Core.Building;
 
 namespace Jamm.Core.ModKit;
 
@@ -53,6 +54,21 @@ public sealed record ModKitBoat(
     ModKitBoatStats Stats,
     int[]? Origin);
 
+/// <summary>A fishing rod definition in a ModKit package.</summary>
+public sealed record ModKitRod(
+    string Key,
+    string Name,
+    double Cost,
+    double CastSpeed,
+    double RodPower,
+    double RodPowerFlat,
+    double ReelSpeed,
+    double SinkerDistance,
+    string SpritePath,
+    int UpgradeSlots,
+    bool Unlocked,
+    int[]? Origin);
+
 /// <summary>Optional GML hook files attached to a ModKit hat.</summary>
 public sealed record ModKitHatHooks(string? Effect);
 
@@ -100,7 +116,11 @@ public sealed record ModKitManifest(
     IReadOnlyList<ModKitFish> Fish,
     IReadOnlyList<ModKitBoat> Boats,
     IReadOnlyList<ModKitHat> Hats,
-    IReadOnlyList<ModKitUpgrade> Upgrades);
+    IReadOnlyList<ModKitUpgrade> Upgrades)
+{
+    /// <summary>Fishing rods registered with the JAMM item API.</summary>
+    public IReadOnlyList<ModKitRod> Rods { get; init; } = [];
+}
 
 /// <summary>Parses, validates, and scaffolds ModKit folder packages (<c>jamm-mod.json</c> + art + GML hooks).</summary>
 public static partial class ModKitPackage
@@ -155,15 +175,17 @@ public static partial class ModKitPackage
 
             var fish = ParseArray(rootObj, "fish", "$.fish", (el, path) => ParseFish(root, el, path));
             var boats = ParseArray(rootObj, "boats", "$.boats", (el, path) => ParseBoat(root, el, path));
+            var rods = ParseArray(rootObj, "rods", "$.rods", (el, path) => ParseRod(root, el, path));
             var hats = ParseArray(rootObj, "hats", "$.hats", (el, path) => ParseHat(root, el, path));
             var upgrades = ParseArray(rootObj, "upgrades", "$.upgrades", (el, path) => ParseUpgrade(root, el, path));
 
             EnsureUniqueKeys(fish.Select(f => f.Key), "$.fish");
             EnsureUniqueKeys(boats.Select(b => b.Key), "$.boats");
+            EnsureUniqueKeys(rods.Select(r => ModKitBuilder.SanitizeIdent(r.Key)), "$.rods");
             EnsureUniqueKeys(hats.Select(h => h.Key), "$.hats");
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
 
-            return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades);
+            return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades) { Rods = rods };
         }
     }
 
@@ -411,6 +433,50 @@ public static partial class ModKitPackage
         }
 
         return new ModKitBoat(key, name, cost, cardPath, spritePath, description, unlocked, stats, origin);
+    }
+
+    private static ModKitRod ParseRod(string root, JsonElement element, string path)
+    {
+        var obj = ExpectObject(element, path);
+        JsonElement slotValue = default;
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in obj.EnumerateObject())
+        {
+            string field = property.Name.ToLowerInvariant();
+            if (field is not ("key" or "name" or "cost" or "cast_speed" or "rod_power" or "rod_power_flat"
+                or "reel_speed" or "sinker_distance" or "sprite" or "upgrade_slots" or "unlocked" or "origin"))
+                throw Error($"{path}.{property.Name}", $"Unknown rod field '{property.Name}'. Use cost and unlocked for shop purchase and starting ownership.");
+            if (!seen.Add(field))
+                throw Error($"{path}.{property.Name}", $"Duplicate rod field '{property.Name}'. Keep one value for this field.");
+            if (field == "upgrade_slots") slotValue = property.Value;
+        }
+
+        int slots = 8;
+        if (slotValue.ValueKind != JsonValueKind.Undefined)
+        {
+            if (slotValue.ValueKind == JsonValueKind.String && slotValue.GetString() == "vanilla")
+                slots = -1;
+            else if (slotValue.ValueKind != JsonValueKind.Number || !slotValue.TryGetInt32(out slots)
+                || slots is < 0 or > ItemsRuntimeScripts.JammMaxRodSlots)
+                throw Error($"{path}.upgrade_slots", $"Expected an integer from 0 to {ItemsRuntimeScripts.JammMaxRodSlots} or \"vanilla\".");
+        }
+
+        double cost = RequireRodNumber("cost");
+        if (cost < 0)
+            throw Error($"{path}.cost", "Cost must be nonnegative.");
+
+        return new(
+            RequireKey(obj, "key", $"{path}.key"),
+            RequireNonEmptyString(obj, "name", $"{path}.name"),
+            cost, RequireRodNumber("cast_speed"), RequireRodNumber("rod_power"), RequireRodNumber("rod_power_flat"),
+            RequireRodNumber("reel_speed"), RequireRodNumber("sinker_distance"),
+            RequireAssetFile(root, obj, "sprite", $"{path}.sprite", [".png"], expectedFrames: 1),
+            slots, OptionalBool(obj, "unlocked", $"{path}.unlocked", false),
+            OptionalOrigin(obj, "origin", $"{path}.origin"));
+
+        double RequireRodNumber(string field) => TryGetNonNull(obj, field, out var value)
+            ? ReadNumber(value, $"{path}.{field}")
+            : throw Error($"{path}.{field}", $"Missing required number field '{field}'.");
     }
 
     private static ModKitHat ParseHat(string root, JsonElement element, string path)

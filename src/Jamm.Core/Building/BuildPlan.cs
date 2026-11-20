@@ -32,7 +32,8 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         IReadOnlyList<AssetReference>? baseReferences = null) => Create(patches, resolutions, baseReferences, null);
 
     internal static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions,
-        IReadOnlyList<AssetReference>? baseReferences, IReadOnlyDictionary<string, CodeText>? baseCode)
+        IReadOnlyList<AssetReference>? baseReferences, IReadOnlyDictionary<string, CodeText>? baseCode,
+        IReadOnlySet<int>? unlockFixMods = null)
     {
         if (patches.Count == 0) throw new ArgumentException("build needs at least one mod.");
         resolutions ??= new Dictionary<string, string>();
@@ -325,6 +326,8 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             }
         if (relocation.RodCount > 0)
             LegacyRodRelocation.CompleteCode(assets, patches, baseCode, relocation.RodCount);
+        if (unlockFixMods is { Count: > 0 })
+            LegacyShopRepair.Apply(assets, decisions, patches, baseCode, unlockFixMods);
         return new(assets, decisions)
         {
             Catalog = catalog.Mapping,
