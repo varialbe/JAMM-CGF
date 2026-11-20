@@ -38,6 +38,10 @@ The revised donor comparison pairs the finished sprites with their main body don
 
 Each fish has one connected silhouette at the body and fin scale. Flaret and Lowbelly each have one isolated source-sized pixel in the half-alpha mask inspection.
 
+The round 2 solo dock run recorded nine weather fish in each weather, ended Fog at night with its override still requested, and completed without a CODE ERROR. The full 1200 × 720 Fog capture is at `~/jamm-night/weather/fog-wide.png`. Both foreground tile joins are visually continuous in this frame. The boundary beneath the boat at about x = 300 matches the water boundary in the clear-day capture. The refreshed gameplay sheet is at `~/jamm-night/weather/art-review-gameplay.png`, and the eight native captures and telemetry are in `~/jamm-night/weather/screens/art-round2/`.
+
+The Release build completed with zero warnings. The atlas regression, all 599 default .NET tests on rerun, and all four GML tests passed. The five-pack and all-seven results below are from round 1.
+
 ## Verification
 
 Use `dotnet build -c Release`, `dotnet test -c Release`, and `node --test scripts/test-weather-runtime.mjs`. The synthetic tests cover manifest diagnostics, package coexistence with the same short ID, a preinstalled console, missing or duplicate anchors, deterministic weighted selection, persistence by qualified ID, day/night activation and parking/restoration. The two-package test builds and reloads a legacy-format archive with one controller.
