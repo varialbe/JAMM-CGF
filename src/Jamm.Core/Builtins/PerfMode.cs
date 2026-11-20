@@ -7,7 +7,7 @@ namespace Jamm.ModMaker;
 /// <summary>Opt-in scheduling for structurally standard, distant paused fish.</summary>
 public static class PerfMode
 {
-    private const string Controller = "obj_jamm_perf";
+    internal const string ControllerName = "obj_jamm_perf";
 
     // Offline historical census only; runtime eligibility below does not use this list.
     // WHY: the original audit excluded unknown/custom species.
@@ -117,7 +117,7 @@ public static class PerfMode
     /// <summary>Adds a persistent switch, toast and optional per-second scheduling counters.</summary>
     public static void Queue(UndertaleData data, CompileGroup compiler, bool debug)
     {
-        var obj = ModObjects.Create(data, Controller, true);
+        var obj = ModObjects.Create(data, ControllerName, true);
         void Add(EventType type, uint subtype, string text) => compiler.QueueCodeReplace(obj.EventHandlerFor(type, subtype, data), text);
         Add(EventType.Create, 0, $$"""
             if (instance_number(object_index) > 1) { instance_destroy(); exit; }

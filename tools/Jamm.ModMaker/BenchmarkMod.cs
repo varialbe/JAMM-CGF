@@ -33,7 +33,9 @@ public sealed record BenchmarkOptions(
     bool DeepSonar = false,
     bool ShowHud = false,
     bool Profile = false,
-    bool ProfileScripts = false);
+    bool ProfileScripts = false,
+    int TraceFish = 0,
+    bool FishGrid = false);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -76,12 +78,19 @@ public static partial class BenchmarkMod
     };
 
     /// <summary>Applies the benchmark controller pass to an original or already-modded in-memory archive.</summary>
-    public static void Apply(UndertaleData data, BenchmarkOptions? options = null)
+    public static void Apply(UndertaleData data, BenchmarkOptions? options = null, Action<string>? decision = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         options ??= new BenchmarkOptions();
         ValidateOptions(options);
 
+        if (options.FishGrid)
+        {
+            string result = FishGrid.Apply(data);
+            decision?.Invoke(result);
+        }
+
+        if (options.TraceFish > 0) FishTrace.Instrument(data, options.Seed);
         if (options.Profile)
             GmlCpuProfiler.Instrument(data, options.ProfileScripts);
 
@@ -94,12 +103,12 @@ public static partial class BenchmarkMod
 
         var compiler = new CompileGroup(data);
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Create, 0u, data), CreateGml(options));
-        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Destroy, 0u, data), DestroyGml());
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Destroy, 0u, data), DestroyGml(options.TraceFish > 0));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.RoomStart, data), RoomStartGml(data));
-        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStepGml(data));
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStepGml(data, options.TraceFish > 0));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), EndStepGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), DrawGuiGml(data));
-        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), DrawGuiEndGml(options.Profile));
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), DrawGuiEndGml(options));
         ModObjects.Compile(compiler);
 
         ModObjects.PlaceInstance(data, "NewWorld", bench, first: true);
@@ -116,6 +125,8 @@ public static partial class BenchmarkMod
             throw new ArgumentOutOfRangeException(nameof(options), "CaptureSeconds must be > 0 and <= 3600.");
         if (options.MaxSamples < 1 || options.MaxSamples > 200000)
             throw new ArgumentOutOfRangeException(nameof(options), "MaxSamples must be between 1 and 200000.");
+        if (options.TraceFish is < 0 or > 200000)
+            throw new ArgumentOutOfRangeException(nameof(options), "TraceFish must be between 0 (disabled) and 200000.");
         if (options.BoatSlot < 1)
             throw new ArgumentOutOfRangeException(nameof(options), "BoatSlot must be >= 1.");
         if (double.IsNaN(options.DockX) || double.IsInfinity(options.DockX)
@@ -209,6 +220,7 @@ public static partial class BenchmarkMod
             if (jamm_b_output_file == "" || jamm_b_output_file == "meta.ini" || string_pos("sdata", string_lower(jamm_b_output_file)) == 1 || string_pos(".win", string_lower(jamm_b_output_file)) > 0 || string_pos("..", jamm_b_output_file) > 0 || string_pos("/", jamm_b_output_file) > 0 || string_pos(chr(92), jamm_b_output_file) > 0 || string_pos(":", jamm_b_output_file) > 0)
                 jamm_b_output_file = "jamm_bench_" + jamm_b_scene + ".csv";
 
+            {{(o.TraceFish > 0 ? FishTrace.Create : "")}}
             jamm_b_frame_list = ds_list_create();
             jamm_b_loop_list = ds_list_create();
             jamm_b_state = 0;
@@ -228,9 +240,10 @@ public static partial class BenchmarkMod
             """;
     }
 
-    private static string DestroyGml() => """
+    private static string DestroyGml(bool trace) => $$"""
         if (variable_instance_exists(id, "jamm_b_owner") && jamm_b_owner)
         {
+            {{(trace ? "buffer_delete(jamm_trace_buffer);" : "")}}
             ds_list_destroy(jamm_b_frame_list);
             ds_list_destroy(jamm_b_loop_list);
         }
@@ -272,7 +285,7 @@ public static partial class BenchmarkMod
         }
         """;
 
-    private static string BeginStepGml(UndertaleData data)
+    private static string BeginStepGml(UndertaleData data, bool trace)
     {
         bool hasSaveManager = data.GameObjects.ByName("SaveManager") is not null;
         string saveLock = hasSaveManager
@@ -293,6 +306,7 @@ public static partial class BenchmarkMod
             : "";
 
         return $$"""
+            {{(trace ? "global.jamm_trace_tick += 1;" : "")}}
             jamm_b_step_t = get_timer();
             jamm_b_has_step = 1;
             if (jamm_b_state == 2) jamm_b_step_samples += 1;
@@ -577,12 +591,23 @@ public static partial class BenchmarkMod
             """;
     }
 
-    private static string DrawGuiEndGml(bool profile) => $$"""
+    private static string DrawGuiEndGml(BenchmarkOptions options)
+    {
+        bool profile = options.Profile;
+        bool trace = options.TraceFish > 0;
+        string warmedUp = trace
+            ? "true"
+            : "(jamm_b_now - jamm_b_phase_start) >= (jamm_b_warmup_sec * 1000000) && jamm_b_warmup_frames >= 10";
+        string finished = trace
+            ? $"jamm_trace_n >= {options.TraceFish}"
+            : "(jamm_b_now - jamm_b_capture_start) >= (jamm_b_capture_sec * 1000000) || ds_list_size(jamm_b_frame_list) >= jamm_b_max_samples";
+
+        return $$"""
         var jamm_b_now = get_timer();
         if (jamm_b_state == 1)
         {
             jamm_b_warmup_frames += 1;
-            if ((jamm_b_now - jamm_b_phase_start) >= (jamm_b_warmup_sec * 1000000) && jamm_b_warmup_frames >= 10)
+            if ({{warmedUp}})
             {
                 ds_list_clear(jamm_b_frame_list);
                 ds_list_clear(jamm_b_loop_list);
@@ -591,6 +616,7 @@ public static partial class BenchmarkMod
                 jamm_b_prev_gui_t = jamm_b_now;
                 jamm_b_has_step = 0;
                 {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_n);\nglobal.__jamm_prof_on = 1;" : "")}}
+                {{(trace ? FishTrace.Start : "")}}
                 jamm_b_state = 2;
             }
         }
@@ -603,11 +629,12 @@ public static partial class BenchmarkMod
             {
                 jamm_b_loop_us = max(0, jamm_b_now - jamm_b_step_t);
                 jamm_b_has_step = 0;
+                {{(trace ? FishTrace.Sample() : "")}}
             }
             ds_list_add(jamm_b_frame_list, jamm_b_frame_us);
             ds_list_add(jamm_b_loop_list, jamm_b_loop_us);
 
-            if ((jamm_b_now - jamm_b_capture_start) >= (jamm_b_capture_sec * 1000000) || ds_list_size(jamm_b_frame_list) >= jamm_b_max_samples)
+            if ({{finished}})
             {
                 {{(profile ? "global.__jamm_prof_on = 0;" : "")}}
                 var jamm_b_wall_us = max(1, jamm_b_now - jamm_b_capture_start);
@@ -676,6 +703,11 @@ public static partial class BenchmarkMod
                 {
                     file_text_write_string(jamm_b_f, "# jamm_bench v1");
                     file_text_writeln(jamm_b_f);
+                    if (variable_global_exists("jamm_fg_enabled"))
+                    {
+                        file_text_write_string(jamm_b_f, "# fish_grid=" + string(global.jamm_fg_enabled));
+                        file_text_writeln(jamm_b_f);
+                    }
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# samples=" + string(jamm_b_n) + " wall_us=" + string(round(jamm_b_wall_us)) + " avg_fps=" + string(jamm_b_avg_fps) + " room_speed=" + string(room_speed) + " step_samples=" + string(jamm_b_step_samples) + " draw_samples=" + string(jamm_b_n) + " draws_per_step=" + string(jamm_b_n / max(1, jamm_b_step_samples)) + " instances=" + string(instance_count) + " window=" + string(jamm_b_window_w) + "x" + string(jamm_b_window_h) + " application_surface=" + string(jamm_b_app_w) + "x" + string(jamm_b_app_h) + " fullscreen=" + string(jamm_b_fullscreen) + " render_size_normalized=" + string(jamm_b_size_ok));
@@ -733,6 +765,8 @@ public static partial class BenchmarkMod
             }
         }
         """;
+
+    }
 
     private static string ProfileWriterGml() => """
         var jamm_p_name = "jamm_profile_" + jamm_b_scene + ".csv";

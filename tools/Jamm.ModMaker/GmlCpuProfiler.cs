@@ -28,14 +28,12 @@ public static class GmlCpuProfiler
             }
         }
 
-        if (includeScripts)
+        foreach (var script in data.Scripts)
         {
-            foreach (var script in data.Scripts)
-            {
-                var code = script.Code;
-                if (code is null || code.ParentEntry is not null || code.Name.Content.Contains("obj_jamm", StringComparison.Ordinal)) continue;
-                entries.TryAdd(code, false);
-            }
+            if (!includeScripts && script.Name.Content is not ("jamm_fg_build" or "jamm_fg_collect")) continue;
+            var code = script.Code;
+            if (code is null || code.ParentEntry is not null || code.Name.Content.Contains("obj_jamm", StringComparison.Ordinal)) continue;
+            entries.TryAdd(code, false);
         }
 
         if (entries.Count == 0) return 0;
@@ -48,11 +46,11 @@ public static class GmlCpuProfiler
             string helperName = $"__jamm_prof_original_{index}";
             string helperCodeName = $"gml_Script_{helperName}";
             string label = oldName + (drawAffected ? " [render-affected]" : "");
-            string source = ModObjects.Decompile(data, original);
 
             // Keep the original body as a callable script. The event/script entry becomes a
             // wrapper, so its timer is accumulated even when the body executes exit or return.
             original.Name = data.Strings.MakeString(helperCodeName);
+            if (data.CodeLocals.ByName(oldName) is { } locals) locals.Name = original.Name;
             data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(helperName), Code = original });
 
             var wrapper = UndertaleCode.CreateEmptyEntry(data, oldName);
@@ -72,7 +70,6 @@ public static class GmlCpuProfiler
                 foreach (var action in attached) action.CodeId = wrapper;
             }
 
-            compiler.QueueCodeReplace(original, source);
             compiler.QueueCodeReplace(wrapper, WrapperGml(helperName, label, oldName.StartsWith("gml_Script_", StringComparison.Ordinal)));
             index++;
         }

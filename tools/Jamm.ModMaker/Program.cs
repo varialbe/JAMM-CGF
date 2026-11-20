@@ -31,7 +31,7 @@ public static class Program
                   console <original.win> <out.win>
                   silo    <original.win> <out.win>
                   bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -53,7 +53,17 @@ public static class Program
             case "perf-census": foreach (string line in PerfMode.Census(data)) Console.WriteLine(line); return 0;
             case "inspect": Inspector.Run(data); return 0;
             case "dump": Dump.Run(data, args.Skip(2)); return 0;
-            case "names": foreach (var c in data.Code) Console.WriteLine(c.Name.Content); return 0;
+            case "names":
+                if (args.Contains("--objects"))
+                {
+                    for (int i = 0; i < data.GameObjects.Count; i++)
+                    {
+                        var obj = data.GameObjects[i];
+                        Console.WriteLine($"{i}\t{obj.Name.Content}\t{obj.ParentId?.Name.Content}");
+                    }
+                }
+                else foreach (var c in data.Code) Console.WriteLine(c.Name.Content);
+                return 0;
             case "census":
                 {
                     var room = data.Rooms.ByName(args.Length > 2 ? args[2] : "NewWorld")!;
@@ -84,7 +94,7 @@ public static class Program
             case "bench" when SiloScene.Requested(args): SiloScene.Apply(data, args); Save(data, output!); return 0;
             case "bench":
                 var benchOpts = ParseBenchOptions(args.Skip(3).ToArray());
-                BenchmarkMod.Apply(data, benchOpts);
+                BenchmarkMod.Apply(data, benchOpts, Console.WriteLine);
                 Save(data, output!, saved => VerifyBench(saved, benchOpts));
                 return 0;
             case "profile":
@@ -119,6 +129,8 @@ public static class Program
         bool showHud = false;
         bool profile = false;
         bool profileScripts = false;
+        int traceFish = 0;
+        bool fishGrid = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -131,6 +143,11 @@ public static class Program
                 case "--deep-sonar": deepSonar = true; break;
                 case "--show-hud": showHud = true; break;
                 case "--profile": profile = true; break;
+                case "--trace-fish":
+                    traceFish = ParseInt(RequireValue(args, ref i, arg), arg);
+                    if (traceFish < 1) throw new ArgumentException("--trace-fish requires at least one tick.");
+                    break;
+                case "--fish-grid": fishGrid = true; break;
                 case "--profile-scripts": profile = true; profileScripts = true; break;
                 case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
                 case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
@@ -146,7 +163,7 @@ public static class Program
             }
         }
 
-        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts);
+        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid);
     }
 
     private static string RequireValue(string[] args, ref int i, string option)

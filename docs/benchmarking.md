@@ -66,6 +66,26 @@ All scenes run inside `NewWorld` with `random_set_seed(Seed)` (default `1337`), 
 | `--boat-slot <n>` | `BoatSlot` | `7` | `BoatData` slot used in `deepwater` (clamped to `[1, nItems - 1]`) |
 | `--deep-sonar` | `DeepSonar` | `0` (`false`) | Also enable `SonarPanelAdvanced` in `sonar` scene |
 | `--show-hud` | `ShowHud` | `0` (`false`) | Show status box outside capture (suppressed during capture) |
+| `--profile` / `--profile-scripts` | | Off | Record inclusive event timings, with optional script timings |
+| `--fish-grid` | `FishGrid` in `[Perf]` | Off unless Perf is already installed | Install the guarded grid in a benchmark copy |
+| `--trace-fish <ticks>` | | Off | Record one fish state hash per simulation tick after scene setup |
+
+## Comparing fish behaviour
+
+Build one archive for each scene with `--trace-fish 1800 --fish-grid --seed 1337`. Run each
+archive twice with the same save sandbox and seed, setting `FishGrid=0` and `FishGrid=1`
+in the `[Perf]` section of `jamm_perf.ini`. Keep the two
+`jamm_trace_fish_<scene>.csv` files and compare them byte for byte. The benchmark CSV records
+the actual `FishGrid` switch value. The trace CSV contains the tick, active fish count, cumulative
+explicit GML RNG calls and an MD5 of binary fish state in engine traversal order.
+
+Trace mode starts sampling on the first tick after scene setup and uses a fixed tick count.
+It pins the simulation-facing clock, delta and FPS values and seeds RNG before the first
+explicit random call. It counts explicit GML RNG calls. Engine-internal random draws are
+outside that counter. Trace mode suppresses discarded raster calls while retaining Draw
+events and their state changes. Capture performance with a separate run using `--profile`
+or `--profile-scripts`. Its `jamm_profile_<scene>.csv` includes `jamm_fg_build` and
+`jamm_fg_collect` when the grid runs.
 
 ## Distinguishing game loop vs. present
 

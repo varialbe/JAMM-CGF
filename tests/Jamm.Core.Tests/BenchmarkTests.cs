@@ -190,6 +190,30 @@ public class BenchmarkTests
     }
 
     [Fact]
+    public void FishTraceControlsSimulationInputsAndWritesOneHashPerStep()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var step = data.GameObjects.ByName("Fish")!.EventHandlerFor(EventType.Step, 2u, data);
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(step, "if (x > 0) exit; x = current_time + delta_time + fps + random(1);");
+        ModObjects.Compile(compiler);
+
+        BenchmarkMod.Apply(data, new BenchmarkOptions(TraceFish: 1800));
+
+        string instrumented = ModObjects.Decompile(data, step);
+        Assert.Contains("jamm_trace_clock()", instrumented);
+        Assert.Contains("jamm_trace_delta()", instrumented);
+        Assert.Contains("jamm_trace_fps()", instrumented);
+        Assert.Contains("jamm_trace_rng()", instrumented);
+        Assert.Contains("random(1)", instrumented);
+        Assert.Equal(default, step.Instructions.First(instruction => instruction.ValueFunction?.Name.Content == "jamm_trace_rng").ReferenceType);
+        string drawEnd = Code(data, "Draw_75");
+        Assert.Contains("jamm_trace_n >= 1800", drawEnd);
+        Assert.Contains("buffer_md5", drawEnd);
+        Assert.Contains("buffer_f64", drawEnd);
+    }
+
+    [Fact]
     public void UnprofiledBenchLeavesExistingCodeUnchanged()
     {
         using var data = CreateSyntheticGame(includeOptionalObjects: true);
