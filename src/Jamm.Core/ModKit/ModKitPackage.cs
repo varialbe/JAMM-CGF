@@ -100,7 +100,11 @@ public sealed record ModKitManifest(
     IReadOnlyList<ModKitFish> Fish,
     IReadOnlyList<ModKitBoat> Boats,
     IReadOnlyList<ModKitHat> Hats,
-    IReadOnlyList<ModKitUpgrade> Upgrades);
+    IReadOnlyList<ModKitUpgrade> Upgrades)
+{
+    /// <summary>Optional base or addon role declared by the package.</summary>
+    public Management.ModRole? Role { get; init; }
+}
 
 /// <summary>Parses, validates, and scaffolds ModKit folder packages (<c>jamm-mod.json</c> + art + GML hooks).</summary>
 public static partial class ModKitPackage
@@ -163,7 +167,8 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(hats.Select(h => h.Key), "$.hats");
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
 
-            return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades);
+            var (_, _, role) = Management.ModRole.ReadManifest(rootObj, manifestPath);
+            return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades) { Role = role };
         }
     }
 

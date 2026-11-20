@@ -22,13 +22,19 @@ public static class ArchiveBuilder
     /// <summary>Compiles a merged working copy; publishes only after the temporary output passes verification.</summary>
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
-        CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false)
+        CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false) =>
+        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack);
+
+    internal static BuildResult BuildLayer(string basePath, IReadOnlyList<BuildInput> inputs, string output,
+        IReadOnlyDictionary<string, string>? resolutions, bool dryRun, Action<string>? progress,
+        CancellationToken cancellationToken, AnalysisOptions? options, bool noRepack,
+        bool intermediate = false, IReadOnlyList<string>? additionalProtectedPaths = null, bool hasMergedBase = false)
     {
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
         cancellationToken.ThrowIfCancellationRequested();
-        string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath)];
+        string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath), .. additionalProtectedPaths ?? []];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
         using var original = GameFileLoader.Load(basePath, progress, cancellationToken, options);
         if (inputs.Count == 0)
@@ -67,18 +73,17 @@ public static class ArchiveBuilder
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
             // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
             // jamm_api_init when no items runtime was injected.
-            var plan = CatalogRuntime.PreparePlan(
-                FishRuntime.PreparePlan(
-                    ItemsRuntime.PreparePlan(
-                        HudRuntime.PreparePlan(
-                            MenuRuntime.PreparePlan(
-                                BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base),
-                                semantics.Base, original.Data),
-                            semantics.Base),
-                        semantics.Base,
-                        semantics.BaseNames),
-                    semantics.Base, original.Data),
-                semantics.Base);
+            var plan = BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, hasMergedBase);
+            if (!intermediate)
+                plan = CatalogRuntime.PreparePlan(
+                    FishRuntime.PreparePlan(
+                        ItemsRuntime.PreparePlan(
+                            HudRuntime.PreparePlan(
+                                MenuRuntime.PreparePlan(plan, semantics.Base, original.Data),
+                                semantics.Base),
+                            semantics.Base, semantics.BaseNames),
+                        semantics.Base, original.Data),
+                    semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
             ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
@@ -88,7 +93,7 @@ public static class ArchiveBuilder
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress, extraDecisions);
+                Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress, extraDecisions, intermediate);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -105,7 +110,7 @@ public static class ArchiveBuilder
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             ArchiveVerifier.ValidateReferences(data);
             var counts = Counts(data);
-            var acceptance = AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
+            var acceptance = intermediate ? null : AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
             if (dryRun) return new(plan, original.Inspection, null, counts, 0, remapped, expectedReferences.Count, acceptance);
             progress?.Invoke("Writing temporary merged archive");
             var verification = Publish(output, protectedPaths, plan, original.Inspection, stream => UndertaleIO.Write(stream, data),
@@ -162,7 +167,8 @@ public static class ArchiveBuilder
         }
     }
 
-    private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress, List<string> extraDecisions)
+    private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress, List<string> extraDecisions,
+        bool intermediate)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -314,11 +320,14 @@ public static class ArchiveBuilder
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
         ReassignRoomIds(data, ancestor);
-        CatalogRuntime.Inject(data, recompile);
-        HudRuntime.Inject(data, recompile);
-        MenuRuntime.Inject(data, recompile);
-        ItemsRuntime.Inject(data, recompile);
-        FishRuntime.Inject(data, recompile);
+        if (!intermediate)
+        {
+            CatalogRuntime.Inject(data, recompile);
+            HudRuntime.Inject(data, recompile);
+            MenuRuntime.Inject(data, recompile);
+            ItemsRuntime.Inject(data, recompile);
+            FishRuntime.Inject(data, recompile);
+        }
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
         var finalNames = SemanticReferences.Names(data);

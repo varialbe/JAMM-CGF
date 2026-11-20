@@ -74,9 +74,7 @@ internal static class ModKitCommand
 
             case "build":
                 var loaded = ModKitPackage.Load(dir);
-                string? basePath = options.GetValueOrDefault("--base") ?? new ManagerStore(dataDirectory).Config().Base;
-                if (string.IsNullOrWhiteSpace(basePath))
-                    throw new ArgumentException("Set the configured legacy base first ('cgfmm config set base <data.win>') or pass --base <data.win>.");
+                string basePath = options.GetValueOrDefault("--base") ?? new ModLibrary(new ManagerStore(dataDirectory)).ModKitAncestor(loaded);
                 string outPath = options.GetValueOrDefault("--out", Path.Combine(Path.GetFullPath(dir), $"{loaded.Id}.win"));
                 var result = ModKitBuilder.Build(dir, basePath, outPath, Console.Error.WriteLine, noRepack: noRepack);
                 if (result.TextureDecision is { } decision) Console.WriteLine($"Decision: {decision}");

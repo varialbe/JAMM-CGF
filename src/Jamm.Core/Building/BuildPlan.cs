@@ -32,7 +32,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         IReadOnlyList<AssetReference>? baseReferences = null) => Create(patches, resolutions, baseReferences, null);
 
     internal static BuildPlan Create(IReadOnlyList<ModPatch> patches, IReadOnlyDictionary<string, string>? resolutions,
-        IReadOnlyList<AssetReference>? baseReferences, IReadOnlyDictionary<string, CodeText>? baseCode)
+        IReadOnlyList<AssetReference>? baseReferences, IReadOnlyDictionary<string, CodeText>? baseCode, bool hasMergedBase = false)
     {
         if (patches.Count == 0) throw new ArgumentException("build needs at least one mod.");
         resolutions ??= new Dictionary<string, string>();
@@ -42,7 +42,7 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
         patches = assetRelocation.Patches;
         var relocation = LegacySlotRelocation.Prepare(patches);
         patches = relocation.Patches;
-        var catalog = CatalogMerge.Prepare(patches);
+        var catalog = CatalogMerge.Prepare(patches, hasMergedBase);
         patches = catalog.Patches;
         // Analyze a single patch twice to reuse exactly the Phase 2 ancestor merge, too.
         var report = ConflictAnalyzer.AnalyzePrepared(patches.Count == 1 ? [patches[0], patches[0]] : patches, relocation, catalog.Mapping);

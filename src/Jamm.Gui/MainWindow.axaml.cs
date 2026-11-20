@@ -293,8 +293,56 @@ public sealed partial class MainWindow : Window
     private async void NewProfileClick(object? sender, RoutedEventArgs e) { if (Model is { } vm && await PromptAsync("New profile", "my-mods") is { } name) await vm.CreateProfileAsync(name); }
     private async void RenameProfileClick(object? sender, RoutedEventArgs e) { if (Model is { SelectedProfile: not null } vm && await PromptAsync("Rename profile", vm.SelectedProfile) is { } name) await vm.RenameProfileAsync(name); }
     private async void DeleteProfileClick(object? sender, RoutedEventArgs e) { if (Model is { SelectedProfile: not null } vm && await ConfirmAsync($"Delete profile '{vm.SelectedProfile}'? Installed files and backups are kept.")) await vm.DeleteProfileAsync(); }
-    private async void UpClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) { int i = OrderList.SelectedIndex; await vm.MoveAsync(i, i - 1); OrderList.SelectedIndex = Math.Max(0, i - 1); } }
-    private async void DownClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) { int i = OrderList.SelectedIndex; await vm.MoveAsync(i, i + 1); OrderList.SelectedIndex = Math.Min(vm.Order.Count - 1, i + 1); } }
+    private async void UpClick(object? sender, RoutedEventArgs e) => await MoveSelectedAsync(-1);
+    private async void DownClick(object? sender, RoutedEventArgs e) => await MoveSelectedAsync(1);
+    private async Task MoveSelectedAsync(int offset)
+    {
+        if (Model is { } vm && OrderList.SelectedItem is ModRow row)
+        {
+            int index = vm.Order.IndexOf(row);
+            await vm.MoveAsync(index, index + offset);
+            OrderList.SelectedItem = row;
+        }
+    }
+    private async void ProfileRoleClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is not { CanEditProfile: true } vm || OrderList.SelectedItem is not ModRow row) return;
+        string[] roles = ["none", "base", "addon"];
+        var candidates = vm.Order.Where(other => other.Id != row.Id).ToArray();
+        var role = new ComboBox { ItemsSource = new[] { "Vanilla", "Base", "Addon" }, SelectedIndex = Array.IndexOf(roles, row.ProfileRole) };
+        var ancestor = new ComboBox
+        {
+            ItemsSource = candidates.Select(mod => mod.Name).ToArray(),
+            PlaceholderText = "Choose a base mod",
+            SelectedIndex = Array.FindIndex(candidates, mod => mod.Id == row.BaseId)
+        };
+        var parent = new StackPanel { Spacing = 6, Children = { new TextBlock { Text = "Base mod" }, ancestor } };
+        var save = new Button { Content = "Save" };
+        var cancel = new Button { Content = "Cancel" };
+        var dialog = new Window
+        {
+            Title = $"Profile role · {row.Name}", Width = 420, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(24), Spacing = 12,
+                Children = { new TextBlock { Text = "Role in this profile" }, role, parent,
+                    new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8, Children = { cancel, save } } }
+            }
+        };
+        void Refresh()
+        {
+            parent.IsVisible = role.SelectedIndex == 2;
+            save.IsEnabled = role.SelectedIndex >= 0 && (!parent.IsVisible || ancestor.SelectedIndex >= 0);
+        }
+        role.SelectionChanged += (_, _) => Refresh();
+        ancestor.SelectionChanged += (_, _) => Refresh();
+        save.Click += (_, _) => dialog.Close(true);
+        cancel.Click += (_, _) => dialog.Close(false);
+        Refresh();
+        if (await dialog.ShowDialog<bool>(this))
+            await vm.SetProfileRoleAsync(row.Id, roles[role.SelectedIndex], parent.IsVisible ? candidates[ancestor.SelectedIndex].Id : null);
+    }
     private async void CheckClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.CheckAsync(); }
     private async void InstallClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.InstallAsync(ConfirmAsync); }
     private async void PlayClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.PlayAsync(ConfirmAsync); }
