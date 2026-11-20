@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Example Rod — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="mod-header">
+      <a class="back" href="../index.html#example-rod">← All mods</a>
+      <div class="card-head">
+        <img src="../assets/example-rod.svg" alt="" width="44" height="44">
+        <div>
+          <h1>Example Rod</h1>
+          <div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div>
+          <p>Version 1.0.0</p>
+        </div>
+      </div>
+      <a class="btn" href="../packages/example-rod.zip" download>Download example-rod.zip</a>
+      <div class="checksum">SHA-256: 3b24dfb69e05e07e533ef37f42edf7696bad7744b152a02df5b663969fec8a6c (1,058 B)</div>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>Example Rod adds the Copper Current to the normal rod shop for $25,000. Buy and equip it through the shop and use normal rod upgrades with it.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Gallery</h2>
+      <div class="gallery">
+        <figure>
+          <a href="../images/example-rod/velrod-shop.webp"><img src="../images/example-rod/velrod-shop-thumb.webp" loading="lazy" alt="The Copper Current displayed in the rod shop for $25,000"></a>
+          <figcaption>Copper Current in the rod shop</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical datasheet</h2>
+      <table class="datasheet">
+        <tbody>
+          <tr><th scope="row">Package type</th><td>ModKit</td></tr>
+          <tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
+          <tr><th scope="row">APIs used</th><td>ModKit <code>rods</code> declarations and the Items API&#x27;s <code>jamm_rod_register</code> function.</td></tr>
+          <tr><th scope="row">Assets and scripts added</th><td>0 game objects, 1 single-frame rod sprite and 2 standalone scripts in the source build on a clean base. The scripts are a package initializer and the rod registration stub.</td></tr>
+          <tr><th scope="row">Save-file behaviour</th><td>The Items API uses <code>[JAMM_Items]</code> in the native slot INI. It remembers rod ownership under <code>u:rod:example-rod:copper-current</code>, the equipped rod key under <code>eq:rod</code> and upgrades under <code>slot:example-rod:copper-current:&lt;index&gt;</code>.</td></tr>
+          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The rod gets a slot from the Items API at runtime. Ownership and upgrades follow the stable key across profile orders. If the equipped rod is removed from the profile, loading falls back to the Basic Rod.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>The <code>rods</code> array provides the price, a single-frame PNG with origin <code>[19, 69]</code> and the rod&#x27;s stats. The manifest sets <code>cast_speed</code> to 13, <code>rod_power</code> to 1.85, <code>rod_power_flat</code> to 4, <code>reel_speed</code> to 10.5 and <code>sinker_distance</code> to 4,200.</p>
+      <p>ModKit imports the sprite and generates <code>jamm_init_example_rod</code>, which calls <code>jamm_rod_register</code> with the key <code>example-rod:copper-current</code>. The Items runtime appends a <code>RodData</code> row, uses the manifest values for price and stats, and creates the corresponding <code>UpgradeData</code> row. The rod starts available in the shop.</p>
+      <p>The manifest sets <code>upgrade_slots</code> to <code>vanilla</code>. ModKit passes the automatic slot sentinel to the Items runtime, which chooses one more usable slot than the highest existing rod count, capped at 16.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+      <ul class="package-files">
+        <li><code>art/copper-current.png</code></li>
+        <li><code>jamm-mod.json</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
