@@ -7,7 +7,8 @@
   Byte für Byte gleich. Neue Datei: `~/jamm-night/builds/all7-repack.win`.
 * **Zum Anschauen (nicht gemergt):** Silo v2 mit Öffnungsanimation, Endless Ocean (Worldgen v0), Wetter-Mod. Bilder unter
   `~/jamm-night/review-2026-11-20/`. Meine ehrliche Einschätzung steht bei jedem Punkt – vor allem zu den Fischen.
-* **Weitere Branches:** siehe Abschnitt 6 (Fisch-Grid, Ressourcen-Audit, …) – Stand am Morgen.
+* **Weitere Branches:** Abschnitt 6 – Fisch-Grid (gleiches Verhalten, keine CPU-Ersparnis, nicht gemergt), Vels Rod/Boot-Punkte (fertig, vor Merge ingame bestätigen),
+  Base-Mod-Modus und Schwacher-PC-Preset wegen Codex-Limit um 08:08 gestoppt (Resume-Skript liegt bereit).
 * **Vorfälle:** Platte war um ~02:15 voll (behoben, Wächter läuft), RAM ist der Engpass auf dem VPS (all-7-Spiel ≈ 6 GB unter Wine).
 
 Start: `main` = `9e95bb2`. In-game tests ran on the VPS (Wine + real Steam client, Xvfb, llvmpipe – no GPU, so no FPS numbers).
@@ -84,7 +85,7 @@ On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
   jobs only with > 2.5 GB available RAM.
 * `run.sh` used to `pkill` any running game for non-silo scenes – with several agents that killed other agents' runs. It now waits (≤ 20 min).
 * `tmux has-session -t name` prefix-matches (`jamm-silo2` matched `jamm-silo2-next`, the follow-up waited for itself) → exact `-t =name`.
-* Night queue: max 2 concurrent `codex exec` processes (counted directly), stops on a quota message. No Codex quota limit was hit tonight.
+* Night queue: max 2 concurrent `codex exec` processes (counted directly), stops on a quota message. The Codex subscription limit was hit at 08:08 (see section 6).
 
 ## 6. Other branches (state at 07:45; jobs keep running)
 
@@ -137,8 +138,12 @@ Measured on the VPS (repacked builds, llvmpipe; RSS includes Wine's CPU-side tex
   Mystic Rod $680,000). Off by default. 597 tests green.
 * Before merging: ask Vel/you to confirm in game that Hyper Boat and Mystic Rod are really unobtainable in the original mods.
 
-### Running / queued
-Base-mod mode (running), weak-PC preset (queued; spec extended with the mipmap/VRAM findings).
+### Stopped by the Codex usage limit (08:08)
+Codex hit the subscription usage limit ("try again at 9:12 AM"). Per your rule no API keys were used and nothing was restarted automatically.
+* Base-mod mode: unfinished; its uncommitted work is saved as WIP commit `5f6ce29` on `exp/base-mod` (pushed).
+* Weak-PC preset: had just started (only merged exp/fish-perf into its branch); spec now includes the mipmap/VRAM findings.
+* To continue both after the limit resets (same Codex sessions, subscription only):
+  `tmux new -d -s jamm-resume "bash ~/jamm-wt/resume-after-quota.sh"`.
 
 ## What I need from you
 
