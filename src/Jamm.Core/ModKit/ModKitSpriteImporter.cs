@@ -12,7 +12,8 @@ internal sealed record SpriteImportSpec(
     int Frames,
     int[]? Origin,
     bool CenterOrigin,
-    bool GenerateMask);
+    bool GenerateMask,
+    ModKitSprite? Composition = null);
 
 /// <summary>Packs ModKit PNG assets onto new GameMaker texture pages and creates <see cref="UndertaleSprite"/> entries.</summary>
 internal static class ModKitSpriteImporter
@@ -26,18 +27,16 @@ internal static class ModKitSpriteImporter
         var packer = new TextureGroupPacker(maxTextureSize: 2048, border: 2, allowCrop: false, format: GMImage.ImageFormat.Png);
         var pending = new List<(SpriteImportSpec Spec, int Width, int Height, List<UndertaleTexturePageItem> Items, byte[]? MaskBytes, int MinX, int MinY, int MaxX, int MaxY)>();
 
+        using var composer = new ModKitComposition(data);
         foreach (var spec in specs)
         {
             if (data.Sprites.ByName(spec.Name) is not null)
                 throw new InvalidDataException($"Sprite '{spec.Name}' already exists in the base archive. Choose a different mod id or item key.");
 
-            using var source = new MagickImage(spec.PngPath);
-            source.Format = MagickFormat.Rgba;
-            source.SetBitDepth(8);
-            source.Alpha(AlphaOption.Set);
+            using var source = spec.Composition is null ? new MagickImage(spec.PngPath) : null;
 
-            int totalWidth = (int)source.Width;
-            int height = (int)source.Height;
+            int totalWidth = source is null ? spec.Composition!.Width * spec.Frames : (int)source.Width;
+            int height = source is null ? spec.Composition!.Height : (int)source.Height;
             if (spec.Frames < 1 || totalWidth % spec.Frames != 0)
                 throw new InvalidDataException($"Sprite '{spec.PngPath}' ({totalWidth}x{height}) is not evenly divisible by frames={spec.Frames}.");
 
@@ -48,9 +47,11 @@ internal static class ModKitSpriteImporter
 
             for (int f = 0; f < spec.Frames; f++)
             {
-                var tile = spec.Frames == 1
-                    ? new MagickImage(source)
-                    : CropFrame(source, f * frameWidth, frameWidth, height);
+                var tile = source is null ? composer.Render(spec.Composition!, f)
+                    : spec.Frames == 1 ? new MagickImage(source) : CropFrame(source, f * frameWidth, frameWidth, height);
+                tile.ColorType = ColorType.TrueColorAlpha;
+                tile.SetBitDepth(8);
+                tile.Alpha(AlphaOption.Set);
 
                 if (f == 0)
                     maskBytes = ComputeBoundsAndMask(tile, frameWidth, height, spec.GenerateMask, out minX, out minY, out maxX, out maxY);
@@ -86,7 +87,7 @@ internal static class ModKitSpriteImporter
                 Smooth = false,
                 Preload = true,
                 BBoxMode = 2,
-                SepMasks = UndertaleSprite.SepMaskType.AxisAlignedRect
+                SepMasks = entry.Spec.Composition is not null ? UndertaleSprite.SepMaskType.Precise : UndertaleSprite.SepMaskType.AxisAlignedRect
             };
 
             foreach (var item in entry.Items)
@@ -131,7 +132,8 @@ internal static class ModKitSpriteImporter
 
         int stride = (width + 7) / 8;
         byte[]? mask = generateMask ? new byte[stride * height] : null;
-        ReadOnlySpan<byte> pixels = frame.GetPixels().GetReadOnlyArea(0, 0, (uint)width, (uint)height);
+        using var pixelCollection = frame.GetPixels();
+        ReadOnlySpan<byte> pixels = pixelCollection.GetReadOnlyArea(0, 0, (uint)width, (uint)height);
 
         for (int y = 0; y < height; y++)
         {

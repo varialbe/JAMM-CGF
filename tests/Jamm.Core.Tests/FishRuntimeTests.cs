@@ -11,6 +11,21 @@ namespace Jamm.Core.Tests;
 public sealed class FishRuntimeTests
 {
     [Fact]
+    public void FishOnlyInitializerDoesNotActivateItemSavePatches()
+    {
+        const string name = "gml_Script_jamm_init_demo";
+        const string gml = "jamm_fish_register(\"demo:f\", DemoFish, 0, \"F\", \"Desc\", 0, 10, 1400, 1600, 1);\nreturn 0;";
+        var snapshot = AssetFields.Json(new { });
+        var source = new CodeText(gml, "gml", 0, 0, null, []);
+        var plan = new BuildPlan([new("code", name, 0, new(name, null, snapshot, [], null, source), snapshot, gml)], []);
+        var baseline = new Dictionary<string, CodeText>
+        {
+            ["gml_Object_SaveManager_Other_13"] = new("return 0;", "gml", 0, 0, null, [])
+        };
+        Assert.Same(plan, ItemsRuntime.PreparePlan(plan, baseline));
+    }
+
+    [Fact]
     public void FishRuntimeInjectsRegisterStandaloneApiInitAndNameLookup()
     {
         using var temp = new TemporaryDirectory();

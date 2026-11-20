@@ -7,10 +7,20 @@ using System.Text.RegularExpressions;
 namespace Jamm.Core.ModKit;
 
 /// <summary>Fish spawn rectangle and target population count in the ocean.</summary>
-public sealed record ModKitSpawnBox(double XMin, double XMax, double YMin, double YMax, int Count);
+public sealed record ModKitSpawnBox(double XMin, double XMax, double YMin, double YMax, int Count)
+{
+    /// <summary>Optional id of an area defined in the same package.</summary>
+    public string? Area { get; init; }
+
+    /// <summary>Optional room subrectangle relative to the area's origin.</summary>
+    public ModKitAreaBounds? Within { get; init; }
+}
 
 /// <summary>Optional GML hook files attached to a ModKit fish.</summary>
 public sealed record ModKitFishHooks(string? Create, string? Step, string? Caught, string? Draw);
+
+/// <summary>A nonpersistent room object with optional event hooks.</summary>
+public sealed record ModKitObject(string Key, string? Sprite, int Depth, string? Create, string? Step, string? Draw);
 
 /// <summary>A fish definition in a ModKit package.</summary>
 public sealed record ModKitFish(
@@ -36,7 +46,11 @@ public sealed record ModKitFish(
     string HiddenDescription,
     bool Exotic,
     int[]? Origin,
-    ModKitFishHooks Hooks);
+    ModKitFishHooks Hooks)
+{
+    /// <summary>Optional key of a composed sprite defined in the same package.</summary>
+    public string? SpriteKey { get; init; }
+}
 
 /// <summary>Optional boat movement and capacity stats.</summary>
 public sealed record ModKitBoatStats(double MaxSpeed, int Capacity, double MaxDistance, double MoveBonus);
@@ -100,7 +114,17 @@ public sealed record ModKitManifest(
     IReadOnlyList<ModKitFish> Fish,
     IReadOnlyList<ModKitBoat> Boats,
     IReadOnlyList<ModKitHat> Hats,
-    IReadOnlyList<ModKitUpgrade> Upgrades);
+    IReadOnlyList<ModKitUpgrade> Upgrades)
+{
+    /// <summary>Room areas included in the package.</summary>
+    public IReadOnlyList<ModKitArea> Areas { get; init; } = [];
+
+    /// <summary>Build-time sprite recipes included in the package.</summary>
+    public IReadOnlyList<ModKitSprite> Sprites { get; init; } = [];
+
+    /// <summary>Custom room objects available to area placements.</summary>
+    public IReadOnlyList<ModKitObject> Objects { get; init; } = [];
+}
 
 /// <summary>Parses, validates, and scaffolds ModKit folder packages (<c>jamm-mod.json</c> + art + GML hooks).</summary>
 public static partial class ModKitPackage
@@ -153,7 +177,20 @@ public static partial class ModKitPackage
             string author = OptionalString(rootObj, "author", "$.author", "");
             string description = OptionalString(rootObj, "description", "$.description", "");
 
-            var fish = ParseArray(rootObj, "fish", "$.fish", (el, path) => ParseFish(root, el, path));
+            var areas = ParseArray(rootObj, "areas", "$.areas", ParseArea);
+            var sprites = ParseArray(rootObj, "sprites", "$.sprites", (el, path) => ParseSprite(root, el, path));
+            EnsureUniqueKeys(areas.Select(a => ModKitBuilder.SanitizeIdent(a.Id)), "$.areas");
+            EnsureUniqueKeys(sprites.Select(s => ModKitBuilder.SanitizeIdent(s.Key)), "$.sprites");
+            var spritesByKey = sprites.ToDictionary(s => s.Key, StringComparer.Ordinal);
+            var objects = ParseArray(rootObj, "objects", "$.objects", (el, path) => ParseObject(root, el, path, spritesByKey));
+            var fish = ParseArray(rootObj, "fish", "$.fish", (el, path) => ParseFish(root, el, path, spritesByKey));
+            foreach (var entry in fish.Where(f => f.Spawn.Area is not null))
+            {
+                var area = areas.FirstOrDefault(a => a.Id == entry.Spawn.Area)
+                    ?? throw Error("$.fish", $"Fish '{entry.Key}' references unknown area '{entry.Spawn.Area}'. Use an id from areas[].");
+                if (entry.Spawn.Within is { } region && (region.Right > area.Bounds.W || region.Bottom > area.Bounds.H))
+                    throw Error("$.fish", $"Fish '{entry.Key}' has a 'within' rectangle outside area '{area.Id}'.");
+            }
             var boats = ParseArray(rootObj, "boats", "$.boats", (el, path) => ParseBoat(root, el, path));
             var hats = ParseArray(rootObj, "hats", "$.hats", (el, path) => ParseHat(root, el, path));
             var upgrades = ParseArray(rootObj, "upgrades", "$.upgrades", (el, path) => ParseUpgrade(root, el, path));
@@ -162,9 +199,25 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(boats.Select(b => b.Key), "$.boats");
             EnsureUniqueKeys(hats.Select(h => h.Key), "$.hats");
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
+            EnsureUniqueKeys(objects.Select(o => ModKitBuilder.SanitizeIdent(o.Key)), "$.objects");
 
-            return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades);
+            return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
+                { Areas = areas, Sprites = sprites, Objects = objects };
         }
+    }
+
+    private static ModKitObject ParseObject(string root, JsonElement element, string path, IReadOnlyDictionary<string, ModKitSprite> sprites)
+    {
+        var obj = ExpectObject(element, path);
+        string key = RequireKey(obj, "key", $"{path}.key");
+        string? sprite = TryGetNonNull(obj, "sprite", out _) ? RequireKey(obj, "sprite", $"{path}.sprite") : null;
+        if (sprite is not null && !sprites.ContainsKey(sprite))
+            throw Error($"{path}.sprite", $"Unknown sprite recipe '{sprite}'. Use a key from sprites[].");
+        int depth = OptionalInt(obj, "depth", $"{path}.depth", 0);
+        JsonElement hooks = TryGetNonNull(obj, "hooks", out var value) ? ExpectObject(value, $"{path}.hooks") : default;
+        string? Hook(string name) => hooks.ValueKind == JsonValueKind.Object
+            ? OptionalAssetFile(root, hooks, name, $"{path}.hooks.{name}", [".gml"]) : null;
+        return new(key, sprite, depth, Hook("create"), Hook("step"), Hook("draw"));
     }
 
     /// <summary>Creates a starter ModKit package folder for the requested template (<c>fish</c>, <c>upgrade</c>, <c>boat</c>, or <c>hat</c>).</summary>
@@ -325,7 +378,7 @@ public static partial class ModKitPackage
         return manifestPath;
     }
 
-    private static ModKitFish ParseFish(string root, JsonElement element, string path)
+    private static ModKitFish ParseFish(string root, JsonElement element, string path, IReadOnlyDictionary<string, ModKitSprite> sprites)
     {
         var obj = ExpectObject(element, path);
         string key = RequireKey(obj, "key", $"{path}.key");
@@ -341,7 +394,20 @@ public static partial class ModKitPackage
         };
 
         int frames = OptionalInt(obj, "frames", $"{path}.frames", 1, min: 1);
-        string spritePath = RequireAssetFile(root, obj, "sprite", $"{path}.sprite", [".png"], expectedFrames: frames);
+        string sprite = RequireNonEmptyString(obj, "sprite", $"{path}.sprite");
+        string? spriteKey = null;
+        string spritePath = "";
+        if (sprites.TryGetValue(sprite, out var composition))
+        {
+            if (TryGetNonNull(obj, "frames", out _) && frames != composition.Frames.Count)
+                throw Error($"{path}.frames", $"Sprite '{sprite}' has {composition.Frames.Count} recipe frame(s). Match that count or omit 'frames'.");
+            spriteKey = sprite;
+            frames = composition.Frames.Count;
+        }
+        else if (Path.GetExtension(sprite).Equals(".png", StringComparison.OrdinalIgnoreCase))
+            spritePath = ValidateAssetPath(root, sprite, $"{path}.sprite", [".png"], frames);
+        else
+            throw Error($"{path}.sprite", $"Sprite '{sprite}' was not found. Use a key from sprites[] or a relative PNG path.");
         double value = OptionalDouble(obj, "value", $"{path}.value", 100.0, min: 0.0);
         double xp = OptionalDouble(obj, "xp", $"{path}.xp", 25.0, min: 0.0);
         double stamina = OptionalDouble(obj, "stamina", $"{path}.stamina", defaultStamina, min: 1.0);
@@ -357,6 +423,8 @@ public static partial class ModKitPackage
         string hiddenDesc = OptionalString(obj, "hiddenDescription", $"{path}.hiddenDescription", "Little is known about this fish.");
         bool exotic = OptionalBool(obj, "exotic", $"{path}.exotic", false);
         int[]? origin = OptionalOrigin(obj, "origin", $"{path}.origin");
+        if (spriteKey is not null && origin is not null)
+            throw Error($"{path}.origin", $"Set the origin on composed sprite '{spriteKey}' in sprites[].");
 
         ModKitFishHooks hooks = new(null, null, null, null);
         if (TryGetNonNull(obj, "hooks", out var hooksEl))
@@ -372,7 +440,7 @@ public static partial class ModKitPackage
         return new ModKitFish(
             key, name, size, sizeTab, parent, spritePath, frames,
             value, xp, stamina, lungeSpeed, lungeRange, lungeRangeStop, speed,
-            spawn, night, description, caughtDesc, seenDesc, hiddenDesc, exotic, origin, hooks);
+            spawn, night, description, caughtDesc, seenDesc, hiddenDesc, exotic, origin, hooks) { SpriteKey = spriteKey };
     }
 
     private static ModKitSpawnBox ParseSpawnBox(JsonElement parent, string path)
@@ -381,6 +449,21 @@ public static partial class ModKitPackage
             throw Error(path, "Missing required 'spawn' object with { \"x\": [x1, x2], \"y\": [y1, y2], \"count\": N }.");
 
         var obj = ExpectObject(spawnEl, path);
+        if (TryGetNonNull(obj, "area", out _))
+        {
+            string area = RequireKey(obj, "area", $"{path}.area");
+            if (TryGetNonNull(obj, "x", out _) || TryGetNonNull(obj, "y", out _))
+                throw Error(path, "Use either an area id or x and y ranges for a fish spawn.");
+            int population = OptionalInt(obj, "count", $"{path}.count", 3, min: 1);
+            ModKitAreaBounds? within = null;
+            if (TryGetNonNull(obj, "within", out var region))
+            {
+                var rect = ExpectObject(region, $"{path}.within");
+                within = new(RequireInt(rect, "x", $"{path}.within.x", 0), RequireInt(rect, "y", $"{path}.within.y", 0),
+                    RequireInt(rect, "w", $"{path}.within.w", 1), RequireInt(rect, "h", $"{path}.within.h", 1));
+            }
+            return new(0, 0, 0, 0, population) { Area = area, Within = within };
+        }
         var (x1, x2) = RequireRange(obj, "x", $"{path}.x");
         var (y1, y2) = RequireRange(obj, "y", $"{path}.y");
         int count = OptionalInt(obj, "count", $"{path}.count", 3, min: 1);

@@ -1,0 +1,574 @@
+{
+  "id": "jamm-silo",
+  "name": "The Silo",
+  "version": "2.1.0",
+  "author": "JAMM",
+  "description": "Fish the flooded launch shaft beneath the Missile Silo in NewWorld and discover four deep-water species.",
+  "areas": [
+    {
+      "id": "launch-shaft",
+      "bounds": {
+        "x": 33564,
+        "y": 11420,
+        "w": 1250,
+        "h": 1560
+      },
+      "anchor": {
+        "mode": "follow",
+        "object": "MissileSilo",
+        "x": 33984,
+        "y": 11570
+      },
+      "opens": {
+        "object": "MissileSilo",
+        "x": 33984,
+        "y": 11570,
+        "sprite": "open-silo",
+        "set": {
+          "canOpen": false,
+          "image_index": 0,
+          "image_speed": 0
+        }
+      },
+      "pieces": [
+        {
+          "object": "CaveRockLeg",
+          "x": 50,
+          "y": 718,
+          "scaleX": -0.58,
+          "scaleY": 0.88,
+          "rotation": -12
+        },
+        {
+          "object": "CaveRockWedge",
+          "x": 868,
+          "y": 815,
+          "scaleX": 0.5,
+          "scaleY": 0.72,
+          "rotation": 8
+        },
+        {
+          "object": "CaveRockTee",
+          "x": 259,
+          "y": 1359,
+          "scaleX": 0.56,
+          "scaleY": 0.61,
+          "rotation": 22
+        },
+        {
+          "object": "CaveRockLeg",
+          "x": 696,
+          "y": 1400,
+          "scaleX": -0.69,
+          "scaleY": 0.5,
+          "rotation": 158
+        },
+        {
+          "object": "CaveRockTear",
+          "x": 112,
+          "y": 1240,
+          "scaleX": 0.54,
+          "scaleY": 0.71,
+          "rotation": -33
+        },
+        {
+          "object": "CaveRockTear",
+          "x": 897,
+          "y": 1281,
+          "scaleX": -0.54,
+          "scaleY": 0.58,
+          "rotation": 20
+        },
+        {
+          "object": "jmk_jamm_silo_object_hatch",
+          "x": 420,
+          "y": 150
+        }
+      ],
+      "lights": [
+        {
+          "object": "GeigerLight",
+          "x": 444,
+          "y": 230,
+          "scaleX": 0.8,
+          "scaleY": 0.8,
+          "rotation": 0,
+          "set": {
+            "add_blend": 4162107,
+            "sub_blend": 2369312,
+            "image_alpha": 0,
+            "image_scale": 0.8,
+            "image_xscale": 0.8,
+            "image_yscale": 0.8,
+            "silo_glow_alpha": 0.54
+          }
+        },
+        {
+          "object": "GeigerLight",
+          "x": 442,
+          "y": 541,
+          "scaleX": 1.05,
+          "scaleY": 1.05,
+          "rotation": 0,
+          "set": {
+            "add_blend": 2648383,
+            "sub_blend": 2369312,
+            "image_alpha": 0,
+            "image_scale": 1.05,
+            "image_xscale": 1.05,
+            "image_yscale": 1.05,
+            "silo_glow_alpha": 0.52
+          }
+        },
+        {
+          "object": "GeigerLight",
+          "x": 564,
+          "y": 834,
+          "scaleX": 1.43,
+          "scaleY": 1.43,
+          "rotation": 0,
+          "set": {
+            "add_blend": 3301669,
+            "sub_blend": 2369312,
+            "image_alpha": 0,
+            "image_scale": 1.43,
+            "image_xscale": 1.43,
+            "image_yscale": 1.43,
+            "silo_glow_alpha": 0.66
+          }
+        },
+        {
+          "object": "GeigerLight",
+          "x": 506,
+          "y": 1159,
+          "scaleX": 1.2,
+          "scaleY": 1.2,
+          "rotation": 0,
+          "set": {
+            "add_blend": 3301426,
+            "sub_blend": 2369312,
+            "image_alpha": 0,
+            "image_scale": 1.2,
+            "image_xscale": 1.2,
+            "image_yscale": 1.2,
+            "silo_glow_alpha": 0.58
+          }
+        }
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "key": "hatch",
+      "depth": -10,
+      "hooks": {
+        "create": "hooks/hatch_create.gml",
+        "step": "hooks/hatch_step.gml",
+        "draw": "hooks/hatch_draw.gml"
+      }
+    }
+  ],
+  "sprites": [
+    {
+      "key": "veyl",
+      "width": 106,
+      "height": 76,
+      "origin": [
+        24,
+        42
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s17",
+          "x": 7,
+          "y": 4,
+          "scaleX": 0.94,
+          "scaleY": 0.85,
+          "tones": {
+            "colors": [
+              "#596a80",
+              "#8fb2de",
+              "#75a1d5"
+            ],
+            "cutoffs": [
+              76,
+              142
+            ]
+          }
+        },
+        {
+          "file": "parts/pits.svg",
+          "x": 17,
+          "y": 37
+        }
+      ]
+    },
+    {
+      "key": "radik",
+      "width": 222,
+      "height": 112,
+      "origin": [
+        39,
+        63
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_m20",
+          "x": 7,
+          "y": 3,
+          "scaleX": 0.92,
+          "scaleY": 1.02,
+          "tones": {
+            "colors": [
+              "#507c3a",
+              "#76a260",
+              "#9dc987"
+            ],
+            "cutoffs": [
+              142,
+              187
+            ]
+          }
+        },
+        {
+          "file": "parts/scutes.svg",
+          "x": 73,
+          "y": 31
+        }
+      ]
+    },
+    {
+      "key": "ferrex",
+      "width": 445,
+      "height": 159,
+      "origin": [
+        79,
+        74
+      ],
+      "compose": [
+        {
+          "from": "spr_magmer",
+          "x": 6,
+          "y": 0,
+          "scaleX": 0.55,
+          "scaleY": 0.36,
+          "tones": {
+            "colors": [
+              "#843131",
+              "#9a4040",
+              "#fc7e00"
+            ],
+            "cutoffs": [
+              72,
+              115
+            ]
+          }
+        },
+        {
+          "file": "parts/gills.svg",
+          "x": 93,
+          "y": 51
+        }
+      ]
+    },
+    {
+      "key": "garrusk",
+      "width": 660,
+      "height": 304,
+      "origin": [
+        114,
+        162
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_h1",
+          "x": 10,
+          "y": 1,
+          "scaleX": 0.89,
+          "scaleY": 0.97,
+          "tones": {
+            "colors": [
+              "#9b9985",
+              "#bcb3a2",
+              "#dcd2bb"
+            ],
+            "cutoffs": [
+              125,
+              155
+            ]
+          }
+        },
+        {
+          "file": "parts/marks.svg",
+          "x": 181,
+          "y": 149
+        }
+      ]
+    },
+    {
+      "key": "open-silo",
+      "width": 1477,
+      "height": 647,
+      "origin": [
+        634,
+        91
+      ],
+      "compose": [
+        {
+          "from": "spr_silo",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 545,
+            "h": 647
+          },
+          "x": 0,
+          "y": 0
+        },
+        {
+          "from": "spr_silo",
+          "crop": {
+            "x": 854,
+            "y": 0,
+            "w": 623,
+            "h": 647
+          },
+          "x": 854,
+          "y": 0
+        },
+        {
+          "from": "spr_silo",
+          "crop": {
+            "x": 545,
+            "y": 0,
+            "w": 40,
+            "h": 184
+          },
+          "x": 545,
+          "y": 0
+        },
+        {
+          "from": "spr_silo",
+          "crop": {
+            "x": 825,
+            "y": 0,
+            "w": 29,
+            "h": 255
+          },
+          "x": 825,
+          "y": 0
+        },
+        {
+          "from": "spr_silo",
+          "crop": {
+            "x": 795,
+            "y": 270,
+            "w": 59,
+            "h": 95
+          },
+          "x": 795,
+          "y": 270
+        }
+      ]
+    },
+    {
+      "key": "silo-doors",
+      "width": 309,
+      "height": 647,
+      "origin": [
+        89,
+        91
+      ],
+      "compose": [
+        [
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 545,
+              "y": 184,
+              "w": 40,
+              "h": 463
+            },
+            "x": 0,
+            "y": 184
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 585,
+              "y": 0,
+              "w": 115,
+              "h": 647
+            },
+            "x": 40,
+            "y": 0
+          }
+        ],
+        [
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 700,
+              "y": 0,
+              "w": 95,
+              "h": 647
+            },
+            "x": 155,
+            "y": 0
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 795,
+              "y": 0,
+              "w": 30,
+              "h": 270
+            },
+            "x": 250,
+            "y": 0
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 825,
+              "y": 255,
+              "w": 29,
+              "h": 15
+            },
+            "x": 280,
+            "y": 255
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 795,
+              "y": 365,
+              "w": 59,
+              "h": 282
+            },
+            "x": 250,
+            "y": 365
+          }
+        ]
+      ]
+    }
+  ],
+  "fish": [
+    {
+      "key": "veyl",
+      "name": "Veyl",
+      "size": "small",
+      "sprite": "veyl",
+      "value": 18000,
+      "xp": 300,
+      "speed": 1.5,
+      "lungeRange": 84,
+      "stamina": 45,
+      "lungeSpeed": 9,
+      "night": true,
+      "exotic": false,
+      "description": "The Veyl feels for vibrations through the rows of pits along its face. It has never seen the surface.",
+      "spawn": {
+        "area": "launch-shaft",
+        "count": 3,
+        "within": {
+          "x": 386,
+          "y": 320,
+          "w": 204,
+          "h": 340
+        }
+      },
+      "hooks": {
+        "create": "hooks/deep_water.gml",
+        "step": "hooks/shaft_step.gml"
+      }
+    },
+    {
+      "key": "radik",
+      "name": "Radik",
+      "size": "medium",
+      "sprite": "radik",
+      "value": 68000,
+      "xp": 850,
+      "speed": 1.7,
+      "lungeRange": 108,
+      "stamina": 85,
+      "lungeSpeed": 9,
+      "night": true,
+      "exotic": false,
+      "description": "A distant cousin of the Geiger. Green scutes flash along its back when it turns.",
+      "spawn": {
+        "area": "launch-shaft",
+        "count": 3,
+        "within": {
+          "x": 380,
+          "y": 546,
+          "w": 260,
+          "h": 252
+        }
+      },
+      "hooks": {
+        "create": "hooks/deep_water.gml",
+        "step": "hooks/shaft_step.gml"
+      }
+    },
+    {
+      "key": "ferrex",
+      "name": "Ferrex",
+      "size": "large",
+      "sprite": "ferrex",
+      "value": 186000,
+      "xp": 2500,
+      "speed": 1.1,
+      "lungeRange": 145,
+      "stamina": 125,
+      "lungeSpeed": 12,
+      "night": true,
+      "exotic": false,
+      "description": "The Ferrex spends its life close to the shaft wall. Its fins are the colour of old iron.",
+      "spawn": {
+        "area": "launch-shaft",
+        "count": 2,
+        "within": {
+          "x": 360,
+          "y": 690,
+          "w": 325,
+          "h": 210
+        }
+      },
+      "hooks": {
+        "create": "hooks/deep_water.gml",
+        "step": "hooks/shaft_step.gml"
+      }
+    },
+    {
+      "key": "garrusk",
+      "name": "Garrusk",
+      "size": "huge",
+      "sprite": "garrusk",
+      "value": 520000,
+      "xp": 9000,
+      "speed": 0.76,
+      "lungeRange": 174,
+      "stamina": 270,
+      "lungeSpeed": 12,
+      "night": true,
+      "exotic": true,
+      "description": "A solitary fish that guards the deepest water in the shaft. It rarely leaves the chamber.",
+      "spawn": {
+        "area": "launch-shaft",
+        "count": 1,
+        "within": {
+          "x": 390,
+          "y": 750,
+          "w": 310,
+          "h": 200
+        }
+      },
+      "hooks": {
+        "create": "hooks/deep_water.gml",
+        "step": "hooks/shaft_step.gml"
+      }
+    }
+  ]
+}

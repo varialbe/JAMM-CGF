@@ -27,8 +27,8 @@ internal static class CheckCommand
             else if (arg.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"Unknown option '{arg}'.");
             else paths.Add(arg);
         }
-        if (paths.Count < (assetLiterals ? 1 : 2) || !options.TryGetValue("--base", out string? basePath))
-            throw new ArgumentException("check needs at least two mods or patches and --base <data.win>.");
+        if (paths.Count < 1 || !options.TryGetValue("--base", out string? basePath))
+            throw new ArgumentException("check needs at least one mod or patch and --base <data.win>.");
         List<string> inputs = [basePath, .. paths];
         Dictionary<int, ModPatch> supplied = [];
         Dictionary<int, string> archives = [];
@@ -97,7 +97,7 @@ internal static class CheckCommand
             Console.WriteLine($"Asset literal audit: {literals.Count} untyped candidates. Numeric ranges are hints, not proof of an asset reference; no numbers were rewritten.");
             return 0;
         }
-        var report = ConflictAnalyzer.Analyze(patches);
+        var report = ConflictAnalyzer.Analyze(patches, allowSingle: true);
         timer.Stop();
         if (output is not null)
             OutputFile.Write(output, JsonSerializer.Serialize(new { elapsedSeconds = timer.Elapsed.TotalSeconds, report }, JsonOptions) + "\n", inputs);
@@ -121,7 +121,7 @@ internal static class CheckCommand
         bool IsHunk(ConflictItem f) => f.Family == "code" && f.Kind is "code" or "list" or "addition" or "removal"
             && report.CodeMerges.ContainsKey(f.Asset);
         var rows = report.Findings.GroupBy(f => (Severity: IsHunk(f) ? "" : f.Severity,
-            f.Family, f.Asset, Kind: IsHunk(f) ? "code hunks" : f.Kind)).ToArray();
+            f.Family, f.Asset, Kind: IsHunk(f) ? "code hunks" : f.Kind, Area: f.Kind == "area" ? f.Message : null)).ToArray();
         foreach (string status in severities)
         {
             Console.WriteLine($"\n{status} ({report.Counts[status]} findings)");

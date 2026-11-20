@@ -33,7 +33,8 @@ my-mod/
   * Boats: object `jmk_<id>_<key>`, world sprite `jmk_<id>_<key>_spr`, shop card `jmk_<id>_<key>_card`.
   * Hats: object `jmk_<id>_<key>`, sprite `jmk_<id>_<key>_spr`, optional hook `jmk_<id>_<key>_effect`.
   * Upgrades: icon sprite `jmk_<id>_<key>_icon`, optional hooks `jmk_<id>_<key>_{apply,step}`.
-  * Init script: `jamm_init_<id>` (with hyphens replaced by underscores).
+  * Room objects use `jmk_<id>_object_<key>`.
+  * Init script: `jamm_init_<id>` when the package registers fish or items (with hyphens replaced by underscores).
 * **Standalone placeholders**: `ModKitBuilder` adds `return -1;` placeholder scripts only for the `jamm_*_register` functions the package actually calls, so the built `.win` verifies standalone and merges with zero conflicts when JAMM replaces them at merge time.
 
 ---
@@ -51,6 +52,17 @@ my-mod/
 | `boats` | array | No | `[]` | Custom boat definitions. |
 | `hats` | array | No | `[]` | Custom hat (`Gear`) definitions. |
 | `upgrades` | array | No | `[]` | Custom rod upgrade definitions. |
+| `areas` | array | No | `[]` | [Room areas and follow anchors](areas.md). |
+| `objects` | array | No | `[]` | Custom room objects with optional event hooks. |
+| `sprites` | array | No | `[]` | [Build-time sprite recipes](#sprite-recipes). |
+
+---
+
+## `objects` entries
+
+Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step` and `hooks.draw` accept package-relative `.gml` files and run as the object's Create, normal Step and Draw events. A Draw hook can call `draw_self()` to include the object's assigned sprite.
+
+Place the object by referring to `jmk_<id>_object_<key>` in an area's `pieces` or `lights`. Room objects have no parent and are recreated with the room. An area can use a colocated controller for an animation or trigger in [the Silo tutorial](../../examples/modkit/silo/README.md).
 
 ---
 
@@ -70,8 +82,8 @@ Parent object and Fishalog tab are selected from `size`:
 | `key` | string | Yes | — | Unique within `fish` (`^[a-z0-9_-]+$`). |
 | `name` | string | Yes | — | Non-empty display name in Fishalog and catch popups. |
 | `size` | string | Yes | — | `"small"`, `"medium"`, `"large"`, or `"huge"` (case-insensitive). |
-| `sprite` | string | Yes | — | Relative `.png` path (fish should face **left**). |
-| `frames` | int | No | `1` | `>= 1`. Horizontal strip frame count (`width % frames == 0`). |
+| `sprite` | string | Yes | — | Relative `.png` path or a key from `sprites[]`. Fish should face **left**. |
+| `frames` | int | No | `1` | `>= 1`. Horizontal strip frame count (`width % frames == 0`). Omit for a composed sprite to use the recipe frame count. |
 | `value` | number | No | `100` | `>= 0`. Base sale value (`BASE_VALUE`). |
 | `xp` | number | No | `25` | `>= 0`. Experience awarded on full-life catch (`XP_VALUE`). |
 | `stamina` | number | No | `50`/`70`/`50`/`100` | `>= 1`. `MAX_STAMINA` while hooked. |
@@ -79,7 +91,7 @@ Parent object and Fishalog tab are selected from `size`:
 | `lungeRange` | number | No | `60` | `>= 0`. `LUNGE_RANGE_START`. |
 | `lungeRangeStop` | number | No | `lungeRange + 5` | `>= lungeRange`. `LUNGE_RANGE_STOP`. |
 | `speed` | number | No | `1.5` | `>= 0`. Base idle swim speed (`jamm_swim_speed`). |
-| `spawn` | object | Yes | — | `{ "x": [x1, x2], "y": [y1, y2], "count": N }`. `x` and `y` are 2-number arrays (auto-ordered min..max); `count` defaults to `3` (`>= 1`). Water surface is `y = 1244`. |
+| `spawn` | object | Yes | — | `{ "x": [x1, x2], "y": [y1, y2], "count": N }`. Each coordinate array contains two numbers that JAMM orders from minimum to maximum. `count` defaults to `3` and must be at least `1`. The water surface is `y = 1244`. For [area spawns](areas.md#fill-the-area-with-fish), use `{ "area": "<id>", "count": N }` with an optional relative `within` rectangle. |
 | `night` | bool | No | `false` | Sets `stayOutAtNight` (`1` if true, `0` if false). |
 | `description` | string | No | `"<name>."` | Base catalog description (and fallback for `desc_n` / `desc_e`). |
 | `caughtDescription` | string | No | `description` | Shown in Fishalog once caught. |
@@ -221,3 +233,45 @@ ModKit compiles hooks with UndertaleModLib targeting **GameMaker: Studio 1.4**:
 * Declare local variables with `var a, b;` before assigning them.
 * No GMS2+ structs (`{}`), `function()` literals, chained ternaries, or `\n` string escapes (use `#` for line breaks in UI strings).
 * `real()` throws on non-numeric strings.
+
+
+## Sprite recipes
+
+A recipe creates an ordinary GameMaker sprite using frames sampled from the player's own legacy `data.win` and optional original package artwork. Distribute the recipe and any original parts with the ModKit source. JAMM reads the referenced base sprite by exact asset name at build time.
+
+```json
+{
+  "sprites": [
+    {
+      "key": "scute-fish",
+      "width": 176,
+      "height": 86,
+      "origin": [30, 50],
+      "compose": [
+        { "from": "spr_fish_s17", "crop": { "x": 53, "y": 9, "w": 42, "h": 61 },
+          "x": 112, "y": 7, "scaleX": 1.3, "hueShift": 48 },
+        { "from": "spr_powerfin", "frame": 0, "crop": { "x": 0, "y": 0, "w": 144, "h": 152 },
+          "x": 4, "y": 0, "scaleX": 0.85, "scaleY": 0.5, "tint": "#b4e3b4", "z": 1 },
+        { "file": "parts/scutes.svg", "x": 55, "y": 29, "opacity": 0.8, "z": 2 }
+      ]
+    }
+  ]
+}
+```
+
+Set a fish's `sprite` to `"scute-fish"` or reference the key from an area's `opens.sprite`. Output dimensions are 1–2044 pixels per axis. Origin defaults to the canvas center. For a composed fish, set the origin on the sprite recipe. Compose several output frames by supplying an array of layer arrays, `"compose": [[…], […]]`. All frames share the same canvas and origin. The first frame defines the sprite's collision mask. Frame selection in play is controlled by the object's GML.
+
+| Layer field | Meaning |
+| --- | --- |
+| `from`, `frame` | Exact base sprite name and zero-based source frame. Frame defaults to 0. |
+| `file` | Relative path to an original PNG or self-contained SVG, in place of `from`. SVG parts can use plain shapes and paths with inline drawing attributes. |
+| `crop` | Optional integer rectangle `{x,y,w,h}` in the padded source frame. It must fit the source. |
+| `x`, `y` | Position of the transformed layer's upper-left corner on the canvas. Defaults to 0. Pixels outside the canvas are clipped. |
+| `scaleX`, `scaleY` | Positive multipliers for width and height. Defaults to 1. |
+| `rotation`, `flip` | Image rotation in clockwise degrees and flip direction (`none`, `x`, `y`, `both`). Flipping comes before scaling and rotation. |
+| `paletteMap` | Exact RGB replacement pairs, for example `{"#fece52":"#67a889"}`. Alpha is preserved. |
+| `hueShift`, `tint` | Hue rotation in degrees, then a `#RRGGBB` channel multiplier. Palette replacements occur first. |
+| `tones` | Flat palette with two or three `colors` and one ascending `cutoffs` value between each pair. Cutoffs use integer luminance from 1 to 255. A pixel at a cutoff uses the next color. Applied after the other color and geometry transforms, with alpha preserved. |
+| `opacity`, `z` | Alpha multiplier from 0 to 1 and integer stacking order. Higher Z is drawn later. Equal Z follows manifest order. |
+
+`modkit check` validates the recipe fields and package paths. `modkit build` also validates referenced base frames and crop sizes against the selected archive.

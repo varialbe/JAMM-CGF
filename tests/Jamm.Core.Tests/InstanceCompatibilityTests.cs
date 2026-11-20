@@ -7,25 +7,28 @@ namespace Jamm.Core.Tests;
 
 public sealed class InstanceCompatibilityTests
 {
-    private const string Event = "gml_Object_Electron_Other_17";
     private const string Body = "if (Lure.fish > 0 && Lure.fish.object_index == Flash.object_index)\n{\n    fish_lunge();\n}\n";
     private const string FishThinnerEvent = "gml_Object_FishThinner_Other_10";
     private const string FishThinnerBody = "while (n_culled < number_to_cull && attempts < max_attempts)\n{\n    if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000)\n    {\n        deactivated = 1;\n        if (light > 0)\n        {\n            instance_destroy(light);\n        }\n        instance_deactivate_object(id);\n        other.n_culled++;\n    }\n    other.attempts++;\n}\n";
     private static readonly PatchFile Source = new("mod.win", "test", 0, "1", 16, "Test mod");
     private static readonly ModPatch Patch = new(2, "test", DateTimeOffset.UnixEpoch, Source, Source, [], []);
 
-    [Fact]
-    public void RepairsKnownElectronEventAndPreservesDifferentBodies()
+    [Theory]
+    [InlineData("gml_Object_Electron_Other_17", "Flash")]
+    [InlineData("gml_Object_Shados_Other_17", "Lumos")]
+    public void RepairsKnownFishLungeTypeChecksAndPreservesDifferentBodies(string entry, string target)
     {
-        var known = Plan(Body);
-        var other = Plan(Body + "Flash.speed = 0;");
+        string body = Body.Replace("Flash", target, StringComparison.Ordinal);
+        string differentBody = body + $"{target}.speed = 0;";
+        var known = Plan(body, entry);
+        var other = Plan(differentBody, entry);
 
         var repaired = InstanceCompatibility.Repair(known, [Patch], Baseline());
 
-        Assert.Contains("== Flash)", repaired.Assets.Single(a => a.Name == Event).Gml);
+        Assert.Contains($"== {target})", repaired.Assets.Single(a => a.Name == entry).Gml);
         Assert.Contains(repaired.Decisions, decision => decision.Contains("CGF-INSTANCE-001", StringComparison.Ordinal));
         var repairedOther = InstanceCompatibility.Repair(other, [Patch], Baseline());
-        Assert.Equal(Body + "Flash.speed = 0;", repairedOther.Assets.Single(a => a.Name == Event).Gml);
+        Assert.Equal(differentBody, repairedOther.Assets.Single(a => a.Name == entry).Gml);
     }
 
     [Fact]

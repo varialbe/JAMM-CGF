@@ -13,6 +13,8 @@ public static class CgfAssetTypes
     private static readonly IReadOnlyDictionary<string, (int MinArgs, int MaxArgs, (int Arg, string Family)[] Typed)> ApiFunctions =
         new Dictionary<string, (int, int, (int, string)[])>(StringComparer.Ordinal)
         {
+            ["jamm_catalog_register"] = (4, 10, [(1, "objects")]),
+            ["jamm_fish_register"] = (10, 16, [(1, "objects")]),
             ["jamm_boat_register"] = (6, 7, [(3, "sprites"), (4, "objects")]),
             ["jamm_rod_register"] = (9, 11, [(8, "sprites")]),
             ["jamm_lure_register"] = (6, 7, [(3, "objects"), (4, "sprites")]),

@@ -123,7 +123,7 @@
     "id": "jamm-silo",
     "name": "The Silo",
     "author": "JAMM",
-    "description": "Dive through the maintenance hatch near the Missile Silo. Explore the flooded launch shaft, refill air and recover four salvage items for cash.",
+    "description": "Open the Missile Silo in NewWorld and fish its flooded launch shaft for four deep-water species.",
     "fileUrl": "https://varialbe.xyz/cgf-mods/packages/jamm-silo.zip",
     "isPreview": false,
     "categories": [
@@ -136,11 +136,11 @@
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#jamm-silo",
-    "packageType": "recipe",
-    "manifestFile": "jamm-recipe.json",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
     "isDefault": false,
-    "version": "2.0.0",
-    "sha256": "7564a1bf1cfcc902cf4bcceaceceac0a10a223859d6c725b7e28f204b138a860",
-    "sizeBytes": 6411
+    "version": "2.1.0",
+    "sha256": "c8a9f8f69f41eb937a73ab9ff3bab1f9465fc4091fde788b57b6cb3debca4811",
+    "sizeBytes": 7529
   }
 ]
