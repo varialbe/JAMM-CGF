@@ -2,7 +2,7 @@
 
 ## Kurzfassung (deutsch)
 
-* **Gemergt nach main:** nur `exp/texture-repack` (wie vereinbart). All-7: 417 → 119 Texturseiten, geschätzter VRAM 3,4 → 2,2 GB,
+* **Gemergt nach main:** `exp/texture-repack` und am Morgen `exp/resource-audit` (paralleles PNG-Rendering, Build 347→305 s, byte-identisch). All-7: 417 → 119 Texturseiten, geschätzter VRAM 3,4 → 2,2 GB,
   Datei 217 → 120 MB, alle Texturen pixelgleich. Läuft jetzt für **jeden** Build mit Mods (auch Einzelmods, Builtins, ModKit); Vanilla bleibt
   Byte für Byte gleich. Neue Datei: `~/jamm-night/builds/all7-repack.win`.
 * **Zum Anschauen (nicht gemergt):** Silo v2 mit Öffnungsanimation, Endless Ocean (Worldgen v0), Wetter-Mod. Bilder unter
@@ -35,7 +35,8 @@ Verification (own, on the final code): all-7 built through the normal profile pa
 pixel comparison against the unpacked build passed for every live texture item (pixels, fields, collision masks); full suite
 446 core + 127 GUI green, zero warnings; **dock RECORDED** with the final build. Deepwater was RECORDED by Codex on 709fb37 (same atlas:
 identical `417 -> 119` decision; later changes were lossless PNG encoding, gating and the keep-guard). My own deepwater run with the final
-build was stopped by Claude Code's low-memory reaper and not restarted – **to repeat:** `~/jamm-night/bin/run.sh ~/jamm-night/builds/all7-repack.win tex dock|deepwater 600`.
+build was stopped by Claude Code's low-memory reaper; the resource audit later ran all-7 **deepwater RECORDED** with the same 119 pages
+(identical PNG payloads). To repeat: `~/jamm-night/bin/run.sh ~/jamm-night/builds/all7-repack.win tex dock|deepwater 600`.
 On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
 
 ## 2. Silo v2 + Area API + opening animation – for review (`exp/silo-v2`, 673a0ee)
@@ -100,7 +101,7 @@ On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
   452 → 400 ms/tick, but a single pair on a shared VPS. Conclusion so far: behaviour-identical, but the quadratic cost is not where the
   grid helps; the remaining big cost is per-fish work and the global selectors. Do not merge as Perf default. 587 tests green. The profiler/bench tooling (own merge commit in that branch) is useful on its own and could go to main separately – your call.
 
-### Resource audit (`exp/resource-audit`) – Part A done, Part B (parallel PNG rendering in the repacker) in progress
+### Resource audit (`exp/resource-audit`) – done, **merged** (`97dad4f`)
 
 Measured on the VPS (repacked builds, llvmpipe; RSS includes Wine's CPU-side texture copies):
 
@@ -114,7 +115,12 @@ Measured on the VPS (repacked builds, llvmpipe; RSS includes Wine's CPU-side tex
   one 213 s cave ambience → candidate for streaming). No byte-identical duplicates after merge.
 * GM 1.4 runner: only per-sprite/background prefetch/flush, no whole-page flush; no mod uses them. Page uploads stay flat from title to
   deepwater (all pages resident) – so the repack's page reduction is the main VRAM lever.
-* Build time all-7: 347 s, of which **texture repack 158 s** (PNG decode 412× + re-decode 723× during rendering) → Part B parallelises/caches that.
+* Build time all-7: 347 s, of which **texture repack 158 s**. Part B (merged): bounded parallel PNG decode/encode (≤ 2 workers, serial for huge pages,
+  deterministic – 1- and 2-worker archives byte-identical, PNG date chunks dropped): repack **157.5 → 101.5 s**, build **347 → 305 s**; pixel test passed,
+  all-7 dock + deepwater RECORDED, 447 core + 127 GUI green.
+* **Real VRAM is higher than the page estimate:** the D3D9 trace shows all 119 pages uploaded before the title screen, and power-of-two rounding +
+  mipmaps bring the requested texture allocation for all-7 to **3,841 MiB** (vs. 2,171 MiB RGBA8 page estimate). Next levers: unreferenced-asset
+  stripping (two dedicated background pages ≈ 24 MiB), and checking whether mipmaps can be avoided for the legacy runner (weak-PC preset).
 * In-game multithreading: GML is single-threaded; a native DLL for neighbour search is not justified by the grid result above.
 * GPU plan for the PC (draw calls, per-fish lights) is in the audit report.
 
