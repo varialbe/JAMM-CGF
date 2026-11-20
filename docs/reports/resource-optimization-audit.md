@@ -250,3 +250,46 @@ The 30 largest asset-owned rectangles per build are ranked by decoded RGBA8 byte
 | 30 | `spr_rocksig` #1 | 1066×817 | 3.322 | vanilla |
 
 </details>
+
+## Part B · Bounded parallel PNG rendering
+
+### Candidate ranking
+
+| Rank | Candidate | Benefit and risk |
+| ---: | --- | --- |
+| 1 | Parallelise PNG rendering | Source decode and destination encode were 105 s of the isolated all-7 repack. Two workers can improve profile build time on a modest multicore CPU. The pixel operation, packing order, and archive references can be tested byte for byte. |
+| 2 | Stream the longest predecoded music | Cave ambience accounts for about 39 MiB of PCM equivalent. Streaming would require correct legacy flags, a companion Ogg file through install and restore, and checks of loop points, pitch, volume and start latency. |
+| 3 | Strip unreferenced assets | The two dedicated background pages account for 24 MiB of D3D9 level-0 allocations. Candidate sprite pixels have a larger upper bound. An opt-in pass would still need to preserve IDs, validate indirect references and measure the pages actually reclaimed. |
+| 4 | Further patch-generation concurrency | The measured two-worker patch pass saved 0.31 s of decompilation and took 3.40 s longer overall. Whole-mod concurrency would increase the number of live models and image working sets. |
+| 5 | Convert or deduplicate mod WAVs | There is only one added 47,866-byte WAV. The merged AUDO already stores it once. The remaining 39,646 bytes of orphan Oggs are small relative to the atlas and predecoded cave music. |
+
+The selected change parallelises source decode and copying within each render batch, then encodes independent output pages in parallel. Layout and archive order are still assigned serially. Source groups write disjoint padded rectangles. It honours the analysis worker limit, allows up to two render workers, and keeps source decode serial for a batch with an input page over 64 MiB of RGBA8 pixels. The existing 128 MiB raw output batch budget still applies. `CGFMM_ANALYSIS_WORKERS=1` selects sequential rendering as well as sequential analysis.
+
+Two runs of the prior all-7 build differed only in 276 PNG date text chunks, three on each of the 92 generated pages. Generated pages now omit those dates while preserving the PNG colour and DEFLATE settings. The profile builder revision tracks the encoding change. [ImageMagick PNG defines](https://imagemagick.org/defines/)
+
+### Before and after
+
+The three Release builds used the same ordered all-7 inputs, disabled analysis caching, and set `MAGICK_THREAD_LIMIT=1`. The baseline had two analysis workers and serial PNG rendering. RSS is the peak for the entire builder process.
+
+| Build | Analysis / render workers | Repack seconds | Total seconds | Peak RSS MiB | Archive bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 2 / 1 | 157.51 | 347.10 | 3,867.84 | 120,302,966 |
+| Updated, sequential | 1 / 1 | 138.95 | 310.29 | 4,574.50 | 120,289,110 |
+| Updated, parallel | 2 / 2 | 101.52 | 304.93 | 3,974.12 | 120,289,110 |
+
+The two-worker update reduced the measured repack stage by 56.0 s (35.5%) and the total build by 42.2 s (12.1%) against the baseline. Peak RSS in those two builds differed by 106.3 MiB. The updated two-worker stage was 26.9% faster than the updated sequential stage. The runs shared the VPS with other work. Variable planning time and GC timing also affected wall time and process peaks.
+
+The updated one- and two-worker archives passed `cmp` and share SHA-256 `2a3dddbd858cc5bfc7ad31ff2bd9cd7941894cdace1038323331a6f45d09aba5`. All 119 pages matched the pre-change repacked PNG payloads with only the date text excluded from the comparison. The opt-in real-file test also matched decoded pixels, texture ownership and geometry, page flags and collision masks against the unrepacked all-7 archive. The output still has 119 pages and the same in-game allocation budget.
+
+Release build passed with zero warnings and errors. The standard suite passed 447 Core and 127 GUI tests, with 16 opt-in tests skipped. The separate all-7 texture comparison passed. Synthetic coverage runs the build path with one and two workers and exercises concurrent decode/copy into shared output buffers and concurrent encoding of separate pages.
+
+### Gameplay verification
+
+Both checks launched the updated two-worker all-7 archive through `~/jamm-night/bin/run.sh` with a 600-second budget per scene. The shared lock and the game-process check kept the sessions serial. The benchmark used seed 1337, a six-second warmup, 30 seconds of capture and a 1200×720 application surface.
+
+| Scene | Runner status | Samples |
+| --- | --- | ---: |
+| Dock | RECORDED | 51 |
+| Deepwater | RECORDED | 37 |
+
+The asset checks establish pixel fidelity independently of differences in simulation-frame timing. The gameplay logs and CSVs remain on the VPS in `~/jamm-night/runs/resource-audit-png-{dock,deepwater}/`. Temporary game directories and generated audit archives were removed.

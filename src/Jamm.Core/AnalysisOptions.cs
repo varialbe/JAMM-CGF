@@ -1,9 +1,9 @@
 namespace Jamm.Core;
 
-/// <summary>Bounds independent analysis work and controls the disposable manager analysis cache.</summary>
+/// <summary>Bounds independent analysis and texture work and controls the disposable manager analysis cache.</summary>
 public sealed record AnalysisOptions
 {
-    /// <summary>Maximum workers; one core is left free by default. Set to one for sequential analysis.</summary>
+    /// <summary>Maximum workers, leaving one core free by default. Set to one for sequential work.</summary>
     public int MaxDegreeOfParallelism { get; init; } = Math.Max(1, Environment.ProcessorCount - 1);
     /// <summary>Disables reusable base analysis, for diagnostics and sequential comparisons.</summary>
     public bool UseCache { get; init; } = true;

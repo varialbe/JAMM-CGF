@@ -96,7 +96,7 @@ public static class ArchiveBuilder
             if (!noRepack && TextureRepacker.HasAtlas(data))
             {
                 using var phase = new AnalysisPhase(options, "build/texture-repack");
-                string decision = TextureRepacker.RepackForBuild(data, output, progress, cancellationToken);
+                string decision = TextureRepacker.RepackForBuild(data, output, progress, cancellationToken, options);
                 plan = plan with { Decisions = [.. plan.Decisions, decision] };
             }
             var expectedReferences = semantics.Expected(plan, data);
