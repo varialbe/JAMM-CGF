@@ -108,7 +108,7 @@ public static class ModKitBuilder
             cancellationToken.ThrowIfCancellationRequested();
             string keyIdent = SanitizeIdent(fish.Key);
             string assetPrefix = $"jmk_{modIdent}_{keyIdent}";
-            string spriteName = $"{assetPrefix}_spr";
+            string spriteName = fish.SpriteKey is null ? $"{assetPrefix}_spr" : CompositionName(modIdent, fish.SpriteKey);
             string objName = assetPrefix;
 
             string? createHook = AddHookScript(data, compiler, $"{assetPrefix}_create", fish.Hooks.Create, ref scriptsAdded);
@@ -185,7 +185,7 @@ public static class ModKitBuilder
 
             initBody.AppendLine(
                 $"jamm_fish_register({GmlString($"{package.Id}:{fish.Key}")}, {objName}, {fish.SizeTab}, {GmlString(fish.Name)}, " +
-                $"{GmlString(fish.Description)}, {Num(fish.Spawn.XMin)}, {Num(fish.Spawn.XMax)}, {Num(fish.Spawn.YMin)}, {Num(fish.Spawn.YMax)}, {fish.Spawn.Count}, " +
+                $"{GmlString(fish.Description)}, {Num(fish.Spawn.XMin)}, {Num(fish.Spawn.XMax)}, {Num(fish.Spawn.YMin)}, {Num(fish.Spawn.YMax)}, {(fish.Spawn.Area is null ? fish.Spawn.Count : 0)}, " +
                 $"{GmlString(fish.CaughtDescription)}, {GmlString(fish.SeenDescription)}, {GmlString(fish.HiddenDescription)}, " +
                 $"{GmlString(fish.Description)}, {GmlString(fish.Description)}, {(fish.Exotic ? 1 : 0)});");
         }
@@ -269,10 +269,25 @@ public static class ModKitBuilder
                 $"{upgrade.MaxStacks}, {applyHook ?? "-1"}, {stepHook ?? "-1"});");
         }
 
-        initBody.AppendLine("return 0;");
-        string initScript = $"jamm_init_{modIdent}";
-        AddScript(data, compiler, initScript, initBody.ToString());
-        scriptsAdded++;
+        AreaPlacement.ValidateSource(data, package);
+        foreach (var area in package.Areas)
+        {
+            var population = package.Fish.Where(f => f.Spawn.Area == area.Id).Select(f =>
+                new AreaFish($"jmk_{modIdent}_{SanitizeIdent(f.Key)}", f.Spawn.Count, f.Spawn.Within)).ToArray();
+            var opening = area.Opens;
+            if (opening?.Sprite is { } sprite && package.Sprites.Any(s => s.Key == sprite))
+                opening = opening with { Sprite = CompositionName(modIdent, sprite) };
+            AddScript(data, compiler, $"{AreaDeclarations.Prefix}{modIdent}_{SanitizeIdent(area.Id)}",
+                AreaDeclarations.Encode(new AreaDeclaration(package.Id, area with { Opens = opening }, population)));
+            scriptsAdded++;
+        }
+
+        if (initBody.Length > 0)
+        {
+            initBody.AppendLine("return 0;");
+            AddScript(data, compiler, $"jamm_init_{modIdent}", initBody.ToString());
+            scriptsAdded++;
+        }
 
         progress?.Invoke($"Compiling {scriptsAdded} script(s) and {objectsAdded} object(s)…");
         ArchiveVerifier.Compile(compiler, $"ModKit package '{package.Id}'");
@@ -299,7 +314,11 @@ public static class ModKitBuilder
     private static List<SpriteImportSpec> CollectSpriteSpecs(ModKitManifest package, string modIdent)
     {
         var specs = new List<SpriteImportSpec>();
-        foreach (var fish in package.Fish)
+        foreach (var recipe in package.Sprites)
+            specs.Add(new(CompositionName(modIdent, recipe.Key), "", recipe.Frames.Count, recipe.Origin,
+                CenterOrigin: true, GenerateMask: true, recipe));
+
+        foreach (var fish in package.Fish.Where(f => f.SpriteKey is null))
         {
             string keyIdent = SanitizeIdent(fish.Key);
             specs.Add(new($"jmk_{modIdent}_{keyIdent}_spr", fish.SpritePath, fish.Frames, fish.Origin, CenterOrigin: true, GenerateMask: true));
@@ -322,6 +341,8 @@ public static class ModKitBuilder
         }
         return specs;
     }
+
+    private static string CompositionName(string id, string key) => $"jmk_{id}_recipe_{SanitizeIdent(key)}";
 
     private static bool EnsurePlaceholder(UndertaleData data, CompileGroup compiler, string scriptName)
     {

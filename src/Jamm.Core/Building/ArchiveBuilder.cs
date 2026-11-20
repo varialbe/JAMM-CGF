@@ -70,15 +70,16 @@ public static class ArchiveBuilder
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
             var data = working.Data;
+            IReadOnlyDictionary<string, string> generatedAreaCode;
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress, extraDecisions);
+                generatedAreaCode = Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
             plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
-            var expectedReferences = semantics.Expected(plan, data);
+            var expectedReferences = semantics.Expected(plan, data, generatedAreaCode);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
@@ -130,7 +131,9 @@ public static class ArchiveBuilder
         }
     }
 
-    private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress, List<string> extraDecisions)
+    private static IReadOnlyDictionary<string, string> Apply(UndertaleData data, UndertaleData ancestor,
+        IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan,
+        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -280,6 +283,7 @@ public static class ArchiveBuilder
         foreach (var room in data.Rooms)
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
+        var generatedAreaCode = AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
         ReassignRoomIds(data, ancestor);
         CatalogRuntime.Inject(data, recompile);
         HudRuntime.Inject(data, recompile);
@@ -296,6 +300,7 @@ public static class ArchiveBuilder
             compiler.QueueCodeReplace(code, AssetSymbols.Link(gml, name, finalNames));
         }
         ArchiveVerifier.Compile(compiler, "merged archive");
+        return generatedAreaCode;
     }
 
     private static void ReassignRoomIds(UndertaleData data, UndertaleData ancestor)

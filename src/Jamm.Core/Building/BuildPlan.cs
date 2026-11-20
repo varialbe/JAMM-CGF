@@ -325,6 +325,9 @@ public sealed record BuildPlan(IReadOnlyList<PlannedAsset> Assets, IReadOnlyList
             }
         if (relocation.RodCount > 0)
             LegacyRodRelocation.CompleteCode(assets, patches, baseCode, relocation.RodCount);
+        var finalRooms = assets.Where(a => a.Family == "rooms" && a.Snapshot.HasValue && a.Patch is not null)
+            .ToDictionary(a => a.Name, a => a.Snapshot!.Value, StringComparer.Ordinal);
+        decisions.AddRange(AreaDeclarations.Diagnose(patches, names, finalRooms).Select(f => f.Message));
         return new(assets, decisions)
         {
             Catalog = catalog.Mapping,

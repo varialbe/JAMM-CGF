@@ -31,7 +31,7 @@ public static partial class RecipePackage
     /// <summary>Supported local archive generators referenced by <c>generator</c>.</summary>
     public static readonly IReadOnlySet<string> SupportedGenerators = new HashSet<string>(StringComparer.Ordinal)
     {
-        "perf", "smooth", "hd-lite", "console", "silo"
+        "perf", "smooth", "hd-lite", "console"
     };
 
     [GeneratedRegex("^[a-z0-9_-]+$", RegexOptions.CultureInvariant)]
@@ -131,7 +131,6 @@ public static partial class RecipePackage
             case "smooth": SmoothMod.Apply(data); break;
             case "hd-lite": HdMod.Apply(data, null); break;
             case "console": ConsoleMod.Apply(data); break;
-            case "silo": SiloMod.Apply(data, recipe.RootDirectory); break;
             default: throw new InvalidDataException($"Unsupported recipe generator '{recipe.Generator}'.");
         }
 

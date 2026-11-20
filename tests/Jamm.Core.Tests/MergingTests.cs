@@ -553,7 +553,8 @@ public class MergingTests
         var unrelated = Patch("Add", ("rooms", Asset("world", ancestor,
             """{"instances":{"home":[{"object":"old"}],"hatch":[{"object":"hatch"}]}}"""), null));
 
-        var report = ConflictAnalyzer.Analyze(reverse ? [unrelated, moving, removing] : [removing, moving, unrelated]);
+        var unchanged = Patch("No room edit") with { References = [new("rooms", "world", "objects", "old")] };
+        var report = ConflictAnalyzer.Analyze(reverse ? [unchanged, unrelated, moving, removing] : [removing, moving, unrelated, unchanged]);
 
         var finding = Assert.Single(report.Findings, f => f.Kind == "reference");
         Assert.Equal("old", finding.Asset);

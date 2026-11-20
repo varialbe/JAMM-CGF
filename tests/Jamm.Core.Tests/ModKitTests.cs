@@ -241,6 +241,8 @@ public sealed class ModKitTests
         string apiInit = PatchBuilder.ReadCode(merged, FishRuntime.ApiInitCode).Text;
         Assert.Contains("jamm_init_alpha_pack()", apiInit);
         Assert.Contains("jamm_init_beta_pack()", apiInit);
+        string betaInit = PatchBuilder.ReadCode(merged, "gml_Script_jamm_init_beta_pack").Text;
+        Assert.Contains("jmk_beta_pack_beta_bass", betaInit);
         Assert.Contains("instance_create(", PatchBuilder.ReadCode(merged, FishRuntime.RegisterCode).Text);
     }
 
