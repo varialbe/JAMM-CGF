@@ -158,7 +158,7 @@ The fixed 120-tick all-7 dock pair also produced byte-identical traces, with 390
 
 ### Trace comparison
 
-The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish. Heavy dock captured 1,800 OFF ticks and 1,603 ON ticks on the first attempt. Every ON row matched the OFF prefix. The runner stopped at its 600-second cap. A packed-trace retry reduced buffer writes with per-fish presence masks but reached only 1,695 OFF ticks under the same cap. Heavy dock therefore has a matching prefix, with full equivalence still unverified.
+The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish. Heavy dock captured 1,800 OFF ticks and 1,603 ON ticks on the first attempt. Every ON row matched the OFF prefix. The runner stopped at its 600-second cap. A packed-trace retry reduced buffer writes with per-fish presence masks but reached only 1,695 OFF ticks under the same cap. Heavy dock therefore has a matching prefix, with full equivalence still unverified. The all-7 runner loaded the repacked archive and continued sampling until the cap in both scenes. The shared prefixes matched in both, but neither scene reached the full 1,800 ticks. Heavy deepwater completed 1,800 ticks on each side with SHA-256 `5481f67fe2af77355a998fea9431355f93f4ede91f34053a9bc8e82e672da426`.
 
 | Pack | Scene | OFF ticks | ON ticks | Comparison |
 |---|---|---:|---:|---|
@@ -167,4 +167,4 @@ The initial 512-pixel implementation produced matching 30-tick and 1,800-tick va
 | heavy | dock | 1800 | 1603 | First 1,603 ticks match |
 | heavy | deepwater | 1800 | 1800 | Identical |
 | all7 | dock | 742 | 609 | First 609 ticks match |
-| all7 | deepwater | 675 | 0 | No matched captures |
+| all7 | deepwater | 675 | 842 | First 675 ticks match |
