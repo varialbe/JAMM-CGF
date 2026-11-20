@@ -1,7 +1,7 @@
 {
   "id": "jamm-silo",
   "name": "The Silo",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "author": "JAMM",
   "description": "Fish the flooded launch shaft beneath the Missile Silo in NewWorld and discover four deep-water species.",
   "areas": [
@@ -172,23 +172,46 @@
     {
       "key": "veyl",
       "width": 106,
-      "height": 76,
+      "height": 92,
       "origin": [
-        24,
-        42
+        23,
+        58
       ],
       "compose": [
         {
           "from": "spr_fish_s17",
-          "x": 7,
-          "y": 4,
-          "scaleX": 0.94,
-          "scaleY": 0.85,
+          "x": 19,
+          "y": 2,
+          "scaleX": 0.92,
+          "scaleY": 1.43,
           "tones": {
             "colors": [
-              "#596a80",
-              "#8fb2de",
-              "#75a1d5"
+              "#735b88",
+              "#735b88"
+            ],
+            "cutoffs": [
+              120
+            ]
+          },
+          "crop": {
+            "x": 13,
+            "y": 0,
+            "w": 59,
+            "h": 26
+          },
+          "edgeSoftness": 0.35
+        },
+        {
+          "from": "spr_fish_s17",
+          "x": 7,
+          "y": 26,
+          "scaleX": 0.94,
+          "scaleY": 0.76,
+          "tones": {
+            "colors": [
+              "#463950",
+              "#a18ab9",
+              "#735b88"
             ],
             "cutoffs": [
               76,
@@ -199,7 +222,7 @@
         {
           "file": "parts/pits.svg",
           "x": 17,
-          "y": 37
+          "y": 56
         }
       ]
     },
@@ -228,7 +251,8 @@
               142,
               187
             ]
-          }
+          },
+          "edgeSoftness": 0.64
         },
         {
           "file": "parts/scutes.svg",
@@ -239,35 +263,35 @@
     },
     {
       "key": "ferrex",
-      "width": 445,
-      "height": 159,
+      "width": 340,
+      "height": 202,
       "origin": [
-        79,
-        74
+        49,
+        140
       ],
       "compose": [
         {
-          "from": "spr_magmer",
-          "x": 6,
-          "y": 0,
-          "scaleX": 0.55,
-          "scaleY": 0.36,
+          "from": "spr_fish_l9",
+          "x": 5,
+          "y": 3,
+          "scaleX": 1,
+          "scaleY": 1,
           "tones": {
             "colors": [
-              "#843131",
-              "#9a4040",
-              "#fc7e00"
+              "#63492f",
+              "#c59a5f",
+              "#967043"
             ],
             "cutoffs": [
-              72,
-              115
+              126,
+              171
             ]
           }
         },
         {
           "file": "parts/gills.svg",
-          "x": 93,
-          "y": 51
+          "x": 91,
+          "y": 73
         }
       ]
     },
@@ -288,9 +312,9 @@
           "scaleY": 0.97,
           "tones": {
             "colors": [
-              "#9b9985",
-              "#bcb3a2",
-              "#dcd2bb"
+              "#416c65",
+              "#648d80",
+              "#31564f"
             ],
             "cutoffs": [
               125,
@@ -299,9 +323,9 @@
           }
         },
         {
-          "file": "parts/marks.svg",
-          "x": 181,
-          "y": 149
+          "file": "parts/bands.svg",
+          "x": 222,
+          "y": 98
         }
       ]
     },

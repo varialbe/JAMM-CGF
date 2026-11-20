@@ -28,7 +28,7 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
-                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload]
+                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload] [--silo-video]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);

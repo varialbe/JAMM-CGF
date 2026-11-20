@@ -4,16 +4,16 @@ The Silo ships as a ModKit source package in `examples/modkit/silo/`. It opens t
 
 ## Art review
 
-The 23-fish contact sheet is at `~/jamm-night/silo-v2/ref/contact-sheet.png`. The revised review is at `~/jamm-night/silo-v2/art-review.png`. The first four rows pair each new fish with three vanilla fish in its size class on sampled deep-water color. The bottom row crops the live fish frame and its vanilla donor from the game's comparison capture at 1× under equal lighting. The separate gameplay screenshots show the fish in the native water and rock lighting. The source renders, vanilla pixels and screenshots stay on the VPS.
+The 23-fish contact sheet is at `~/jamm-night/silo-v2/ref/contact-sheet.png`. The 2.2 review is at `~/jamm-night/silo-v2/art-review.png`. The first four rows pair each species with three vanilla fish in its size class. The bottom row uses individual 1× in-game comparison captures with a consistent background and labels below each fish. The source renders, vanilla pixels and screenshots stay on the VPS.
 
-Each recipe starts from one intact silhouette and uses `tones` to remap its luminance to flat swatches. Fins keep their native joins. The full silhouette remains the primary marker at game scale. The original SVG details use only the darkest color in the same palette. In all four exported recipes, the intended dominant swatches account for more than 99% of fully opaque pixels.
+The recipes use `tones` to keep the fills in a compact palette. Radik's palette and composition carry over from 2.1. Its dorsal edge uses a 0.64-pixel alpha filter, which increased the exported partially transparent edge pixels from 1,479 to 2,693. The other three use new palettes and retain the native shading boundaries of their main silhouettes.
 
 | Fish | 1. Palette | 2. Joins | 3. Style | 4. Silhouette at game scale | 5. Source and details |
 | --- | --- | --- | --- | --- | --- |
-| Veyl | Three cool blues sampled from Cuddlefish. | Garder's tail and fins stay attached through their native silhouette. | Flat blue body and a darker soft tail. The old teal patch is gone. | The high fin and rounded tail carry the shape. The smallest sensory pits are deliberately subtle. | One Garder frame and three small flat pit marks. |
-| Radik | Three leaf greens sampled from Bagu. | One continuous Sizzer body ends in its own broad tail. | Mid-green fins and three dark scutes. The two sides of the body use the same fill. | The tall profile and large rounded tail remain readable without the scutes. | One Sizzer frame and three flat scutes contained within the flank. |
-| Ferrex | Two rust reds and amber sampled from Magmer. | Stretches the complete Magmer silhouette, preserving the lower fins and the tail join. | Flat rust body, darker fin and gill shading, original amber spike shapes. | The narrow profile and exposed amber spikes carry the silhouette. Dark gill marks are secondary. | One Magmer frame and two small gill marks. |
-| Garrusk | Maw's sand and stone tones dominate the opaque pixels. | Shark's own full tail is continuous with the stockier body. | The body is a single opaque layer. Native fin boundaries contain the darker shade. | The deeper shoulder and tapered Shark tail define the shape. This is the closest of the four to its donor. | One Shark frame and three small flat gill marks. |
+| Veyl | Dusty lilac, plum fins and a darker plum for the pits. | The extended dorsal crop overlaps behind the intact Garder body. The stock tail joins naturally. | The sail uses a single darker fill. | The tall swept sail and lower body ratio distinguish it from the rounder small blue fish. The pits are secondary at game scale. | Garder pixels and three small flat pits. |
+| Radik | The same three leaf greens from Bagu. | The continuous Sizzer silhouette and tail retain their original joins. | The dorsal edge has a soft alpha transition. The mid-green fins and flank scutes keep their previous shades. | The tall profile and broad tail remain the main cues. | One Sizzer frame and three small flat scutes. |
+| Ferrex | Three copper and ochre shades with a dark eye and gill tone. | The full Bagu silhouette keeps its native proportions, including the long tail. | The body and fins use separate flat copper fills. | The two-lobed nose and long tail read cleanly. Its silhouette is still recognizably Bagu-derived. | One Bagu frame and two small gill marks. |
+| Garrusk | Muted petrol-green body, bands and fins. | Shark's full tail remains continuous with the body. The bands sit inside the flank. | Three tapered flat bands use the darker body shade. | The broad shoulder still reads as sharklike. The three bands are the distinguishing feature at 1×. | One Shark frame and a small flat SVG marking layer. |
 
 ## Hatch opening
 
@@ -62,7 +62,7 @@ Each profile has eight captures under `~/jamm-night/silo-v2/screens/` covering t
 
 Version 2.1 builds for solo and all seven retained all 26 Silo assets with zero Silo conflicts. The all-seven profile reported 78 legacy conflicts. The standalone source diff added 26 code entries and changed zero existing code entries, objects or rooms. The release build passed with zero warnings and all 580 default tests passed. The opt-in ten-build matrix and the staged site-package integration test also passed against the original archive. Build logs are at `~/jamm-night/silo-v2/addendum/`.
 
-The opening probe records a blocked passage in the closed and mid-slide frames, then a clear passage once both doors have opened. The glow capture waits for the native lights to reach full brightness. The probe traverses the shaft with the lure and reads the hatch's passability, brightness, catch counts and boat inventory in a fresh process on the same save. The `solo/` and `all7/` directories under `~/jamm-night/silo-v2/screens/opening/` each contain `opening-sequence.png`, the individual captures and the test CSVs.
+The opening probe records a blocked passage in the closed and mid-slide frames, then a clear passage once both doors have opened. The glow capture waits for the native lights to reach full brightness. The probe traverses the shaft with the lure and reads the hatch's passability, brightness, catch counts and boat inventory in a fresh process on the same save. The earlier 2.1 sequences are archived under `~/jamm-night/silo-v2/round3/prior-captures/`.
 
 | Profile | Hatch in NewWorld | Closed and mid-slide | Open and glow | Blocked lure samples after opening | Fresh-process reload |
 | --- | --- | --- | --- | ---: | --- |
@@ -71,11 +71,25 @@ The opening probe records a blocked passage in the closed and mid-slide frames, 
 
 A separate run loaded slot 8 alongside the opened slot 7. Slot 8's hatch was closed, dark and blocked. Slot 7 still contained the opened flag when the run ended. The slot 8 capture and CSV are in `~/jamm-night/silo-v2/screens/opening/slot-isolation/`.
 
+## 2.2 capture verification
+
+The capture bench lets the title clear, dismisses the casting hint and filters other messages from the shots. It fixes the primary view on the hatch and lights the scene with a temporary vanilla lamp, using the same light-surface setup as the worldgen showcase. The chamber shot briefly arranges four live fish in frame. The 1× comparison row uses separate in-game render surfaces so each complete fish frame has its own caption and gutter.
+
+The release build passed with zero warnings. All 581 default tests, the ten-build opt-in archive matrix and the opt-in site-package integration passed. The 2.2 archives verified with all 26 Silo assets present and zero Silo conflicts for solo and all seven. The 78 all-seven legacy conflicts carry over from the earlier build.
+
+The solo and all-seven sequences each contain nine frames. The five moving shots recorded 13%, 32%, 45%, 65% and 84% progress. The closed hatch and all five moving shots blocked the probe, and the clear shaft allowed the complete lure path with zero blocked samples. The all-seven sequence followed Cave's rotated hatch at (35472, 11984). Mean frame luminance was 29–33% in solo and 29–37% with all seven. I checked each shot for visible geometry and title or casting text, and confirmed the four live fish in each chamber shot against their body-color regions.
+
+Each native comparison uses a separate surface with a 20-pixel margin around the sprite canvas. I compared the silhouettes in all eight new and vanilla captures against their corresponding source frames. The full silhouettes are present, with no horizontal band across them. The labels sit in separate space below the captures.
+
+The nine full-size stills and `opening-sequence.png` are in each of `~/jamm-night/silo-v2/screens/opening/solo/` and `~/jamm-night/silo-v2/screens/opening/all7/`. The live X11 recording of the all-seven opening was retimed to 3.00 seconds. Its `opening.mp4` and 1,180,215-byte `opening.gif` are in `~/jamm-night/silo-v2/screens/opening/`. I checked the decoded frames for desktop occlusion and sampled twelve video frames for title and casting text. The rejected solo desktop take remains outside the published sequence.
+
 ## Reproducing the checks
 
 Run the regular release build and tests with `dotnet build -c Release` and `dotnet test -c Release`. The synthetic tests cover invalid manifests, placement and transforms, competing anchors, per-instance code, precise collision masks and multi-frame sprite composition. Set `JAMM_ORIGINAL` to the exact legacy base and `JAMM_SILO_INPUTS` to the root of the seven local archives to run `SiloAreaRealTests`.
 
 The ModMaker bench's `--scene silo` moves the boat to the landmark and guides the lure through the opening in NewWorld, sampling native collision as it goes. Its capture camera follows the scripted subject directly to avoid interpolation overshoot on long Wine frames. The catch probe calls the fish's native bite event, then the catch and boat deposit routines. The save run writes a separate test save, and reload starts another process on that save and reads the Fishalog counts and boat inventory. Each test process uses a 600-second limit under the shared game lock. Screens and CSV logs are under `~/jamm-night/silo-v2/screens/`.
+
+With `--silo-video`, the bench writes `jamm_silo_opening.ready` in the test save directory and holds the closed view for the desktop recorder. The recorder writes `jamm_silo_opening.go` after it starts. The bench signals the full-glow frame with `jamm_silo_opening.done`.
 
 ## Open points
 

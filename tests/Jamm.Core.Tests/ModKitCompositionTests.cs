@@ -51,6 +51,28 @@ public sealed class ModKitCompositionTests
         }
     }
 
+    [Fact]
+    public void EdgeSoftnessAntialiasesTheSilhouetteWithoutChangingOpaqueColor()
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        using var data = UndertaleData.CreateNew();
+        string donor = temp.PathFor("donor.png");
+        using (var image = new MagickImage(MagickColors.Red, 9, 9))
+            image.Write(donor);
+        ModKitSpriteImporter.ImportAll(data, [new("spr_donor", donor, 1, null, true, true)]);
+        string package = temp.Package("""
+            {"id":"kit","name":"Edge test","sprites":[{"key":"fish","width":11,"height":11,
+            "compose":[{"from":"spr_donor","x":1,"y":1,"edgeSoftness":0.64}]}]}
+            """);
+
+        using var compositor = new ModKitComposition(data);
+        using var frame = compositor.Render(Assert.Single(ModKitPackage.Load(package).Sprites), 0);
+        using var pixels = frame.GetPixels();
+        Assert.InRange(pixels.GetArea(1, 1, 1, 1)![3], 1, 254);
+        Assert.Equal(new byte[] { 255, 0, 0, 255 }, pixels.GetArea(5, 5, 1, 1)!);
+        Assert.Equal(0, pixels.GetArea(0, 0, 1, 1)![3]);
+    }
+
     [Theory]
     [InlineData("[90, 45]")]
     [InlineData("[90, \"45\"]")]

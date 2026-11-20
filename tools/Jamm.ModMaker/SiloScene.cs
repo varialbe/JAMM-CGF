@@ -10,7 +10,7 @@ internal static class SiloScene
     private const string Report = "jamm_bench_silo.csv";
     private const string HatchController = "jmk_jamm_silo_object_hatch";
     private static readonly string[] FishNames = ["veyl", "radik", "ferrex", "garrusk"];
-    private static readonly string[] ReferenceFish = ["Garder", "Sizzer", "Magmer", "Shark"];
+    private static readonly string[] ReferenceFish = ["Garder", "Sizzer", "Bagu", "Shark"];
 
     internal static bool Requested(string[] args)
     {
@@ -26,10 +26,13 @@ internal static class SiloScene
             throw new ArgumentException("Choose --silo-mode cycle, save, or reload.");
 
         string[] species = FishNames.Select(key => $"jmk_jamm_silo_{key}").ToArray();
-        foreach (string name in species.Concat(ReferenceFish).Concat([HatchController, "MissileSilo", "BoatData", "Lure", "Collidable", "CatalogData", "BigHook2", "Camera"]))
+        foreach (string name in species.Concat(ReferenceFish).Concat([HatchController, "MissileSilo", "BoatData", "Lure", "Collidable", "CatalogData", "BigHook2", "Camera", "Light", "LightingSystem", "Message"]))
             if (data.GameObjects.ByName(name) is null)
                 throw new InvalidDataException($"The silo scene needs '{name}'. Merge the Silo ModKit package before instrumenting.");
 
+        if (data.Rooms.ByName("NewWorld")?.Views.FirstOrDefault() is not { Enabled: true } view)
+            throw new InvalidDataException("The silo scene needs the primary NewWorld view.");
+        view.ObjectId = null!;
         var probe = ModObjects.Create(data, Probe, persistent: true);
         var compiler = new CompileGroup(data);
         string setup = string.Join('\n', species.Select((name, i) => $"silo_species[{i}] = {name};"));
@@ -44,10 +47,21 @@ internal static class SiloScene
             silo_shot = "";
             silo_row = "";
             silo_blocked = 0;
-            silo_recorded_mid = false;
+            silo_mid = 0;
             silo_recorded_open = false;
             silo_glow_ticks = 0;
             silo_art_show = false;
+            silo_video = {{(args.Contains("--silo-video") ? 1 : 0)}};
+            silo_start_after = -1;
+            silo_lamp = noone;
+            silo_group_dx[0] = -480;
+            silo_group_dx[1] = -370;
+            silo_group_dx[2] = 130;
+            silo_group_dx[3] = 200;
+            silo_group_dy[0] = -195;
+            silo_group_dy[1] = 70;
+            silo_group_dy[2] = -190;
+            silo_group_dy[3] = 175;
             var file = file_text_open_write("{{Report}}");
             file_text_write_string(file, "stage,room,x,y,object,population,fishalog_count,fish_in_boat,blocked_samples,hatch_x,hatch_y,progress,glow,passable");
             file_text_writeln(file);
@@ -59,7 +73,7 @@ internal static class SiloScene
 
             // Wine's long frames can overshoot the native camera's interpolation.
             // Frame the scripted lure or boat directly while capturing the scene.
-            if (silo_stage == 1 || silo_stage == 7)
+            if (silo_stage == 1 || silo_stage == 7 || silo_stage == 8)
             {
                 Camera.x = silo_view_x;
                 Camera.y = silo_view_y;
@@ -77,6 +91,28 @@ internal static class SiloScene
             Camera.ORIGIN_X = Camera.x;
             Camera.ORIGIN_Y = Camera.y;
             Camera.atOrigin = 1;
+            view_wview[0] = 1600;
+            view_hview[0] = 960;
+            view_xview[0] = Camera.x - 800;
+            view_yview[0] = Camera.y - 480;
+            for (var i = 1; i < 8; i += 1) view_visible[i] = false;
+            with (Message) visible = false;
+            with (LightingSystem)
+            {
+                if (width != 1600 || height != 960)
+                {
+                    if (surface_exists(light_surface)) surface_free(light_surface);
+                    width = 1600;
+                    height = 960;
+                    light_surface = surface_create(width, height);
+                }
+                day_coefficient = 1;
+                overcast_coefficient = 1;
+                lightning_flash = 0;
+            }
+            silo_lamp.x = Camera.x;
+            silo_lamp.y = Camera.y;
+            silo_lamp.visible = silo_stage < 5 || silo_stage == 7 || silo_stage == 8;
             """);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.User0, data), Snapshot);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.User1, data), """
@@ -92,22 +128,34 @@ internal static class SiloScene
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), """
             if (silo_art_show)
             {
-                // Photograph the live sprite frame and the donor at 1x in identical light.
-                // Stack the subjects so the largest pair fits inside the capture window.
-                draw_set_alpha(1);
-                draw_set_color(make_color_rgb(23, 29, 39));
-                draw_rectangle(0, 0, 1200, 720, false);
-                draw_set_color(c_white);
-                draw_sprite(silo_art_live, silo_art_frame,
-                    600 - sprite_get_width(silo_art_live) / 2 + sprite_get_xoffset(silo_art_live),
-                    180 - sprite_get_height(silo_art_live) / 2 + sprite_get_yoffset(silo_art_live));
-                draw_sprite(silo_art_sprite, 0,
-                    600 - sprite_get_width(silo_art_sprite) / 2 + sprite_get_xoffset(silo_art_sprite),
-                    540 - sprite_get_height(silo_art_sprite) / 2 + sprite_get_yoffset(silo_art_sprite));
+                // Off-screen surfaces isolate each full frame from the room and every HUD pass.
+                for (var i = 0; i < 2; i += 1)
+                {
+                    var subject, subimage, target;
+                    subject = i == 0 ? silo_art_live : silo_art_sprite;
+                    subimage = i == 0 ? silo_art_frame : 0;
+                    target = surface_create(sprite_get_width(subject) + 40, sprite_get_height(subject) + 40);
+                    surface_set_target(target);
+                    draw_clear(make_color_rgb(23, 29, 39));
+                    draw_set_blend_mode(0);
+                    draw_set_alpha(1);
+                    draw_sprite(subject, subimage, 20 + sprite_get_xoffset(subject), 20 + sprite_get_yoffset(subject));
+                    surface_reset_target();
+                    surface_save(target, "jamm_silo_compare_" + string(silo_index) + "_" + string(i) + ".png");
+                    surface_free(target);
+                }
+                silo_art_show = false;
             }
             if (silo_shot != "")
             {
                 screen_save("jamm_silo_" + silo_shot + ".png");
+                if (silo_video && (silo_shot == "closed" || silo_shot == "glow"))
+                {
+                    var mark;
+                    mark = file_text_open_write(silo_shot == "closed" ? "jamm_silo_opening.ready" : "jamm_silo_opening.done");
+                    file_text_write_string(mark, "1");
+                    file_text_close(mark);
+                }
                 silo_shot = "";
             }
             """);
@@ -120,6 +168,10 @@ internal static class SiloScene
         string dismiss = string.Join('\n', new[] { "GameModeMenu", "GM_Classic", "GM_Realism" }
             .Where(name => data.GameObjects.ByName(name) is not null)
             .Select(name => $"with ({name}) instance_destroy();"));
+        string hideHint = data.GameObjects.ByName("Message_HowToCast") is null
+            ? "" : "with (Message_HowToCast) instance_destroy();";
+        string titleVisible = data.GameObjects.ByName("Message_CatGoesFishing") is null
+            ? "false" : "instance_exists(Message_CatGoesFishing)";
 
         return $$"""
             if (room != NewWorld || !instance_exists(SaveManager) || !SaveManager.loaded) exit;
@@ -133,11 +185,21 @@ internal static class SiloScene
 
             if (silo_stage == 0)
             {
-                if (silo_ticks < 10 || !variable_instance_exists(CatalogData.id, "jamm_fish_names")) exit;
+                {{hideHint}}
+                {{dismiss}}
+                Girl.boatMessageShown = 1;
+                Girl.startMessageShown = 1;
+                if (silo_ticks < 45 || (silo_ticks < 240 && {{titleVisible}}) ||
+                    !variable_instance_exists(CatalogData.id, "jamm_fish_names")) exit;
                 window_set_fullscreen(false);
                 window_set_size(1200, 720);
                 display_set_gui_size(1200, 720);
-                {{dismiss}}
+                Girl.hide_ui_lock = 1;
+                silo_lamp = instance_create(hatch.x, hatch.y, Light);
+                silo_lamp.sub_blend = c_white;
+                silo_lamp.add_blend = make_color_rgb(25, 33, 37);
+                silo_lamp.image_scale = 4 * 1600 / sprite_get_width(silo_lamp.sprite_index);
+                silo_lamp.special_scale = silo_lamp.image_scale;
                 if (silo_mode == 2)
                 {
                     for (silo_index = 0; silo_index < 4; silo_index += 1)
@@ -158,8 +220,6 @@ internal static class SiloScene
                     vessel.boat_index = 1;
                 }
                 Girl.level = max(25, Girl.level);
-                Girl.boatMessageShown = 1;
-                Girl.startMessageShown = 1;
                 Boat.moveLocked = 0;
                 Rod.swing_locked = 0;
                 Boat.x = hatch.x + 45;
@@ -191,17 +251,19 @@ internal static class SiloScene
                 // Keep the closed and moving shutters in the same framing as the lure approaches.
                 turn = hatch.image_angle * pi / 180;
                 dx = 56;
-                dy = silo_ticks < 16 ? -350 : -88;
+                if (silo_ticks >= 16 && silo_start_after < 0 &&
+                    (!silo_video || file_exists("jamm_silo_opening.go"))) silo_start_after = current_time + 320;
+                dy = silo_start_after < 0 || current_time < silo_start_after ? -350 : -88;
                 silo_x = hatch.x + dx * cos(turn) + dy * sin(turn);
                 silo_y = hatch.y - dx * sin(turn) + dy * cos(turn);
-                silo_view_x = hatch.x + 55;
-                silo_view_y = hatch.y + 95;
+                silo_view_x = hatch.x + 65;
+                silo_view_y = hatch.y + 175;
                 event_user(1);
                 if (silo_ticks == 8) silo_row = "closed";
-                else if (!silo_recorded_mid && control.silo_progress >= 0.37 && control.silo_progress < 0.72)
+                else if (silo_mid < 5 && control.silo_progress >= 0.10 + silo_mid * 0.17 && control.silo_progress < 1)
                 {
-                    silo_recorded_mid = true;
-                    silo_row = "mid";
+                    silo_mid += 1;
+                    silo_row = "mid-" + string(silo_mid);
                 }
                 else if (!silo_recorded_open && control.silo_progress == 1)
                 {
@@ -210,11 +272,10 @@ internal static class SiloScene
                 }
                 else if (silo_recorded_open && control.silo_glow == 1)
                 {
-                    silo_view_x = hatch.x + 65;
                     silo_view_y = hatch.y + 335;
                     silo_glow_ticks += 1;
                     if (silo_glow_ticks == 3) silo_row = "glow";
-                    if (silo_glow_ticks == 5)
+                    if (silo_glow_ticks == 12)
                     {
                         silo_stage = 2;
                         silo_ticks = 0;
@@ -253,11 +314,69 @@ internal static class SiloScene
                 {
                     silo_row = "shaft";
                     event_user(0);
-                    silo_shot = "chamber";
                 }
                 if (silo_ticks >= 94)
                 {
-                    silo_stage += 1;
+                    silo_stage = 8;
+                    silo_ticks = 0;
+                }
+                exit;
+            }
+
+            if (silo_stage == 8)
+            {
+                // Assemble four live subjects briefly for the chamber photograph.
+                silo_view_x = hatch.x + 85;
+                silo_view_y = hatch.y + 690;
+                var i, fish_x, fish_y;
+                for (i = 0; i < 4; i += 1)
+                {
+                    if (silo_ticks == 1)
+                    {
+                        target = instance_find(silo_species[i], 0);
+                        silo_group[i] = target;
+                        if (!instance_exists(target)) continue;
+                        silo_group_x[i] = target.x;
+                        silo_group_y[i] = target.y;
+                        silo_group_depth[i] = target.depth;
+                        silo_group_state[i] = target.state;
+                        silo_group_life[i] = target.life;
+                    }
+                    target = silo_group[i];
+                    if (!instance_exists(target)) continue;
+                    if (silo_ticks >= 8)
+                    {
+                        target.x = silo_group_x[i];
+                        target.y = silo_group_y[i];
+                        target.depth = silo_group_depth[i];
+                        target.state = silo_group_state[i];
+                        target.life = silo_group_life[i];
+                        continue;
+                    }
+                    fish_x = silo_view_x + silo_group_dx[i];
+                    fish_y = silo_view_y + silo_group_dy[i];
+                    target.x = fish_x - sprite_get_width(target.sprite_index) / 2 + sprite_get_xoffset(target.sprite_index);
+                    target.y = fish_y - sprite_get_height(target.sprite_index) / 2 + sprite_get_yoffset(target.sprite_index);
+                    target.direction = 180;
+                    target.image_angle = 0;
+                    target.image_xscale = 1;
+                    target.image_yscale = 1;
+                    target.depth = -30;
+                    target.state = 11;
+                    target.life = target.MAX_LIFE;
+                    target.speed = 0;
+                    target.spd = 0;
+                    target.visible = true;
+                }
+                if (silo_ticks == 6)
+                {
+                    silo_row = "chamber";
+                    event_user(0);
+                    silo_shot = "chamber";
+                }
+                if (silo_ticks >= 8)
+                {
+                    silo_stage = 3;
                     silo_ticks = 0;
                 }
                 exit;
@@ -284,13 +403,12 @@ internal static class SiloScene
                     event_user(0);
                     silo_shot = object_get_name(species);
                 }
-                silo_art_show = silo_ticks >= 10 && silo_ticks <= 14;
+                silo_art_show = silo_ticks == 12;
                 if (silo_art_show)
                 {
                     silo_art_sprite = object_get_sprite(silo_reference[silo_index]);
                     silo_art_live = target.sprite_index;
                     silo_art_frame = floor(target.image_index);
-                    if (silo_ticks == 13) silo_shot = "compare_" + object_get_name(species);
                 }
                 if (silo_ticks >= 16)
                 {

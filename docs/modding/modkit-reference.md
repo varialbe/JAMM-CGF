@@ -272,6 +272,7 @@ Set a fish's `sprite` to `"scute-fish"` or reference the key from an area's `ope
 | `paletteMap` | Exact RGB replacement pairs, for example `{"#fece52":"#67a889"}`. Alpha is preserved. |
 | `hueShift`, `tint` | Hue rotation in degrees, then a `#RRGGBB` channel multiplier. Palette replacements occur first. |
 | `tones` | Flat palette with two or three `colors` and one ascending `cutoffs` value between each pair. Cutoffs use integer luminance from 1 to 255. A pixel at a cutoff uses the next color. Applied after the other color and geometry transforms, with alpha preserved. |
+| `edgeSoftness` | Optional alpha smoothing after resizing and rotation, measured in output pixels from 0 to 1.5. Defaults to 0. Fractional values soften jagged silhouette edges while preserving opaque colors. Leave a little transparent space around the source silhouette. |
 | `opacity`, `z` | Alpha multiplier from 0 to 1 and integer stacking order. Higher Z is drawn later. Equal Z follows manifest order. |
 
 `modkit check` validates the recipe fields and package paths. `modkit build` also validates referenced base frames and crop sizes against the selected archive.

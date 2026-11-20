@@ -139,8 +139,8 @@
     "packageType": "modkit",
     "manifestFile": "jamm-mod.json",
     "isDefault": false,
-    "version": "2.1.0",
-    "sha256": "c8a9f8f69f41eb937a73ab9ff3bab1f9465fc4091fde788b57b6cb3debca4811",
-    "sizeBytes": 7529
+    "version": "2.2.0",
+    "sha256": "9bbfc6aaed00b72540b5f6ad5c174887deb8e7a80e4ef9cbcbead0fb99b11acb",
+    "sizeBytes": 7633
   }
 ]

@@ -22,6 +22,9 @@ public sealed record ModKitSpriteLayer(string? From, string? File, int Frame, Mo
 {
     /// <summary>Optional flat palette applied to the transformed layer while retaining its alpha.</summary>
     public ModKitSpriteTones? Tones { get; init; }
+
+    /// <summary>Optional subpixel alpha smoothing after geometry transforms.</summary>
+    public double EdgeSoftness { get; init; }
 }
 
 /// <summary>A fixed-size sprite canvas with an ordered composition for each frame.</summary>
@@ -89,7 +92,8 @@ public static partial class ModKitPackage
         return new(from, file, frame, crop, x, y, sx, sy, rotation, flip, tint, hue, palette,
             OptionalDouble(obj, "opacity", $"{path}.opacity", 1, 0, 1), OptionalInt(obj, "z", $"{path}.z", 0))
         {
-            Tones = TryGetNonNull(obj, "tones", out var tones) ? ParseTones(tones, $"{path}.tones") : null
+            Tones = TryGetNonNull(obj, "tones", out var tones) ? ParseTones(tones, $"{path}.tones") : null,
+            EdgeSoftness = OptionalDouble(obj, "edgeSoftness", $"{path}.edgeSoftness", 0, 0, 1.5)
         };
     }
 
@@ -216,6 +220,11 @@ internal sealed class ModKitComposition(UndertaleData data) : IDisposable
             image.BackgroundColor = MagickColors.Transparent;
             image.Rotate(layer.Rotation);
             image.ResetPage();
+        }
+        if (layer.EdgeSoftness > 0)
+        {
+            image.VirtualPixelMethod = VirtualPixelMethod.Transparent;
+            image.GaussianBlur(0, layer.EdgeSoftness, Channels.Alpha);
         }
         if (layer.Tones is { } tones)
             ApplyTones(image, tones);
