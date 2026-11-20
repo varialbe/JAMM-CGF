@@ -85,11 +85,11 @@ public static class ArchiveBuilder
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
             if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
             var data = working.Data;
-            IReadOnlyDictionary<string, string> generatedAreaCode;
+            IReadOnlyDictionary<string, string> generatedCode;
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                generatedAreaCode = Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions);
+                generatedCode = Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -100,7 +100,7 @@ public static class ArchiveBuilder
                 string decision = TextureRepacker.RepackForBuild(data, output, progress, cancellationToken);
                 plan = plan with { Decisions = [.. plan.Decisions, decision] };
             }
-            var expectedReferences = semantics.Expected(plan, data, generatedAreaCode);
+            var expectedReferences = semantics.Expected(plan, data, generatedCode);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
@@ -316,13 +316,14 @@ public static class ArchiveBuilder
         foreach (var room in data.Rooms)
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
-        var generatedAreaCode = AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
-        ReassignRoomIds(data, ancestor);
+        var generatedCode = AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
         CatalogRuntime.Inject(data, recompile);
         HudRuntime.Inject(data, recompile);
         MenuRuntime.Inject(data, recompile);
         ItemsRuntime.Inject(data, recompile);
         FishRuntime.Inject(data, recompile);
+        WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+        ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
         var finalNames = SemanticReferences.Names(data);
@@ -333,7 +334,7 @@ public static class ArchiveBuilder
             compiler.QueueCodeReplace(code, AssetSymbols.Link(gml, name, finalNames));
         }
         ArchiveVerifier.Compile(compiler, "merged archive");
-        return generatedAreaCode;
+        return generatedCode;
     }
 
     private static void ReassignRoomIds(UndertaleData data, UndertaleData ancestor)

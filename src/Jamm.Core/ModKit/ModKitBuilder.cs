@@ -21,7 +21,7 @@ public sealed record ModKitBuildResult(
 }
 
 /// <summary>Compiles a validated <see cref="ModKitManifest"/> onto a read-only legacy base archive as a zero-conflict mod.</summary>
-public static class ModKitBuilder
+public static partial class ModKitBuilder
 {
     /// <summary>Builds a ModKit folder package into a new verified <c>.win</c> file without modifying the base archive.</summary>
     public static ModKitBuildResult Build(
@@ -129,6 +129,7 @@ public static class ModKitBuilder
             }
         }
 
+        var weatherFish = package.Weathers.SelectMany(w => w.Fish).ToHashSet(StringComparer.Ordinal);
         foreach (var fish in package.Fish)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -211,7 +212,7 @@ public static class ModKitBuilder
 
             initBody.AppendLine(
                 $"jamm_fish_register({GmlString($"{package.Id}:{fish.Key}")}, {objName}, {fish.SizeTab}, {GmlString(fish.Name)}, " +
-                $"{GmlString(fish.Description)}, {Num(fish.Spawn.XMin)}, {Num(fish.Spawn.XMax)}, {Num(fish.Spawn.YMin)}, {Num(fish.Spawn.YMax)}, {(fish.Spawn.Area is null ? fish.Spawn.Count : 0)}, " +
+                $"{GmlString(fish.Description)}, {Num(fish.Spawn.XMin)}, {Num(fish.Spawn.XMax)}, {Num(fish.Spawn.YMin)}, {Num(fish.Spawn.YMax)}, {(fish.Spawn.Area is null && !weatherFish.Contains(fish.Key) ? fish.Spawn.Count : 0)}, " +
                 $"{GmlString(fish.CaughtDescription)}, {GmlString(fish.SeenDescription)}, {GmlString(fish.HiddenDescription)}, " +
                 $"{GmlString(fish.Description)}, {GmlString(fish.Description)}, {(fish.Exotic ? 1 : 0)});");
         }
@@ -294,6 +295,8 @@ public static class ModKitBuilder
                 $"{GmlString(upgrade.Description)}, {GmlString(upgrade.Description2)}, {Num(upgrade.Cost)}, {iconName}, " +
                 $"{upgrade.MaxStacks}, {applyHook ?? "-1"}, {stepHook ?? "-1"});");
         }
+
+        AddWeathers(data, compiler, package, modIdent, ref scriptsAdded);
 
         AreaPlacement.ValidateSource(data, package);
         foreach (var area in package.Areas)
@@ -428,7 +431,7 @@ public static class ModKitBuilder
 
     private static string Num(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
-    private static string GmlString(string value)
+    internal static string GmlString(string value)
     {
         string normalized = value.Replace("\r\n", "#", StringComparison.Ordinal).Replace("\n", "#", StringComparison.Ordinal);
         if (!normalized.Contains('"', StringComparison.Ordinal))

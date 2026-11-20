@@ -97,3 +97,15 @@ Quick fixes for the most common issues when building or testing ModKit and GML A
   * Make sure every sprite, object, and script passed to `jamm_*_register` uses its asset name (not a hardcoded number), and avoid passing `0` where `-1` is expected for "none".
 * **Updated ModKit files don't show up in-game (or `Mod name '...' already exists`)**
   * `cgfmm add` imports a compiled copy keyed by archive SHA-256. After editing `jamm-mod.json`, sprites, or hooks, delete profiles referencing the old build (`cgfmm profile delete dev`), run `cgfmm remove "My Mod"` (or pass `--name "My Mod v2"`), and re-run `cgfmm add my-mod`.
+
+## Weather
+
+| Symptom | What to check |
+| --- | --- |
+| The console says a weather is queued | The game is in its vanilla night phase. Try again in daylight or explicitly opt the weather into night in the manifest. |
+| The console cannot choose the ID | Run `weather` to list installed entries. Supply `package:id` when two packages use the same short ID. |
+| A standalone source archive has no weather | Import it into a profile and build the profile so JAMM can install the controller and merge the declarations. |
+| `Weather API could not locate a unique anchor` | Check that the base is the supported August 2023 VM archive. The error identifies the entry. If another mod changed that entry, test without that mod and report the name and entry to its author. |
+| A weather fish does not appear | Check the package's `weathers[].fish` keys and the surface spawn ranges. Inspect the Fishalog and use the console to force the correct weather at the dock. |
+| Music is silent | Check the in-game music volume, the Vorbis file, and the lure depth. A non-looping track finishes once while its weather remains active. |
+| A forecast changes when reopening the slot | The schedule changes every local-clock hour. Check that the slot's `jamm-weather-<slot>.ini` was copied with the save and that the weather package is enabled. |

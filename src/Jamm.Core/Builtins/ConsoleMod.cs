@@ -17,23 +17,31 @@ public static class ConsoleMod
     /// <summary>Adds the persistent in-game console controller to an original legacy game archive.</summary>
     public static void Apply(UndertaleData data)
     {
+        var compiler = new CompileGroup(data);
+        foreach (var (entry, body) in Install(data))
+            compiler.QueueCodeReplace(entry, body);
+        ModObjects.Compile(compiler);
+    }
+
+    internal static IReadOnlyList<(UndertaleCode Entry, string Body)> Install(UndertaleData data)
+    {
         foreach (string required in new[] { "Girl", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons" })
         {
             if (data.GameObjects.ByName(required) is null)
                 throw new InvalidDataException($"Required object '{required}' is missing: build the console mod from the original legacy 2023 data.win.");
         }
 
-        var compiler = new CompileGroup(data);
         var console = ModObjects.Create(data, ObjectName, persistent: true);
-        compiler.QueueCodeReplace(console.EventHandlerFor(EventType.Create, 0u, data), Create);
-        compiler.QueueCodeReplace(console.EventHandlerFor(EventType.Destroy, 0u, data), Destroy);
-        compiler.QueueCodeReplace(console.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStep(data));
-        compiler.QueueCodeReplace(console.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), EndStep(data));
-        compiler.QueueCodeReplace(console.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), DrawGui(data));
-        ModObjects.Compile(compiler);
-
         foreach (string room in new[] { "NewWorld", "room11" })
             ModObjects.PlaceInstance(data, room, console, first: true);
+        return
+        [
+            (console.EventHandlerFor(EventType.Create, 0u, data), Create),
+            (console.EventHandlerFor(EventType.Destroy, 0u, data), Destroy),
+            (console.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStep(data)),
+            (console.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), EndStep(data)),
+            (console.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), DrawGui(data))
+        ];
     }
 
     private const string SaveWarning = "WARNING: The next autosave (or opening the Esc save menu) will keep these changes in your save file.";

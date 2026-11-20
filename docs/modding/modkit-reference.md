@@ -52,6 +52,7 @@ my-mod/
 | `boats` | array | No | `[]` | Custom boat definitions. |
 | `hats` | array | No | `[]` | Custom hat (`Gear`) definitions. |
 | `upgrades` | array | No | `[]` | Custom rod upgrade definitions. |
+| `weathers` | array | No | `[]` | [Weather schedule, visuals, audio and fish](weather.md). |
 | `areas` | array | No | `[]` | [Room areas and follow anchors](areas.md). |
 | `objects` | array | No | `[]` | Custom room objects with optional event hooks. |
 | `sprites` | array | No | `[]` | [Build-time sprite recipes](#sprite-recipes). |

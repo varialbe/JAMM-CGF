@@ -359,3 +359,8 @@ Returns how many copies of an upgrade are installed on the **currently equipped 
       // React to the player's installed Turbo Reel stacks!
   }
   ```
+
+## Weather API
+
+Use [Weather API](weather.md) for `weathers[]`, `jamm_weather_current()`, `jamm_weather_name()`,
+`jamm_weather_intensity()`, `jamm_weather_command()`, and weather lifecycle hooks.
