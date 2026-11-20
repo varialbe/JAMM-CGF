@@ -38,3 +38,27 @@ The dock probe is available through `jamm-modmaker bench <profile.win> <new.win>
 The established five-pack order is Antiquity, PWB, Abyss, Colour and Verdant. The all-seven profile also uses TGE and Cave. Both builds used the existing default load-order decisions and texture repacking. Their build logs retain the legacy texture-geometry diagnostics. Managed folder import also accepted the Weather Pack and added it to a profile.
 
 The Release build passed with zero warnings. The default .NET suites passed 598 tests with 16 opt-in real-file tests skipped. All four GML harness tests passed. The final archive and pairwise check logs are in `~/jamm-night/weather/`.
+
+### Runner notes
+
+The first Wine launch stopped at Steam initialization. Refreshing the existing client under the shared game lock allowed the next launch to reach NewWorld. The first successful game startup exposed a native Fish field that Rod normally initializes later. Weather schools now seed that field when they spawn.
+
+The dock archive controls the legacy day/night predicate and lighting clock to give each profile the same phase inputs. These controls are installed only by the bench command. The Wine host exposed its dummy audio device, so the bench measures running GameMaker audio voices and the archive check verifies the Ogg assets. Speaker output was outside the VPS coverage.
+
+The complete donor comparison stays on the VPS. A gameplay-only review sheet and the four solo weather captures were sent via the requested Telegram script.
+
+### Dock results
+
+The three profiles completed the dock probe without a CODE ERROR. Counts are for the sampled surface band at the dock.
+
+| Profile | Super Sunny | Rainy | Windy | Fog | Eligible vanilla fish on clear day → after clearing |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Weather Pack | 8 | 7 | 9 | 8 | 17 → 25 |
+| Weather Pack + five-pack | 9 | 8 | 8 | 9 | 14 → 14 |
+| Weather Pack + all seven | 8 | 9 | 7 | 8 | 22 → 14 |
+
+Every counted weather fish had a Fishalog registration. All four weather samples in each profile had zero eligible vanilla surface fish and two playing audio voices. Fog stopped at night while its override was still requested. Its fish and audio cleared, and the parked fish returned to native behavior. In the solo run, the sampled upper sky averaged 173–222 across the four weathers, 224 in clear daylight, and 14 at night on a 0–255 luminance scale.
+
+The completed captures, CSVs and local test INIs are under `~/jamm-night/weather/screens/verified-solo/`, `verified-public5/`, and `verified-all7/`. Executable runs were serialized behind the shared game lock. The all-seven capture reached its night sample about four minutes after launch, within the 600-second budget.
+
+Reopening the test slot in the same local hour preserved the seed, qualified forecast ID, and start and end seconds. Reopening after the next hour preserved the seed and computed a new forecast.
