@@ -90,6 +90,23 @@ internal static class TextureRepacker
         if (preserved.Count + layouts.Count > short.MaxValue + 1)
             return "[CGF-TEX-001] Texture repack skipped because the result would exceed the legacy texture page limit.";
 
+        // Never make a build worse: an already tightly packed atlas (e.g. vanilla plus built-ins)
+        // can grow through the added gutters. Keep the source atlas unless the repack saves memory
+        // or pages (fewer pages also means fewer texture switches).
+        long plannedBytes = preserved.Sum(PageBytes) + layouts.Sum(layout => ImageBytes(layout.Width, layout.Height));
+        int plannedPages = preserved.Count + layouts.Count;
+        if (plannedBytes >= beforeBytes && plannedPages >= sourcePages.Length)
+        {
+            // Still drop texture items nothing references; the pages and live items stay untouched.
+            int pruned = data.TexturePageItems.Count - live.Length;
+            if (pruned > 0)
+            {
+                data.TexturePageItems.Clear();
+                foreach (var item in live) data.TexturePageItems.Add(item);
+            }
+            return FormattableString.Invariant($"[CGF-TEX-001] Texture repack kept the source atlas: {sourcePages.Length} pages, {beforeBytes / 1_000_000d:F0} MB (a repack would need {plannedPages} pages, {plannedBytes / 1_000_000d:F0} MB); {pruned} unreferenced texture items removed.");
+        }
+
         Render(layouts, sourcePages, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 

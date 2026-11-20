@@ -168,6 +168,26 @@ public sealed partial class BuildingTests
     }
 
     [Fact]
+    public void TightlyPackedAtlasIsKeptWhenARepackWouldGrow()
+    {
+        // A full 16x16 page would need 20x20 with gutters, i.e. a 32x32 page: keep the source.
+        using var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Major = 1;
+        var page = new UndertaleEmbeddedTexture { TextureData = new() { Image = new GMImage(16, 16) } };
+        var item = new UndertaleTexturePageItem { TexturePage = page, SourceWidth = 16, SourceHeight = 16 };
+        data.EmbeddedTextures.Add(page);
+        data.TexturePageItems.Add(item);
+        data.Backgrounds.Add(new() { Texture = item });
+
+        string decision = TextureRepacker.Repack(data, null, default);
+
+        Assert.StartsWith("[CGF-TEX-001] Texture repack kept the source atlas", decision);
+        Assert.Same(page, Assert.Single(data.EmbeddedTextures));
+        Assert.Same(page, item.TexturePage);
+        Assert.Equal((0, 0), (item.SourceX, item.SourceY));
+    }
+
+    [Fact]
     public void GroupedAtlasIsLeftIntact()
     {
         using var data = UndertaleData.CreateNew();

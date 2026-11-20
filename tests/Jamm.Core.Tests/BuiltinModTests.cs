@@ -86,7 +86,7 @@ public sealed class BuiltinModTests : IDisposable
         Assert.False(installer.IsInstalled("perf"));
         var repacked = installer.Prepare("perf");
         Assert.Equal(1, repacked.Build.Counts[AssetKind.TexturePages]);
-        Assert.Contains(repacked.Build.Plan.Decisions, decision => decision.StartsWith("[CGF-TEX-001] Texture pages:", StringComparison.Ordinal));
+        Assert.Contains(repacked.Build.Plan.Decisions, decision => decision.StartsWith("[CGF-TEX-001] Texture", StringComparison.Ordinal));
         installer.Install(repacked);
         Assert.True(installer.IsInstalled("perf"));
     }
