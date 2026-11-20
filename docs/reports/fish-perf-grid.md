@@ -145,22 +145,24 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | vanilla | deepwater | 1 | — | — | — | — | — | — | — |
 | heavy | dock | 0 | 54 | 2263.04 | 192.98 | 85.27 | 455.10 | 0.000 | 0.00 |
 | heavy | dock | 1 | 30 | 2408.57 | 252.69 | 104.91 | 830.12 | 1.043 | 19.07 |
-| heavy | deepwater | 0 | — | — | — | — | — | — | — |
-| heavy | deepwater | 1 | — | — | — | — | — | — | — |
+| heavy | deepwater | 0 | 58 | 2237.55 | 180.28 | 80.57 | 429.60 | 0.000 | 0.00 |
+| heavy | deepwater | 1 | 51 | 2287.27 | 200.65 | 87.72 | 481.80 | 0.977 | 17.69 |
 | all7 | dock | 0 | — | — | — | — | — | — | — |
 | all7 | dock | 1 | — | — | — | — | — | — | — |
 | all7 | deepwater | 0 | — | — | — | — | — | — | — |
 | all7 | deepwater | 1 | — | — | — | — | — | — | — |
 
+A second heavy dock pair used a fixed 120-tick window with the trace clock and raster suppression on both sides. The traces were byte-identical, and both sides executed 250,546 Fish End Step events. The measured Fish End Step time was 171.64 ms/tick OFF and 179.27 ms/tick ON. Whole-loop time rose from 394.00 to 407.97 ms/tick. The grid built at 0.860 ms/tick and served 26.74 queries/tick. This controlled pair showed no CPU reduction for heavy dock.
+
 ### Trace comparison
 
-The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish. Heavy dock captured 1,800 OFF ticks and 1,603 ON ticks on the first attempt. Every ON row matched the OFF prefix. The runner stopped at its 600-second cap. A retry reduces trace buffer writes by storing per-fish presence masks for optional fields.
+The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish. Heavy dock captured 1,800 OFF ticks and 1,603 ON ticks on the first attempt. Every ON row matched the OFF prefix. The runner stopped at its 600-second cap. A packed-trace retry reduced buffer writes with per-fish presence masks but reached only 1,695 OFF ticks under the same cap. Heavy dock therefore has a matching prefix, with full equivalence still unverified.
 
 | Pack | Scene | OFF ticks | ON ticks | Comparison |
 |---|---|---:|---:|---|
 | vanilla | dock | 0 | 0 | No matched captures |
 | vanilla | deepwater | 0 | 0 | No matched captures |
 | heavy | dock | 1800 | 1603 | Same prefix, different lengths |
-| heavy | deepwater | 0 | 0 | No matched captures |
+| heavy | deepwater | 1800 | 0 | No matched captures |
 | all7 | dock | 0 | 0 | No matched captures |
 | all7 | deepwater | 0 | 0 | No matched captures |
