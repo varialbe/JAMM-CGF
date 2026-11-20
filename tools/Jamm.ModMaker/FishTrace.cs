@@ -112,7 +112,8 @@ internal static class FishTrace
         """;
 
     // Include the fields read or updated by the neighbour scripts and the base state
-    // machine. The presence byte distinguishes an unset variable from any real value.
+    // machine. Presence masks distinguish fields that are unset without a buffer
+    // call for each absent field. Each mask covers at most 30 bits in GM1.
     private static readonly string[] OptionalFields =
     [
         "state", "spd", "life", "target", "target_x", "target_y", "pal", "impulse", "sdist", "dir",
@@ -128,14 +129,15 @@ internal static class FishTrace
         string required = Writes("id", "object_index", "x", "y", "xprevious", "yprevious", "hspeed", "vspeed",
             "speed", "direction", "image_xscale", "image_yscale", "image_angle",
             "path_index", "path_position", "path_speed");
-        string optional = string.Join("\n", OptionalFields.Select(field => $$"""
-            if (variable_instance_exists(id, "{{field}}"))
-            {
-                buffer_write(b, buffer_u8, 1);
-                buffer_write(b, buffer_f64, {{field}});
-            }
-            else buffer_write(b, buffer_u8, 0);
-            """));
+        string optional = string.Join("\n", OptionalFields.Chunk(30).Select((fields, group) =>
+        {
+            string mask = $"jamm_trace_mask_{group}";
+            string readPresence = string.Join("\n", fields.Select((field, bit) =>
+                $"if (variable_instance_exists(id, \"{field}\")) {mask} += {1 << bit};"));
+            string writeValues = string.Join("\n", fields.Select((field, bit) =>
+                $"if (({mask} & {1 << bit}) != 0) buffer_write(b, buffer_f64, {field});"));
+            return $"var {mask} = 0;\n{readPresence}\nbuffer_write(b, buffer_u32, {mask});\n{writeValues}";
+        }));
 
         return $$"""
             var b = jamm_trace_buffer;

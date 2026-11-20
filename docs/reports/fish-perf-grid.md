@@ -47,7 +47,7 @@ Cells are 1,024 pixels wide. Queries include padding for up to 32 pixels of move
 ## Validation and measurements
 <!-- Recorded measurements -->
 
-The Release solution build completed with zero warnings. The .NET suite passed 460 core and 127 GUI tests, with 15 real-file tests skipped by default. The original-only managed Perf build also passed semantic reference validation and archive read-back. The GML fixture checks 500 ordered queries against a brute-force loop, negative and large coordinates, movement between cells, same-count replacement and deactivate/reactivate. The first fixture passed in the legacy Wine runner.
+The Release solution build completed with zero warnings. The .NET suite passed 460 core and 127 GUI tests, with 15 real-file tests skipped by default. The original-only managed Perf build also passed semantic reference validation and archive read-back. The GML fixture checks 500 ordered queries against a brute-force loop, negative and large coordinates, movement between cells, same-count replacement and deactivate/reactivate. Both the original and revised fixtures passed in the legacy Wine runner.
 
 The benchmark runs used Wine, the same 1200×720 viewport for performance captures, default scene coordinates and seed 1337. F8 scheduling was off. Each pair uses the same benchmark archive with a different `jamm_perf.ini` setting. The trace freezes simulation-facing time, date, frame delta and the FPS input to FishThinner. It suppresses raster submission while retaining Draw events. Hashes cover the active Fish traversal, binary positions, velocities, scale, path state and selected fish state variables. The RNG column counts explicit calls reachable from GML.
 
@@ -144,7 +144,7 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | vanilla | deepwater | 0 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 1 | — | — | — | — | — | — | — |
 | heavy | dock | 0 | 54 | 2263.04 | 192.98 | 85.27 | 455.10 | 0.000 | 0.00 |
-| heavy | dock | 1 | — | — | — | — | — | — | — |
+| heavy | dock | 1 | 30 | 2408.57 | 252.69 | 104.91 | 830.12 | 1.043 | 19.07 |
 | heavy | deepwater | 0 | — | — | — | — | — | — | — |
 | heavy | deepwater | 1 | — | — | — | — | — | — | — |
 | all7 | dock | 0 | — | — | — | — | — | — | — |
@@ -154,13 +154,13 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 
 ### Trace comparison
 
-The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish.
+The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish. Heavy dock captured 1,800 OFF ticks and 1,603 ON ticks on the first attempt. Every ON row matched the OFF prefix. The runner stopped at its 600-second cap. A retry reduces trace buffer writes by storing per-fish presence masks for optional fields.
 
 | Pack | Scene | OFF ticks | ON ticks | Comparison |
 |---|---|---:|---:|---|
 | vanilla | dock | 0 | 0 | No matched captures |
 | vanilla | deepwater | 0 | 0 | No matched captures |
-| heavy | dock | 1800 | 0 | No matched captures |
+| heavy | dock | 1800 | 1603 | Same prefix, different lengths |
 | heavy | deepwater | 0 | 0 | No matched captures |
 | all7 | dock | 0 | 0 | No matched captures |
 | all7 | deepwater | 0 | 0 | No matched captures |

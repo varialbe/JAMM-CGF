@@ -211,6 +211,7 @@ public class BenchmarkTests
         Assert.Contains("jamm_trace_n >= 1800", drawEnd);
         Assert.Contains("buffer_md5", drawEnd);
         Assert.Contains("buffer_f64", drawEnd);
+        Assert.Contains("buffer_u32", drawEnd);
     }
 
     [Fact]
