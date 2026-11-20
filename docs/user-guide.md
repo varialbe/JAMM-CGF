@@ -30,6 +30,28 @@ Before replacement, SHA-256-verified originals are retained at `data.win.cgfmm-o
 
 No game files are distributed. Patches, details and logs can contain local game code or strings: do not redistribute them. Static verification checks archives, references and compilation; gameplay still needs testing with the legacy executable.
 
+## Overhauls and their addons
+
+Keep **Settings → Base** pointed at the original August 2023 game. To play an
+overhaul with an addon made specifically for it, import both mods and enable them
+in the same profile. JAMM lists the overhaul first and indents its addons.
+
+If a mod ships with role metadata, JAMM uses that role when you add it to a
+profile. For a legacy archive, open **Advanced mode**, select a profile and
+select the overhaul under **Your mods**. Click **Profile role…** and choose
+**Base**. Then select the addon, choose **Addon**, and pick its base. Use
+**Vanilla** to clear the dependency for an archive made against the original
+game. A **Possible base mod** label is a suggestion. Assign **Base** when the
+mod's author identifies it as an addon foundation.
+
+Run **Check** before installation. Enable the required base if JAMM reports it
+as missing or disabled. The profile can have one enabled base. If JAMM reports
+a version or hash mismatch, use the overhaul release specified by the addon
+author. Vanilla-targeting mods can share a profile with an overhaul, and JAMM
+warns that their changes may overlap.
+
+The same setup is available on the command line. See the [profile commands](cli.md).
+
 ## CLI quick start: six steps
 
 1. Buy/install Cat Goes Fishing on Steam. Keep your game and mod files outside this checkout.
@@ -57,7 +79,8 @@ No game files are distributed. Patches, details and logs can contain local game 
    ```
 
 5. Add your mods (`.win` or a zip containing one nested `data.win`), create their
-   load order, and select the profile. Each import computes its semantic patch:
+   load order, and select the profile. An addon with a declared base gets its
+   patch when JAMM checks or builds the profile.
 
    ```sh
    cgfmm add "$HOME/Cat-Goes-Fishing-Mods/the-abyss-beta.win" --name Abyss

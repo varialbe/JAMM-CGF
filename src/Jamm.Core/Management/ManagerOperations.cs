@@ -20,25 +20,23 @@ public sealed class ManagerOperations(ManagerStore store)
     }
 
     /// <summary>Runs the portable conflict analyzer on the active profile's verified cached patches.</summary>
-    public ConflictReport Check(string profile, CancellationToken cancellationToken = default, Action<string>? progress = null)
+    public ConflictReport Check(string profile, CancellationToken cancellationToken = default, Action<string>? progress = null, bool strict = false)
     {
-        var library = new ModLibrary(store);
         var selection = new ProfileLibrary(store).Get(profile);
         if (selection.EnabledMods.Length == 0) throw new ArgumentException("Enable at least one mod in this profile before checking or installing.");
-        string basePath = store.Config().Base ?? throw new ArgumentException("Choose a legacy base data.win in Settings first.");
-        new BuiltinMods(store).RefreshStale(selection.EnabledMods, progress, cancellationToken);
-        string hash = BuildFiles.Hash(basePath);
-        var patches = selection.EnabledMods.Select(id =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var patch = library.Patch(library.Find(id), progress, cancellationToken);
-            if (patch.Base.Sha256 != hash) throw new InvalidDataException("This profile targets another base. Select its original base in Settings or re-add its mods.");
-            return patch;
-        }).ToArray();
-        cancellationToken.ThrowIfCancellationRequested();
-        var report = ConflictAnalyzer.Analyze(patches, allowSingle: true, cancellationToken: cancellationToken);
+        var loaded = ProfileSelection.Load(store, selection, strict, progress, cancellationToken);
+        var report = loaded.Analyze(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return report;
+    }
+
+    /// <summary>Builds an enabled profile to a new archive without installing it.</summary>
+    public BuildResult Build(string profile, string output, bool dryRun = false, bool noRepack = false, bool strict = false,
+        Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var saved = new ProfileLibrary(store).Get(profile);
+        var selection = ProfileSelection.Load(store, saved, strict, progress, cancellationToken);
+        return ProfileArchiveBuilder.Build(store, saved, selection, output, dryRun, noRepack || saved.NoRepack, progress, cancellationToken);
     }
 
     /// <summary>Recognizes the original or a guarded installed build; unknown game files cannot be replaced.</summary>

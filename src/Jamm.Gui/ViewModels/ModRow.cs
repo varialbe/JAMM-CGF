@@ -76,6 +76,16 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     public string Id { get; } = id;
     /// <summary>User-facing display name.</summary>
     public string Name { get; } = name;
+    /// <summary>Effective role in the active profile, falling back to the package declaration.</summary>
+    public string ProfileRole { get; internal set; } = "none";
+    /// <summary>Library ID or package ID of this addon's ancestor.</summary>
+    public string? BaseId { get; internal set; }
+    /// <summary>Role label or an overhaul suggestion shown alongside the mod.</summary>
+    public string RoleLine { get; internal set; } = "Vanilla";
+    /// <summary>Whether this row has a role or suggestion to show in the profile.</summary>
+    public bool ShowRole => RoleLine != "Vanilla";
+    /// <summary>Extra left margin for addons in profile lists.</summary>
+    public Avalonia.Thickness ProfileIndent => new(ProfileRole == "addon" ? 20 : 0, 0, 0, 0);
     /// <summary>Base compatibility description.</summary>
     public string Badge { get; } = badge;
     /// <summary>Readable archive size and cache state.</summary>

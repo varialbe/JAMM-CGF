@@ -1,5 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Jamm.Gui.ModListRow" KeyboardNavigation.TabNavigation="Continue">
-  <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+  <Border Margin="{Binding ProfileIndent}" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
     <StackPanel>
       <Grid MinHeight="48">
         <Button x:Name="HeaderButton" Background="Transparent" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12,8,76,8" Click="HeaderClick" KeyDown="HeaderKeyDown" AutomationProperties.Name="{Binding Name}">
@@ -11,6 +11,7 @@
                   <TextBlock Text="ModKit" FontSize="10" FontWeight="Bold" Foreground="#93C5FD"/>
                 </Border>
               </WrapPanel>
+              <TextBlock Text="{Binding RoleLine}" IsVisible="{Binding ShowRole}" Classes="muted" FontSize="12" TextWrapping="Wrap"/>
               <TextBlock Text="● pending" Foreground="#D6A500" FontSize="12" IsVisible="{Binding IsPending}"/>
             </StackPanel>
             <TextBlock Grid.Column="1" x:Name="Chevron" Text="⌄" VerticalAlignment="Center"/>

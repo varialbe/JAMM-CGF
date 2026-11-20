@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Jamm.Core;
 using Jamm.Core.Building;
+using Jamm.Core.Management;
 using Jamm.Core.Merging;
 using Jamm.Core.Patching;
 
@@ -9,17 +10,19 @@ namespace Jamm.Cli;
 
 internal static class CheckCommand
 {
-    internal static int Run(string[] arguments)
+    internal static int Run(string[] arguments, string? dataDirectory = null)
     {
         List<string> paths = [];
-        bool assetLiterals = false;
+        bool assetLiterals = false, strict = false;
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         for (int i = 0; i < arguments.Length; i++)
         {
             string arg = arguments[i];
             if (arg == "--verbose") continue;
             if (arg == "--asset-literals") { assetLiterals = true; continue; }
-            if (arg is "--base" or "--json" or "--details" or "--patches-dir")
+            if (arg == "--strict")
+            { if (strict) throw new ArgumentException("--strict was given twice."); strict = true; continue; }
+            if (arg is "--base" or "--json" or "--details" or "--patches-dir" or "--profile")
             {
                 if (++i == arguments.Length || arguments[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{arg} needs a value.");
                 if (!options.TryAdd(arg, arguments[i])) throw new ArgumentException($"{arg} was given twice.");
@@ -27,6 +30,13 @@ internal static class CheckCommand
             else if (arg.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"Unknown option '{arg}'.");
             else paths.Add(arg);
         }
+        if (options.TryGetValue("--profile", out string? profile))
+        {
+            if (paths.Count > 0 || assetLiterals || options.Keys.Any(key => key is not "--profile" and not "--json" and not "--details"))
+                throw new ArgumentException("Use --profile with --json, --details or --strict.");
+            return CheckProfile(profile, options.GetValueOrDefault("--json"), options.GetValueOrDefault("--details"), strict, dataDirectory);
+        }
+        if (strict) throw new ArgumentException("--strict requires --profile <name>.");
         if (paths.Count < (assetLiterals ? 1 : 2) || !options.TryGetValue("--base", out string? basePath))
             throw new ArgumentException("check needs at least two mods or patches and --base <data.win>.");
         List<string> inputs = [basePath, .. paths];
@@ -106,12 +116,31 @@ internal static class CheckCommand
         return report.ExitCode;
     }
 
+    private static int CheckProfile(string name, string? output, string? details, bool strict, string? dataDirectory)
+    {
+        var timer = Stopwatch.StartNew();
+        var store = new ManagerStore(dataDirectory);
+        var profiles = new ProfileLibrary(store);
+        var group = profiles.Group(profiles.Get(name));
+        string[] protectedPaths = [Path.Combine(store.Root, "config.json"), Path.Combine(store.Root, "profiles", name + ".json")];
+        if (store.Config().Base is { } vanilla) protectedPaths = [.. protectedPaths, vanilla];
+        if (output is not null) OutputFile.Validate(output, protectedPaths);
+        var report = new ManagerOperations(store).Check(name, progress: Console.Error.WriteLine, strict: strict);
+        if (output is not null)
+            OutputFile.Write(output, JsonSerializer.Serialize(new { elapsedSeconds = timer.Elapsed.TotalSeconds, group, report }, JsonOptions) + "\n", protectedPaths);
+        ManagementCommand.PrintGroup(group);
+        Print(report, timer.Elapsed.TotalSeconds, grouped: true);
+        if (details is not null) Details(report, [], details);
+        return report.ExitCode;
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private static bool IsPatch(string path) => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
 
-    private static void Print(ConflictReport report, double elapsed)
+    private static void Print(ConflictReport report, double elapsed, bool grouped = false)
     {
-        Console.WriteLine("Load order (later mod wins by default when building):");
+        Console.WriteLine(grouped ? "Patch summary in profile order (later mods win within each group):"
+            : "Load order (later mod wins by default when building):");
         for (int i = 0; i < report.LoadOrder.Count; i++)
         {
             var mod = report.LoadOrder[i];
@@ -119,9 +148,9 @@ internal static class CheckCommand
         }
         string[] severities = ["CONFLICT", "AUTO", "INFO", "WARNING"];
         bool IsHunk(ConflictItem f) => f.Family == "code" && f.Kind is "code" or "list" or "addition" or "removal"
-            && report.CodeMerges.ContainsKey(f.Asset);
+            && report.CodeMerges.ContainsKey(f.CodeMergeKey);
         var rows = report.Findings.GroupBy(f => (Severity: IsHunk(f) ? "" : f.Severity,
-            f.Family, f.Asset, Kind: IsHunk(f) ? "code hunks" : f.Kind)).ToArray();
+            f.Family, f.Asset, f.ResolutionPrefix, Kind: IsHunk(f) ? "code hunks" : f.Kind)).ToArray();
         foreach (string status in severities)
         {
             Console.WriteLine($"\n{status} ({report.Counts[status]} findings)");
@@ -130,9 +159,9 @@ internal static class CheckCommand
             {
                 var item = group.First();
                 string message = group.Key.Kind == "code hunks"
-                    ? $"{report.CodeMerges[item.Asset].Hunks.Count} hunks ({report.CodeMerges[item.Asset].Hunks.Count(h => h.Status == "CONFLICT")} conflicts); use --details for all versions."
+                    ? $"{report.CodeMerges[item.CodeMergeKey].Hunks.Count} hunks ({report.CodeMerges[item.CodeMergeKey].Hunks.Count(h => h.Status == "CONFLICT")} conflicts); use --details for all versions."
                     : group.Count() > 1 ? $"{group.Count()} findings; use --details for all versions." : item.Message;
-                Console.WriteLine($"{group.Key.Kind,-12} {item.Family,-14} {item.Asset,-48} {string.Join(" + ", group.SelectMany(f => f.Mods).Distinct())}: {message}");
+                Console.WriteLine($"{group.Key.Kind,-12} {item.Family,-14} {item.CodeMergeKey,-48} {string.Join(" + ", group.SelectMany(f => f.Mods).Distinct())}: {message}");
             }
         }
         Console.WriteLine($"\n{string.Join("; ", report.Counts.Select(c => $"{c.Key}: {c.Value}"))}; elapsed {elapsed:F3} s.");
@@ -141,7 +170,7 @@ internal static class CheckCommand
 
     private static void Details(ConflictReport report, IReadOnlyList<ModPatch> patches, string asset)
     {
-        var findings = report.Findings.Where(f => f.Asset == asset).ToArray();
+        var findings = report.Findings.Where(f => f.Asset == asset || f.CodeMergeKey == asset).ToArray();
         Console.WriteLine($"\nDetails: {asset}");
         if (report.CodeMerges.TryGetValue(asset, out var code))
         {

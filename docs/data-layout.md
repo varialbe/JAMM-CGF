@@ -12,6 +12,7 @@ cgfmm/
   mods/<mod-id>/data.win
   mods/<mod-id>/mod.json
   patches/<mod-id>.cgfmm-patch.json
+  patches/<mod-id>/<ancestor-sha256>-<mod-sha256>.json
   profiles/<name>.json
   backups/<base-sha256>.win
   builds/<unique-build-id>.win
@@ -37,12 +38,18 @@ remove affected profiles/mods and re-add against the new base, or select their
 original base again. Patches are not silently retargeted.
 
 `mod.json` records `id`, `name`, `sourceFileName`, `sha256`, `addedUtc`,
-`baseSha256`, `gen8Timestamp`, `gmVersion`, and `bytecode`. An import stages the
-archive, generates its patch against the configured base, and publishes the
-library entry only after success. `.zip` imports validate every entry, reject
+`baseSha256`, `gen8Timestamp`, `gmVersion`, and `bytecode`. A vanilla-targeting
+import stages the archive and generates a patch against the configured base
+before publishing the library entry. `.zip` imports validate every entry, reject
 absolute/parent-traversal paths and symbolic links, and copy only the single
 `data.win`, including one inside nested folders. Ambiguous/missing `data.win`
 files are errors. Executables and other zip contents are never extracted or run.
+
+Imported role metadata is stored in `role`, alongside the optional `packageId`
+and package `version`. A declared addon gets a separate patch cache keyed by
+both its own archive hash and its base mod's original archive hash. A base
+replacement makes JAMM compute the delta against the new archive. The same
+cache layout supports legacy addons assigned in profiles.
 
 `profiles/<name>.json` contains `name`, ordered `mods` (IDs), and `resolutions`.
 Later participating mods win overlaps by default; disjoint changes combine.
@@ -54,11 +61,17 @@ display names. `keep-both` has Phase 3's insertion-only restriction. Code hunk k
 be removed while any profile references it. Deleting the active profile clears
 the selection; it does not alter the installed game or delete backups.
 
+The optional `roles` object maps library IDs to profile overrides. Each value
+contains `role` (`base`, `addon` or `none`). An addon override also contains
+the base library ID in `base` and can retain the package's `baseVersion` and
+`baseSha256` constraints. Addon conflict keys begin with `addons/` so vanilla
+and addon conflicts on the same asset can have independent choices.
+
 `config.json` uses these CLI keys (paths are stored absolute):
 
 | CLI key | JSON field | Default / purpose |
 | --- | --- | --- |
-| `base` | `base` | Required, read-only original archive used for all patches/builds |
+| `base` | `base` | Required, read-only vanilla ancestor and original archive for backups |
 | `gameDir` | `gameDir` | Required, complete legacy game folder to install/run |
 | `wine.mode` | `wine.mode` | `wine`; alternatively `proton` or `proton-flatpak` |
 | `wine.prefix` | `wine.prefix` | Optional `WINEPREFIX`; otherwise runner default |

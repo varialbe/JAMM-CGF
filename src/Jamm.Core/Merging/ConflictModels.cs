@@ -13,7 +13,18 @@ public sealed record FieldConflict(string Path, [property: JsonIgnore(Condition 
 /// <summary>A deterministic finding. Kinds distinguish list/index, binary, deletion and reference problems.</summary>
 public sealed record ConflictItem(string Severity, string Kind, string Family, string Asset,
     IReadOnlyList<string> Mods, string Message, IReadOnlyList<FieldConflict>? Fields = null,
-    string? SuggestedResolution = null, IReadOnlyList<string>? Sources = null);
+    string? SuggestedResolution = null, IReadOnlyList<string>? Sources = null)
+{
+    /// <summary>Ancestor group qualifier for profile conflicts.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ResolutionPrefix { get; init; }
+    /// <summary>Profile resolution key for this asset.</summary>
+    [JsonIgnore]
+    public string ResolutionKey => $"{ResolutionPrefix}{Family}/{Asset}";
+    /// <summary>Key of the code merge in the enclosing report.</summary>
+    [JsonIgnore]
+    public string CodeMergeKey => ResolutionPrefix + Asset;
+}
 
 /// <summary>Per-mod summary in the original load order.</summary>
 public sealed record ModSummary(string Name, string FileName, string Sha256, int Added, int Changed, int Removed, int Warnings);
