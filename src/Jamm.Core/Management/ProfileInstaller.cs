@@ -27,9 +27,12 @@ public sealed class ProfileInstaller(ManagerStore store)
         string hash = BuildFiles.Hash(config.Base);
         if (inputs.Any(i => i.Patch.Base.Sha256 != hash))
             throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
+        // Existing Perf installations need a rebuild even when the bundled input archive is unchanged.
+        string builder = profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal)
+            ? "menu-layout-3-fish-grid-1" : "menu-layout-3";
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
-            Builder = inputs.Length > 0 && !profile.NoRepack ? $"menu-layout-3/{TextureRepacker.Revision}" : "menu-layout-3",
+            Builder = inputs.Length > 0 && !profile.NoRepack ? $"{builder}/{TextureRepacker.Revision}" : builder,
             InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
