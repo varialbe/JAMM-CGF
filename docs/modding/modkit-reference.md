@@ -33,6 +33,7 @@ my-mod/
   * Boats: object `jmk_<id>_<key>`, world sprite `jmk_<id>_<key>_spr`, shop card `jmk_<id>_<key>_card`.
   * Hats: object `jmk_<id>_<key>`, sprite `jmk_<id>_<key>_spr`, optional hook `jmk_<id>_<key>_effect`.
   * Upgrades: icon sprite `jmk_<id>_<key>_icon`, optional hooks `jmk_<id>_<key>_{apply,step}`.
+  * Room objects use `jmk_<id>_object_<key>`.
   * Init script: `jamm_init_<id>` when the package registers fish or items (with hyphens replaced by underscores).
 * **Standalone placeholders**: `ModKitBuilder` adds `return -1;` placeholder scripts only for the `jamm_*_register` functions the package actually calls, so the built `.win` verifies standalone and merges with zero conflicts when JAMM replaces them at merge time.
 
@@ -52,7 +53,16 @@ my-mod/
 | `hats` | array | No | `[]` | Custom hat (`Gear`) definitions. |
 | `upgrades` | array | No | `[]` | Custom rod upgrade definitions. |
 | `areas` | array | No | `[]` | [Room areas and follow anchors](areas.md). |
+| `objects` | array | No | `[]` | Custom room objects with optional event hooks. |
 | `sprites` | array | No | `[]` | [Build-time sprite recipes](#sprite-recipes). |
+
+---
+
+## `objects` entries
+
+Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step` and `hooks.draw` accept package-relative `.gml` files and run as the object's Create, normal Step and Draw events. A Draw hook can call `draw_self()` to include the object's assigned sprite.
+
+Place the object by referring to `jmk_<id>_object_<key>` in an area's `pieces` or `lights`. Room objects have no parent and are recreated with the room. An area can use a colocated controller for an animation or trigger in [the Silo tutorial](../../examples/modkit/silo/README.md).
 
 ---
 
@@ -261,6 +271,7 @@ Set a fish's `sprite` to `"scute-fish"` or reference the key from an area's `ope
 | `rotation`, `flip` | Image rotation in clockwise degrees and flip direction (`none`, `x`, `y`, `both`). Flipping comes before scaling and rotation. |
 | `paletteMap` | Exact RGB replacement pairs, for example `{"#fece52":"#67a889"}`. Alpha is preserved. |
 | `hueShift`, `tint` | Hue rotation in degrees, then a `#RRGGBB` channel multiplier. Palette replacements occur first. |
+| `tones` | Flat palette with two or three `colors` and one ascending `cutoffs` value between each pair. Cutoffs use integer luminance from 1 to 255. A pixel at a cutoff uses the next color. Applied after the other color and geometry transforms, with alpha preserved. |
 | `opacity`, `z` | Alpha multiplier from 0 to 1 and integer stacking order. Higher Z is drawn later. Equal Z follows manifest order. |
 
 `modkit check` validates the recipe fields and package paths. `modkit build` also validates referenced base frames and crop sizes against the selected archive.

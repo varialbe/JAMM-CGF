@@ -19,7 +19,8 @@ public sealed class ModKitCompositionTests
                 [{"from":"spr_donor","crop":{"x":0,"y":0,"w":1,"h":2},"x":2,"y":1,"scaleX":2,"paletteMap":{"#ff0000":"#2255aa"},"z":0},
                  {"file":"fin.svg","x":2,"y":1,"z":1},
                  {"from":"spr_donor","x":2,"y":1,"opacity":0,"z":1}],
-                [{"from":"spr_donor","crop":{"x":0,"y":0,"w":1,"h":1},"x":1,"y":3,"tint":"#4400ff"}]
+                [{"from":"spr_donor","crop":{"x":0,"y":0,"w":1,"h":1},"x":1,"y":3,"tint":"#4400ff"},
+                 {"from":"spr_donor","x":2,"y":2,"opacity":0.5,"tones":{"colors":["#263348","#8fb2de"],"cutoffs":[51]} }]
               ]}
             ]}
             """);
@@ -36,6 +37,7 @@ public sealed class ModKitCompositionTests
         Assert.Equal(new byte[] { 0, 255, 0, 255 }, Color(first, 3, 1));
         Assert.Equal(0, Color(first, 0, 0)[3]);
         Assert.Equal(new byte[] { 68, 0, 0, 255 }, Color(second, 1, 3));
+        Assert.Equal(new byte[] { 143, 178, 222, 128 }, Color(second, 2, 2));
         ModKitBuilder.Apply(data, ModKitPackage.Load(package));
         var sprite = data.Sprites.ByName("jmk_kit_recipe_fish")!;
         Assert.Equal(2, sprite.Textures.Count);
@@ -47,6 +49,20 @@ public sealed class ModKitCompositionTests
             using var pixels = image.GetPixels();
             return pixels.GetArea(x, y, 1, 1)!;
         }
+    }
+
+    [Theory]
+    [InlineData("[90, 45]")]
+    [InlineData("[90, \"45\"]")]
+    [InlineData("[90]")]
+    public void ToneCutoffsMustBeAscendingAndMatchThePalette(string values)
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        string package = temp.Package($$$"""
+            {"id":"kit","name":"Palette Test","sprites":[{"key":"fish","width":8,"height":8,
+            "compose":[{"from":"spr_donor","tones":{"colors":["#112233","#445566","#778899"],"cutoffs":{{{values}}}}}]}]}
+            """);
+        Assert.Contains("tones", Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(package)).Message);
     }
 
     [Theory]

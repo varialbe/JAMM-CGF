@@ -45,16 +45,19 @@ public sealed class ModKitAreaTests
             {"id":"area-test","name":"Area test",
              "areas":[{"id":"reef","bounds":{"x":30,"y":1600,"w":80,"h":100},
                        "anchor":{"mode":"{{{mode}}}"{{{anchor}}}},
-                       "pieces":[{"object":"Rock","x":13,"y":25,"scaleX":-1.5,"rotation":90}],
+                       "pieces":[{"object":"Rock","x":13,"y":25,"scaleX":-1.5,"rotation":90},
+                                 {"object":"jmk_area_test_object_effect","x":10,"y":20}],
                        "lights":[{"object":"Lamp","x":35,"y":48,"set":{"image_alpha":0.35}}]
                        {{{opens}}}}],
              "sprites":[{"key":"swimmer","width":16,"height":16,"compose":[{"file":"part.svg"}]}],
+             "objects":[{"key":"effect","depth":-10,"hooks":{"create":"effect.gml","step":"effect.gml","draw":"effect.gml"}}],
              "fish":[{"key":"swimmer","name":"Swimmer","size":"small","sprite":"swimmer",
                       "spawn":{"area":"reef","count":10,"within":{"x":3,"y":5,"w":50,"h":70} } }]}
             """);
         File.WriteAllText(Path.Combine(package, "part.svg"), """
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><ellipse cx="7" cy="7" rx="5" ry="2" fill="#335577"/></svg>
             """);
+        File.WriteAllText(Path.Combine(package, "effect.gml"), "animation_frame = 1;");
         ModKitBuilder.Build(package, basePath, sourcePath);
         using var originalFile = GameFileLoader.Load(basePath);
         using var sourceFile = GameFileLoader.Load(sourcePath);
@@ -104,6 +107,11 @@ public sealed class ModKitAreaTests
         Assert.Equal(90, rock.Rotation);
         var lamp = Assert.Single(world.GameObjects, i => i.X == left + 35 && i.Y == top + 48);
         Assert.NotNull(lamp.CreationCode);
+        var effect = Assert.Single(world.GameObjects, i => i.ObjectDefinition.Name.Content == "jmk_area_test_object_effect");
+        Assert.Equal((left + 10, top + 20), (effect.X, effect.Y));
+        Assert.Equal(-10, effect.ObjectDefinition.Depth);
+        foreach (string type in new[] { "Create", "Step", "Draw" })
+            Assert.NotNull(result.Data.Code.ByName($"gml_Object_jmk_area_test_object_effect_{type}_0"));
 
         var solids = world.GameObjects.Select(i => SolidAt.Create(i)).OfType<SolidAt>().ToArray();
         var swimmers = world.GameObjects.Where(i => i.ObjectDefinition.Name.Content == "jmk_area_test_swimmer").ToArray();

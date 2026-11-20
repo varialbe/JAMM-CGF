@@ -12,10 +12,17 @@ namespace Jamm.Core.ModKit;
 /// <summary>A pixel rectangle in an untrimmed source frame.</summary>
 public sealed record ModKitCrop(int X, int Y, int W, int H);
 
+/// <summary>Maps source luminance ranges to a small set of flat RGB swatches.</summary>
+public sealed record ModKitSpriteTones(IReadOnlyList<int> Colors, IReadOnlyList<int> Cutoffs);
+
 /// <summary>A layer sampled from the base archive or an original package asset.</summary>
 public sealed record ModKitSpriteLayer(string? From, string? File, int Frame, ModKitCrop? Crop,
     int X, int Y, double ScaleX, double ScaleY, double Rotation, string Flip,
-    int? Tint, double HueShift, IReadOnlyDictionary<int, int> PaletteMap, double Opacity, int Z);
+    int? Tint, double HueShift, IReadOnlyDictionary<int, int> PaletteMap, double Opacity, int Z)
+{
+    /// <summary>Optional flat palette applied to the transformed layer while retaining its alpha.</summary>
+    public ModKitSpriteTones? Tones { get; init; }
+}
 
 /// <summary>A fixed-size sprite canvas with an ordered composition for each frame.</summary>
 public sealed record ModKitSprite(string Key, int Width, int Height, int[]? Origin,
@@ -80,7 +87,23 @@ public static partial class ModKitPackage
                     ? pair.Value.GetString() : null, $"{path}.paletteMap")))
                     throw Error($"{path}.paletteMap", $"Source color '{pair.Name}' is listed twice.");
         return new(from, file, frame, crop, x, y, sx, sy, rotation, flip, tint, hue, palette,
-            OptionalDouble(obj, "opacity", $"{path}.opacity", 1, 0, 1), OptionalInt(obj, "z", $"{path}.z", 0));
+            OptionalDouble(obj, "opacity", $"{path}.opacity", 1, 0, 1), OptionalInt(obj, "z", $"{path}.z", 0))
+        {
+            Tones = TryGetNonNull(obj, "tones", out var tones) ? ParseTones(tones, $"{path}.tones") : null
+        };
+    }
+
+    private static ModKitSpriteTones ParseTones(JsonElement value, string path)
+    {
+        var obj = ExpectObject(value, path);
+        var colors = ParseArray(obj, "colors", $"{path}.colors", (color, at) =>
+            ParseColor(color.ValueKind == JsonValueKind.String ? color.GetString() : null, at));
+        var cutoffs = ParseArray(obj, "cutoffs", $"{path}.cutoffs", (cutoff, at) =>
+            cutoff.ValueKind == JsonValueKind.Number && cutoff.TryGetInt32(out int number) && number is >= 1 and <= 255
+                ? number : throw Error(at, "Use an integer from 1 to 255."));
+        if (colors.Count is not (2 or 3) || cutoffs.Count != colors.Count - 1 || (cutoffs.Count == 2 && cutoffs[0] >= cutoffs[1]))
+            throw Error(path, "Choose two or three colors and one ascending cutoff between each pair.");
+        return new(colors, cutoffs);
     }
 
     private static int ParseColor(string? value, string path) =>
@@ -194,6 +217,25 @@ internal sealed class ModKitComposition(UndertaleData data) : IDisposable
             image.Rotate(layer.Rotation);
             image.ResetPage();
         }
+        if (layer.Tones is { } tones)
+            ApplyTones(image, tones);
+    }
+
+    private static void ApplyTones(MagickImage image, ModKitSpriteTones tones)
+    {
+        image.ColorType = ColorType.TrueColorAlpha;
+        using var pixels = image.GetPixels();
+        byte[] rgba = pixels.GetArea(0, 0, image.Width, image.Height)!;
+        for (int i = 0; i < rgba.Length; i += 4)
+        {
+            int luminance = (2126 * rgba[i] + 7152 * rgba[i + 1] + 722 * rgba[i + 2] + 5000) / 10000;
+            int index = luminance < tones.Cutoffs[0] ? 0 : tones.Cutoffs.Count == 2 && luminance >= tones.Cutoffs[1] ? 2 : 1;
+            int color = tones.Colors[index];
+            rgba[i] = (byte)(color >> 16);
+            rgba[i + 1] = (byte)(color >> 8);
+            rgba[i + 2] = (byte)color;
+        }
+        pixels.SetArea(0, 0, image.Width, image.Height, rgba.AsSpan());
     }
 
     private static void EditPixels(MagickImage image, IReadOnlyDictionary<int, int>? palette, int? tint, double opacity)

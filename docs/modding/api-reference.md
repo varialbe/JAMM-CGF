@@ -43,7 +43,7 @@ Avoid naming your own assets or INI sections with these prefixes:
 * **`jamm_`** — reserved for JAMM scripts (`jamm_init_*`, `jamm_api_init`, `jamm_*_register`, `jamm_item_find`, `jamm_upgrade_stacks`, `jamm_items_*`, `jamm_catalog_*`, `jamm_hud_*`) and JAMM instance variables (`jamm_key`, `jamm_base_count`, `jamm_api_done`, `jamm_upg`, etc.).
 * **`obj_jamm_`** — reserved for JAMM runtime controller objects (`obj_jamm_api`, `obj_jamm_console`, etc.).
 * **`jmk_`** — reserved for ModKit-generated sprites, objects, and hook scripts (`jmk_<id>_<key>…`).
-* **`JAMM_`** — reserved for JAMM save INI sections (`[JAMM_Items]`, `[JAMM_Catalog]`).
+* **`JAMM_`** — reserved for JAMM save INI sections such as `[JAMM_Items]`, `[JAMM_Catalog]` and `[JAMM_Areas]`.
 
 ## Automatic Asset Relinking Across Mods
 

@@ -69,7 +69,11 @@ public sealed class SiloAreaRealTests
                 var hatch = Assert.Single(room.GameObjects, i => i.ObjectDefinition.Name.Content == "MissileSilo");
                 Assert.Equal(expectedAnchor, (hatch.X, hatch.Y));
                 Assert.NotNull(hatch.CreationCode);
-                Assert.Equal(9, room.GameObjects.Count(i => i.ObjectDefinition.Name.Content.StartsWith("jmk_jamm_silo_", StringComparison.Ordinal)));
+                var overlay = Assert.Single(room.GameObjects, i => i.ObjectDefinition.Name.Content == "jmk_jamm_silo_object_hatch");
+                Assert.Equal(expectedAnchor, (overlay.X, overlay.Y));
+                Assert.Equal(9, room.GameObjects.Count(i => i.ObjectDefinition.Name.Content.StartsWith("jmk_jamm_silo_", StringComparison.Ordinal)
+                    && i != overlay));
+                Assert.Equal(2, merged.Data.Sprites.ByName("jmk_jamm_silo_recipe_silo_doors")!.Textures.Count);
             }
             File.Delete(output);
         }

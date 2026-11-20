@@ -1,7 +1,7 @@
 {
   "id": "jamm-silo",
   "name": "The Silo",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "JAMM",
   "description": "Fish the flooded launch shaft beneath the Missile Silo in NewWorld and discover four deep-water species.",
   "areas": [
@@ -25,7 +25,7 @@
         "y": 11570,
         "sprite": "open-silo",
         "set": {
-          "canOpen": true,
+          "canOpen": false,
           "image_index": 0,
           "image_speed": 0
         }
@@ -78,6 +78,11 @@
           "scaleX": -0.54,
           "scaleY": 0.58,
           "rotation": 20
+        },
+        {
+          "object": "jmk_jamm_silo_object_hatch",
+          "x": 420,
+          "y": 150
         }
       ],
       "lights": [
@@ -91,10 +96,11 @@
           "set": {
             "add_blend": 4162107,
             "sub_blend": 2369312,
-            "image_alpha": 0.54,
+            "image_alpha": 0,
             "image_scale": 0.8,
             "image_xscale": 0.8,
-            "image_yscale": 0.8
+            "image_yscale": 0.8,
+            "silo_glow_alpha": 0.54
           }
         },
         {
@@ -107,10 +113,11 @@
           "set": {
             "add_blend": 2648383,
             "sub_blend": 2369312,
-            "image_alpha": 0.52,
+            "image_alpha": 0,
             "image_scale": 1.05,
             "image_xscale": 1.05,
-            "image_yscale": 1.05
+            "image_yscale": 1.05,
+            "silo_glow_alpha": 0.52
           }
         },
         {
@@ -123,10 +130,11 @@
           "set": {
             "add_blend": 3301669,
             "sub_blend": 2369312,
-            "image_alpha": 0.66,
+            "image_alpha": 0,
             "image_scale": 1.43,
             "image_xscale": 1.43,
-            "image_yscale": 1.43
+            "image_yscale": 1.43,
+            "silo_glow_alpha": 0.66
           }
         },
         {
@@ -139,330 +147,161 @@
           "set": {
             "add_blend": 3301426,
             "sub_blend": 2369312,
-            "image_alpha": 0.58,
+            "image_alpha": 0,
             "image_scale": 1.2,
             "image_xscale": 1.2,
-            "image_yscale": 1.2
+            "image_yscale": 1.2,
+            "silo_glow_alpha": 0.58
           }
         }
       ]
     }
   ],
+  "objects": [
+    {
+      "key": "hatch",
+      "depth": -10,
+      "hooks": {
+        "create": "hooks/hatch_create.gml",
+        "step": "hooks/hatch_step.gml",
+        "draw": "hooks/hatch_draw.gml"
+      }
+    }
+  ],
   "sprites": [
+    {
+      "key": "veyl",
+      "width": 106,
+      "height": 76,
+      "origin": [
+        24,
+        42
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s17",
+          "x": 7,
+          "y": 4,
+          "scaleX": 0.94,
+          "scaleY": 0.85,
+          "tones": {
+            "colors": [
+              "#596a80",
+              "#8fb2de",
+              "#75a1d5"
+            ],
+            "cutoffs": [
+              76,
+              142
+            ]
+          }
+        },
+        {
+          "file": "parts/pits.svg",
+          "x": 17,
+          "y": 37
+        }
+      ]
+    },
     {
       "key": "radik",
       "width": 222,
       "height": 112,
       "origin": [
-        40,
+        39,
         63
       ],
       "compose": [
         {
-          "from": "spr_fish_s17",
-          "crop": {
-            "x": 58,
-            "y": 9,
-            "w": 37,
-            "h": 60
-          },
-          "x": 154,
-          "y": 28,
-          "scaleX": 1.55,
-          "scaleY": 1.24,
-          "hueShift": 50,
-          "tint": "#a2dc8a",
-          "rotation": -9
-        },
-        {
-          "from": "spr_powerfin",
-          "crop": {
-            "x": 105,
-            "y": 14,
-            "w": 175,
-            "h": 132
-          },
-          "x": 62,
-          "y": 22,
-          "scaleX": 0.73,
-          "scaleY": 0.65,
-          "hueShift": 42,
-          "tint": "#97c28c"
-        },
-        {
-          "from": "spr_geiger",
-          "crop": {
-            "x": 5,
-            "y": 58,
-            "w": 311,
-            "h": 226
-          },
-          "x": 5,
-          "y": 13,
-          "scaleX": 0.34,
-          "scaleY": 0.4,
-          "tint": "#bddfa9"
-        },
-        {
-          "from": "spr_geiger",
-          "crop": {
-            "x": 125,
-            "y": 140,
-            "w": 116,
-            "h": 91
-          },
-          "x": 43,
-          "y": 42,
-          "scaleX": 0.45,
-          "scaleY": 0.48,
-          "tint": "#bddfa9"
+          "from": "spr_fish_m20",
+          "x": 7,
+          "y": 3,
+          "scaleX": 0.92,
+          "scaleY": 1.02,
+          "tones": {
+            "colors": [
+              "#507c3a",
+              "#76a260",
+              "#9dc987"
+            ],
+            "cutoffs": [
+              142,
+              187
+            ]
+          }
         },
         {
           "file": "parts/scutes.svg",
-          "x": 94,
-          "y": 37,
-          "scaleX": 1.32,
-          "scaleY": 1.25
-        }
-      ]
-    },
-    {
-      "key": "veyl",
-      "width": 112,
-      "height": 74,
-      "origin": [
-        25,
-        43
-      ],
-      "compose": [
-        {
-          "from": "spr_underfin",
-          "crop": {
-            "x": 272,
-            "y": 24,
-            "w": 89,
-            "h": 130
-          },
-          "x": 68,
-          "y": 24,
-          "scaleX": 0.44,
-          "scaleY": 0.34,
-          "tint": "#c9a9da"
-        },
-        {
-          "from": "spr_fish_s1",
-          "crop": {
-            "x": 0,
-            "y": 0,
-            "w": 57,
-            "h": 72
-          },
-          "x": 5,
-          "y": 4,
-          "scaleX": 1.26,
-          "scaleY": 0.9,
-          "hueShift": 42,
-          "tint": "#e6c7dd"
-        },
-        {
-          "from": "spr_fish_s5",
-          "crop": {
-            "x": 55,
-            "y": 36,
-            "w": 42,
-            "h": 36
-          },
-          "x": 51,
-          "y": 38,
-          "scaleX": 0.62,
-          "scaleY": 0.55,
-          "hueShift": 100,
-          "tint": "#beabd7",
-          "rotation": 12
-        },
-        {
-          "file": "parts/pits.svg",
-          "x": 11,
-          "y": 43,
-          "scaleX": 1.14,
-          "scaleY": 1.11
+          "x": 73,
+          "y": 31
         }
       ]
     },
     {
       "key": "ferrex",
-      "width": 380,
-      "height": 136,
+      "width": 445,
+      "height": 159,
       "origin": [
-        47,
-        66
+        79,
+        74
       ],
       "compose": [
         {
-          "from": "spr_noxius",
-          "crop": {
-            "x": 119,
-            "y": 75,
-            "w": 57,
-            "h": 85
-          },
-          "x": 285,
-          "y": 32,
-          "scaleX": 1.57,
-          "scaleY": 1.08,
-          "hueShift": -6,
-          "tint": "#d5b288"
-        },
-        {
           "from": "spr_magmer",
-          "crop": {
-            "x": 278,
-            "y": 110,
-            "w": 379,
-            "h": 200
-          },
-          "x": 112,
-          "y": 33,
-          "scaleX": 0.58,
-          "scaleY": 0.42,
-          "tint": "#e2aa88"
+          "x": 6,
+          "y": 0,
+          "scaleX": 0.55,
+          "scaleY": 0.36,
+          "tones": {
+            "colors": [
+              "#843131",
+              "#9a4040",
+              "#fc7e00"
+            ],
+            "cutoffs": [
+              72,
+              115
+            ]
+          }
         },
         {
-          "from": "spr_magmer",
-          "crop": {
-            "x": 29,
-            "y": 40,
-            "w": 304,
-            "h": 244
-          },
-          "x": 5,
-          "y": 18,
-          "scaleX": 0.45,
-          "scaleY": 0.43,
-          "tint": "#d4a47f"
-        },
-        {
-          "from": "spr_fish_l9",
-          "crop": {
-            "x": 137,
-            "y": 130,
-            "w": 104,
-            "h": 64
-          },
-          "x": 142,
-          "y": 85,
-          "scaleX": 0.95,
-          "scaleY": 0.57,
-          "hueShift": -81,
-          "tint": "#ecb283",
-          "rotation": -11
-        },
-        {
-          "from": "spr_powerfin",
-          "crop": {
-            "x": 40,
-            "y": 80,
-            "w": 79,
-            "h": 28
-          },
-          "x": 48,
-          "y": 60,
-          "scaleX": 0.3,
-          "scaleY": 0.34,
-          "hueShift": -23,
-          "tint": "#e7b881"
+          "file": "parts/gills.svg",
+          "x": 93,
+          "y": 51
         }
       ]
     },
     {
       "key": "garrusk",
-      "width": 714,
-      "height": 296,
+      "width": 660,
+      "height": 304,
       "origin": [
-        126,
-        153
+        114,
+        162
       ],
       "compose": [
         {
-          "from": "spr_fish_l9",
-          "crop": {
-            "x": 252,
-            "y": 42,
-            "w": 80,
-            "h": 152
-          },
-          "x": 544,
-          "y": 35,
-          "scaleX": 1.97,
-          "scaleY": 1.51,
-          "hueShift": 30,
-          "tint": "#83aaa9",
-          "rotation": 8
-        },
-        {
           "from": "spr_fish_h1",
-          "crop": {
-            "x": 167,
-            "y": 0,
-            "w": 373,
-            "h": 305
-          },
-          "x": 242,
-          "y": 0,
-          "scaleX": 0.94,
-          "scaleY": 0.96,
-          "tint": "#7c9fa3"
+          "x": 10,
+          "y": 1,
+          "scaleX": 0.89,
+          "scaleY": 0.97,
+          "tones": {
+            "colors": [
+              "#9b9985",
+              "#bcb3a2",
+              "#dcd2bb"
+            ],
+            "cutoffs": [
+              125,
+              155
+            ]
+          }
         },
         {
-          "from": "spr_fish_h2",
-          "crop": {
-            "x": 0,
-            "y": 51,
-            "w": 480,
-            "h": 320
-          },
-          "x": 0,
-          "y": 33,
-          "scaleX": 0.8,
-          "scaleY": 0.79,
-          "tint": "#81a9a7"
-        },
-        {
-          "from": "spr_fish_h1",
-          "crop": {
-            "x": 277,
-            "y": 251,
-            "w": 86,
-            "h": 57
-          },
-          "x": 233,
-          "y": 215,
-          "scaleX": 1.16,
-          "scaleY": 1.02,
-          "tint": "#91a8a4",
-          "rotation": -20
-        },
-        {
-          "from": "spr_geiger",
-          "crop": {
-            "x": 229,
-            "y": 151,
-            "w": 46,
-            "h": 36
-          },
-          "x": 144,
-          "y": 119,
-          "scaleX": 0.68,
-          "scaleY": 0.56,
-          "tint": "#b0bf99"
-        },
-        {
-          "file": "parts/scutes.svg",
-          "x": 288,
-          "y": 103,
-          "scaleX": 2.65,
-          "scaleY": 2.07,
-          "opacity": 0.52
+          "file": "parts/marks.svg",
+          "x": 181,
+          "y": 149
         }
       ]
     },
@@ -530,6 +369,87 @@
           "x": 795,
           "y": 270
         }
+      ]
+    },
+    {
+      "key": "silo-doors",
+      "width": 309,
+      "height": 647,
+      "origin": [
+        89,
+        91
+      ],
+      "compose": [
+        [
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 545,
+              "y": 184,
+              "w": 40,
+              "h": 463
+            },
+            "x": 0,
+            "y": 184
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 585,
+              "y": 0,
+              "w": 115,
+              "h": 647
+            },
+            "x": 40,
+            "y": 0
+          }
+        ],
+        [
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 700,
+              "y": 0,
+              "w": 95,
+              "h": 647
+            },
+            "x": 155,
+            "y": 0
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 795,
+              "y": 0,
+              "w": 30,
+              "h": 270
+            },
+            "x": 250,
+            "y": 0
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 825,
+              "y": 255,
+              "w": 29,
+              "h": 15
+            },
+            "x": 280,
+            "y": 255
+          },
+          {
+            "from": "spr_silo",
+            "crop": {
+              "x": 795,
+              "y": 365,
+              "w": 59,
+              "h": 282
+            },
+            "x": 250,
+            "y": 365
+          }
+        ]
       ]
     }
   ],

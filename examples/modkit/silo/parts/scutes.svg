@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="38" height="23" viewBox="0 0 38 23">
-  <path fill="#507f3c" d="M1 9L7 1 12 4 9 12 5 14ZM12 13L19 4 23 6 21 17 16 18ZM25 16L33 9 37 12 33 21 27 22Z"/>
-  <path fill="#c4e878" d="M3 8L8 3 9 4 6 9ZM15 11L20 6 21 7 18 12ZM28 15L33 11 34 12 31 16Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="33" height="17" viewBox="0 0 33 17">
+  <ellipse cx="4.5" cy="7.5" rx="3.5" ry="4.4" transform="rotate(-23 4.5 7.5)" fill="#507c3a"/>
+  <ellipse cx="15" cy="9" rx="3.2" ry="4" transform="rotate(-27 15 9)" fill="#507c3a"/>
+  <ellipse cx="24.5" cy="12.2" rx="2.8" ry="3.6" transform="rotate(-30 24.5 12.2)" fill="#507c3a"/>
 </svg>

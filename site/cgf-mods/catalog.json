@@ -123,7 +123,7 @@
     "id": "jamm-silo",
     "name": "The Silo",
     "author": "JAMM",
-    "description": "Fish the flooded launch shaft beneath the Missile Silo in NewWorld and discover four deep-water species.",
+    "description": "Open the Missile Silo in NewWorld and fish its flooded launch shaft for four deep-water species.",
     "fileUrl": "https://varialbe.xyz/cgf-mods/packages/jamm-silo.zip",
     "isPreview": false,
     "categories": [
@@ -139,8 +139,8 @@
     "packageType": "modkit",
     "manifestFile": "jamm-mod.json",
     "isDefault": false,
-    "version": "2.0.0",
-    "sha256": "7ac3dd329b971d99bb44070367370e25b1560fab7952b9a7ac1be9a98a246934",
-    "sizeBytes": 5351
+    "version": "2.1.0",
+    "sha256": "c8a9f8f69f41eb937a73ab9ff3bab1f9465fc4091fde788b57b6cb3debca4811",
+    "sizeBytes": 7529
   }
 ]

@@ -103,6 +103,24 @@ public static class ModKitBuilder
         bool hasFleeLarge = data.Scripts.ByName("fish_fleelarge") is not null;
         bool hasFleeHuge = data.Scripts.ByName("fish_fleehuge") is not null;
 
+        foreach (var entry in package.Objects)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string name = $"jmk_{modIdent}_object_{SanitizeIdent(entry.Key)}";
+            var sprite = entry.Sprite is { } key ? sprites[CompositionName(modIdent, key)] : null;
+            var obj = CreateModObject(data, name, null, sprite, entry.Depth);
+            QueueHook(EventType.Create, entry.Create);
+            QueueHook(EventType.Step, entry.Step);
+            QueueHook(EventType.Draw, entry.Draw);
+            objectsAdded++;
+
+            void QueueHook(EventType type, string? path)
+            {
+                if (path is not null)
+                    compiler.QueueCodeReplace(obj.EventHandlerFor(type, 0u, data), File.ReadAllText(path, Encoding.UTF8));
+            }
+        }
+
         foreach (var fish in package.Fish)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -378,8 +396,8 @@ public static class ModKitBuilder
     private static UndertaleGameObject CreateModObject(
         UndertaleData data,
         string name,
-        UndertaleGameObject parent,
-        UndertaleSprite sprite,
+        UndertaleGameObject? parent,
+        UndertaleSprite? sprite,
         int depth)
     {
         if (data.GameObjects.ByName(name) is not null)
