@@ -51,6 +51,39 @@ The same route completed on the public five-pack (Antiquity, PWB, Abyss, Colour 
 
 Screenshots are in `~/jamm-night/worldgen/screens/`. The CSVs are in `~/jamm-night/worldgen/run-vanilla.cv5qkA/save/jamm_bench_worldgen.csv` and `~/jamm-night/worldgen/run-public5.3iMCLq/save/jamm_bench_worldgen.csv`. Total active counts also reflect vanilla zone activation. Generated instance counts come from the controller's owned lists.
 
+## Showcase
+
+The showcase uses a separate bench archive built from Endless Ocean on the August 2023 vanilla base. Run `jamm-modmaker bench endless-ocean.win showcase.win --scene worldgen --showcase` and launch it in a separate game copy with a disposable save and the chosen seed in `jamm_endless_ocean.ini`. The bench places Boat7 east of the generation boundary, moves the camera through fixed frames, and lights the underwater shots with a scaled vanilla lamp. Each underwater frame spans 4,096 world pixels horizontally. The depth sheets stack three frames at the same x and scale, omitting the stretches of water between the three fish spawn bands.
+
+| File in `~/jamm-night/worldgen/showcase/` | Caption |
+| --- | --- |
+| `vanilla-1337-transition.png` | At x = 170,000 the first generated rock rises on the right. The open water on the left follows the end of the legacy map's placed content. |
+| `vanilla-1337-floor-03.png` | At x = 177,168 the floor rises from a low shelf into a long ridge. |
+| `vanilla-314159-floor-03.png` | The same framing with seed 314159. The high ground on the left drops into a trough before rising at the far right. |
+| `vanilla-1337-floor-117.png` | At x = 410,640 the floor climbs to a broad crest and starts to descend again. |
+| `vanilla-1337-floor-486.png` | At x = 1,166,352 the low shelf rises sharply toward the final chunk. |
+| `vanilla-1337-depths-03.png` | Upper-water, midwater and near-floor fish at x = 177,168. |
+| `vanilla-1337-depths-117.png` | The same three depth bands at x = 410,640. |
+| `vanilla-1337-depths-486.png` | The three depth bands near the east end at x = 1,166,352. |
+| `vanilla-1337-panorama.png` | Five consecutive deep-ocean screens spanning x = 223,248–233,488, joined west to east. |
+| `vanilla-1337-surface.png` | Boat7 at x = 410,640, with open sky and continuous waves above the generated terrain. |
+
+The panorama is 3,000 × 720. FFmpeg crops the middle 600 columns of each 1,200 × 720 frame and joins them with `hstack`. Each crop represents one 2,048 px chunk and the bench keeps the lamp fixed across the five frames. The two `vanilla-*.csv` files record the seed, camera bounds, streamed chunks and the number of generated fish whose centers were inside each frame.
+
+The optional public five-pack run completed all 16 captures with the recipe default seed, 271828. Its generation boundary moves the route 373 px east. The near-floor frame at the first stop recorded zero fish. The other two floor stops recorded fish in all three bands.
+
+| File in `~/jamm-night/worldgen/showcase/public5-271828/` | Caption |
+| --- | --- |
+| `transition.png` | The first generated rocks east of the five-pack's boundary at x = 170,373. |
+| `floor-03.png` and `depths-03.png` | The first floor stop and its depth panels at x = 177,541. |
+| `floor-117.png` and `depths-117.png` | The middle stop and all three fish bands at x = 411,013. |
+| `floor-486.png` and `depths-486.png` | The far-eastern floor and all three fish bands at x = 1,166,725. |
+| `panorama.png` | Five joined views of the floor spanning x = 223,621–233,861. |
+| `surface.png` | Boat7 above the middle stop at x = 411,013. |
+| `capture.csv` | Camera bounds, seed, streamed chunks and generated fish counts for the five-pack run. |
+
+The release build finished with zero warnings. The core and GUI suites passed 447 and 127 tests, with 15 opt-in tests skipped across both suites. All four synthetic worldgen tests passed. Building the default validation scene from the same recipe produced a byte-for-byte match with the prior bench archive.
+
 ## Fixed ranges and v1
 
 | System | What the legacy build does | What v1 needs |

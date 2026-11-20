@@ -30,7 +30,7 @@ public static class Program
                   console <original.win> <out.win>
                   silo    <original.win> <out.win>
                   bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save]
-                  bench   <endless-ocean.win> <out.win> --scene worldgen
+                  bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -81,7 +81,7 @@ public static class Program
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
             case "silo": SiloMod.Apply(data); Save(data, output!); return 0;
             case "bench" when SiloScene.Requested(args): SiloScene.Apply(data, args); Save(data, output!); return 0;
-            case "bench" when WorldgenScene.Requested(args): WorldgenScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when WorldgenScene.Requested(args): WorldgenScene.Apply(data, args.Contains("--showcase")); Save(data, output!); return 0;
             case "profile":
                 // Profiles a (possibly modded) data.win: instruments all object events.
                 Profiler.Apply(data); Save(data, output!); return 0;
