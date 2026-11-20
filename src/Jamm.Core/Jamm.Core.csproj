@@ -3,6 +3,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Building/cgf-asset-types.json" />
     <EmbeddedResource Include="Building/Weather/*.gml" />
+    <EmbeddedResource Include="Builtins/Worldgen/*.gml" LogicalName="Jamm.Worldgen.%(Filename)" />
     <EmbeddedResource Include="../../external/UndertaleModTool/UndertaleModLib/GameSpecificData/Underanalyzer/gamemaker.json" LogicalName="Jamm.Core.Building.gamemaker.json" />
     <ProjectReference Include="..\..\external\UndertaleModTool\UndertaleModLib\UndertaleModLib.csproj" />
   </ItemGroup>
