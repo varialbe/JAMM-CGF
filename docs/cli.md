@@ -19,11 +19,15 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
 | `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
 | `profile list [--json]` | List profiles and mark the active selection in text output |
-| `profile show <name> [--json]` | Show order and resolution choices |
+| `profile show <name> [--json]` | Show order, enablement, performance settings, and resolution choices |
 | `profile use <name>` | Select a profile for apply/play |
 | `profile delete <name>` | Delete a profile, clearing the active selection if needed |
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
 | `profile repack <name> on\|off` | Enable or disable texture repacking for builds of this profile |
+| `profile preset <name> weak-pc\|default` | Apply Weak PC or restore the previous profile settings |
+| `profile builtin <name> <id> on\|off` | Enable or disable a bundled mod in the profile |
+| `profile perf <name> mode\|grid on\|off` | Set the startup default for F8 scheduling or the fish grid |
+| `profile perf <name> interval <ticks>` | Set the default distant-fish update interval from 1 to 60 ticks |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
 | `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
 | `restore` | Restore the configured game directory and retain all original backups |

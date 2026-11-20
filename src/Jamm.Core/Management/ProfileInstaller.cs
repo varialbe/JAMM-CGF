@@ -33,7 +33,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             Builder = inputs.Length > 0 && !profile.NoRepack ? $"{builder}/{TextureRepacker.Revision}" : builder,
-            InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            InstanceCompatibility.Revision, profile.Name, profile.Preset, profile.Perf, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);
@@ -87,7 +87,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
         var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, new ProfileLibrary(store).ActiveResolutions(selection.Profile),
             progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root },
-            noRepack: selection.Profile.NoRepack);
+            noRepack: selection.Profile.NoRepack, perfSettings: selection.Profile.Perf);
         return new(selection.Profile, selection.Config, selection.Signature, output, hash, result);
     }
 
@@ -117,6 +117,8 @@ public sealed class ProfileInstaller(ManagerStore store)
             BuildFiles.Resolve(Path.Combine(prepared.Config.GameDir!, "data.win")));
         GameInstaller.Install(prepared.OutputPath, prepared.Config.GameDir!, prepared.BaseSha256,
             selection.Inputs.Select(i => i.ArchivePath), prepared.Config.Base, prepared.Build.Plan.Catalog);
+        if (prepared.Profile.Perf.StartEnabled && prepared.Profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal))
+            PerfIni.Seed(prepared.Config, store.Root);
         // First-run desktop setup may choose the game's own archive. Once installed,
         // keep subsequent checks bound to the verified ancestor rather than the replacement.
         if (rebase)

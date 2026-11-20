@@ -29,6 +29,95 @@ public sealed class ManagementTests : IDisposable
     }
 
     [Fact]
+    public void WeakPcPresetPersistsAndRestoresPreviousSettings()
+    {
+        var library = new ModLibrary(store);
+        var perf = library.Add(source, "JAMM Perf", stableId: "builtin-perf").Mod;
+        string hdPath = Path.Combine(directory, "hd.win");
+        WriteArchive(hdPath, 9);
+        var hd = library.Add(hdPath, "JAMM HD Lite", stableId: "builtin-hd-lite").Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("laptop", [hd.Id, perf.Id]);
+        profiles.SetBuiltin("laptop", "perf", false);
+        profiles.SetRepack("laptop", false);
+        profiles.SetPerf("laptop", fishGrid: false, interval: 6);
+        var before = profiles.Get("laptop");
+
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["preset", "laptop", "weak-pc"], store.Root));
+        var active = new ProfileLibrary(new ManagerStore(store.Root)).Get("laptop");
+        Assert.Equal("weak-pc", active.Preset);
+        Assert.Equal([perf.Id], active.EnabledMods);
+        Assert.False(active.NoRepack);
+        Assert.True(active.Perf.StartEnabled);
+        Assert.True(active.Perf.FishGrid);
+        Assert.True(active.Perf.Interval > 4);
+        Assert.Equal(active.BeforeWeakPc, profiles.SetPreset("laptop", "weak-pc").BeforeWeakPc);
+
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["preset", "laptop", "default"], store.Root));
+        var reverted = profiles.Get("laptop");
+        Assert.Equal(before.Preset, reverted.Preset);
+        Assert.Equal(before.Mods, reverted.Mods);
+        Assert.Equal(before.EnabledMods, reverted.EnabledMods);
+        Assert.Equal(before.NoRepack, reverted.NoRepack);
+        Assert.Equal(before.Perf, reverted.Perf);
+        Assert.Null(reverted.BeforeWeakPc);
+    }
+
+    [Fact]
+    public void WeakPcIndividualOverridesWinAndPresetAloneInvalidatesInstall()
+    {
+        var library = new ModLibrary(store);
+        var content = library.Add(source, "Content").Mod;
+        string perfPath = Path.Combine(directory, "perf.win");
+        WriteArchive(perfPath, 9);
+        var perf = library.Add(perfPath, "JAMM Perf", stableId: "builtin-perf").Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("laptop", [content.Id, perf.Id]);
+        profiles.SetBuiltin("laptop", "perf", false);
+        string game = Path.Combine(directory, "game");
+        Directory.CreateDirectory(game);
+        File.Copy(original, Path.Combine(game, "data.win"));
+        store.Set("gameDir", game);
+        var installer = new ProfileInstaller(store);
+        installer.Install(installer.Prepare("laptop"));
+        Assert.True(installer.IsInstalled("laptop"));
+
+        profiles.SetPreset("laptop", "weak-pc");
+        profiles.SetBuiltin("laptop", "perf", false);
+        profiles.SetPerf("laptop", startEnabled: false, fishGrid: true, interval: 4);
+        Assert.False(installer.IsInstalled("laptop"));
+        profiles.SetRepack("laptop", false);
+        profiles.SetPerf("laptop", fishGrid: false, interval: 13);
+        Assert.Equal(13, profiles.Get("laptop").Perf.Interval);
+        var reverted = profiles.SetPreset("laptop", "default");
+        Assert.Equal([content.Id], reverted.EnabledMods);
+        Assert.False(reverted.Perf.FishGrid);
+        Assert.Equal(13, reverted.Perf.Interval);
+        Assert.True(reverted.NoRepack);
+    }
+
+    [Theory]
+    [InlineData(null, "[Perf]\r\nMode=1\r\n")]
+    [InlineData("[Perf]\r\nmode = 0\r\nInterval=27\r\n", "[Perf]\r\nmode = 0\r\nInterval=27\r\n")]
+    [InlineData("[perf]\n; Keep this value\nInterval=27\n", "[perf]\nMode=1\n; Keep this value\nInterval=27\n")]
+    [InlineData("[Perf]", "[Perf]\r\nMode=1\r\n")]
+    [InlineData("[Other]\r\nMode=0\r\n", "[Other]\r\nMode=0\r\n[Perf]\r\nMode=1\r\n")]
+    public void PerfIniSeedsOnlyMissingMode(string? originalIni, string expected)
+    {
+        string save = Path.Combine(directory, "save");
+        string path = Path.Combine(save, "jamm_perf.ini");
+        if (originalIni is not null)
+        {
+            Directory.CreateDirectory(save);
+            File.WriteAllText(path, originalIni);
+        }
+        PerfIni.SeedDirectory(save);
+        PerfIni.SeedDirectory(save);
+        Assert.Equal(expected, File.ReadAllText(path));
+        Assert.Single(Directory.EnumerateFiles(save));
+    }
+
+    [Fact]
     public void ProfileEditsRetainChoicesAndUnknownFieldsUntilWinnerIsRemoved()
     {
         var library = new ModLibrary(store);

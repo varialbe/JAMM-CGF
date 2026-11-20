@@ -23,7 +23,7 @@ public static partial class FishGrid
     /// <summary>Applies the grid when the original avoidance loop and supported runner layout are present.</summary>
     public static string Apply(UndertaleData data) => Apply(data, []);
 
-    internal static string Apply(UndertaleData data, List<UndertaleCode> edits)
+    internal static string Apply(UndertaleData data, List<UndertaleCode> edits, bool enabledByDefault = true)
     {
         if (data.GameObjects.ByName(Controller) is not null)
             return Decision("skipped (runtime already installed)");
@@ -64,10 +64,10 @@ public static partial class FishGrid
         foreach (var (call, script) in Lifecycle) AddScript(WrapperName(call.Name, call.Count), script);
         var controller = ModObjects.Create(data, Controller, persistent: true);
         controller.Visible = false;
-        AddEvent(EventType.Create, 0u, """
+        AddEvent(EventType.Create, 0u, $$"""
             if (instance_number(object_index) > 1) { instance_destroy(); exit; }
             ini_open("jamm_perf.ini");
-            global.jamm_fg_enabled = ini_read_real("Perf", "FishGrid", 1) != 0;
+            global.jamm_fg_enabled = ini_read_real("Perf", "FishGrid", {{(enabledByDefault ? 1 : 0)}}) != 0;
             ini_close();
             global.jamm_fg_heads = ds_map_create();
             global.jamm_fg_orders = ds_list_create();
@@ -100,7 +100,7 @@ public static partial class FishGrid
             if (LegacyCodeHooks.Insert(code, Select, code == endStep ? enter : null, code == endStep ? leave : null))
                 edits.Add(code);
 
-        return Decision("enabled (FishLarge avoidance with ordered cells and live-position guards)");
+        return Decision($"enabled (default {(enabledByDefault ? "on" : "off")}, FishLarge avoidance with ordered cells and live-position guards)");
 
         UndertaleFunction Function(string name) => data.Functions.EnsureDefined(name, data.Strings);
 

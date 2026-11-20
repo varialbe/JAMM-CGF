@@ -1,11 +1,19 @@
 using Jamm.Core.Building;
 using Jamm.Core.Merging;
+using Jamm.ModMaker;
 
 namespace Jamm.Core.Management;
 
 /// <summary>Stores ordered profiles and validates all selected mods and resolutions before use.</summary>
 public sealed class ProfileLibrary(ManagerStore store)
 {
+    /// <summary>Uses the profile's ordinary settings.</summary>
+    public const string DefaultPreset = "default";
+    /// <summary>Uses the profile's low-spec performance defaults.</summary>
+    public const string WeakPcPreset = "weak-pc";
+    private const string PerfId = "builtin-perf";
+    private const string HdId = "builtin-hd-lite";
+
     private string FilePath(string name) => store.Path("profiles", ManagerStore.Name(name) + ".json");
 
     /// <summary>Lists saved profiles in ordinal name order.</summary>
@@ -21,6 +29,14 @@ public sealed class ProfileLibrary(ManagerStore store)
         if (profile.Name != name || profile.Mods is null || profile.Mods.Distinct(StringComparer.Ordinal).Count() != profile.Mods.Length || profile.Resolutions is null
             || profile.DisabledMods is null || profile.DisabledMods.Except(profile.Mods).Any())
             throw new InvalidDataException($"Profile '{name}' is invalid. Recreate it with a nonempty, unique mod list.");
+        if (profile.Perf is null || profile.Perf.Interval is < 1 or > 60
+            || profile.Preset switch
+            {
+                DefaultPreset => profile.BeforeWeakPc is not null,
+                WeakPcPreset => profile.BeforeWeakPc?.Perf is null || profile.BeforeWeakPc.Perf.Interval is < 1 or > 60,
+                _ => true
+            })
+            throw new InvalidDataException($"Profile '{name}' has invalid performance settings. Repair its profile JSON or recreate it in JAMM.");
         foreach (string mod in profile.Mods) ManagerStore.Name(mod);
         return profile;
     }
@@ -53,6 +69,16 @@ public sealed class ProfileLibrary(ManagerStore store)
         var resolutions = new Dictionary<string, string>(profile.Resolutions, StringComparer.Ordinal);
         foreach (var choice in removed) resolutions.Remove(choice.Key);
         var result = profile with { Mods = ids, DisabledMods = off, Resolutions = resolutions };
+        if (profile.BeforeWeakPc is { } before)
+        {
+            // The GUI includes all library mods in its order, even ones it never enabled.
+            // Retain explicit enablement changes while ignoring those passive additions.
+            if (ChangedBuiltin(profile, result, PerfId))
+                before = before with { PerfEnabled = BuiltinEnabled(result, PerfId) };
+            if (ChangedBuiltin(profile, result, HdId))
+                before = before with { HdEnabled = BuiltinEnabled(result, HdId) };
+            result = result with { BeforeWeakPc = before };
+        }
         store.Write(FilePath(name), result);
         foreach (var choice in removed) notice?.Invoke($"Removed resolution for {choice.Key}: winning mod '{choice.Value}' was removed from profile '{name}'. Review conflicts before playing.");
         return result;
@@ -82,8 +108,120 @@ public sealed class ProfileLibrary(ManagerStore store)
     public void Use(string name) { Get(name); store.SaveConfig(store.Config() with { ActiveProfile = name }); }
 
     /// <summary>Sets whether builds of this profile should repack textures.</summary>
-    public void SetRepack(string name, bool enabled) =>
-        store.Write(FilePath(name), Get(name) with { NoRepack = !enabled });
+    public void SetRepack(string name, bool enabled)
+    {
+        var profile = Get(name);
+        var before = profile.BeforeWeakPc is { } previous ? previous with { NoRepack = !enabled } : null;
+        store.Write(FilePath(name), profile with { NoRepack = !enabled, BeforeWeakPc = before });
+    }
+
+    /// <summary>Changes a profile's mode, interval and grid defaults without editing the game's INI.</summary>
+    public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null)
+    {
+        var profile = Get(name);
+        if (interval is < 1 or > 60)
+            throw new ArgumentException("Choose a distant fish interval from 1 to 60 ticks.");
+        PerfSettings Update(PerfSettings settings) => new(
+            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval);
+        var before = profile.BeforeWeakPc;
+        if (before is not null) before = before with { Perf = Update(before.Perf) };
+        var result = profile with { Perf = Update(profile.Perf), BeforeWeakPc = before };
+        store.Write(FilePath(name), result);
+        return result;
+    }
+
+    /// <summary>Enables or disables a bundled mod and preserves that choice when leaving Weak PC.</summary>
+    public void SetBuiltin(string name, string id, bool enabled, Action<string>? progress = null)
+    {
+        if (BuiltinMods.Catalog.All(mod => mod.Id != id))
+            throw new ArgumentException($"Unknown built-in mod '{id}'. See 'cgfmm builtin list'.");
+        string modId = "builtin-" + id;
+        var profile = Get(name);
+        if (enabled)
+        {
+            EnsureBuiltin(id, progress, default);
+            profile = Get(name);
+        }
+        var result = SetBuiltin(profile, modId, enabled || profile.Mods.Contains(modId) ? enabled : null);
+        if (result.BeforeWeakPc is { } before)
+        {
+            if (modId == PerfId) before = before with { PerfEnabled = BuiltinEnabled(result, PerfId) };
+            if (modId == HdId) before = before with { HdEnabled = BuiltinEnabled(result, HdId) };
+            result = result with { BeforeWeakPc = before };
+        }
+        store.Write(FilePath(name), result);
+    }
+
+    /// <summary>Applies or reverses the Weak PC settings while leaving the rest of the profile intact.</summary>
+    public ModProfile SetPreset(string name, string preset, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        if (preset is not (WeakPcPreset or DefaultPreset))
+            throw new ArgumentException("Choose 'weak-pc' or 'default' for the profile preset.");
+        var profile = Get(name);
+        if (profile.Preset == preset) return profile;
+        ModProfile result;
+        if (preset == WeakPcPreset)
+        {
+            EnsureBuiltin("perf", progress, cancellationToken);
+            profile = Get(name);
+            if (profile.Preset == preset) return profile;
+            var before = new WeakPcPreviousSettings(BuiltinEnabled(profile, PerfId), BuiltinEnabled(profile, HdId), profile.NoRepack, profile.Perf);
+            result = SetBuiltin(SetBuiltin(profile, PerfId, true), HdId, before.HdEnabled is null ? null : false) with
+            {
+                Preset = WeakPcPreset, BeforeWeakPc = before, NoRepack = false,
+                Perf = new(StartEnabled: true, FishGrid: true, Interval: 8)
+            };
+        }
+        else
+        {
+            var before = profile.BeforeWeakPc!;
+            result = SetBuiltin(SetBuiltin(profile, PerfId, before.PerfEnabled), HdId, before.HdEnabled) with
+            {
+                Preset = DefaultPreset, BeforeWeakPc = null, NoRepack = before.NoRepack, Perf = before.Perf
+            };
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        store.Write(FilePath(name), result);
+        return result;
+    }
+
+    private void EnsureBuiltin(string id, Action<string>? progress, CancellationToken cancellationToken)
+    {
+        if (new ModLibrary(store).Metadata().All(mod => mod.Id != "builtin-" + id))
+            new BuiltinMods(store).Add(id, progress, cancellationToken);
+    }
+
+    private static bool? BuiltinEnabled(ModProfile profile, string id) =>
+        profile.Mods.Contains(id) ? !profile.DisabledMods.Contains(id) : null;
+
+    private static bool ChangedBuiltin(ModProfile before, ModProfile after, string id)
+    {
+        bool? previous = BuiltinEnabled(before, id);
+        bool? current = BuiltinEnabled(after, id);
+        return current != previous && (previous is not null || current == true);
+    }
+
+    private static ModProfile SetBuiltin(ModProfile profile, string id, bool? enabled)
+    {
+        if (enabled is null)
+        {
+            if (!profile.Mods.Contains(id)) return profile;
+            string name = BuiltinMods.Catalog.Single(mod => "builtin-" + mod.Id == id).Name;
+            return profile with
+            {
+                Mods = profile.Mods.Where(mod => mod != id).ToArray(),
+                DisabledMods = profile.DisabledMods.Where(mod => mod != id).ToArray(),
+                Resolutions = profile.Resolutions.Where(choice => choice.Value != name).ToDictionary(StringComparer.Ordinal)
+            };
+        }
+
+        return profile with
+        {
+            Mods = profile.Mods.Contains(id) ? profile.Mods : [.. profile.Mods, id],
+            DisabledMods = enabled == false ? profile.DisabledMods.Append(id).Distinct(StringComparer.Ordinal).ToArray()
+                : profile.DisabledMods.Where(mod => mod != id).ToArray()
+        };
+    }
 
     /// <summary>Deletes a profile and clears its active selection if necessary.</summary>
     public void Delete(string name)

@@ -99,10 +99,19 @@ public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, s
     public string[] DisabledMods { get; init; } = [];
     /// <summary>Skips atlas repacking when building this profile's enabled mods.</summary>
     public bool NoRepack { get; init; }
+    /// <summary>Selected profile preset, or the default configuration.</summary>
+    public string Preset { get; init; } = ProfileLibrary.DefaultPreset;
+    /// <summary>Defaults for the bundled Perf controller.</summary>
+    public Jamm.ModMaker.PerfSettings Perf { get; init; } = new();
+    /// <summary>Settings to restore when Weak PC is turned off.</summary>
+    public WeakPcPreviousSettings? BeforeWeakPc { get; init; }
     /// <summary>Active library IDs in load order.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string[] EnabledMods => Mods.Except(DisabledMods, StringComparer.Ordinal).ToArray();
 }
+
+/// <summary>Settings the preset temporarily changes, including whether each built-in belonged to the profile.</summary>
+public sealed record WeakPcPreviousSettings(bool? PerfEnabled, bool? HdEnabled, bool NoRepack, Jamm.ModMaker.PerfSettings Perf);
 
 /// <summary>Library entry with compatibility and cache validity for the currently configured base.</summary>
 public sealed record ModListEntry(ManagedMod Mod, bool BaseHashMatches, bool TimestampMatches,

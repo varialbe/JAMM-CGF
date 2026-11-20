@@ -235,6 +235,7 @@ public static partial class BenchmarkMod
             jamm_b_capture_start = jamm_b_prev_gui_t;
             jamm_b_warmup_frames = 0;
             jamm_b_step_samples = 0;
+            jamm_b_fish_total = 0;
             jamm_b_summary_line = "";
             {{(o.Profile ? "global.__jamm_prof_us = ds_map_create();\nglobal.__jamm_prof_n = ds_map_create();\nglobal.__jamm_prof_on = 0;" : "")}}
             """;
@@ -612,6 +613,7 @@ public static partial class BenchmarkMod
                 ds_list_clear(jamm_b_frame_list);
                 ds_list_clear(jamm_b_loop_list);
                 jamm_b_step_samples = 0;
+                jamm_b_fish_total = 0;
                 jamm_b_capture_start = jamm_b_now;
                 jamm_b_prev_gui_t = jamm_b_now;
                 jamm_b_has_step = 0;
@@ -629,6 +631,7 @@ public static partial class BenchmarkMod
             {
                 jamm_b_loop_us = max(0, jamm_b_now - jamm_b_step_t);
                 jamm_b_has_step = 0;
+                jamm_b_fish_total += instance_number(Fish);
                 {{(trace ? FishTrace.Sample() : "")}}
             }
             ds_list_add(jamm_b_frame_list, jamm_b_frame_us);
@@ -712,6 +715,13 @@ public static partial class BenchmarkMod
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# samples=" + string(jamm_b_n) + " wall_us=" + string(round(jamm_b_wall_us)) + " avg_fps=" + string(jamm_b_avg_fps) + " room_speed=" + string(room_speed) + " step_samples=" + string(jamm_b_step_samples) + " draw_samples=" + string(jamm_b_n) + " draws_per_step=" + string(jamm_b_n / max(1, jamm_b_step_samples)) + " instances=" + string(instance_count) + " window=" + string(jamm_b_window_w) + "x" + string(jamm_b_window_h) + " application_surface=" + string(jamm_b_app_w) + "x" + string(jamm_b_app_h) + " fullscreen=" + string(jamm_b_fullscreen) + " render_size_normalized=" + string(jamm_b_size_ok));
                     file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, "# active_fish_mean=" + string(jamm_b_fish_total / max(1, jamm_b_loop_n)));
+                    file_text_writeln(jamm_b_f);
+                    if (variable_global_exists("jamm_perf_mode"))
+                    {
+                        file_text_write_string(jamm_b_f, "# perf_mode=" + string(global.jamm_perf_mode) + " interval=" + string(global.jamm_perf_interval) + " eligible_events=" + string(global.jamm_perf_eligible) + " skipped_events=" + string(global.jamm_perf_skipped));
+                        file_text_writeln(jamm_b_f);
+                    }
                     if (!jamm_b_size_ok)
                     {
                         file_text_write_string(jamm_b_f, "# warning=render_size_normalization_not_applied_or_overridden_requested_window=1200x720_application_surface=1200x720_fullscreen=0");

@@ -59,6 +59,35 @@ public sealed partial class MainWindow : Window
             await vm.ToggleBuiltinAsync(row.Id);
     }
 
+    private async void WeakPcClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEdit: true } vm) await vm.ToggleWeakPcAsync();
+    }
+
+    private async void ProfileRepackClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm) await vm.ToggleProfileRepackAsync();
+    }
+
+    private async void ProfilePerfModeClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm)
+            await vm.UpdateProfilePerfAsync(startEnabled: !vm.ProfilePerf.StartEnabled);
+    }
+
+    private async void ProfileFishGridClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm)
+            await vm.UpdateProfilePerfAsync(fishGrid: !vm.ProfilePerf.FishGrid);
+    }
+
+    private async void ProfileFishIntervalChanged(object? sender, NumericUpDownValueChangedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm && e.NewValue is >= 1 and <= 60 and decimal value
+            && value == decimal.Truncate(value) && vm.ProfilePerf.Interval != value)
+            await vm.UpdateProfilePerfAsync(interval: (int)value);
+    }
+
     private MainViewModel? Model => DataContext as MainViewModel;
     private bool initialized;
     private Point? dragStart;

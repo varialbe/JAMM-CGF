@@ -219,6 +219,7 @@ public sealed partial class MainViewModel : ObservableObject
             foreach (var p in data.Profiles) Profiles.Add(p.Name);
             SelectedProfile = data.Config.ActiveProfile;
             var profile = data.Profiles.FirstOrDefault(p => p.Name == SelectedProfile);
+            ShowPresetSettings(profile);
             if (profile is not null)
             {
                 foreach (string id in profile.Mods)
