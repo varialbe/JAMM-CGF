@@ -51,8 +51,9 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
 
 Optional `--debug` adds diagnostic logging/controllers; it is useful for local
 measurements and may affect performance. See the implementation reports for
-[Perf/Smooth](reports/phase6a.md), [HD](reports/phase6b.md) and
-[experimental performance mode](reports/phase6c.md).
+[Perf/Smooth](reports/phase6a.md), [HD](reports/phase6b.md),
+[experimental performance mode](reports/phase6c.md), and the
+[local benchmark mode guide](benchmarking.md) (`jamm-modmaker bench`).
 
 ## HD with 2x texture pages
 
