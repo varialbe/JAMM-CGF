@@ -163,6 +163,6 @@ The initial 512-pixel implementation produced matching 30-tick and 1,800-tick va
 | vanilla | dock | 0 | 0 | No matched captures |
 | vanilla | deepwater | 0 | 0 | No matched captures |
 | heavy | dock | 1800 | 1603 | Same prefix, different lengths |
-| heavy | deepwater | 1800 | 0 | No matched captures |
+| heavy | deepwater | 1800 | 1800 | Identical |
 | all7 | dock | 0 | 0 | No matched captures |
 | all7 | deepwater | 0 | 0 | No matched captures |
