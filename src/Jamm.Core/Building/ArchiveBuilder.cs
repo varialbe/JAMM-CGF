@@ -8,7 +8,11 @@ using UndertaleModLib.Models;
 namespace Jamm.Core.Building;
 
 /// <summary>A patch paired with the local archive whose entire-file SHA-256 must match it.</summary>
-public sealed record BuildInput(ModPatch Patch, string ArchivePath);
+public sealed record BuildInput(ModPatch Patch, string ArchivePath)
+{
+    /// <summary>Opts this input into shop repair for legacy items with no unlock path.</summary>
+    public bool UnlockFix { get; init; }
+}
 
 /// <summary>A completed build or an in-memory dry run, including decisions and archive counts.</summary>
 public sealed record BuildResult(BuildPlan Plan, GameInspection Base, VerificationResult? Verification,
@@ -65,6 +69,8 @@ public static class ArchiveBuilder
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
+            var unlockFixMods = inputs.Select((input, index) => (input, index)).Where(x => x.input.UnlockFix)
+                .Select(x => x.index).ToHashSet();
             // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
             // jamm_api_init when no items runtime was injected.
             var plan = CatalogRuntime.PreparePlan(
@@ -72,7 +78,7 @@ public static class ArchiveBuilder
                     ItemsRuntime.PreparePlan(
                         HudRuntime.PreparePlan(
                             MenuRuntime.PreparePlan(
-                                BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base),
+                                BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, unlockFixMods),
                                 semantics.Base, original.Data),
                             semantics.Base),
                         semantics.Base,

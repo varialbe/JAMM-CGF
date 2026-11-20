@@ -19,7 +19,8 @@ public sealed class ProfileLibrary(ManagerStore store)
         if (!File.Exists(path)) throw new FileNotFoundException($"Profile '{name}' was not found. Use 'profile list' or create it first.");
         var profile = store.Read<ModProfile>(path);
         if (profile.Name != name || profile.Mods is null || profile.Mods.Distinct(StringComparer.Ordinal).Count() != profile.Mods.Length || profile.Resolutions is null
-            || profile.DisabledMods is null || profile.DisabledMods.Except(profile.Mods).Any())
+            || profile.DisabledMods is null || profile.DisabledMods.Except(profile.Mods).Any()
+            || profile.UnlockFixMods is { } fixes && (fixes.Distinct(StringComparer.Ordinal).Count() != fixes.Length || fixes.Except(profile.Mods).Any()))
             throw new InvalidDataException($"Profile '{name}' is invalid. Recreate it with a nonempty, unique mod list.");
         foreach (string mod in profile.Mods) ManagerStore.Name(mod);
         return profile;
@@ -52,7 +53,8 @@ public sealed class ProfileLibrary(ManagerStore store)
         var removed = profile.Resolutions.Where(r => removedNames.Contains(r.Value)).ToArray();
         var resolutions = new Dictionary<string, string>(profile.Resolutions, StringComparer.Ordinal);
         foreach (var choice in removed) resolutions.Remove(choice.Key);
-        var result = profile with { Mods = ids, DisabledMods = off, Resolutions = resolutions };
+        string[]? fixes = profile.UnlockFixMods?.Intersect(ids, StringComparer.Ordinal).ToArray();
+        var result = profile with { Mods = ids, DisabledMods = off, Resolutions = resolutions, UnlockFixMods = fixes is { Length: > 0 } ? fixes : null };
         store.Write(FilePath(name), result);
         foreach (var choice in removed) notice?.Invoke($"Removed resolution for {choice.Key}: winning mod '{choice.Value}' was removed from profile '{name}'. Review conflicts before playing.");
         return result;
@@ -84,6 +86,19 @@ public sealed class ProfileLibrary(ManagerStore store)
     /// <summary>Sets whether builds of this profile should repack textures.</summary>
     public void SetRepack(string name, bool enabled) =>
         store.Write(FilePath(name), Get(name) with { NoRepack = !enabled });
+
+    /// <summary>Opts one of the profile's mods into repairs for unreachable legacy shop items.</summary>
+    public void SetUnlockFix(string name, string mod, bool enabled)
+    {
+        var profile = Get(name);
+        string id = new ModLibrary(store).Find(mod).Id;
+        if (!profile.Mods.Contains(id, StringComparer.Ordinal))
+            throw new ArgumentException($"Mod '{mod}' is not in profile '{name}'. Choose one of its mods.");
+        var optedIn = (profile.UnlockFixMods ?? []).ToHashSet(StringComparer.Ordinal);
+        if (enabled) optedIn.Add(id);
+        else optedIn.Remove(id);
+        store.Write(FilePath(name), profile with { UnlockFixMods = optedIn.Count == 0 ? null : profile.Mods.Where(optedIn.Contains).ToArray() });
+    }
 
     /// <summary>Deletes a profile and clears its active selection if necessary.</summary>
     public void Delete(string name)

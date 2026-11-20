@@ -76,7 +76,7 @@ internal static class ModKitCommand
             case "check":
                 var pkg = ModKitPackage.Load(dir);
                 Console.WriteLine($"ModKit package '{pkg.Name}' ({pkg.Id} v{pkg.Version}) is valid: " +
-                    $"{pkg.Areas.Count} area(s), {pkg.Weathers.Count} weather(s), {pkg.Sprites.Count} sprite recipe(s), {pkg.Fish.Count} fish, {pkg.Boats.Count} boat(s), {pkg.Hats.Count} hat(s), {pkg.Upgrades.Count} upgrade(s).");
+                    $"{pkg.Areas.Count} area(s), {pkg.Weathers.Count} weather(s), {pkg.Sprites.Count} sprite recipe(s), {pkg.Fish.Count} fish, {pkg.Boats.Count} boat(s), {pkg.Rods.Count} rod(s), {pkg.Hats.Count} hat(s), {pkg.Upgrades.Count} upgrade(s).");
                 return 0;
 
             case "build":

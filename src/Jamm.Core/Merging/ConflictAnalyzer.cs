@@ -30,11 +30,16 @@ public static class ConflictAnalyzer
         var rooms = report.FieldMerges.Where(r => r.Family == "rooms").ToDictionary(r => r.Asset, r => r.Snapshot, StringComparer.Ordinal);
         var areas = Building.AreaDeclarations.Diagnose(catalog.Patches, labels, rooms);
         if (areas.Count > 0) report = report with { Findings = [.. report.Findings, .. areas] };
-        if (assetRelocation.Decisions.Count == 0) return report;
         string[] modNames = patches.Select(Name).ToArray();
         var renames = assetRelocation.Decisions.Select(d => new ConflictItem(d.StartsWith("WARNING", StringComparison.Ordinal) ? "WARNING" : "INFO",
             "relocation", "assets", "asset-name", modNames, d));
-        return report with { Findings = [.. renames, .. report.Findings] };
+        List<ConflictItem> unlocks = [];
+        for (int i = 0; i < relocation.Patches.Length; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            unlocks.AddRange(Building.LegacyItemUnlocks.Analyze(relocation.Patches[i]).Select(f => f.ToConflict(report.LoadOrder[i].Name)));
+        }
+        return report with { Findings = [.. renames, .. report.Findings, .. unlocks] };
     }
 
     internal static ConflictReport AnalyzePrepared(

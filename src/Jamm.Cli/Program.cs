@@ -66,6 +66,7 @@ int Run(string[] arguments)
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
             cgfmm profile resolve <name> <asset> <mod|keep-both>
             cgfmm profile repack <name> on|off
+            cgfmm profile unlockfix <profile> <mod> on|off
             cgfmm apply [--profile <name>] [--yes]
             cgfmm play [--profile <name>] [--yes]
             cgfmm restore [--game <game dir>] [--verbose]

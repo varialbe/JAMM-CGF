@@ -223,7 +223,11 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 foreach (string id in profile.Mods)
                 {
-                    var row = Mods.Single(m => m.Id == id); row.Enabled = !profile.DisabledMods.Contains(id); Order.Add(row);
+                    var row = Mods.Single(m => m.Id == id);
+                    row.InProfile = true;
+                    row.Enabled = !profile.DisabledMods.Contains(id);
+                    row.UnlockFix = profile.UnlockFixMods?.Contains(id, StringComparer.Ordinal) == true;
+                    Order.Add(row);
                 }
             }
             foreach (var row in Mods)
@@ -238,6 +242,7 @@ public sealed partial class MainViewModel : ObservableObject
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorPerformanceChanges)) await SetKeepAuthorPerformanceChangesAsync(row);
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorHudDesign)) await SetKeepAuthorHudDesignAsync(row);
                     else if (e.PropertyName == nameof(ModRow.KeepAuthorGameplayChanges)) await SetKeepAuthorGameplayChangesAsync(row);
+                    else if (e.PropertyName == nameof(ModRow.UnlockFix)) await SetUnlockFixAsync(row);
                 };
             }
             RefreshBuiltins();
@@ -348,6 +353,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (SelectedProfile is null) throw new ArgumentException("Create or select a profile before enabling mods.");
         var ids = Order.Select(m => m.Id).ToArray(); var disabled = Order.Where(m => !m.SavedEnabled).Select(m => m.Id).ToArray();
         await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile, ids, disabled, progress.Report));
+        foreach (var row in Order) row.InProfile = true;
         Conflicts.Clear(); OnPropertyChanged(nameof(ConflictCounts)); NotifyButtons(); Message("Load order saved. Check again to review conflicts.");
     }, false);
     /// <summary>Stages enablement without building, installing or persisting the selection.</summary>
@@ -406,7 +412,11 @@ public sealed partial class MainViewModel : ObservableObject
             if (!Profiles.Contains(name)) Profiles.Add(name);
         }
         await Task.Run(() => new ProfileLibrary(store).Update(SelectedProfile!, Order.Select(m => m.Id), Order.Where(m => !m.Enabled).Select(m => m.Id), progress.Report));
-        foreach (var row in Mods) row.AcceptChanges();
+        foreach (var row in Order)
+        {
+            row.InProfile = true;
+            row.AcceptChanges();
+        }
         NotifyButtons();
     }
     /// <summary>Moves a mod to an absolute position for drag/drop and keyboard buttons.</summary>
@@ -428,6 +438,14 @@ public sealed partial class MainViewModel : ObservableObject
         await Task.Run(() => store.SetMany(settings));
         await ReloadAsync(); Message("Settings saved.");
     }, false);
+    private Task SetUnlockFixAsync(ModRow row) => RunAsync("Updating legacy shop unlock repair", async (_, _) =>
+    {
+        string profile = SelectedProfile!;
+        bool enabled = row.UnlockFix;
+        await Task.Run(() => new ProfileLibrary(store).SetUnlockFix(profile, row.Id, enabled));
+        Message($"{row.Name}: legacy shop unlock repair {(enabled ? "on" : "off")} for '{profile}'.");
+    }, false);
+
     /// <summary>Runs shared conflict checks and displays per-hunk choices where applicable.</summary>
     public Task CheckAsync() => RunAsync("Checking conflicts", async (token, progress) =>
     {

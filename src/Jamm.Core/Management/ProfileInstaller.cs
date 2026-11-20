@@ -23,16 +23,22 @@ public sealed class ProfileInstaller(ManagerStore store)
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
         new BuiltinMods(store).RefreshStale(profile.EnabledMods, progress, cancellationToken);
         var library = new ModLibrary(store);
-        var inputs = profile.EnabledMods.Select(id => library.Find(id)).Select(m => new BuildInput(library.Patch(m, progress, cancellationToken), library.Archive(m))).ToArray();
+        var inputs = profile.EnabledMods.Select(library.Find).Select(m => new BuildInput(library.Patch(m, progress, cancellationToken), library.Archive(m))
+        {
+            UnlockFix = profile.UnlockFixMods?.Contains(m.Id, StringComparer.Ordinal) == true
+        }).ToArray();
         string hash = BuildFiles.Hash(config.Base);
         if (inputs.Any(i => i.Patch.Base.Sha256 != hash))
             throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
-        string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        string signatureText = JsonSerializer.Serialize(new
         {
             Builder = inputs.Length > 0 && !profile.NoRepack ? $"menu-layout-3/{TextureRepacker.Revision}" : "menu-layout-3",
             InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
-        }, ManagerStore.JsonOptions))));
+        }, ManagerStore.JsonOptions);
+        if (inputs.Any(i => i.UnlockFix))
+            signatureText += "\nLegacy shop repair v1: " + string.Join(",", inputs.Where(i => i.UnlockFix).Select(i => i.Patch.Mod.Sha256));
+        string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(signatureText)));
         return (profile, config, inputs, signature);
     }
 

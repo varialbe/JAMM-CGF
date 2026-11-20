@@ -314,9 +314,38 @@ Once in-game, press **`F12`** (or `` ` ``) to open **JAMM Console** and run `mon
 
 ---
 
-## 9. Bonus: Custom rod or lure with the GML API (UndertaleModTool)
+## 9. A custom rod in the shop
 
-ModKit focuses on fish, boats, hats, and upgrades; to add **rods**, **lures**, or **tools**, create a `.win` mod in UndertaleModTool with your new sprite/object assets, placeholder scripts (`return -1;`), and a `jamm_init_<id>` script:
+The [Example Rod](../../examples/modkit/example-rod/) package includes an original sprite and this `rods` entry for Copper Current.
+
+```json
+{
+  "key": "copper-current",
+  "name": "Copper Current",
+  "cost": 25000,
+  "cast_speed": 13,
+  "rod_power": 1.85,
+  "rod_power_flat": 4,
+  "reel_speed": 10.5,
+  "sinker_distance": 4200,
+  "sprite": "art/copper-current.png",
+  "origin": [19, 69],
+  "upgrade_slots": "vanilla"
+}
+```
+
+`"upgrade_slots": "vanilla"` gives the rod one more slot than the highest slot count at registration time, capped at 16. Change the line to `"upgrade_slots": 6` for six slots. Omitting the field gives eight slots. With `unlocked` omitted, Copper Current appears in the rod shop for $25,000.
+
+```sh
+cgfmm modkit check examples/modkit/example-rod
+cgfmm add examples/modkit/example-rod
+```
+
+Enable Example Rod in a profile and build it to use the rod in game.
+
+## 10. Registering gear with GML in UndertaleModTool
+
+The GML API also supports rods, lures, and tools. Create a `.win` mod in UndertaleModTool with your sprite or object assets, placeholder registration scripts (`return -1;`), and a `jamm_init_<id>` script.
 
 ```gml
 // Script: jamm_init_angler_gear

@@ -99,6 +99,61 @@ public sealed class ModKitTests
             """));
     }
 
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("17")]
+    [InlineData("1.5")]
+    [InlineData("null")]
+    [InlineData("true")]
+    [InlineData("\"8\"")]
+    [InlineData("\"best\"")]
+    public void RodSlotErrorsNameTheExactField(string slots)
+    {
+        using var temp = new TemporaryDirectory();
+        string dir = WriteRodPackage(temp, $$""", "upgrade_slots": {{slots}}""");
+        Assert.Contains("$.rods[0].upgrade_slots", Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(dir)).Message);
+    }
+
+    [Theory]
+    [InlineData(", \"slot_count\": 8", "slot_count")]
+    [InlineData(", \"unlock\": {}", "unlock")]
+    [InlineData(", \"sprite\": \"art/nope.png\"", "sprite")]
+    [InlineData("", "sprite")]
+    public void RodValidationReportsUnknownFieldsAndMissingSprites(string extra, string path)
+    {
+        using var temp = new TemporaryDirectory();
+        string dir = WriteRodPackage(temp, extra, includeSprite: path != "sprite");
+        Assert.Contains($"$.rods[0].{path}", Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(dir)).Message);
+    }
+
+    [Theory]
+    [InlineData("", "8, 0")]
+    [InlineData(", \"upgrade_slots\": 0", "0, 0")]
+    [InlineData(", \"upgrade_slots\": 16, \"unlocked\": true", "16, 1")]
+    [InlineData(", \"upgrade_slots\": \"vanilla\"", "-1, 0")]
+    public void RodInitRegistrationMatchesTheGmlApi(string extra, string optionalArguments)
+    {
+        using var temp = new TemporaryDirectory();
+        var package = ModKitPackage.Load(WriteRodPackage(temp, extra));
+        var rod = Assert.Single(package.Rods);
+        Assert.Equal($"jamm_rod_register(\"test-rod:reef-rod\", \"Reef Rod\", 250, 13, 1.85, 4, 10.5, 4200, jmk_test_rod_reef_rod_rod_sprite, {optionalArguments});",
+            ModKitBuilder.RodRegistration(package.Id, rod));
+    }
+
+    private static string WriteRodPackage(TemporaryDirectory temp, string extra, bool includeSprite = true)
+    {
+        string sprite = includeSprite ? """, "sprite": "art/rod.png" """ : "";
+        string dir = CreateMinimalPackage(temp, "rod", $$"""
+            { "id": "test-rod", "name": "Test Rod", "rods": [
+                { "key": "reef-rod", "name": "Reef Rod", "cost": 250, "cast_speed": 13, "rod_power": 1.85,
+                  "rod_power_flat": 4, "reel_speed": 10.5, "sinker_distance": 4200 {{sprite}}{{extra}} }
+            ] }
+            """);
+        Directory.CreateDirectory(Path.Combine(dir, "art"));
+        File.WriteAllBytes(Path.Combine(dir, "art", "rod.png"), SolidPng(24, 24));
+        return dir;
+    }
+
     [Fact]
     public void BuilderCompilesAllAssetTypesAndTwoModKitModsMergeWithoutConflicts()
     {
@@ -287,6 +342,39 @@ public sealed class ModKitTests
         var list = new ModLibrary(new ManagerStore(dataDir)).List();
         Assert.Single(list);
         Assert.Equal("My Fish", list[0].Mod.Name);
+    }
+
+    [RealFilesFact]
+    public void RealBaseMergesExampleRodWithItemsRuntimeAndShopPaging()
+    {
+        string basePath = Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!;
+        string package = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..", "examples", "modkit", "example-rod"));
+        using var temp = new TemporaryDirectory();
+        string modPath = temp.PathFor("example-rod.win");
+        string output = temp.PathFor("merged.win");
+
+        var mod = ModKitBuilder.Build(package, basePath, modPath, noRepack: true);
+        Assert.Equal(1, mod.SpritesAdded);
+        Assert.Equal(0, mod.ObjectsAdded);
+        Assert.Equal(2, mod.ScriptsAdded);
+
+        ModPatch patch;
+        using (var original = GameFileLoader.Load(basePath))
+        using (var archive = GameFileLoader.Load(modPath))
+            patch = PatchBuilder.Create(original, archive, "Example Rod");
+
+        var merged = ArchiveBuilder.Build(basePath, [new(patch, modPath)], output, noRepack: true);
+        Assert.NotNull(merged.Verification);
+        using var file = GameFileLoader.Load(output);
+        var sprite = file.Data.Sprites.ByName("jmk_example_rod_copper_current_rod_sprite");
+        Assert.NotNull(sprite);
+        Assert.Equal(19, sprite.OriginX);
+        Assert.Equal(69, sprite.OriginY);
+        Assert.Contains("jamm_rod_register(", PatchBuilder.ReadCode(file, "gml_Script_jamm_init_example_rod").Text);
+        Assert.Contains("jamm_init_example_rod()", PatchBuilder.ReadCode(file, ItemsRuntimeScripts.ApiInitCode).Text);
+        Assert.Contains("RodData.nItems", PatchBuilder.ReadCode(file, "gml_Script_jamm_rod_register").Text);
+        Assert.Contains("scroll_row", PatchBuilder.ReadCode(file, "gml_Object_CardHandler_Create_0").Text);
     }
 
     [RealFilesFact]

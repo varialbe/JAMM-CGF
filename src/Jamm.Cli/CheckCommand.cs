@@ -27,7 +27,7 @@ internal static class CheckCommand
             else if (arg.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"Unknown option '{arg}'.");
             else paths.Add(arg);
         }
-        if (paths.Count < 1 || !options.TryGetValue("--base", out string? basePath))
+        if (paths.Count == 0 || !options.TryGetValue("--base", out string? basePath))
             throw new ArgumentException("check needs at least one mod or patch and --base <data.win>.");
         List<string> inputs = [basePath, .. paths];
         Dictionary<int, ModPatch> supplied = [];
@@ -121,7 +121,8 @@ internal static class CheckCommand
         bool IsHunk(ConflictItem f) => f.Family == "code" && f.Kind is "code" or "list" or "addition" or "removal"
             && report.CodeMerges.ContainsKey(f.Asset);
         var rows = report.Findings.GroupBy(f => (Severity: IsHunk(f) ? "" : f.Severity,
-            f.Family, f.Asset, Kind: IsHunk(f) ? "code hunks" : f.Kind, Area: f.Kind == "area" ? f.Message : null)).ToArray();
+            f.Family, f.Asset, Kind: IsHunk(f) ? "code hunks" : f.Kind, Area: f.Kind == "area" ? f.Message : null,
+            Mod: f.Kind == "unlock" ? f.Mods[0] : "")).ToArray();
         foreach (string status in severities)
         {
             Console.WriteLine($"\n{status} ({report.Counts[status]} findings)");
@@ -132,7 +133,8 @@ internal static class CheckCommand
                 string message = group.Key.Kind == "code hunks"
                     ? $"{report.CodeMerges[item.Asset].Hunks.Count} hunks ({report.CodeMerges[item.Asset].Hunks.Count(h => h.Status == "CONFLICT")} conflicts); use --details for all versions."
                     : group.Count() > 1 ? $"{group.Count()} findings; use --details for all versions." : item.Message;
-                Console.WriteLine($"{group.Key.Kind,-12} {item.Family,-14} {item.Asset,-48} {string.Join(" + ", group.SelectMany(f => f.Mods).Distinct())}: {message}");
+                string explanation = item.Kind == "unlock" ? message : $"{string.Join(" + ", group.SelectMany(f => f.Mods).Distinct())}: {message}";
+                Console.WriteLine($"{group.Key.Kind,-12} {item.Family,-14} {item.Asset,-48} {explanation}");
             }
         }
         Console.WriteLine($"\n{string.Join("; ", report.Counts.Select(c => $"{c.Key}: {c.Value}"))}; elapsed {elapsed:F3} s.");
