@@ -2,7 +2,7 @@ namespace Jamm.ModMaker;
 
 internal static class FishGridScripts
 {
-    internal const int CellSize = 512;
+    internal const int CellSize = 1024;
     internal const int Drift = 32;
     internal const int CoordinateLimit = 33554432;
     // Signed cell coordinates within CoordinateLimit occupy fewer than 18 bits per axis.
@@ -28,8 +28,31 @@ internal static class FishGridScripts
             if (!global.jamm_fg_valid) exit;
             if (!variable_instance_exists(id, "jamm_fg_serial_seen")) exit;
             if (jamm_fg_serial_seen != global.jamm_fg_serial) exit;
-            if (!(abs(x - jamm_fg_origin_x) <= {{Drift}} && abs(y - jamm_fg_origin_y) <= {{Drift}}))
+            if (abs(x - jamm_fg_origin_x) <= {{Drift}} && abs(y - jamm_fg_origin_y) <= {{Drift}}) exit;
+            if (!(abs(x) <= {{CoordinateLimit}} && abs(y) <= {{CoordinateLimit}}))
+            {
                 global.jamm_fg_valid = false;
+                exit;
+            }
+            var key = floor(x / {{CellSize}}) + (floor(y / {{CellSize}}) * {{RowStride}});
+            var old_key = jamm_fg_cell;
+            jamm_fg_origin_x = x;
+            jamm_fg_origin_y = y;
+            if (key == old_key) exit;
+
+            // Relink the cell node while keeping the order captured by with (FishLarge).
+            var order = jamm_fg_order;
+            var previous = global.jamm_fg_previous[order];
+            var next = global.jamm_fg_links[order];
+            if (previous >= 0)
+                global.jamm_fg_links[previous] = next;
+            else if (next >= 0)
+                ds_map_set(global.jamm_fg_heads, old_key, next);
+            else
+                ds_map_delete(global.jamm_fg_heads, old_key);
+            if (next >= 0) global.jamm_fg_previous[next] = previous;
+            jamm_fg_cell = key;
+            {{LinkCellHead}}
             """,
         ["jamm_fg_type"] = """
             return argument0 == FishLarge || object_is_ancestor(argument0, FishLarge);
@@ -76,9 +99,10 @@ internal static class FishGridScripts
                 jamm_fg_origin_y = y;
                 var key = floor(x / {{CellSize}}) + (floor(y / {{CellSize}}) * {{RowStride}});
                 var order = global.jamm_fg_count;
+                jamm_fg_order = order;
+                jamm_fg_cell = key;
                 global.jamm_fg_ids[order] = id;
-                global.jamm_fg_links[order] = ds_map_find_value(global.jamm_fg_heads, key);
-                ds_map_set(global.jamm_fg_heads, key, order);
+                {{LinkCellHead}}
                 global.jamm_fg_count += 1;
             }
             """,
@@ -95,7 +119,8 @@ internal static class FishGridScripts
                 for (var cx = min_x; cx <= max_x; cx += 1)
                 {
                     var order = ds_map_find_value(global.jamm_fg_heads, cx + (cy * {{RowStride}}));
-                    while (!is_undefined(order))
+                    if (is_undefined(order)) continue;
+                    while (order >= 0)
                     {
                         ds_list_add(orders, order);
                         order = global.jamm_fg_links[order];
@@ -122,6 +147,15 @@ internal static class FishGridScripts
             return true;
             """
     };
+
+    private const string LinkCellHead = """
+        var head = ds_map_find_value(global.jamm_fg_heads, key);
+        if (is_undefined(head)) head = -1;
+        if (head >= 0) global.jamm_fg_previous[head] = order;
+        global.jamm_fg_previous[order] = -1;
+        global.jamm_fg_links[order] = head;
+        ds_map_set(global.jamm_fg_heads, key, order);
+        """;
 
     internal static string Avoidance(string original)
     {

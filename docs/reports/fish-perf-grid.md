@@ -10,7 +10,7 @@ I resolved object indices against the archive's object table and inspected the d
 
 | Script or event | Radius, ordering and effects | Grid decision |
 |---|---|---|
-| `fish_avoid_fish` | Strict squared-distance cutoff `abs(argument1)`. Accumulates both velocity components in selector traversal order. Coincident distinct instances still reach the original arithmetic. The last non-self visit supplies `sdist`, including a fish outside the cutoff. | Uses the grid for `FishLarge` and radii through 512. Bagu, dynamic `object_index` selectors and larger radii keep the original loop. Audited callers use 40, 50, 300, 500 and 1,000 for the large-fish selector. |
+| `fish_avoid_fish` | Strict squared-distance cutoff `abs(argument1)`. Accumulates both velocity components in selector traversal order. Coincident distinct instances still reach the original arithmetic. The last non-self visit supplies `sdist`, including a fish outside the cutoff. | Uses the grid for `FishLarge` and radii through 1,024. Bagu, dynamic `object_index` selectors and larger radii keep the original loop. Audited callers use 40, 50, 300, 500 and 1,000 for the large-fish selector. |
 | `fish_flock` | Unbounded same-species nearest query on a random refresh or missing partner. Temporarily deactivates self, then rejects a partner by state and applies spring-like velocity changes. | Native nearest and reactivation order retained. |
 | `fish_shove_schoolmates` | Precise shape membership from `instance_place` at the current position. Uses one returned instance. The 1–500 distance clamp affects force after the lookup. | Native collision masks and hit selection retained. |
 | `fish_fleelarge`, `fish_fleehuge` | Unbounded native nearest, then a size-dependent test of 100 × (display size − 2), with 10 extra pixels in state 9. Includes state and random gates. | Native nearest and tie handling retained. |
@@ -40,12 +40,12 @@ Several other fish traversals are driven by a player action, a controller or a s
 
 The controller resets validity in Begin Step. It builds lazily during the first eligible Fish End Step query, after engine movement. One `with (FishLarge)` walk captures each active instance's traversal ordinal. The query unions the relevant cells, sorts those ordinals, and executes the original impulse math against current positions. It also preserves the final `sdist` write.
 
-Cells are 512 pixels wide. Queries include padding for up to 32 pixels of movement per axis from the snapshot. Position hooks invalidate the snapshot after larger moves and before writes whose destination might be another instance. Creation, destruction, activation and object changes invalidate before a tracked candidate can enter, leave or change order. This catches same-count replacement. The query also checks the room and the active selector count. Once invalidated, that tick uses the original loop.
+Cells are 1,024 pixels wide. Queries include padding for up to 32 pixels of movement per axis from the last recorded position. Larger moves update the recorded position and relink the fish if it changes cells, without changing its traversal ordinal. A position outside the indexed bounds or a write with a potentially different instance as its destination invalidates the snapshot. Creation, destruction, activation and object changes invalidate before a tracked candidate can enter, leave or change order. This catches same-count replacement. The query also checks the room and the active selector count. Once invalidated, that tick uses the original loop.
 
 ## Validation and measurements
 <!-- Recorded measurements -->
 
-The Release solution build completed with zero warnings. The .NET suite passed 460 core and 127 GUI tests, with 15 real-file tests skipped by default. The original-only managed Perf build also passed semantic reference validation and archive read-back. The opt-in GML fixture passed in the legacy Wine runner. It checks 500 ordered queries against a brute-force loop, negative and large coordinates, movement bounds, same-count replacement and deactivate/reactivate.
+The Release solution build completed with zero warnings. The .NET suite passed 460 core and 127 GUI tests, with 15 real-file tests skipped by default. The original-only managed Perf build also passed semantic reference validation and archive read-back. The GML fixture checks 500 ordered queries against a brute-force loop, negative and large coordinates, movement between cells, same-count replacement and deactivate/reactivate. The first fixture passed in the legacy Wine runner.
 
 The benchmark runs used Wine, the same 1200×720 viewport for performance captures, default scene coordinates and seed 1337. F8 scheduling was off. Each pair uses the same benchmark archive with a different `jamm_perf.ini` setting. The trace freezes simulation-facing time, date, frame delta and the FPS input to FishThinner. It suppresses raster submission while retaining Draw events. Hashes cover the active Fish traversal, binary positions, velocities, scale, path state and selected fish state variables. The RNG column counts explicit calls reachable from GML.
 
@@ -131,6 +131,8 @@ Each cell reports entry calls per tick / percentage of the profiled loop. A dash
 
 ### Before and after
 
+The initial 512-pixel grid did not improve the heavy dock timing. It measured 181.92 ms/tick OFF and 191.29 ms/tick ON, with 0.750 ms/tick spent building the grid and 8.33 grid queries served per tick. An instrumented follow-up attributed 24 of 31 observed first invalidations to tracked fish moving more than 32 pixels. Active-set changes accounted for the other seven. The revised grid keeps large coordinate changes in the spatial index by relinking the existing ordinal.
+
 These are event-profile captures with the same instrumentation on both sides. Fish time is inclusive elapsed time inside `Fish_Step_2`, and µs/call divides it by executed Fish End Step events. Whole-loop time includes update and draw work. Grid-build time averages across every captured tick, including ticks without a build.
 
 | Pack | Scene | Grid | Ticks | Fish End Step calls/tick | Fish End Step ms/tick | µs/call | Whole loop ms/tick | Grid build ms/tick | Grid collects/tick |
@@ -139,8 +141,8 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | vanilla | dock | 1 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 0 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 1 | — | — | — | — | — | — | — |
-| heavy | dock | 0 | 58 | 2229.64 | 181.92 | 81.59 | 427.81 | 0.000 | 0.00 |
-| heavy | dock | 1 | 54 | 2263.39 | 191.29 | 84.51 | 457.86 | 0.750 | 8.33 |
+| heavy | dock | 0 | — | — | — | — | — | — | — |
+| heavy | dock | 1 | — | — | — | — | — | — | — |
 | heavy | deepwater | 0 | — | — | — | — | — | — | — |
 | heavy | deepwater | 1 | — | — | — | — | — | — | — |
 | all7 | dock | 0 | — | — | — | — | — | — | — |
@@ -150,11 +152,11 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 
 ### Trace comparison
 
-A 30-tick vanilla dock smoke pair produced byte-identical files with SHA-256 `f4186b23ae0f40c906ed7d2228a1c2b655df06eed4613def8431e7d4586163f1`. The full matrix requires 1,800 complete rows per side and byte-identical files.
+The initial 512-pixel implementation produced matching 30-tick and 1,800-tick vanilla dock pairs. The full pair's SHA-256 was `6c835cd0cd9339269f888152892b35d7e5b80a561b66ad98bbd724d1362a7a70`. The table below refers to the revised grid that relinks moving fish.
 
 | Pack | Scene | OFF ticks | ON ticks | Comparison |
 |---|---|---:|---:|---|
-| vanilla | dock | 1800 | 1800 | Identical |
+| vanilla | dock | 0 | 0 | No matched captures |
 | vanilla | deepwater | 0 | 0 | No matched captures |
 | heavy | dock | 0 | 0 | No matched captures |
 | heavy | deepwater | 0 | 0 | No matched captures |

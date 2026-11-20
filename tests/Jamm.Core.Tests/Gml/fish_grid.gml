@@ -19,7 +19,16 @@ for (var trial = 0; trial < 500; trial += 1)
     var center = centers[trial mod 3];
     var px = center.x + irandom_range(-520, 520);
     var py = center.y + irandom_range(-520, 520);
-    var radius = irandom_range(1, 512);
+    var radius = irandom_range(1, 1024);
+    if (trial mod 25 == 0)
+    {
+        with (spawned[trial div 25])
+        {
+            x += irandom_range(-1400, 1400);
+            y += irandom_range(-1400, 1400);
+            jamm_fg_touch();
+        }
+    }
     var cx = x;
     var cy = y;
     x = px;
@@ -54,9 +63,19 @@ with (spawned[102])
     x += 32;
     jamm_fg_touch();
     if (!jamm_fg_ready(512)) show_error("Grid rejected a fish within its drift bound", true);
-    x += 1;
+    x += 3072;
     jamm_fg_touch();
-    if (jamm_fg_ready(512)) show_error("Grid accepted a fish outside its drift bound", true);
+    if (!jamm_fg_ready(1024)) show_error("Grid rejected a fish after relinking its cell", true);
+    var count = jamm_fg_collect(0);
+    var found = false;
+    for (var j = 0; j < count; j += 1)
+        if (global.jamm_fg_ids[ds_list_find_value(global.jamm_fg_orders, j)] == id) found = true;
+    if (!found) show_error("Grid lost a fish after moving it to another cell", true);
+    var old_x = x;
+    x = 33554433;
+    jamm_fg_touch();
+    if (global.jamm_fg_valid) show_error("Grid accepted a fish outside the supported coordinates", true);
+    x = old_x;
 }
 global.jamm_fg_built = false;
 if (!jamm_fg_ready(100)) show_error("Grid failed to rebuild for lifecycle check", true);
