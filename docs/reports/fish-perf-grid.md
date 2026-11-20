@@ -43,7 +43,7 @@ Cells are 512 pixels wide. Queries include padding for up to 32 pixels of moveme
 ## Validation and measurements
 <!-- Recorded measurements -->
 
-The Release solution build completed with zero warnings. The .NET suite passed 460 core and 127 GUI tests, with 15 real-file tests skipped by default. The original-only managed Perf build also passed semantic reference validation and archive read-back. The opt-in GML fixture was compiled from the original archive. It checks 500 ordered queries against a brute-force loop, negative and large coordinates, movement bounds, same-count replacement and deactivate/reactivate.
+The Release solution build completed with zero warnings. The .NET suite passed 460 core and 127 GUI tests, with 15 real-file tests skipped by default. The original-only managed Perf build also passed semantic reference validation and archive read-back. The opt-in GML fixture passed in the legacy Wine runner. It checks 500 ordered queries against a brute-force loop, negative and large coordinates, movement bounds, same-count replacement and deactivate/reactivate.
 
 The benchmark runs used Wine, the same 1200×720 viewport for performance captures, default scene coordinates and seed 1337. F8 scheduling was off. Each pair uses the same benchmark archive with a different `jamm_perf.ini` setting. The trace freezes simulation-facing time, date, frame delta and the FPS input to FishThinner. It suppresses raster submission while retaining Draw events. Hashes cover the active Fish traversal, binary positions, velocities, scale, path state and selected fish state variables. The RNG column counts explicit calls reachable from GML.
 
@@ -82,7 +82,7 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | vanilla | dock | 1 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 0 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 1 | — | — | — | — | — | — | — |
-| heavy | dock | 0 | — | — | — | — | — | — | — |
+| heavy | dock | 0 | 58 | 2229.64 | 181.92 | 81.59 | 427.81 | 0.000 | 0.00 |
 | heavy | dock | 1 | — | — | — | — | — | — | — |
 | heavy | deepwater | 0 | — | — | — | — | — | — | — |
 | heavy | deepwater | 1 | — | — | — | — | — | — | — |
@@ -93,7 +93,7 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 
 ### Trace comparison
 
-The target is 1,800 complete rows per side and byte-identical files. Partial captures cannot satisfy that target.
+A 30-tick vanilla dock smoke pair produced byte-identical files with SHA-256 `f4186b23ae0f40c906ed7d2228a1c2b655df06eed4613def8431e7d4586163f1`. The full matrix requires 1,800 complete rows per side and byte-identical files.
 
 | Pack | Scene | OFF ticks | ON ticks | Comparison |
 |---|---|---:|---:|---|
