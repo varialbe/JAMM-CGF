@@ -147,12 +147,12 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | heavy | dock | 1 | 30 | 2408.57 | 252.69 | 104.91 | 830.12 | 1.043 | 19.07 |
 | heavy | deepwater | 0 | 58 | 2237.55 | 180.28 | 80.57 | 429.60 | 0.000 | 0.00 |
 | heavy | deepwater | 1 | 51 | 2287.27 | 200.65 | 87.72 | 481.80 | 0.977 | 17.69 |
-| all7 | dock | 0 | — | — | — | — | — | — | — |
-| all7 | dock | 1 | — | — | — | — | — | — | — |
+| all7 | dock | 0 | 13 | 3855.00 | 814.41 | 211.26 | 1955.81 | 0.000 | 0.00 |
+| all7 | dock | 1 | 26 | 3781.85 | 465.25 | 123.02 | 951.16 | 1.877 | 17.35 |
 | all7 | deepwater | 0 | — | — | — | — | — | — | — |
 | all7 | deepwater | 1 | — | — | — | — | — | — | — |
 
-A second heavy dock pair used a fixed 120-tick window with the trace clock and raster suppression on both sides. The traces were byte-identical, and both sides executed 250,546 Fish End Step events. The measured Fish End Step time was 171.64 ms/tick OFF and 179.27 ms/tick ON. Whole-loop time rose from 394.00 to 407.97 ms/tick. The grid built at 0.860 ms/tick and served 26.74 queries/tick. This controlled pair showed no CPU reduction for heavy dock.
+A second heavy dock pair used a fixed 120-tick window with the trace clock and raster suppression on both sides. The traces were byte-identical, and both sides executed 250,546 Fish End Step events. The measured Fish End Step time was 171.64 ms/tick OFF and 179.27 ms/tick ON. Whole-loop time rose from 394.00 to 407.97 ms/tick. The grid built at 0.860 ms/tick and served 26.74 queries/tick. This controlled pair showed no CPU reduction for heavy dock. The first ordinary all-7 dock pair had substantially different whole-loop times and only 13 OFF ticks, so the apparent speedup in that row cannot isolate the grid.
 
 ### Trace comparison
 
@@ -164,5 +164,5 @@ The initial 512-pixel implementation produced matching 30-tick and 1,800-tick va
 | vanilla | deepwater | 0 | 0 | No matched captures |
 | heavy | dock | 1800 | 1603 | Same prefix, different lengths |
 | heavy | deepwater | 1800 | 1800 | Identical |
-| all7 | dock | 0 | 0 | No matched captures |
+| all7 | dock | 742 | 0 | No matched captures |
 | all7 | deepwater | 0 | 0 | No matched captures |
