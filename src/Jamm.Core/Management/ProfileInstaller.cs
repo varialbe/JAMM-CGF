@@ -29,8 +29,8 @@ public sealed class ProfileInstaller(ManagerStore store)
             throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
-            // Rebuild installations that contain the earlier menu positioning patches.
-            Builder = "menu-layout-3", InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Builder = inputs.Length > 0 && !profile.NoRepack ? $"menu-layout-3/{TextureRepacker.Revision}" : "menu-layout-3",
+            InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions))));
         return (profile, config, inputs, signature);
@@ -82,7 +82,9 @@ public sealed class ProfileInstaller(ManagerStore store)
         string hash = BuildFiles.Hash(selection.Config.Base!);
         string output = store.Path("builds", $"{Guid.NewGuid():N}.win");
         GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
-        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, new ProfileLibrary(store).ActiveResolutions(selection.Profile), progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root });
+        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, new ProfileLibrary(store).ActiveResolutions(selection.Profile),
+            progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root },
+            noRepack: selection.Profile.NoRepack);
         return new(selection.Profile, selection.Config, selection.Signature, output, hash, result);
     }
 

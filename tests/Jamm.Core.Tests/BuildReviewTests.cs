@@ -247,7 +247,7 @@ public sealed partial class BuildingTests
         using var original = GameFileLoader.Load(baseline); using var a = GameFileLoader.Load(aPath); using var b = GameFileLoader.Load(bPath);
         var pa = PatchBuilder.Create(original, a, "A"); var pb = PatchBuilder.Create(original, b, "B");
         string output = temp.PathFor("result.win");
-        ArchiveBuilder.Build(baseline, [new(pa, aPath), new(pb, bPath)], output);
+        ArchiveBuilder.Build(baseline, [new(pa, aPath), new(pb, bPath)], output, noRepack: true);
         using var result = GameFileLoader.Load(output);
         Assert.Equal("new display", result.Data.Fonts[0].DisplayName.Content);
         Assert.Equal(new ContentFingerprints().Region(a.Data.Fonts[0].Texture), new ContentFingerprints().Region(result.Data.Fonts[0].Texture));

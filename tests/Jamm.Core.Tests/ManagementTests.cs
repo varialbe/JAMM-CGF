@@ -40,12 +40,18 @@ public sealed class ManagementTests : IDisposable
         string path = Path.Combine(store.Root, "profiles", "everything.json");
         var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
         json["future"] = System.Text.Json.Nodes.JsonNode.Parse("{\"nested\":[1,true,\"value\"]}");
+        json.AsObject().Remove("noRepack"); // Older profiles lack the setting.
         File.WriteAllText(path, json.ToJsonString());
+        Assert.False(profiles.Get("everything").NoRepack);
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["repack", "everything", "off"], store.Root));
         List<string> notices = [];
         profiles.Update("everything", [b.Id, a.Id], [a.Id], notices.Add);
         Assert.Equal("Abyss", profiles.Get("everything").Resolutions["code/synthetic"]);
         profiles.Update("everything", [a.Id, b.Id], [], notices.Add);
         profiles.Rename("everything", "renamed");
+        Assert.True(profiles.Get("renamed").NoRepack);
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["repack", "renamed", "on"], store.Root));
+        Assert.False(profiles.Get("renamed").NoRepack);
         Assert.Empty(notices);
         Assert.Equal(json["future"]!.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(store.Root, "profiles", "renamed.json")))!["future"]!.ToJsonString());
         profiles.Update("renamed", [b.Id], [], notices.Add);

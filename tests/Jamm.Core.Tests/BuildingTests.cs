@@ -178,7 +178,7 @@ public sealed partial class BuildingTests
         string output = temp.PathFor("result.win");
         ArchiveBuilder.Build(basePath, [new(pa, aPath), new(pb, bPath)], output);
         using var merged = GameFileLoader.Load(output);
-        Assert.Equal(2, merged.Data.EmbeddedTextures.Count);
+        Assert.Single(merged.Data.EmbeddedTextures);
         Assert.Equal(2, merged.Data.TexturePageItems.Count);
         Assert.Single(merged.Data.Strings, s => s.Content == "shared display name");
         foreach (var source in new[] { a, b })

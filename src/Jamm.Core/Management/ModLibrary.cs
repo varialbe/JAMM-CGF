@@ -240,7 +240,7 @@ public sealed class ModLibrary(ManagerStore store)
                     {
                         modKitManifest = ModKitPackage.Load(packageRoot);
                         ValidateDisplayName(name ?? modKitManifest.Name);
-                        ModKitBuilder.Build(packageRoot, basePath, copy, progress, cancellationToken);
+                        ModKitBuilder.Build(packageRoot, basePath, copy, progress, cancellationToken, noRepack: true);
                     }
                     else
                     {
@@ -254,7 +254,7 @@ public sealed class ModLibrary(ManagerStore store)
             }
             else if (isModKitFolder)
             {
-                ModKitBuilder.Build(trimmedSource, basePath, copy, progress, cancellationToken);
+                ModKitBuilder.Build(trimmedSource, basePath, copy, progress, cancellationToken, noRepack: true);
             }
             else if (trimmedSource.EndsWith(".win", StringComparison.OrdinalIgnoreCase))
             {

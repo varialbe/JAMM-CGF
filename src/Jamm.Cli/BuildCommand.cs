@@ -20,7 +20,7 @@ internal static class BuildCommand
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         List<string> positional = [];
-        bool dryRun = false;
+        bool dryRun = false, noRepack = false;
         string[] allowed = command switch
         {
             "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json"],
@@ -31,6 +31,8 @@ internal static class BuildCommand
             string arg = arguments[i];
             if (command == "build" && arg == "--dry-run")
             { if (dryRun) throw new ArgumentException("--dry-run was given twice."); dryRun = true; }
+            else if (command == "build" && arg == "--no-repack")
+            { if (noRepack) throw new ArgumentException("--no-repack was given twice."); noRepack = true; }
             else if (allowed.Contains(arg, StringComparer.Ordinal))
             {
                 if (++i == arguments.Length || arguments[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{arg} needs a value.");
@@ -56,9 +58,9 @@ internal static class BuildCommand
             if (!options.TryGetValue("--game", out string? game)) throw new ArgumentException("restore needs --game <game dir>.");
             Console.WriteLine($"Restored data.win (SHA-256 {GameInstaller.Restore(game)}). Original backup retained."); return 0;
         }
-        if (!options.TryGetValue("--base", out string? basePath) || !options.TryGetValue("--order", out string? order))
-            throw new ArgumentException("build needs --base <data.win> and --order <mod1>,<mod2>,... .");
-        string[] paths = order.Split(',', StringSplitOptions.TrimEntries);
+        if (!options.TryGetValue("--base", out string? basePath))
+            throw new ArgumentException("build needs --base <data.win>. Pass --order <mod1>,<mod2>,... to include mods.");
+        string[] paths = options.TryGetValue("--order", out string? order) ? order.Split(',', StringSplitOptions.TrimEntries) : [];
         if (paths.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("--order contains an empty mod path.");
         string output = options.GetValueOrDefault("--out", Path.Combine("build", "data.win"));
         string[] protectedPaths = [basePath, .. paths, .. options.TryGetValue("--resolve", out string? resolvePath) ? new[] { resolvePath } : []];
@@ -108,11 +110,12 @@ internal static class BuildCommand
         if (acceptanceJson is not null)
             OutputFile.Validate(acceptanceJson, [.. protectedPaths, output]);
         if (install is not null) GameInstaller.Validate(install, baseHash, [.. protectedPaths.Skip(1), output], basePath);
-        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress);
+        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress, noRepack: noRepack);
         foreach (string decision in result.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
         foreach (var item in result.RemappedReferences ?? new Dictionary<string, int>())
             Console.WriteLine($"Remapped references: {item.Key}: {item.Value} (changed/added source alternatives; conflict selections verified separately)");
-        Console.WriteLine($"Semantic reference verification: PASS ({result.SemanticEntries} code entries; selected mod hunks and unchanged base).");
+        if (inputs.Count > 0)
+            Console.WriteLine($"Semantic reference verification: PASS ({result.SemanticEntries} code entries; selected mod hunks and unchanged base).");
         Counts(result.Counts);
         if (result.Acceptance is { } acceptance)
         {
@@ -125,7 +128,8 @@ internal static class BuildCommand
             }
         }
         if (dryRun)
-            Console.WriteLine($"Dry run: merge and compilation passed; would write '{Path.GetFullPath(output)}'" +
+            Console.WriteLine((inputs.Count == 0 ? "Dry run: would copy the original archive to" : "Dry run: merge and compilation passed; would write") +
+                $" '{Path.GetFullPath(output)}'" +
                 (install is null ? ". No files written." : $" and install in '{Path.GetFileName(install)}'. No files written."));
         else
         {

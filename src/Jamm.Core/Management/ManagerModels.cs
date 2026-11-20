@@ -97,6 +97,8 @@ public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, s
     public Dictionary<string, System.Text.Json.JsonElement>? ExtraFields { get; init; }
     /// <summary>Disabled library IDs retained in the profile order; absent in older profiles.</summary>
     public string[] DisabledMods { get; init; } = [];
+    /// <summary>Skips atlas repacking when building this profile's enabled mods.</summary>
+    public bool NoRepack { get; init; }
     /// <summary>Active library IDs in load order.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string[] EnabledMods => Mods.Except(DisabledMods, StringComparer.Ordinal).ToArray();

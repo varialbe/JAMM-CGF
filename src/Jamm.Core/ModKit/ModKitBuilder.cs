@@ -14,7 +14,11 @@ public sealed record ModKitBuildResult(
     ModKitManifest Package,
     int SpritesAdded,
     int ObjectsAdded,
-    int ScriptsAdded);
+    int ScriptsAdded)
+{
+    /// <summary>The atlas decision for the standalone build, when repacking was enabled and textures were present.</summary>
+    public string? TextureDecision { get; init; }
+}
 
 /// <summary>Compiles a validated <see cref="ModKitManifest"/> onto a read-only legacy base archive as a zero-conflict mod.</summary>
 public static class ModKitBuilder
@@ -25,7 +29,8 @@ public static class ModKitBuilder
         string basePath,
         string outputPath,
         Action<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool noRepack = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var package = ModKitPackage.Load(packageDirectory);
@@ -48,6 +53,9 @@ public static class ModKitBuilder
         using var data = UndertaleIO.Read(input, (_, _) => cancellationToken.ThrowIfCancellationRequested(), _ => cancellationToken.ThrowIfCancellationRequested());
 
         var (spritesAdded, objectsAdded, scriptsAdded) = Apply(data, package, progress, cancellationToken);
+        string? textureDecision = null;
+        if (!noRepack && TextureRepacker.HasAtlas(data))
+            textureDecision = TextureRepacker.RepackForBuild(data, outputPath, progress, cancellationToken);
 
         string directory = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(directory);
@@ -69,7 +77,7 @@ public static class ModKitBuilder
                 File.Delete(temporary);
         }
 
-        return new ModKitBuildResult(destination, package, spritesAdded, objectsAdded, scriptsAdded);
+        return new ModKitBuildResult(destination, package, spritesAdded, objectsAdded, scriptsAdded) { TextureDecision = textureDecision };
     }
 
     /// <summary>Applies a validated <see cref="ModKitManifest"/> to an in-memory <see cref="UndertaleData"/> model and compiles all generated GML.</summary>

@@ -14,7 +14,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `builtin add <perf\|smooth\|hd-lite\|console>` | Generate and import a built-in JAMM enhancement mod |
 | `modkit new <dir> [--template fish\|upgrade\|boat\|hat]` | Scaffold a starter ModKit folder package (`jamm-mod.json` + PNG + hook) |
 | `modkit check <dir>` | Validate `jamm-mod.json`, PNG headers/frames, and hook paths without building |
-| `modkit build <dir> [--base <data.win>] [--out <file.win>]` | Compile a ModKit folder onto the legacy base (defaults to `config.base` and `<dir>/<id>.win`) |
+| `modkit build <dir> [--base <data.win>] [--out <file.win>] [--no-repack]` | Compile a ModKit folder onto the legacy base (defaults to `config.base` and `<dir>/<id>.win`) |
 | `list [--json]` | Show IDs, names, base hash/timestamp/version compatibility and patch cache validity |
 | `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
 | `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
@@ -23,6 +23,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `profile use <name>` | Select a profile for apply/play |
 | `profile delete <name>` | Delete a profile, clearing the active selection if needed |
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
+| `profile repack <name> on\|off` | Enable or disable texture repacking for builds of this profile |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
 | `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
 | `restore` | Restore the configured game directory and retain all original backups |
@@ -149,6 +150,13 @@ beside the patches or in `JAMM_MODS_DIR`. `--out` defaults to `./build/data.win`
 installed archives and original backups are protected. Normal
 builds publish only after the temporary archive reloads and passes reference and GML
 decompile/compile checks. A dry run compiles in memory and writes nothing.
+
+Any build with an enabled mod repacks the legacy texture atlas by default. This
+includes single-mod, built-in-only, ModKit and JSON patch builds. The
+`CGF-TEX-001` decision reports the page count and estimated uncompressed texture
+memory before and after repacking. Pass `--no-repack` to `cgfmm build` or
+`cgfmm modkit build`, or run `cgfmm profile repack <name> off` for a saved profile
+setting. Omit `--order` from `cgfmm build` to copy the original archive byte for byte.
 
 Resolutions are a JSON object mapping `family/name` (or an unambiguous bare asset name) to a winning mod display name, or
 `"keep-both"` for code insertion conflicts, for example

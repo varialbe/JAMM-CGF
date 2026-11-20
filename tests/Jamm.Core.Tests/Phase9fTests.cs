@@ -12,7 +12,7 @@ public sealed partial class BuildingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NullTexturePageWithPixelsIsPreservedOnlyWhenUnused(bool referenced)
+    public void NullTexturePageWithPixelsFailsIfReferencedAndIsPrunedByRepackIfUnused(bool referenced)
     {
         using var temp = new TemporaryDirectory();
         string basePath = temp.PathFor("base.win"), modPath = temp.PathFor("mod.win"), output = temp.PathFor("output.win");
@@ -42,7 +42,10 @@ public sealed partial class BuildingTests
         }
         else
         {
-            var result = ArchiveBuilder.Build(basePath, [new(patch, modPath)], output);
+            var repacked = ArchiveBuilder.Build(basePath, [new(patch, modPath)], temp.PathFor("repacked.win"));
+            Assert.Equal(0, repacked.Counts[AssetKind.TexturePageItems]);
+
+            var result = ArchiveBuilder.Build(basePath, [new(patch, modPath)], output, noRepack: true);
             Assert.Contains(result.Verification!.Warnings, w => w.Contains("Unused texture item"));
             using var merged = GameFileLoader.Load(output);
             var item = Assert.Single(merged.Data.TexturePageItems);

@@ -21,7 +21,8 @@ public static class ArchiveBuilder
 {
     /// <summary>Compiles a merged working copy; publishes only after the temporary output passes verification.</summary>
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
-        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null, CancellationToken cancellationToken = default, AnalysisOptions? options = null)
+        IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
+        CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false)
     {
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
@@ -30,6 +31,20 @@ public static class ArchiveBuilder
         string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath)];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
         using var original = GameFileLoader.Load(basePath, progress, cancellationToken, options);
+        if (inputs.Count == 0)
+        {
+            if (resolutions is { Count: > 0 })
+                throw new ArgumentException("Conflict resolutions require a build with mods.");
+            var vanilla = new BuildResult(new([], []), original.Inspection, null, original.Inspection.Counts, 0);
+            if (dryRun) return vanilla;
+            progress?.Invoke("Copying the original archive byte for byte");
+            var verified = Publish(output, protectedPaths, vanilla.Plan, original.Inspection, stream =>
+            {
+                using var source = new CancellableGameStream(basePath, cancellationToken);
+                source.CopyTo(stream);
+            }, progress, cancellationToken, options, exactCopy: true);
+            return vanilla with { Verification = verified, SizeBytes = verified.Inspection.FileSize };
+        }
         foreach (var input in inputs)
         {
             if (input.Patch.Base.Sha256 != original.Inspection.Sha256)
@@ -78,6 +93,12 @@ public static class ArchiveBuilder
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
             plan = InstanceCompatibility.Diagnose(plan, patches, original.Data, data);
+            if (!noRepack && TextureRepacker.HasAtlas(data))
+            {
+                using var phase = new AnalysisPhase(options, "build/texture-repack");
+                string decision = TextureRepacker.RepackForBuild(data, output, progress, cancellationToken);
+                plan = plan with { Decisions = [.. plan.Decisions, decision] };
+            }
             var expectedReferences = semantics.Expected(plan, data);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
@@ -86,27 +107,38 @@ public static class ArchiveBuilder
             var counts = Counts(data);
             var acceptance = AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
             if (dryRun) return new(plan, original.Inspection, null, counts, 0, remapped, expectedReferences.Count, acceptance);
-            string destination = Path.GetFullPath(output);
-            string directory = Path.GetDirectoryName(destination)!;
-            Directory.CreateDirectory(directory);
-            string temporary = Path.Combine(directory, $".cgfmm-{Guid.NewGuid():N}.tmp");
-            try
-            {
-                progress?.Invoke("Writing temporary merged archive");
-                using (new AnalysisPhase(options, "write"))
-                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                    UndertaleIO.Write(stream, data);
-                VerificationResult verification;
-                using (new AnalysisPhase(options, "verify"))
-                    verification = ArchiveVerifier.Verify(temporary, original.Inspection, plan.Assets, progress, expectedReferences, cancellationToken, options);
-                BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
-                cancellationToken.ThrowIfCancellationRequested();
-                File.Move(temporary, destination, overwrite: true);
-                return new(plan, original.Inspection, verification, counts, new FileInfo(destination).Length, remapped, expectedReferences.Count, acceptance);
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            progress?.Invoke("Writing temporary merged archive");
+            var verification = Publish(output, protectedPaths, plan, original.Inspection, stream => UndertaleIO.Write(stream, data),
+                progress, cancellationToken, options, expectedReferences);
+            return new(plan, original.Inspection, verification, counts, verification.Inspection.FileSize, remapped, expectedReferences.Count, acceptance);
         }
         finally { foreach (var source in sources) source.Dispose(); }
+    }
+
+    private static VerificationResult Publish(string output, string[] protectedPaths, BuildPlan plan, GameInspection original,
+        Action<Stream> write, Action<string>? progress, CancellationToken cancellationToken, AnalysisOptions options,
+        IReadOnlyDictionary<string, IReadOnlyList<ResolvedCodeReference>>? expectedReferences = null, bool exactCopy = false)
+    {
+        string destination = Path.GetFullPath(output);
+        string directory = Path.GetDirectoryName(destination)!;
+        Directory.CreateDirectory(directory);
+        string temporary = Path.Combine(directory, $".cgfmm-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (new AnalysisPhase(options, "write"))
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                write(stream);
+            VerificationResult verification;
+            using (new AnalysisPhase(options, "verify"))
+                verification = ArchiveVerifier.Verify(temporary, original, plan.Assets, progress, expectedReferences, cancellationToken, options);
+            if (exactCopy && verification.Inspection.Sha256 != original.Sha256)
+                throw new IOException("The original archive changed during copying. Retry with a stable base file.");
+            BuildFiles.ValidateNewOutput(output, protectedPaths);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporary, destination, overwrite: true);
+            return verification;
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     private static void ApplySourceRenames(IReadOnlyList<UndertaleData> sources,
@@ -188,7 +220,8 @@ public static class ArchiveBuilder
         if (useCompleteAtlas)
         {
             // Semantically unchanged binary assets can use the verified mod's atlas as well.
-            // This keeps a single-mod build's page/item/audio counts equal to its source.
+            // Using the source atlas here preserves its layout for --no-repack and supplies
+            // the final repacker with each image from that atlas when repacking is enabled.
             data.EmbeddedTextures.Clear(); data.TexturePageItems.Clear(); data.EmbeddedAudio.Clear();
         }
         var importers = sources.Select(s => new ResourceImporter(s, data)).ToArray();
