@@ -9,17 +9,19 @@ namespace Jamm.Core.Building;
 
 internal static class TextureRepacker
 {
-    internal const string Revision = "texture-repack-2";
+    internal const string Revision = "texture-repack-3";
     private const int PageSize = 2048;
     private const int Border = 2;
     private const long BatchBytes = 128 * 1024 * 1024;
+    private const int MaxRenderWorkers = 2;
 
     internal static bool HasAtlas(UndertaleData data) =>
         data.EmbeddedTextures is { Count: > 0 } || data.TexturePageItems is { Count: > 0 };
 
-    internal static string RepackForBuild(UndertaleData data, string output, Action<string>? progress, CancellationToken cancellationToken)
+    internal static string RepackForBuild(UndertaleData data, string output, Action<string>? progress,
+        CancellationToken cancellationToken, AnalysisOptions? options = null)
     {
-        try { return Repack(data, progress, cancellationToken); }
+        try { return Repack(data, progress, cancellationToken, options); }
         catch (Exception ex) when (ex is not (OutOfMemoryException or OperationCanceledException))
         {
             throw new InvalidDataException($"Could not repack textures while building '{Path.GetFileName(output)}'. Retry with --no-repack or turn repacking off for the profile. {ex.Message}", ex);
@@ -37,7 +39,8 @@ internal static class TextureRepacker
             .OfType<UndertaleTexturePageItem>().ToHashSet<UndertaleTexturePageItem>(ReferenceEqualityComparer.Instance);
     }
 
-    internal static string Repack(UndertaleData data, Action<string>? progress, CancellationToken cancellationToken)
+    internal static string Repack(UndertaleData data, Action<string>? progress, CancellationToken cancellationToken,
+        AnalysisOptions? options = null)
     {
         if (data.IsVersionAtLeast(2) || data.TextureGroupInfo is not null || data.EmbeddedTextures.Any(p => p.TextureExternal))
             return "[CGF-TEX-001] Texture repack skipped for this archive format. Repacking requires embedded GameMaker 1.x pages without texture groups.";
@@ -107,7 +110,8 @@ internal static class TextureRepacker
             return FormattableString.Invariant($"[CGF-TEX-001] Texture repack kept the source atlas: {sourcePages.Length} pages, {beforeBytes / 1_000_000d:F0} MB (a repack would need {plannedPages} pages, {plannedBytes / 1_000_000d:F0} MB); {pruned} unreferenced texture items removed.");
         }
 
-        Render(layouts, sourcePages, cancellationToken);
+        int workers = Math.Min(MaxRenderWorkers, (options ?? AnalysisOptions.Default).MaxDegreeOfParallelism);
+        Render(layouts, sourcePages, workers, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         foreach (var item in live)
@@ -169,10 +173,13 @@ internal static class TextureRepacker
         return layouts;
     }
 
-    private static void Render(List<Layout> layouts, UndertaleEmbeddedTexture[] sources, CancellationToken cancellationToken)
+    private static void Render(List<Layout> layouts, UndertaleEmbeddedTexture[] sources, int workers,
+        CancellationToken cancellationToken)
     {
-        // Bound decoded output memory by building batches, with one decoded source
-        // page at a time. A dedicated page larger than the budget forms its own batch.
+        // Bound decoded output memory by building batches. A dedicated page larger
+        // than the budget forms its own batch.
+        var renderOptions = new AnalysisOptions { MaxDegreeOfParallelism = workers };
+        var serialOptions = renderOptions with { MaxDegreeOfParallelism = 1 };
         int next = 0;
         while (next < layouts.Count)
         {
@@ -195,20 +202,29 @@ internal static class TextureRepacker
                 next++;
             }
             var inputs = batch.SelectMany(layout => layout.Regions).ToLookup(region => region.Source.Page);
-            foreach (var page in sources)
+            var batchSources = sources.Where(inputs.Contains).ToArray();
+            // Keep oversized input pages on the serial path so concurrent decodes
+            // cannot multiply the peak memory cost of a large source page.
+            var decodeOptions = batchSources.Any(page => PageBytes(page) > BatchBytes / MaxRenderWorkers)
+                ? serialOptions : renderOptions;
+            AnalysisWork.For(batchSources.Length, decodeOptions, i =>
             {
-                if (!inputs.Contains(page)) continue;
                 cancellationToken.ThrowIfCancellationRequested();
+                var page = batchSources[i];
                 var pixels = ContentFingerprints.DecodeTexture(page.TextureData.Image);
+                // Different source groups write disjoint padded rectangles.
                 foreach (var region in inputs[page])
                     CopyPixels(pixels, region);
-            }
-            foreach (var layout in batch)
+            });
+            // All writes to the raw output buffers have finished. Each encoder
+            // owns a separate page and the layout list fixes the archive order.
+            AnalysisWork.For(batch.Count, renderOptions, i =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var layout = batch[i];
                 layout.Texture.TextureData.Image = EncodePage(layout.Pixels!);
                 layout.Pixels = null;
-            }
+            });
         }
     }
 
@@ -221,6 +237,8 @@ internal static class TextureRepacker
         // Default DEFLATE can match repeated scanline bytes. UTML's Huffman-only
         // setting cannot, which makes the new atlas pages much larger on disk.
         png.Settings.SetDefine(MagickFormat.Png32, "compression-strategy", 0);
+        // ImageMagick otherwise inserts wall-clock values into generated pages.
+        png.Settings.SetDefine(MagickFormat.Png32, "exclude-chunk", "date");
         return GMImage.FromPng(png.ToByteArray());
     }
 

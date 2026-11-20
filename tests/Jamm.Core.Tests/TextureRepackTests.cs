@@ -23,8 +23,8 @@ public sealed partial class BuildingTests
         BuildInput[] inputs = [new(PatchBuilder.Create(original, a, "A"), aPath), new(PatchBuilder.Create(original, b, "B"), bPath)];
         string unpacked = temp.PathFor("unpacked.win"), repacked = temp.PathFor("repacked.win"), second = temp.PathFor("second.win");
         var off = ArchiveBuilder.Build(basePath, inputs, unpacked, noRepack: true);
-        var on = ArchiveBuilder.Build(basePath, inputs, repacked);
-        var repeat = ArchiveBuilder.Build(basePath, inputs, second);
+        var on = ArchiveBuilder.Build(basePath, inputs, repacked, options: new() { MaxDegreeOfParallelism = 1, UseCache = false });
+        var repeat = ArchiveBuilder.Build(basePath, inputs, second, options: new() { MaxDegreeOfParallelism = 2, UseCache = false });
         Assert.DoesNotContain(off.Plan.Decisions, Decision);
         Assert.Contains("2 duplicates merged, 1 unused regions dropped", Assert.Single(on.Plan.Decisions, Decision));
         Assert.Equal(Assert.Single(on.Plan.Decisions, Decision), Assert.Single(repeat.Plan.Decisions, Decision));
@@ -56,6 +56,51 @@ public sealed partial class BuildingTests
         CompareTextureBuilds(singleBefore.Data, singleAfter.Data, compareBytes: true);
 
         static bool Decision(string line) => line.StartsWith("[CGF-TEX-001]", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ParallelRenderKeepsSeparatePngPagesByteIdenticalAndOmitsDates()
+    {
+        var sequential = Render(1);
+        var parallel = Render(2);
+        Assert.Equal(sequential, parallel);
+        Assert.Equal(-1, parallel.AsSpan().IndexOf("date:"u8));
+
+        static byte[] Render(int workers)
+        {
+            using var data = UndertaleData.CreateNew();
+            data.GeneralInfo.Major = 1;
+            data.GeneralInfo.GameID = 1;
+            data.GeneralInfo.Timestamp = 0;
+            // Each page flag creates a separate output. Each output receives
+            // pixels from two distinct source pages in the same render batch.
+            for (int i = 0; i < 4; i++)
+            {
+                var image = new GMImage(8, 8);
+                var pixel = image.GetRawImageData().Slice((image.Width + 1) * 4, 4);
+                pixel[0] = (byte)(i + 1);
+                pixel[3] = 255;
+                var page = new UndertaleEmbeddedTexture
+                {
+                    Scaled = (uint)(i / 2),
+                    TextureData = new() { Image = image.ConvertToPng() }
+                };
+                var item = new UndertaleTexturePageItem
+                {
+                    TexturePage = page, SourceX = 1, SourceY = 1, SourceWidth = 4, SourceHeight = 4,
+                    TargetWidth = 4, TargetHeight = 4, BoundingWidth = 4, BoundingHeight = 4
+                };
+                data.EmbeddedTextures.Add(page);
+                data.TexturePageItems.Add(item);
+                data.Backgrounds.Add(new() { Name = data.Strings.MakeString($"background_{i}"), Texture = item });
+            }
+
+            TextureRepacker.Repack(data, null, default, new() { MaxDegreeOfParallelism = workers });
+            Assert.Equal(2, data.EmbeddedTextures.Count);
+            using var stream = new MemoryStream();
+            UndertaleIO.Write(stream, data);
+            return stream.ToArray();
+        }
     }
 
     [Fact]
