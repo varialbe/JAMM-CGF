@@ -25,3 +25,11 @@ and in-game `~/jamm-night/bin/run.sh <win> weakpc dock 600` + `deepwater` RECORD
 
 ## Rules
 AGENTS.md. Zero warnings, all tests green. Commit on the branch, no push, no merge to main.
+
+## Addendum (orchestrator, 2026-11-20 morning) – VRAM findings from the resource audit
+docs/reports/resource-optimization-audit.md shows the legacy runner uploads **all** atlas pages before the title screen, and the D3D9 requests
+for all-7 total **3,841 MiB** (power-of-two rounding + mipmaps) although the RGBA8 page estimate is 2,171 MiB. Investigate as part of the preset:
+* Does the GM 1.4 runner create mip chains for every page, and can that be switched off safely from data.win (option flags in GEN8/OPTN, e.g. an
+  interpolation/mipmap option) without changing how sprites look at 1x? Measure with the same D3D9 trace method as the audit; only include it in the
+  preset if pixels at 1x stay identical (screenshot comparison) and RECORDED runs stay green.
+* Unreferenced-asset stripping (audit candidate 3) as an opt-in part of the preset if it is safe and measurable.
