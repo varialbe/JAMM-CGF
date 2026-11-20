@@ -87,18 +87,18 @@ On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
 
 ## 6. Other branches (state at 07:45; jobs keep running)
 
-### Fish neighbour grid (`exp/fish-perf`, CPU) – honest negative so far, not mergeable as a speed-up
+### Fish neighbour grid (`exp/fish-perf`, 7a437bd, CPU) – finished: behaviour-identical, target missed, do not merge as a speed-up
 
 * Step 0 done: `exp/gml-profiler` (+ `exp/jamm-gamma-bench`) merged onto current main in that branch; new bench option `--trace-fish`.
 * Step 1 found that most fish neighbour code is **not** a local radius loop: global `instance_nearest` selectors with deactivate/retry,
   random-index selection, native collision checks. Only the avoidance loop (`with (FishLarge)` in fish End Step) could be rewritten provably.
 * Grid (`jamm_perf.ini [Perf] FishGrid=1`): lazy build per tick, original visiting order preserved via traversal ordinals, invalidates on any
   create/destroy/activation and falls back to the original loop.
-* **Equivalence:** fish-state traces byte-identical vanilla dock (1,800 ticks) and heavy deepwater (1,800 ticks); heavy dock, all-7 dock and
+* **Equivalence:** fish-state traces byte-identical over 1,800 ticks for vanilla dock, vanilla deepwater and heavy deepwater; heavy dock, all-7 dock and
   all-7 deepwater match over their shared prefixes (609–1,603 ticks; the 600 s runner cap stopped the longer side).
 * **Speed:** no reduction for vanilla/heavy (controlled heavy dock pair 171.6 → 179.3 ms/tick fish End Step, slightly worse); all-7 dock pair
   452 → 400 ms/tick, but a single pair on a shared VPS. Conclusion so far: behaviour-identical, but the quadratic cost is not where the
-  grid helps; the remaining big cost is per-fish work and the global selectors. Do not merge as Perf default.
+  grid helps; the remaining big cost is per-fish work and the global selectors. Do not merge as Perf default. 587 tests green. The profiler/bench tooling (own merge commit in that branch) is useful on its own and could go to main separately – your call.
 
 ### Resource audit (`exp/resource-audit`) – Part A done, Part B (parallel PNG rendering in the repacker) in progress
 
