@@ -119,6 +119,9 @@ public sealed record ModKitManifest(
     /// <summary>Room areas included in the package.</summary>
     public IReadOnlyList<ModKitArea> Areas { get; init; } = [];
 
+    /// <summary>Weather declarations to install when JAMM builds a profile.</summary>
+    public IReadOnlyList<ModKitWeather> Weathers { get; init; } = [];
+
     /// <summary>Build-time sprite recipes included in the package.</summary>
     public IReadOnlyList<ModKitSprite> Sprites { get; init; } = [];
 
@@ -201,8 +204,11 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
             EnsureUniqueKeys(objects.Select(o => ModKitBuilder.SanitizeIdent(o.Key)), "$.objects");
 
+            var weathers = ParseArray(rootObj, "weathers", "$.weathers", (el, path) => ParseWeather(root, el, path, spritesByKey, fish));
+            EnsureUniqueKeys(weathers.Select(w => ModKitBuilder.SanitizeIdent(w.Id)), "$.weathers");
+
             return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
-                { Areas = areas, Sprites = sprites, Objects = objects };
+                { Areas = areas, Sprites = sprites, Objects = objects, Weathers = weathers };
         }
     }
 

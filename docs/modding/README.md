@@ -44,6 +44,8 @@ API and ModKit mods avoid shared assets completely:
 7. **[Troubleshooting](troubleshooting.md)** — common build, GML 1.4, sprite, gameplay, and merge fixes.
 8. **[Catalog API](../catalog-api.md)** — deep dive into `jamm_catalog_register` and legacy fish-catalog relocation.
 
+9. **[Weather API](weather.md)** — custom sky layers, fish schools, schedules and audio.
+
 ## Examples in this repository
 
 * [`examples/modkit/example-fish/`](../../examples/modkit/example-fish/) — **Goldie** (small shallow fish) and **Glowfin** (night-only medium fish with `create` and `step` hooks that pulse `image_blend` and dart away from moving lures).

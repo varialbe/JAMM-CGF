@@ -1,0 +1,1322 @@
+{
+  "id": "weather-pack",
+  "name": "Weather Pack",
+  "version": "1.0.1",
+  "author": "JAMM",
+  "description": "Four daylight weathers with new surface fish, animated skies, and original sound.",
+  "weathers": [
+    {
+      "id": "super-sunny",
+      "name": "Super Sunny",
+      "weight": 1,
+      "duration": [
+        600,
+        1500
+      ],
+      "transition": 3,
+      "sky": "#ffeac1",
+      "background": [
+        {
+          "sprite": "warm-horizon",
+          "y": -450,
+          "scroll": 1.5,
+          "parallax": 0.035
+        },
+        {
+          "sprite": "turning-sun",
+          "y": -503,
+          "x": 265,
+          "repeat": false,
+          "fps": 1,
+          "parallax": 0.03,
+          "scale": 0.82
+        },
+        {
+          "sprite": "summer-clouds",
+          "y": -510,
+          "scroll": 8,
+          "parallax": 0.08,
+          "tintEnd": "#ffe9cb"
+        }
+      ],
+      "particles": {
+        "kind": "glints",
+        "count": 105,
+        "speed": 1,
+        "color": "#fff6b8",
+        "opacity": 0.85
+      },
+      "water": {
+        "tint": "#fff1ce",
+        "wave": 0.75
+      },
+      "light": "#fff8ec",
+      "music": {
+        "sound": "audio/super-sunny-music.ogg",
+        "volume": 0.67
+      },
+      "ambience": {
+        "sound": "audio/super-sunny-air.ogg",
+        "volume": 0.26
+      },
+      "fish": [
+        "bask",
+        "flaret"
+      ],
+      "replaceDayFish": true
+    },
+    {
+      "id": "rainy",
+      "name": "Rainy",
+      "weight": 1,
+      "duration": [
+        600,
+        1500
+      ],
+      "transition": 3,
+      "sky": "#c3d0d6",
+      "background": [
+        {
+          "sprite": "rain-horizon",
+          "y": -420,
+          "parallax": 0.09
+        },
+        {
+          "sprite": "rain-clouds",
+          "y": -680,
+          "parallax": 0.12,
+          "scroll": 16,
+          "tintEnd": "#e6edf0"
+        },
+        {
+          "sprite": "rain-clouds",
+          "y": -570,
+          "x": 273,
+          "parallax": 0.22,
+          "scroll": 26,
+          "scale": 0.75,
+          "opacity": 0.64,
+          "tintStart": "#a2b1be",
+          "tintEnd": "#a6b4bc"
+        }
+      ],
+      "particles": {
+        "kind": "rain",
+        "count": 147,
+        "speed": 1.07,
+        "color": "#eef9fb",
+        "opacity": 0.73
+      },
+      "water": {
+        "tint": "#b2ccd5",
+        "wave": 1.25
+      },
+      "light": "#e2edf5",
+      "music": {
+        "sound": "audio/rainy-music.ogg",
+        "volume": 0.67
+      },
+      "ambience": {
+        "sound": "audio/rainy-air.ogg",
+        "volume": 0.26
+      },
+      "fish": [
+        "drizzit",
+        "lowbelly"
+      ],
+      "replaceDayFish": true
+    },
+    {
+      "id": "windy",
+      "name": "Windy",
+      "weight": 1,
+      "duration": [
+        600,
+        1500
+      ],
+      "transition": 3,
+      "sky": "#c6e6e4",
+      "background": [
+        {
+          "sprite": "wind-horizon",
+          "y": -419,
+          "parallax": 0.1
+        },
+        {
+          "sprite": "wind-clouds",
+          "y": -583,
+          "scroll": 52,
+          "parallax": 0.15
+        },
+        {
+          "sprite": "wind-clouds",
+          "y": -437,
+          "x": 280,
+          "scroll": 105,
+          "parallax": 0.23,
+          "scale": 0.58,
+          "opacity": 0.72,
+          "tintEnd": "#def2eb"
+        }
+      ],
+      "particles": {
+        "kind": "wind",
+        "count": 103,
+        "speed": 1.65,
+        "color": "#f5fff8",
+        "opacity": 0.82
+      },
+      "water": {
+        "tint": "#daedec",
+        "wave": 1.75
+      },
+      "light": "#f0faf5",
+      "music": {
+        "sound": "audio/windy-music.ogg",
+        "volume": 0.67
+      },
+      "ambience": {
+        "sound": "audio/windy-air.ogg",
+        "volume": 0.26
+      },
+      "fish": [
+        "kest",
+        "tack"
+      ],
+      "replaceDayFish": true
+    },
+    {
+      "id": "fog",
+      "name": "Fog",
+      "weight": 1,
+      "duration": [
+        600,
+        1500
+      ],
+      "transition": 3,
+      "sky": "#d5e4df",
+      "background": [
+        {
+          "sprite": "fog-horizon",
+          "y": -430,
+          "parallax": 0.05
+        },
+        {
+          "sprite": "fog-high",
+          "y": -390,
+          "scroll": 11,
+          "parallax": 0.13
+        },
+        {
+          "sprite": "fog-low",
+          "y": -190,
+          "plane": "foreground",
+          "scroll": 15,
+          "parallax": 0.19,
+          "opacity": 0.84
+        },
+        {
+          "sprite": "fog-low",
+          "y": -115,
+          "x": 561,
+          "plane": "foreground",
+          "scroll": -21,
+          "parallax": 0.32,
+          "opacity": 0.59,
+          "scale": 0.82
+        }
+      ],
+      "particles": {
+        "kind": "mist",
+        "count": 24,
+        "speed": 0.5,
+        "color": "#e0eee7",
+        "opacity": 0.33
+      },
+      "water": {
+        "tint": "#cfdbd6",
+        "wave": 0.55
+      },
+      "light": "#f0f2ec",
+      "music": {
+        "sound": "audio/fog-music.ogg",
+        "volume": 0.67
+      },
+      "ambience": {
+        "sound": "audio/fog-air.ogg",
+        "volume": 0.26
+      },
+      "fish": [
+        "mote",
+        "veilmouth"
+      ],
+      "replaceDayFish": true,
+      "hooks": {
+        "on_step": "hooks/fog_step.gml"
+      }
+    }
+  ],
+  "sprites": [
+    {
+      "key": "warm-horizon",
+      "width": 1000,
+      "height": 140,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "from": "bg_parallax",
+          "frame": 0,
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 2000,
+            "h": 283
+          },
+          "scaleX": 0.5,
+          "scaleY": 0.49,
+          "tint": "#ffe5ab",
+          "opacity": 0.51
+        }
+      ]
+    },
+    {
+      "key": "rain-horizon",
+      "width": 1000,
+      "height": 140,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "from": "bg_parallax",
+          "frame": 0,
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 2000,
+            "h": 283
+          },
+          "scaleX": 0.5,
+          "scaleY": 0.49,
+          "tint": "#abbcc4",
+          "opacity": 0.58
+        }
+      ]
+    },
+    {
+      "key": "wind-horizon",
+      "width": 1000,
+      "height": 140,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "from": "bg_parallax",
+          "frame": 0,
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 2000,
+            "h": 283
+          },
+          "scaleX": 0.5,
+          "scaleY": 0.49,
+          "tint": "#d4e9ef",
+          "opacity": 0.46
+        }
+      ]
+    },
+    {
+      "key": "fog-horizon",
+      "width": 1000,
+      "height": 140,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "from": "bg_parallax",
+          "frame": 0,
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 2000,
+            "h": 283
+          },
+          "scaleX": 0.5,
+          "scaleY": 0.49,
+          "tint": "#d0dad5",
+          "opacity": 0.69
+        }
+      ]
+    },
+    {
+      "key": "turning-sun",
+      "width": 288,
+      "height": 288,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        [
+          {
+            "file": "parts/sun.svg",
+            "x": 48,
+            "y": 48,
+            "rotation": 0,
+            "scaleX": 0.84,
+            "scaleY": 0.84
+          }
+        ],
+        [
+          {
+            "file": "parts/sun.svg",
+            "x": 36,
+            "y": 36,
+            "rotation": 8,
+            "scaleX": 0.84,
+            "scaleY": 0.84
+          }
+        ],
+        [
+          {
+            "file": "parts/sun.svg",
+            "x": 25,
+            "y": 25,
+            "rotation": 16,
+            "scaleX": 0.84,
+            "scaleY": 0.84
+          }
+        ],
+        [
+          {
+            "file": "parts/sun.svg",
+            "x": 17,
+            "y": 17,
+            "rotation": 24,
+            "scaleX": 0.84,
+            "scaleY": 0.84
+          }
+        ],
+        [
+          {
+            "file": "parts/sun.svg",
+            "x": 12,
+            "y": 12,
+            "rotation": 32,
+            "scaleX": 0.84,
+            "scaleY": 0.84
+          }
+        ],
+        [
+          {
+            "file": "parts/sun.svg",
+            "x": 9,
+            "y": 9,
+            "rotation": 40,
+            "scaleX": 0.84,
+            "scaleY": 0.84
+          }
+        ]
+      ]
+    },
+    {
+      "key": "summer-clouds",
+      "width": 1000,
+      "height": 133,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "file": "parts/summer-clouds.svg"
+        }
+      ]
+    },
+    {
+      "key": "rain-clouds",
+      "width": 960,
+      "height": 330,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "file": "parts/rain-clouds.svg"
+        }
+      ]
+    },
+    {
+      "key": "wind-clouds",
+      "width": 1000,
+      "height": 265,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "file": "parts/wind-clouds.svg"
+        }
+      ]
+    },
+    {
+      "key": "fog-high",
+      "width": 1000,
+      "height": 233,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "file": "parts/fog-high.svg"
+        }
+      ]
+    },
+    {
+      "key": "fog-low",
+      "width": 1000,
+      "height": 305,
+      "origin": [
+        0,
+        0
+      ],
+      "compose": [
+        {
+          "file": "parts/fog-low.svg"
+        }
+      ]
+    },
+    {
+      "key": "bask",
+      "width": 126,
+      "height": 92,
+      "origin": [
+        24,
+        63
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s10",
+          "crop": {
+            "x": 84,
+            "y": 4,
+            "w": 24,
+            "h": 36
+          },
+          "x": 78,
+          "y": 36,
+          "scaleX": 1.55,
+          "scaleY": 1.18,
+          "tones": {
+            "colors": [
+              "#b9674c",
+              "#d98b55",
+              "#f3b86b"
+            ],
+            "cutoffs": [
+              218,
+              237
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 17,
+            "y": 0,
+            "w": 71,
+            "h": 44
+          },
+          "x": 24,
+          "y": 1,
+          "scaleX": 0.78,
+          "scaleY": 1.02,
+          "tones": {
+            "colors": [
+              "#b9674c",
+              "#e1a460"
+            ],
+            "cutoffs": [
+              165
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s6",
+          "crop": {
+            "x": 4,
+            "y": 14,
+            "w": 84,
+            "h": 60
+          },
+          "x": 10,
+          "y": 25,
+          "scaleX": 1.01,
+          "scaleY": 0.91,
+          "tones": {
+            "colors": [
+              "#624050",
+              "#cb7e58",
+              "#f0ba78"
+            ],
+            "cutoffs": [
+              107,
+              173
+            ]
+          }
+        },
+        {
+          "file": "parts/bask.svg",
+          "x": 50,
+          "y": 48
+        }
+      ]
+    },
+    {
+      "key": "flaret",
+      "width": 212,
+      "height": 114,
+      "origin": [
+        57,
+        69
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_m6",
+          "crop": {
+            "x": 35,
+            "y": 0,
+            "w": 95,
+            "h": 31
+          },
+          "x": 63,
+          "y": 6,
+          "scaleX": 0.94,
+          "scaleY": 1.16,
+          "tones": {
+            "colors": [
+              "#b65952",
+              "#d9956b",
+              "#efc88d"
+            ],
+            "cutoffs": [
+              117,
+              162
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m1",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 192,
+            "h": 78
+          },
+          "x": 8,
+          "y": 25,
+          "scaleX": 1.03,
+          "scaleY": 1.04,
+          "tones": {
+            "colors": [
+              "#653b3d",
+              "#c87961",
+              "#e7a574"
+            ],
+            "cutoffs": [
+              98,
+              200
+            ]
+          }
+        },
+        {
+          "file": "parts/flaret.svg",
+          "x": 89,
+          "y": 58
+        }
+      ]
+    },
+    {
+      "key": "drizzit",
+      "width": 140,
+      "height": 88,
+      "origin": [
+        24,
+        51
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 110,
+            "y": 33,
+            "w": 36,
+            "h": 56
+          },
+          "x": 75,
+          "y": 28,
+          "scaleX": 1.36,
+          "scaleY": 0.67,
+          "tones": {
+            "colors": [
+              "#576c96",
+              "#758aab"
+            ],
+            "cutoffs": [
+              155
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 47,
+            "y": 78,
+            "w": 64,
+            "h": 28
+          },
+          "x": 48,
+          "y": 57,
+          "scaleX": 0.74,
+          "scaleY": 0.9,
+          "tones": {
+            "colors": [
+              "#536888",
+              "#8eb3c4"
+            ],
+            "cutoffs": [
+              168
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 47,
+            "y": 78,
+            "w": 64,
+            "h": 28
+          },
+          "x": 65,
+          "y": 53,
+          "scaleX": 0.7,
+          "scaleY": 0.68,
+          "tones": {
+            "colors": [
+              "#536888",
+              "#8eb3c4"
+            ],
+            "cutoffs": [
+              168
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s2b",
+          "crop": {
+            "x": 0,
+            "y": 19,
+            "w": 66,
+            "h": 52
+          },
+          "x": 9,
+          "y": 28,
+          "scaleX": 1.22,
+          "scaleY": 0.7,
+          "tones": {
+            "colors": [
+              "#344760",
+              "#637797",
+              "#a3c1d1"
+            ],
+            "cutoffs": [
+              119,
+              152
+            ]
+          }
+        },
+        {
+          "file": "parts/drizzit.svg",
+          "x": 38,
+          "y": 41
+        }
+      ]
+    },
+    {
+      "key": "lowbelly",
+      "width": 215,
+      "height": 132,
+      "origin": [
+        54,
+        86
+      ],
+      "compose": [
+        {
+          "from": "spr_tim",
+          "crop": {
+            "x": 38,
+            "y": 43,
+            "w": 36,
+            "h": 27
+          },
+          "x": 73,
+          "y": 79,
+          "scaleX": 1.66,
+          "scaleY": 1.78,
+          "tones": {
+            "colors": [
+              "#607997",
+              "#7b95ac"
+            ],
+            "cutoffs": [
+              179
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m9",
+          "crop": {
+            "x": 6,
+            "y": 4,
+            "w": 209,
+            "h": 101
+          },
+          "x": 7,
+          "y": 8,
+          "scaleX": 0.93,
+          "scaleY": 1.07,
+          "tones": {
+            "colors": [
+              "#31465f",
+              "#607997",
+              "#9bb6c5"
+            ],
+            "cutoffs": [
+              92,
+              197
+            ]
+          }
+        },
+        {
+          "file": "parts/lowbelly.svg",
+          "x": 72,
+          "y": 55
+        }
+      ]
+    },
+    {
+      "key": "kest",
+      "width": 138,
+      "height": 85,
+      "origin": [
+        24,
+        52
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s20",
+          "crop": {
+            "x": 36,
+            "y": 0,
+            "w": 108,
+            "h": 40
+          },
+          "x": 42,
+          "y": 4,
+          "scaleX": 0.76,
+          "scaleY": 0.95,
+          "tones": {
+            "colors": [
+              "#61784f",
+              "#a5ba80"
+            ],
+            "cutoffs": [
+              132
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s10",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 108,
+            "h": 48
+          },
+          "x": 6,
+          "y": 27,
+          "scaleX": 1.13,
+          "scaleY": 1.02,
+          "tones": {
+            "colors": [
+              "#3c4c3a",
+              "#829668",
+              "#c1cf98"
+            ],
+            "cutoffs": [
+              111,
+              234
+            ]
+          }
+        },
+        {
+          "file": "parts/kest.svg",
+          "x": 40,
+          "y": 43
+        }
+      ]
+    },
+    {
+      "key": "tack",
+      "width": 222,
+      "height": 106,
+      "origin": [
+        32,
+        71
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s9",
+          "crop": {
+            "x": 17,
+            "y": 0,
+            "w": 72,
+            "h": 44
+          },
+          "x": 26,
+          "y": 12,
+          "scaleX": 1.46,
+          "scaleY": 1.04,
+          "tones": {
+            "colors": [
+              "#739d91",
+              "#afcbbc"
+            ],
+            "cutoffs": [
+              162
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m7",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 192,
+            "h": 72
+          },
+          "x": 9,
+          "y": 41,
+          "scaleX": 1.06,
+          "scaleY": 0.79,
+          "tones": {
+            "colors": [
+              "#294e4e",
+              "#5e948b",
+              "#a4c5b2"
+            ],
+            "cutoffs": [
+              104,
+              192
+            ]
+          }
+        },
+        {
+          "file": "parts/tack.svg",
+          "x": 70,
+          "y": 55
+        }
+      ]
+    },
+    {
+      "key": "mote",
+      "width": 111,
+      "height": 105,
+      "origin": [
+        25,
+        64
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_s7",
+          "crop": {
+            "x": 88,
+            "y": 14,
+            "w": 31,
+            "h": 36
+          },
+          "x": 69,
+          "y": 38,
+          "scaleX": 1.14,
+          "scaleY": 1.08,
+          "tones": {
+            "colors": [
+              "#9a7383",
+              "#cfadb0"
+            ],
+            "cutoffs": [
+              156
+            ]
+          }
+        },
+        {
+          "from": "spr_tim",
+          "crop": {
+            "x": 38,
+            "y": 40,
+            "w": 33,
+            "h": 31
+          },
+          "x": 41,
+          "y": 69,
+          "scaleX": 0.68,
+          "scaleY": 0.95,
+          "tones": {
+            "colors": [
+              "#926b80",
+              "#d2abac"
+            ],
+            "cutoffs": [
+              173
+            ]
+          }
+        },
+        {
+          "from": "spr_tim",
+          "crop": {
+            "x": 38,
+            "y": 40,
+            "w": 33,
+            "h": 31
+          },
+          "x": 53,
+          "y": 68,
+          "scaleX": 0.64,
+          "scaleY": 0.76,
+          "tones": {
+            "colors": [
+              "#986d80",
+              "#d7b0af"
+            ],
+            "cutoffs": [
+              173
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_s1",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 63,
+            "h": 72
+          },
+          "x": 8,
+          "y": 11,
+          "scaleX": 1.03,
+          "scaleY": 0.94,
+          "tones": {
+            "colors": [
+              "#624f67",
+              "#986f8b",
+              "#ceb1c2"
+            ],
+            "cutoffs": [
+              123,
+              164
+            ]
+          }
+        },
+        {
+          "file": "parts/mote.svg",
+          "x": 32,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "key": "veilmouth",
+      "width": 208,
+      "height": 122,
+      "origin": [
+        48,
+        74
+      ],
+      "compose": [
+        {
+          "from": "spr_fish_m12",
+          "crop": {
+            "x": 130,
+            "y": 20,
+            "w": 61,
+            "h": 63
+          },
+          "x": 116,
+          "y": 40,
+          "scaleX": 1.22,
+          "scaleY": 0.96,
+          "tones": {
+            "colors": [
+              "#687971",
+              "#87998b",
+              "#b6c2aa"
+            ],
+            "cutoffs": [
+              95,
+              157
+            ]
+          }
+        },
+        {
+          "from": "spr_bloop",
+          "crop": {
+            "x": 117,
+            "y": 123,
+            "w": 78,
+            "h": 67
+          },
+          "x": 50,
+          "y": 73,
+          "scaleX": 1.06,
+          "scaleY": 0.67,
+          "tones": {
+            "colors": [
+              "#687971",
+              "#a1ae98"
+            ],
+            "cutoffs": [
+              158
+            ]
+          }
+        },
+        {
+          "from": "spr_fish_m27",
+          "crop": {
+            "x": 0,
+            "y": 0,
+            "w": 124,
+            "h": 106
+          },
+          "x": 8,
+          "y": 6,
+          "scaleX": 0.99,
+          "scaleY": 0.92,
+          "tones": {
+            "colors": [
+              "#3b4d4b",
+              "#87998b",
+              "#b6c2aa"
+            ],
+            "cutoffs": [
+              95,
+              157
+            ]
+          }
+        },
+        {
+          "file": "parts/veilmouth.svg",
+          "x": 44,
+          "y": 65
+        }
+      ]
+    }
+  ],
+  "fish": [
+    {
+      "key": "bask",
+      "name": "Bask",
+      "size": "small",
+      "sprite": "bask",
+      "value": 330,
+      "xp": 66,
+      "speed": 1.6,
+      "description": "It turns its good side to the sun. Both sides are its good side.",
+      "seenDescription": "A small gold fish follows the hot line where sea meets sky.",
+      "hiddenDescription": "Look where the water gives back the most light.",
+      "spawn": {
+        "x": [
+          10,
+          450
+        ],
+        "y": [
+          1340,
+          1460
+        ],
+        "count": 5
+      }
+    },
+    {
+      "key": "flaret",
+      "name": "Flaret",
+      "size": "medium",
+      "sprite": "flaret",
+      "value": 1250,
+      "xp": 250,
+      "speed": 1.15,
+      "description": "It hangs under a patch of sun until its shadow warms.",
+      "seenDescription": "A copper seam breaks the glare.",
+      "hiddenDescription": "The brightest days lay a seam of copper in the shallows.",
+      "spawn": {
+        "x": [
+          175,
+          520
+        ],
+        "y": [
+          1410,
+          1520
+        ],
+        "count": 4
+      }
+    },
+    {
+      "key": "drizzit",
+      "name": "Drizzit",
+      "size": "small",
+      "sprite": "drizzit",
+      "value": 405,
+      "xp": 81,
+      "speed": 1.78,
+      "description": "It follows each raindrop down for as long as it can.",
+      "seenDescription": "Little rings on the sea lead to a little fish.",
+      "hiddenDescription": "Wait for a ring that moves against the rain.",
+      "spawn": {
+        "x": [
+          10,
+          450
+        ],
+        "y": [
+          1340,
+          1460
+        ],
+        "count": 5
+      }
+    },
+    {
+      "key": "lowbelly",
+      "name": "Lowbelly",
+      "size": "medium",
+      "sprite": "lowbelly",
+      "value": 1520,
+      "xp": 304,
+      "speed": 1.05,
+      "description": "The first drops turn its belly skyward. It wants to see where they came from.",
+      "seenDescription": "The grey shoal turns when the first drops hit.",
+      "hiddenDescription": "A low cloud may have another face beneath it.",
+      "spawn": {
+        "x": [
+          140,
+          490
+        ],
+        "y": [
+          1390,
+          1520
+        ],
+        "count": 4
+      }
+    },
+    {
+      "key": "kest",
+      "name": "Kest",
+      "size": "small",
+      "sprite": "kest",
+      "value": 440,
+      "xp": 88,
+      "speed": 2.4,
+      "description": "Kests nose into a gust. When it stops they have no idea where they are.",
+      "seenDescription": "A tiny pale sail darts beneath the foam.",
+      "hiddenDescription": "When the wind stands up, look for its smallest sail.",
+      "spawn": {
+        "x": [
+          10,
+          450
+        ],
+        "y": [
+          1340,
+          1460
+        ],
+        "count": 5
+      }
+    },
+    {
+      "key": "tack",
+      "name": "Tack",
+      "size": "medium",
+      "sprite": "tack",
+      "value": 1450,
+      "xp": 290,
+      "speed": 2.15,
+      "description": "It turns on the edge of a gust, as if the sea had corners.",
+      "seenDescription": "Something below the waves is sailing crosswind.",
+      "hiddenDescription": "Watch the sea after a gust has passed.",
+      "spawn": {
+        "x": [
+          80,
+          520
+        ],
+        "y": [
+          1415,
+          1525
+        ],
+        "count": 4
+      }
+    },
+    {
+      "key": "mote",
+      "name": "Mote",
+      "size": "small",
+      "sprite": "mote",
+      "value": 570,
+      "xp": 114,
+      "speed": 0.9,
+      "description": "On clear days it loses its nerve. In fog it nearly loses its outline.",
+      "seenDescription": "A faint row of pearls moves through the grey.",
+      "hiddenDescription": "When the horizon vanishes, look for the little pearls it leaves behind.",
+      "spawn": {
+        "x": [
+          10,
+          450
+        ],
+        "y": [
+          1340,
+          1460
+        ],
+        "count": 5
+      }
+    },
+    {
+      "key": "veilmouth",
+      "name": "Veilmouth",
+      "size": "medium",
+      "sprite": "veilmouth",
+      "value": 1730,
+      "xp": 346,
+      "speed": 0.85,
+      "description": "Ships listen for the horn. Veilmouth listens for the pause afterward.",
+      "seenDescription": "There is a mouth in the fog, where the horn goes quiet.",
+      "hiddenDescription": "Keep listening when the coast disappears.",
+      "spawn": {
+        "x": [
+          145,
+          520
+        ],
+        "y": [
+          1400,
+          1535
+        ],
+        "count": 4
+      }
+    }
+  ]
+}

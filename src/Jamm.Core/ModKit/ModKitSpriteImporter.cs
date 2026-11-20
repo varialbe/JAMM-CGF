@@ -13,7 +13,8 @@ internal sealed record SpriteImportSpec(
     int[]? Origin,
     bool CenterOrigin,
     bool GenerateMask,
-    ModKitSprite? Composition = null);
+    ModKitSprite? Composition = null,
+    bool WrapHorizontal = false);
 
 /// <summary>Packs ModKit PNG assets onto new GameMaker texture pages and creates <see cref="UndertaleSprite"/> entries.</summary>
 internal static class ModKitSpriteImporter
@@ -25,7 +26,7 @@ internal static class ModKitSpriteImporter
             return result;
 
         var packer = new TextureGroupPacker(maxTextureSize: 2048, border: 2, allowCrop: false, format: GMImage.ImageFormat.Png);
-        var pending = new List<(SpriteImportSpec Spec, int Width, int Height, List<UndertaleTexturePageItem> Items, byte[]? MaskBytes, int MinX, int MinY, int MaxX, int MaxY)>();
+        var pending = new List<(SpriteImportSpec Spec, int Width, int Height, int WrapPadding, List<UndertaleTexturePageItem> Items, byte[]? MaskBytes, int MinX, int MinY, int MaxX, int MaxY)>();
 
         using var composer = new ModKitComposition(data);
         foreach (var spec in specs)
@@ -41,6 +42,9 @@ internal static class ModKitSpriteImporter
                 throw new InvalidDataException($"Sprite '{spec.PngPath}' ({totalWidth}x{height}) is not evenly divisible by frames={spec.Frames}.");
 
             int frameWidth = totalWidth / spec.Frames;
+            int wrapPadding = spec.WrapHorizontal
+                ? Math.Clamp((packer.MaxTextureSize - 2 * packer.Border - frameWidth) / 2, 0, Math.Min(2, frameWidth))
+                : 0;
             var items = new List<UndertaleTexturePageItem>(spec.Frames);
             byte[]? maskBytes = null;
             int minX = frameWidth, minY = height, maxX = -1, maxY = -1;
@@ -56,11 +60,17 @@ internal static class ModKitSpriteImporter
                 if (f == 0)
                     maskBytes = ComputeBoundsAndMask(tile, frameWidth, height, spec.GenerateMask, out minX, out minY, out maxX, out maxY);
 
+                if (wrapPadding > 0)
+                {
+                    using var unpadded = tile;
+                    tile = PadHorizontalWrap(unpadded, frameWidth, height, wrapPadding);
+                }
+
                 // TextureGroupPacker takes ownership of tile and disposes it during PackPages().
                 items.Add(packer.AddImage(tile, TextureGroupPacker.BorderFlags.None, allowCrop: false));
             }
 
-            pending.Add((spec, frameWidth, height, items, maskBytes, minX, minY, maxX, maxY));
+            pending.Add((spec, frameWidth, height, wrapPadding, items, maskBytes, minX, minY, maxX, maxY));
         }
 
         packer.PackPages();
@@ -91,7 +101,15 @@ internal static class ModKitSpriteImporter
             };
 
             foreach (var item in entry.Items)
+            {
+                if (entry.WrapPadding > 0)
+                {
+                    // The adjacent columns stay on the atlas for filtering across the cut.
+                    item.SourceX += (ushort)entry.WrapPadding;
+                    item.SourceWidth = item.TargetWidth = item.BoundingWidth = (ushort)entry.Width;
+                }
                 sprite.Textures.Add(new UndertaleSprite.TextureEntry { Texture = item });
+            }
 
             if (entry.MaskBytes is not null)
             {
@@ -113,6 +131,17 @@ internal static class ModKitSpriteImporter
         tile.Crop(new MagickGeometry(offsetX, 0, (uint)width, (uint)height));
         tile.ResetPage();
         return tile;
+    }
+
+    private static MagickImage PadHorizontalWrap(MagickImage tile, int width, int height, int padding)
+    {
+        using var left = CropFrame(tile, width - padding, padding, height);
+        using var right = CropFrame(tile, 0, padding, height);
+        var padded = new MagickImage(MagickColors.Transparent, (uint)(width + 2 * padding), (uint)height);
+        padded.Composite(left, 0, 0, CompositeOperator.Copy);
+        padded.Composite(tile, padding, 0, CompositeOperator.Copy);
+        padded.Composite(right, width + padding, 0, CompositeOperator.Copy);
+        return padded;
     }
 
     private static byte[]? ComputeBoundsAndMask(
