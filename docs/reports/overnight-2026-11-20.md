@@ -124,8 +124,21 @@ Measured on the VPS (repacked builds, llvmpipe; RSS includes Wine's CPU-side tex
 * In-game multithreading: GML is single-threaded; a native DLL for neighbour search is not justified by the grid result above.
 * GPU plan for the PC (draw calls, per-fish lights) is in the audit report.
 
-### Queued, not started yet
-Vel's rod/boat points (ModKit JSON rods + unlock checker), base-mod mode, weak-PC preset (specs on main, queue `jamm-queue`).
+### Vel's rod/boat points (`exp/vel-rods-boats`, 4ea5cbc) – done, ready to merge after an in-game confirmation
+
+* **ModKit JSON rods**: `rods` array with the GML API's fields, `upgrade_slots` as number or `"vanilla"`, same `cost`/`unlocked` style as boats;
+  generates the existing `jamm_rod_register` call. Example mod: rod "Copper Current" appears in the shop for $25,000 (dock RECORDED,
+  screenshot `~/jamm-night/review-2026-11-20/vel/velrod-shop.png`). GUI editor + docs updated.
+* **Unlock checker** (`CGF-UNLOCK-001/002`) over all seven mods found two items without any unlock path, with evidence:
+  Abyss **Hyper Boat** (row starts hidden, nothing ever exposes slot 8) and Cave **Mystic Rod** (row is purchasable but Cave leaves
+  `RodData.nItems` at 6, so the shop never shows it). Reachable items (Antiquity Dark Boat, Cave Mystic Boat, TGE Echo-9/Proto-Rod) were
+  checked by hand with their evidence.
+* **Opt-in repair** per profile (`cgfmm profile unlockfix <profile> <mod> on`, GUI checkbox): makes such items buyable (Hyper Boat $10,000,000,
+  Mystic Rod $680,000). Off by default. 597 tests green.
+* Before merging: ask Vel/you to confirm in game that Hyper Boat and Mystic Rod are really unobtainable in the original mods.
+
+### Running / queued
+Base-mod mode (running), weak-PC preset (queued; spec extended with the mipmap/VRAM findings).
 
 ## What I need from you
 
