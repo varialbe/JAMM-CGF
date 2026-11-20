@@ -44,25 +44,52 @@ public sealed partial class BuildingTests
         Assert.NotEqual(first.TargetX, other.TargetX);
         CompareTextureBuilds(before.Data, after.Data, compareBytes: true);
 
-        var single = ArchiveBuilder.Build(basePath, [inputs[0]], temp.PathFor("single.win"));
-        Assert.DoesNotContain(single.Plan.Decisions, Decision);
-        Assert.Equal(a.Data.EmbeddedTextures.Count, single.Counts[AssetKind.TexturePages]);
-        Assert.Equal(a.Data.TexturePageItems.Count, single.Counts[AssetKind.TexturePageItems]);
+        string singlePath = temp.PathFor("single.win"), singleBaseline = temp.PathFor("single-baseline.win");
+        var single = ArchiveBuilder.Build(basePath, [inputs[0]], singlePath);
+        var singleOff = ArchiveBuilder.Build(basePath, [inputs[0]], singleBaseline, noRepack: true);
+        Assert.Contains("1 duplicates merged", Assert.Single(single.Plan.Decisions, Decision));
+        Assert.Equal(1, single.Counts[AssetKind.TexturePages]);
+        Assert.DoesNotContain(singleOff.Plan.Decisions, Decision);
+        Assert.Equal(a.Data.EmbeddedTextures.Count, singleOff.Counts[AssetKind.TexturePages]);
+        using var singleBefore = GameFileLoader.Load(singleBaseline);
+        using var singleAfter = GameFileLoader.Load(singlePath);
+        CompareTextureBuilds(singleBefore.Data, singleAfter.Data, compareBytes: true);
 
         static bool Decision(string line) => line.StartsWith("[CGF-TEX-001]", StringComparison.Ordinal);
+    }
 
-        static void AddFixture(UndertaleData data, string variant)
-        {
-            AddSprite(data, "vanilla", AddRegion(data, 31, 1));
-            var replacement = AddRegion(data, variant == "a" ? (byte)93 : (byte)71, 2);
-            AddSprite(data, "replaced", replacement);
-            if (variant == "old") return;
-            var item = AddRegion(data, 31, (ushort)(variant == "a" ? 2 : 3));
-            var sprite = AddSprite(data, variant, item);
-            sprite.Textures.Add(new() { Texture = replacement });
-            data.Fonts.Add(new() { Name = data.Strings.MakeString("font_" + variant), DisplayName = data.Strings.MakeString("font"), Texture = item });
-            data.Backgrounds.Add(new() { Name = data.Strings.MakeString("background_" + variant), Texture = replacement });
-        }
+    [Fact]
+    public void VanillaBuildCopiesTheBaseByteForByte()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win"), output = temp.PathFor("copy.win");
+        WriteModel(basePath, data => AddFixture(data, "old"));
+        string before = BuildFiles.Hash(basePath);
+        var copy = ArchiveBuilder.Build(basePath, [], output);
+        Assert.Empty(copy.Plan.Decisions);
+        Assert.Equal(2, copy.Counts[AssetKind.TexturePages]);
+        Assert.Equal(before, copy.Verification!.Inspection.Sha256);
+        Assert.Equal(before, BuildFiles.Hash(output));
+        Assert.Equal(before, BuildFiles.Hash(basePath));
+
+        string cliCopy = temp.PathFor("cli-copy.win");
+        Assert.Equal(0, Jamm.Cli.BuildCommand.Run("build", ["--base", basePath, "--out", cliCopy, "--dry-run"]));
+        Assert.False(File.Exists(cliCopy));
+        Assert.Equal(0, Jamm.Cli.BuildCommand.Run("build", ["--base", basePath, "--out", cliCopy]));
+        Assert.Equal(before, BuildFiles.Hash(cliCopy));
+    }
+
+    private static void AddFixture(UndertaleData data, string variant)
+    {
+        AddSprite(data, "vanilla", AddRegion(data, 31, 1));
+        var replacement = AddRegion(data, variant == "a" ? (byte)93 : (byte)71, 2);
+        AddSprite(data, "replaced", replacement);
+        if (variant == "old") return;
+        var item = AddRegion(data, 31, (ushort)(variant == "a" ? 2 : 3));
+        var sprite = AddSprite(data, variant, item);
+        sprite.Textures.Add(new() { Texture = replacement });
+        data.Fonts.Add(new() { Name = data.Strings.MakeString("font_" + variant), DisplayName = data.Strings.MakeString("font"), Texture = item });
+        data.Backgrounds.Add(new() { Name = data.Strings.MakeString("background_" + variant), Texture = replacement });
 
         static UndertaleSprite AddSprite(UndertaleData data, string name, UndertaleTexturePageItem item)
         {
@@ -159,11 +186,7 @@ public sealed partial class BuildingTests
     {
         using var before = GameFileLoader.Load(Environment.GetEnvironmentVariable("JAMM_UNPACKED_BUILD")!);
         using var after = GameFileLoader.Load(Environment.GetEnvironmentVariable("JAMM_REPACKED_BUILD")!);
-        Assert.True(after.Data.EmbeddedTextures.Count < before.Data.EmbeddedTextures.Count);
-        Assert.True(PageBytes(after.Data) < PageBytes(before.Data));
         CompareTextureBuilds(before.Data, after.Data, compareBytes: false);
-
-        static long PageBytes(UndertaleData data) => data.EmbeddedTextures.Sum(p => (long)p.TextureData.Width * p.TextureData.Height * 4);
     }
 
     private static void CompareTextureBuilds(UndertaleData before, UndertaleData after, bool compareBytes)
@@ -189,6 +212,7 @@ public sealed partial class BuildingTests
         foreach (var (oldItem, newItem) in oldItems.Zip(newItems))
         {
             Assert.Equal(Geometry(oldItem), Geometry(newItem));
+            Assert.Equal(oldItem.TexturePage?.Scaled, newItem.TexturePage?.Scaled);
             Assert.True(oldPixels[oldItem].AsSpan().SequenceEqual(newPixels[newItem]), $"Pixels differ for {oldItem.Name.Content}.");
         }
 

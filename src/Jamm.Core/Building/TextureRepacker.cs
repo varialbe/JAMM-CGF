@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using ImageMagick;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
@@ -8,9 +9,22 @@ namespace Jamm.Core.Building;
 
 internal static class TextureRepacker
 {
+    internal const string Revision = "texture-repack-2";
     private const int PageSize = 2048;
     private const int Border = 2;
     private const long BatchBytes = 128 * 1024 * 1024;
+
+    internal static bool HasAtlas(UndertaleData data) =>
+        data.EmbeddedTextures is { Count: > 0 } || data.TexturePageItems is { Count: > 0 };
+
+    internal static string RepackForBuild(UndertaleData data, string output, Action<string>? progress, CancellationToken cancellationToken)
+    {
+        try { return Repack(data, progress, cancellationToken); }
+        catch (Exception ex) when (ex is not (OutOfMemoryException or OperationCanceledException))
+        {
+            throw new InvalidDataException($"Could not repack textures while building '{Path.GetFileName(output)}'. Retry with --no-repack or turn repacking off for the profile. {ex.Message}", ex);
+        }
+    }
 
     internal static HashSet<UndertaleTexturePageItem> ReferencedItems(UndertaleData data)
     {
@@ -175,10 +189,22 @@ internal static class TextureRepacker
             foreach (var layout in batch)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                layout.Texture.TextureData.Image = layout.Pixels!.ConvertToPng();
+                layout.Texture.TextureData.Image = EncodePage(layout.Pixels!);
                 layout.Pixels = null;
             }
         }
+    }
+
+    private static GMImage EncodePage(GMImage pixels)
+    {
+        using var png = pixels.GetMagickImage();
+        png.Format = MagickFormat.Png32;
+        png.Settings.SetDefine(MagickFormat.Png32, "compression-level", 4);
+        png.Settings.SetDefine(MagickFormat.Png32, "compression-filter", 5);
+        // Default DEFLATE can match repeated scanline bytes. UTML's Huffman-only
+        // setting cannot, which makes the new atlas pages much larger on disk.
+        png.Settings.SetDefine(MagickFormat.Png32, "compression-strategy", 0);
+        return GMImage.FromPng(png.ToByteArray());
     }
 
     private static void CopyPixels(GMImage image, Region region)

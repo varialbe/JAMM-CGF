@@ -5,6 +5,7 @@ using Jamm.ModMaker;
 using UndertaleModLib;
 using UndertaleModLib.Compiler;
 using UndertaleModLib.Models;
+using UndertaleModLib.Util;
 
 namespace Jamm.Core.Tests;
 
@@ -23,7 +24,7 @@ public sealed class BuiltinModTests : IDisposable
         store.Set("base", original);
     }
 
-    private static void WriteBase(string path, uint build = 1773, bool perf = true)
+    private static void WriteBase(string path, uint build = 1773, bool perf = true, Action<UndertaleData>? edit = null)
     {
         using var data = UndertaleData.CreateNew();
         data.GeneralInfo.Major = 1; data.GeneralInfo.Minor = 0; data.GeneralInfo.Build = build;
@@ -49,7 +50,45 @@ public sealed class BuiltinModTests : IDisposable
             }) compiler.QueueCodeReplace(UndertaleCode.CreateEmptyEntry(data, name), source);
         }
         ModObjects.Compile(compiler);
+        edit?.Invoke(data);
         using var stream = File.Create(path); UndertaleIO.Write(stream, data);
+    }
+
+    [Fact]
+    public void BuiltinOnlyProfileRepacksAndInvalidatesAnUnrepackedInstallation()
+    {
+        WriteBase(original, edit: data =>
+        {
+            var page = new UndertaleEmbeddedTexture { TextureData = new() { Image = new GMImage(32, 32).ConvertToPng() } };
+            var item = new UndertaleTexturePageItem { TexturePage = page, SourceWidth = 1, SourceHeight = 1,
+                TargetWidth = 1, TargetHeight = 1, BoundingWidth = 1, BoundingHeight = 1 };
+            data.EmbeddedTextures.Add(page);
+            data.TexturePageItems.Add(item);
+            data.Backgrounds.Add(new() { Name = data.Strings.MakeString("synthetic_background"), Texture = item });
+            data.EmbeddedTextures.Add(new() { TextureData = new() { Image = page.TextureData.Image } });
+        });
+        string game = Path.Combine(root, "game");
+        Directory.CreateDirectory(game);
+        File.Copy(original, Path.Combine(game, "data.win"));
+        store.Set("gameDir", game);
+        var mod = new BuiltinMods(store).Add("perf").Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("perf", [mod.Id]);
+        profiles.SetRepack("perf", enabled: false);
+        var installer = new ProfileInstaller(store);
+        var old = installer.Prepare("perf");
+        Assert.Equal(2, old.Build.Counts[AssetKind.TexturePages]);
+        Assert.DoesNotContain(old.Build.Plan.Decisions, decision => decision.StartsWith("[CGF-TEX-001]", StringComparison.Ordinal));
+        installer.Install(old);
+        Assert.True(installer.IsInstalled("perf"));
+
+        profiles.SetRepack("perf", enabled: true);
+        Assert.False(installer.IsInstalled("perf"));
+        var repacked = installer.Prepare("perf");
+        Assert.Equal(1, repacked.Build.Counts[AssetKind.TexturePages]);
+        Assert.Contains(repacked.Build.Plan.Decisions, decision => decision.StartsWith("[CGF-TEX-001] Texture pages:", StringComparison.Ordinal));
+        installer.Install(repacked);
+        Assert.True(installer.IsInstalled("perf"));
     }
 
     [Theory]

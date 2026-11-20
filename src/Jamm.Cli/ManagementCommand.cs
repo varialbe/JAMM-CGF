@@ -135,7 +135,7 @@ internal static class ManagementCommand
                             Console.WriteLine($"Profile {profile.Name} (later participating mods win overlaps):");
                             foreach (string id in profile.Mods) Console.WriteLine($"  {library.Find(id).Name} ({id})");
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
-                            Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for multi-mod builds")}");
+                            Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for modded builds")}");
                         }
                         break;
                     case "use": Count(2); profiles.Use(positional[1]); Console.WriteLine($"Active profile: {positional[1]}."); break;

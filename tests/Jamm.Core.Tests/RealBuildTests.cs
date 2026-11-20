@@ -31,8 +31,10 @@ public sealed class RealBuildTests
                 string output = Path.Combine(directory, Path.GetFileName(path));
                 var build = ArchiveBuilder.Build(basePath, [inputs[^1]], output);
                 Assert.NotNull(build.Verification);
+                Assert.Contains(build.Plan.Decisions, decision => decision.StartsWith("[CGF-TEX-001] Texture pages:", StringComparison.Ordinal));
                 using var result = GameFileLoader.Load(output);
-                foreach (var kind in mod.Inspection.Counts.Keys.Except(new[] { AssetKind.Strings, AssetKind.Variables, AssetKind.Functions, AssetKind.Objects, AssetKind.Code, AssetKind.Scripts }))
+                foreach (var kind in mod.Inspection.Counts.Keys.Except(new[] { AssetKind.Strings, AssetKind.Variables, AssetKind.Functions,
+                    AssetKind.Objects, AssetKind.Code, AssetKind.Scripts, AssetKind.TexturePages, AssetKind.TexturePageItems }))
                     Assert.Equal(mod.Inspection.Counts[kind], result.Inspection.Counts[kind]);
                 Assert.Equal(original.Data.GameObjects.Select(o => o.Name.Content).Union(mod.Data.GameObjects.Select(o => o.Name.Content)).Count(), result.Data.GameObjects.Count);
                 AssertBaseIndices(original, result);

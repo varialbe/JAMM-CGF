@@ -55,13 +55,13 @@ int Run(string[] arguments)
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
             cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
-            cgfmm build --base <data.win> --order <mod-or-patch>,... [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--dry-run] [--verbose]
+            cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--dry-run] [--verbose]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
             cgfmm add <file.win|file.zip|modkit dir> [--name <name>]
             cgfmm modkit new <dir> [--template fish|upgrade|boat|hat]
             cgfmm modkit check <dir>
-            cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>]
+            cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>] [--no-repack]
             cgfmm list [--json] | remove <mod ID or name>
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
             cgfmm profile resolve <name> <asset> <mod|keep-both>

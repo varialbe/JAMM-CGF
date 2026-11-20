@@ -194,6 +194,7 @@ public sealed class ModKitTests
         string modBPath = temp.PathFor("beta.win");
         var resA = ModKitBuilder.Build(pkgA, basePath, modAPath);
         var resB = ModKitBuilder.Build(pkgB, basePath, modBPath);
+        Assert.StartsWith("[CGF-TEX-001] Texture pages:", resA.TextureDecision);
 
         Assert.Equal(1, resA.SpritesAdded);
         Assert.Equal(1, resA.ObjectsAdded);
@@ -221,6 +222,13 @@ public sealed class ModKitTests
         using var modB = GameFileLoader.Load(modBPath);
         var patchA = PatchBuilder.Create(orig, modA, "Alpha Pack");
         var patchB = PatchBuilder.Create(orig, modB, "Beta Pack");
+        string json = temp.PathFor("alpha.json"), singlePath = temp.PathFor("alpha-only.win");
+        File.WriteAllText(json, PatchJson.Serialize(patchA));
+        Assert.Equal(0, Jamm.Cli.BuildCommand.Run("build", ["--base", basePath, "--order", json, "--out", singlePath]));
+        using (var singleMod = GameFileLoader.Load(singlePath))
+            Assert.NotNull(singleMod.Data.GameObjects.ByName("jmk_alpha_pack_aqua_fin"));
+        var single = ArchiveBuilder.Build(basePath, [new(patchA, modAPath)], temp.PathFor("alpha-only-dry.win"), dryRun: true);
+        Assert.Contains(single.Plan.Decisions, decision => decision.StartsWith("[CGF-TEX-001] Texture pages:", StringComparison.Ordinal));
 
         var report = ConflictAnalyzer.Analyze([patchA, patchB]);
         Assert.DoesNotContain(report.Findings, f => f.Severity == "CONFLICT");

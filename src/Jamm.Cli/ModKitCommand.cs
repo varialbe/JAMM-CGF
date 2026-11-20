@@ -13,7 +13,7 @@ internal static class ModKitCommand
                 JAMM ModKit — scaffold, validate, and build folder mods
                 cgfmm modkit new <dir> [--template fish|upgrade|boat|hat]
                 cgfmm modkit check <dir>
-                cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>]
+                cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>] [--no-repack]
                 """);
             return 0;
         }
@@ -29,10 +29,16 @@ internal static class ModKitCommand
 
         List<string> positional = [];
         Dictionary<string, string> options = new(StringComparer.Ordinal);
+        bool noRepack = false;
         for (int i = 1; i < arguments.Length; i++)
         {
             string arg = arguments[i];
-            if (!arg.StartsWith("--", StringComparison.Ordinal))
+            if (sub == "build" && arg == "--no-repack")
+            {
+                if (noRepack) throw new ArgumentException("--no-repack was given twice.");
+                noRepack = true;
+            }
+            else if (!arg.StartsWith("--", StringComparison.Ordinal))
             {
                 positional.Add(arg);
             }
@@ -72,7 +78,8 @@ internal static class ModKitCommand
                 if (string.IsNullOrWhiteSpace(basePath))
                     throw new ArgumentException("Set the configured legacy base first ('cgfmm config set base <data.win>') or pass --base <data.win>.");
                 string outPath = options.GetValueOrDefault("--out", Path.Combine(Path.GetFullPath(dir), $"{loaded.Id}.win"));
-                var result = ModKitBuilder.Build(dir, basePath, outPath, Console.Error.WriteLine);
+                var result = ModKitBuilder.Build(dir, basePath, outPath, Console.Error.WriteLine, noRepack: noRepack);
+                if (result.TextureDecision is { } decision) Console.WriteLine($"Decision: {decision}");
                 Console.WriteLine($"Built and verified '{result.OutputPath}': {result.SpritesAdded} sprite(s), {result.ObjectsAdded} object(s), {result.ScriptsAdded} script(s).");
                 return 0;
 
