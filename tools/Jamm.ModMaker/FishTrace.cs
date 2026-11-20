@@ -21,6 +21,7 @@ internal static class FishTrace
             throw new InvalidDataException("Fish traces require the legacy Cat Goes Fishing runner and Fish object.");
 
         var originals = data.Code.ToArray();
+        var scripts = data.Scripts.Select(script => script.Name.Content).ToHashSet(StringComparer.Ordinal);
         var compiler = new CompileGroup(data);
         var clock = Add("clock", """
             if (!variable_global_exists("jamm_trace_tick")) return 0;
@@ -46,7 +47,8 @@ internal static class FishTrace
             // including their RNG, state updates and render-state setters, still run.
             var rasterCalls = code.Instructions.Zip(code.Instructions.Skip(1))
                 .Where(pair => pair.Second.Kind == Opcode.Popz && pair.First.Kind == Opcode.Call
-                    && pair.First.ArgumentsCount <= 16 && IsRasterCall(pair.First.ValueFunction?.Name.Content))
+                    && pair.First.ArgumentsCount <= 16 && pair.First.ValueFunction?.Name.Content is { } name
+                    && !scripts.Contains(name) && IsRasterCall(name))
                 .Select(pair => pair.First).ToHashSet();
             LegacyCodeHooks.Insert(code, instruction => rasterCalls.Contains(instruction)
                 ? new(ReplaceCall: raster)
@@ -91,8 +93,8 @@ internal static class FishTrace
         "draw_text", "draw_tile", "draw_triangle", "draw_vertex"
     ];
 
-    private static bool IsRasterCall(string? name)
-        => name is not null && Array.Exists(RasterPrefixes, prefix => name.StartsWith(prefix, StringComparison.Ordinal));
+    private static bool IsRasterCall(string name)
+        => Array.Exists(RasterPrefixes, prefix => name.StartsWith(prefix, StringComparison.Ordinal));
 
     internal static string Create => """
         global.jamm_trace_tick = 0;
