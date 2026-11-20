@@ -162,7 +162,7 @@ The initial 512-pixel implementation produced matching 30-tick and 1,800-tick va
 |---|---|---:|---:|---|
 | vanilla | dock | 0 | 0 | No matched captures |
 | vanilla | deepwater | 0 | 0 | No matched captures |
-| heavy | dock | 1800 | 1603 | Same prefix, different lengths |
+| heavy | dock | 1800 | 1603 | First 1,603 ticks match |
 | heavy | deepwater | 1800 | 1800 | Identical |
-| all7 | dock | 742 | 0 | No matched captures |
+| all7 | dock | 742 | 609 | First 609 ticks match |
 | all7 | deepwater | 0 | 0 | No matched captures |
