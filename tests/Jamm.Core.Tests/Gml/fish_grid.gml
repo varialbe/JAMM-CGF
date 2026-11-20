@@ -72,7 +72,9 @@ with (spawned[102])
         if (global.jamm_fg_ids[ds_list_find_value(global.jamm_fg_orders, j)] == id) found = true;
     if (!found) show_error("Grid lost a fish after moving it to another cell", true);
     var old_x = x;
-    x = 33554433;
+    // Use a value beyond the bound even if the runner rounds x to a float.
+    x = 33555456;
+    if (x <= 33554432) show_error("Fixture could not set the out-of-bounds coordinate", true);
     jamm_fg_touch();
     if (global.jamm_fg_valid) show_error("Grid accepted a fish outside the supported coordinates", true);
     x = old_x;

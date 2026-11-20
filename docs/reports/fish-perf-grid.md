@@ -6,6 +6,8 @@ The benchmark and GML profiler landed together in merge commit `9916593`. The ex
 
 I resolved object indices against the archive's object table and inspected the decompiled selectors, call sites and state writes. A profiler call is a GML entry invocation. It counts each parent event or helper call once even if it performs several engine scans or takes a branch that performs no scan. Inclusive shares can overlap.
 
+The revised all-7 OFF/ON runs use `all7-repack-verify.win` to reduce atlas load time within the 600-second budget. Its object index and room summaries matched the unrepacked archive. The avoidance, Fish End Step, FishThinner Step and procedural-spawner Create decompilations also matched. The script audit rates use the unrepacked archive.
+
 ## Neighbour audit
 
 | Script or event | Radius, ordering and effects | Grid decision |
@@ -141,7 +143,7 @@ These are event-profile captures with the same instrumentation on both sides. Fi
 | vanilla | dock | 1 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 0 | — | — | — | — | — | — | — |
 | vanilla | deepwater | 1 | — | — | — | — | — | — | — |
-| heavy | dock | 0 | — | — | — | — | — | — | — |
+| heavy | dock | 0 | 54 | 2263.04 | 192.98 | 85.27 | 455.10 | 0.000 | 0.00 |
 | heavy | dock | 1 | — | — | — | — | — | — | — |
 | heavy | deepwater | 0 | — | — | — | — | — | — | — |
 | heavy | deepwater | 1 | — | — | — | — | — | — | — |
@@ -158,7 +160,7 @@ The initial 512-pixel implementation produced matching 30-tick and 1,800-tick va
 |---|---|---:|---:|---|
 | vanilla | dock | 0 | 0 | No matched captures |
 | vanilla | deepwater | 0 | 0 | No matched captures |
-| heavy | dock | 0 | 0 | No matched captures |
+| heavy | dock | 1800 | 0 | No matched captures |
 | heavy | deepwater | 0 | 0 | No matched captures |
 | all7 | dock | 0 | 0 | No matched captures |
 | all7 | deepwater | 0 | 0 | No matched captures |
