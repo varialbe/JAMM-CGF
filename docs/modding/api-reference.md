@@ -1,5 +1,7 @@
 # GML Runtime API Reference
 
+Room placement and build-time art use ModKit's declarative APIs. See [Area API](areas.md) for room bounds, anchors, instance settings and free-water fish spawning, and [sprite recipes](modkit-reference.md#sprite-recipes) for composing sprites from base art.
+
 This reference is for **UndertaleModTool / GML authors** (and curious ModKit authors) who want to register boats, rods, lures, tools, hats, rod upgrades, or fish directly in GameMaker: Studio 1.4 GML without editing shared base objects.
 
 If you prefer JSON + PNGs + short hook scripts without UndertaleModTool, use **[JAMM ModKit](modkit-reference.md)** instead—ModKit generates `jamm_init_*` scripts calling this exact runtime API under the hood.
@@ -11,11 +13,11 @@ If you prefer JSON + PNGs + short hook scripts without UndertaleModTool, use **[
 1. **Write one or more `jamm_init_<modid>` scripts** in your `.win` mod (for example `jamm_init_coolmod`). Add only your own new sprites, objects, and scripts—leave `BoatData`, `RodData`, `LureData`, `ToolData`, `GearData`, `UpgradeData`, `CatalogData`, `SaveManager`, and rooms untouched.
 2. **Order of execution**: At merge time, JAMM discovers every `jamm_init_*` script across the merged archive, sorts them deterministically by **profile load order** (then alphabetically by script name), and generates **`jamm_api_init`**.
 3. **When `jamm_api_init` runs**:
-   * **When Item / Upgrade API is active** (at least one `jamm_init_*` script exists or any code calls `jamm_{boat,rod,lure,tool,hat,upgrade}_register`):
+   * **When Item / Upgrade API is active** (a code entry calls `jamm_{boat,rod,lure,tool,hat,upgrade}_register` or an initializer needs the item runtime):
      * JAMM injects `jamm_api_init()` into `SaveManager` `Step_0` right **before** `if (!loaded)` (and after all `Create` events have created the `*Data` singletons).
      * `jamm_api_init()` ensures `obj_jamm_api` exists, checks whether any existing `*Data` object (`BoatData`, `RodData`, `LureData`, `ToolData`, `GearData`, `UpgradeData`) lacks `jamm_api_done`, runs `jamm_items_ensure_base()`, calls each `jamm_init_*()` script once, marks `jamm_api_done = 1` on each `*Data` instance, and triggers `Rod` `ev_user0` (`Other_10`) so custom upgrade `apply` scripts run immediately.
      * If a save-slot change calls `room_restart()` and recreates the `*Data` objects, `jamm_api_init()` automatically re-registers everything before the newly loaded save is applied.
-   * **When ONLY `jamm_fish_register` is called directly without any `jamm_init_*` script**: `FishRuntime` injects `jamm_fish_register` (and `jamm_catalog_*` if `CatalogData` exists). If `jamm_init_*` scripts exist without any item/upgrade calls, `ItemsRuntime` still runs because `jamm_init_*` is present; if `ItemsRuntime` is skipped (e.g., an archive without `SaveManager` save/load events), `FishRuntime` falls back to a standalone `jamm_api_init()` at the top of `SaveManager` `Step_0` guarded by `CatalogData.jamm_api_done` (or `SaveManager.jamm_api_done`).
+   * When a package calls only `jamm_fish_register` directly and supplies no `jamm_init_*` script, `FishRuntime` injects `jamm_fish_register` and adds `jamm_catalog_*` when `CatalogData` exists. For fish-only ModKit initializers, `FishRuntime` installs a standalone `jamm_api_init()` at the top of `SaveManager` `Step_0` guarded by `CatalogData.jamm_api_done` or `SaveManager.jamm_api_done`.
 
 > [!IMPORTANT]
 > **Keep `jamm_init_*` calls deterministic and idempotent**: Register items with literal values and asset names (not random rolls), and use stable string keys like `"mymod:raft"`. Every `jamm_*_register` function returns the existing slot if called twice with the same key (or object, for fish/catalog).
@@ -41,7 +43,7 @@ Avoid naming your own assets or INI sections with these prefixes:
 * **`jamm_`** — reserved for JAMM scripts (`jamm_init_*`, `jamm_api_init`, `jamm_*_register`, `jamm_item_find`, `jamm_upgrade_stacks`, `jamm_items_*`, `jamm_catalog_*`, `jamm_hud_*`) and JAMM instance variables (`jamm_key`, `jamm_base_count`, `jamm_api_done`, `jamm_upg`, etc.).
 * **`obj_jamm_`** — reserved for JAMM runtime controller objects (`obj_jamm_api`, `obj_jamm_console`, etc.).
 * **`jmk_`** — reserved for ModKit-generated sprites, objects, and hook scripts (`jmk_<id>_<key>…`).
-* **`JAMM_`** — reserved for JAMM save INI sections (`[JAMM_Items]`, `[JAMM_Catalog]`).
+* **`JAMM_`** — reserved for JAMM save INI sections such as `[JAMM_Items]`, `[JAMM_Catalog]` and `[JAMM_Areas]`.
 
 ## Automatic Asset Relinking Across Mods
 

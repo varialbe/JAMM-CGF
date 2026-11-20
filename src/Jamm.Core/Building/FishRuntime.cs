@@ -279,7 +279,17 @@ internal static class FishRuntime
             if (argument_count > 13) jamm_dn = argument13;
             if (argument_count > 14) jamm_de = argument14;
             if (argument_count > 15) jamm_ex = argument15;
-            return jamm_catalog_register(jamm_tab, jamm_obj, jamm_name, jamm_desc, jamm_dc, jamm_ds, jamm_dh, jamm_dn, jamm_de, jamm_ex);
+            var jamm_slot;
+            jamm_slot = jamm_catalog_register(jamm_tab, jamm_obj, jamm_name, jamm_desc, jamm_dc, jamm_ds, jamm_dh, jamm_dn, jamm_de, jamm_ex);
+            if (jamm_slot >= 0)
+            {
+                with (jamm_obj)
+                {
+                    catalog_index = jamm_slot;
+                    exotic = jamm_ex;
+                }
+            }
+            return jamm_slot;
             """;
     }
 

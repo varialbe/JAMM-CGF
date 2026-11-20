@@ -81,6 +81,14 @@ Quick fixes for the most common issues when building or testing ModKit and GML A
 
 ---
 
+## Area placement and composed sprites
+
+* **`[CGF-AREA-001]` in check or build** — Review the named area, room and other mod. Use a `follow` anchor to keep the area's offsets when a landmark moves. Inspect both layouts if the other mod also edits the surrounding terrain.
+* **Area cannot find its anchor** — Confirm the object and exact coordinates in the original archive. If a selected mod removes it or replaces it with several instances, choose a unique landmark or a fixed location.
+* **No free-water spawn points** — Enlarge `spawn.within` or the area itself, move the region deeper, or reduce `count`. JAMM samples the merged room after the area pieces and lights are placed.
+* **Recipe cannot find a base sprite or frame** — Use the exact sprite asset name and a zero-based frame index from the same legacy build. An object's name can differ from its sprite name.
+* **Layer crop is outside the source frame** — Inspect the padded dimensions of the referenced frame. Other frames of the same sprite can use different texture dimensions.
+
 ## Merge & Verification Errors
 
 * **`Object 'jmk_...' already exists` / `Script 'jamm_init_...' already exists`**

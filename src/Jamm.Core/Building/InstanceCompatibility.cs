@@ -7,11 +7,8 @@ namespace Jamm.Core.Building;
 
 internal static class InstanceCompatibility
 {
-    internal const int Revision = 2;
-    private const string ElectronEvent = "gml_Object_Electron_Other_17";
+    internal const int Revision = 3;
     private const string FishThinnerEvent = "gml_Object_FishThinner_Other_10";
-    private const string OriginalCondition = "if (Lure.fish > 0 && Lure.fish.object_index == Flash.object_index)";
-    private const string FixedCondition = "if (Lure.fish > 0 && Lure.fish.object_index == Flash)";
     private const string FishCullCondition = "if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000)";
     private const string FishCullGuardedCondition = "if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000 && !(light > 0))";
     private const string FishCullDecision = "[CGF-INSTANCE-003] Kept fish lights alive: FishThinner no longer culls fish that own a light (prevents \"Unable to find any instance\" crashes in Magmer/Volteen draw code when merged rooms place more than 5 of them).";
@@ -27,19 +24,26 @@ internal static class InstanceCompatibility
         if (patches.Count > 0)
             plan = RepairFishThinner(plan, baseline);
 
-        var electron = plan.Assets.FirstOrDefault(a => a.Family == "code" && a.Name == ElectronEvent);
-        if (electron?.Gml is not { } gml) return plan;
+        plan = RepairLungeTypeCheck(plan, patches, "gml_Object_Electron_Other_17", "Flash");
+        return RepairLungeTypeCheck(plan, patches, "gml_Object_Shados_Other_17", "Lumos");
+    }
 
-        // Match the known event body so a future mod that reuses this event name keeps its own logic.
+    private static BuildPlan RepairLungeTypeCheck(BuildPlan plan, IReadOnlyList<ModPatch> patches, string entry, string target)
+    {
+        var asset = plan.Assets.FirstOrDefault(a => a.Family == "code" && a.Name == entry);
+        if (asset?.Gml is not { } gml) return plan;
+
+        // Restrict the repair to these known legacy bodies.
+        string condition = $"if (Lure.fish > 0 && Lure.fish.object_index == {target}.object_index)";
         string body = gml.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
-        if (body != OriginalCondition + "\n{\n    fish_lunge();\n}") return plan;
+        if (body != condition + "\n{\n    fish_lunge();\n}") return plan;
 
-        var repaired = electron with { Gml = gml.Replace(OriginalCondition, FixedCondition, StringComparison.Ordinal) };
+        var repaired = asset with { Gml = gml.Replace(condition, $"if (Lure.fish > 0 && Lure.fish.object_index == {target})", StringComparison.Ordinal) };
         return plan with
         {
-            Assets = plan.Assets.Select(a => a == electron ? repaired : a).ToArray(),
+            Assets = plan.Assets.Select(a => a == asset ? repaired : a).ToArray(),
             Decisions = [.. plan.Decisions,
-                $"[CGF-INSTANCE-001] Fixed {ModName(patches[electron.Source])} in {ElectronEvent}: compare the hooked fish with the Flash object type without requiring a live Flash."]
+                $"[CGF-INSTANCE-001] Fixed {ModName(patches[asset.Source])} in {entry}. Compare the hooked fish with the {target} object type without requiring a live {target}."]
         };
     }
 
