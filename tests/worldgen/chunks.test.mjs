@@ -78,7 +78,7 @@ function setup() {
         },
         instance_create(x, y, kind) {
             const member = { x, y, kind, sprite_index: kind === ground ? underlay : kind,
-                image_xscale: 1, image_yscale: 1, image_blend: 16777215 };
+                image_xscale: 1, image_yscale: 1, image_blend: 16777215, object_id: kind, display_size: 1, size: 1 };
             live.add(member);
             return member;
         },
@@ -96,6 +96,16 @@ function setup() {
             }) ?? null;
         },
         asset_get_index: () => -1,
+        instance_exists: () => false,
+        variable_instance_exists: () => false,
+        power: Math.pow,
+        jmk_endless_ocean_sonar: member => {
+            member.s1 = -1;
+            member.s2 = member.display_size - 1;
+            member.s3 = 10 + 5 * (member.display_size - 1);
+            member.s4 = 10 + 3 * (member.display_size - 1);
+            member.s5 = (member.size + 0.5) / 3.5;
+        },
         script_exists: script => typeof script === 'function',
         fish_object_to_name: object => object,
         get_index_for_name: object => species.indexOf(object),
@@ -194,7 +204,7 @@ test('each depth band stays in water and the biome and wreck rolls vary within b
             if (chunk[6]) {
                 if (lastWreck !== undefined) assert.ok(index - lastWreck >= 10 && index - lastWreck <= 20);
                 lastWreck = index;
-                assert.ok(['Geiger', 'Ancient_Kingfish'].includes(chunk[17]));
+                assert.ok(['Geiger', 'Underfin'].includes(chunk[17]));
             }
             for (let band = 0; band < 3; band++) {
                 const slot = 7 + band * 4;
@@ -202,6 +212,7 @@ test('each depth band stays in water and the biome and wreck rolls vary within b
                 assert.ok(chunk[slot + 1] > 1244 + 260);
                 assert.ok(chunk[slot + 1] < Math.min(...chunk.slice(0, 5)) - 1000);
                 assert.ok(species.includes(chunk[slot + 2]));
+                assert.ok(!['Torby', 'Ancient_Kingfish'].includes(chunk[slot + 2]));
                 seenSpecies.add(chunk[slot + 2]);
             }
         }
