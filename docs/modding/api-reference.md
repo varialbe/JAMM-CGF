@@ -367,8 +367,8 @@ In profiles with big money on (the default), JAMM replaces its body at build tim
 below 10,000 keep the vanilla `$9,999` style, larger ones show one truncated decimal with
 `K`, `M`, `B`, `T` or `Qa` (`$3.4M`, `$9.5T`). The wallet then keeps up to 1e15. Avoid
 your own `min(..., 999999999)` clamps on `Girl.dollars`, and write GML literals above
-2,147,483,647 as products (`3400000 * 1000000`) because the legacy compiler has no
-64-bit literals. Decision `[CGF-MONEY-001]` lists what was patched.
+2,147,483,647 as products (`3400000 * 1000000`) to stay with 32-bit literals, which the legacy
+bytecode handles everywhere. Decision `[CGF-MONEY-001]` lists what was patched.
 
 ## Weather API
 
