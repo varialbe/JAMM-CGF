@@ -64,14 +64,18 @@ The first personal-profile run exposed stale callback script indexes: other mods
 script table after the recipe compiled, leaving the controller's `script_execute` calls
 pointing at the solo indexes. The final merged-layout pass now recompiles the controller
 Step event from symbolic source, and a fresh personal build resolves its callbacks to the
-correct final indexes (200 and 202). That rebuilt archive is currently being rerun in the
-game; the earlier failing run is in `~/jamm-night/runs/worldgen-v1-personal-worldgen/`.
+correct final indexes (200 and 202). The rerun passed on the personal profile containing
+Perf, HD Lite, Console, Smooth, The Silo and Weather Pack: transition and biome collision
+probes passed, the five-chunk window held at most 15 fish, the save check found zero streamed
+fish IDs, and the westbound return released all generated instances. It completed without a
+CODE ERROR. Its CSV is `~/jamm-night/runs/worldgen-v1-personal-fixed-worldgen/`; the first
+run before the callback fix is retained at `~/jamm-night/runs/worldgen-v1-personal-worldgen/`.
 
-The all-7 route could not be evaluated. The runner reached Steam's sign-in screen (the
-displayed message said the account was logged in on another computer); no worldgen route CSV
-was produced. The run was retried under the shared lock, but Steam remained at sign-in. See
-`~/jamm-night/runs/worldgen-v1-all7-worldgen/` and
-`~/jamm-night/runs/worldgen-v1-all7-retry-worldgen/`.
+The first all-7 attempts did not reach the terrain checkpoints: one remained at Steam sign-in,
+and a 240-second run reached the generated edge but stopped before point 1. I rebuilt the
+seven-mod profile with the callback fix and queued a 600-second route under the shared game
+lock. Its run directory is `~/jamm-night/runs/worldgen-v1-all7-final-worldgen/`; results are
+pending that run.
 
 ## Showcase captures
 
