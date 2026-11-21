@@ -31,3 +31,19 @@ Branch `exp/fish-value-cap`, worktree `~/jamm-wt/fish-value-cap`.
    client is logged in (it may currently be logged out; then skip and say so).
 6. Report `docs/reports/fish-value-cap.md`. Commit on the branch; do not merge into main.
 TGE/PWB stay on the VPS only.
+
+## Addendum (user, 2026-11-21): general "fair play" guard against developer/test values
+Vel built TGE with dev values (Cuddlefish 5e9, and `unlockall` then crashes in `Rod_Step_0` reading
+`upgrades[22]` out of range `[1,22]`). The user wants JAMM to neutralise unfair OP dev values in general,
+not only fish value. Extend the step into a **Fair-Play guard** (`fairPlay` config, default on):
+* Derive limits from the **vanilla base** (max vanilla value of each stat x a documented headroom factor,
+  e.g. 2x) for: rod stats (cast speed, rod power / rod power flat, reel speed, sinker distance / sink speed),
+  boat speed/stats, lure/upgrade effects, fish XP_VALUE, shop prices (no 0 or negative prices for items
+  that cost money in vanilla), starting money / money grants in Create events.
+  Fish sale value keeps the fixed 100,000,000 cap from above.
+* Only clamp literal assignments and registration arguments (and a runtime clamp where values are computed);
+  never change vanilla code entries that the mods did not touch. One decision line per clamped value
+  (`[CGF-FAIR-001] ...`, mod name, old -> new).
+* Make the JAMM Console commands `unlockall` / `unlockgear` safe with mods that change upgrade array sizes:
+  analyse the TGE crash (`Rod_Step_0`, `upgrades[22]`) and guard index access so no build can crash there.
+* Tests for each category; vanilla byte-identical; the report lists every clamp in the TGE build.
