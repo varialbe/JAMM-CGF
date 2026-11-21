@@ -37,6 +37,9 @@ internal static class MoneyScene
             {{dismiss}}
             Girl.startMessageShown = 1;
             Girl.hide_ui = 0;
+            // The wallet is only shown while a shop is open.
+            if (!instance_exists(Handler) && instance_exists(icon_Rods))
+                instance_create(icon_Rods.ORIGIN_X, icon_Rods.ORIGIN_Y, RodMenu);
             if (bench_stage == 0)
             {
                 Girl.dollars = 1234567890;
@@ -59,7 +62,9 @@ internal static class MoneyScene
                 var log = file_text_open_write("jamm_bench_money.csv");
                 file_text_write_string(log, "wallet,dollars,ini_in,ini_out,exact,format_big");
                 file_text_writeln(log);
-                file_text_write_string(log, Wallet.dollars_string + "," + string_format(Girl.dollars, 0, 0) + ","
+                var shown = "";
+                if (instance_exists(Wallet) && variable_instance_exists(Wallet.id, "dollars_string")) shown = Wallet.dollars_string;
+                file_text_write_string(log, shown + "," + string_format(Girl.dollars, 0, 0) + ","
                     + string_format(big, 0, 0) + "," + string_format(back, 0, 0) + "," + string(back == big) + ","
                     + number_to_dollar_string(big));
                 file_text_writeln(log);
