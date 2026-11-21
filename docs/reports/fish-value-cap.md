@@ -32,3 +32,7 @@ TGE's Rod recompute event initializes effect slots 0–21. The Rod step and came
 - The final-layer integration test verifies that intermediate builds leave values alone and that a profile with an overhaul and addon still uses vanilla XP limits.
 - A real vanilla-only build with a deliberately low configured cap of 1 was byte-identical to the original by `cmp` and SHA-256.
 - The rebuilt pack passed semantic verification for 2,238 code entries and catalog verification for 200 fish. The ModMaker dump confirmed Cuddlefish at 100,000,000 sale value and 5,000,000 XP. The pack's default conflict order superseded two Perf and two Smooth hunks. Its acceptance check also reported that the Gear event still iterates 18 entries while the upgrade table contains 19.
+
+## VPS playtest
+
+A disposable instrumented copy of the exact-order build ran on the authenticated VPS Steam client with an isolated test save. Cuddlefish was worth 100,000,000 at creation and appraised at 100,000,000 with a 2× gear multiplier. A Fish API registration passed 150,000,000 at runtime and assigned 100,000,000. The Console command `money 3400000000123` set the exact balance and the formatter displayed `$3.4T`.
