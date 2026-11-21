@@ -108,6 +108,8 @@ public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, s
     public string[]? UnlockFixMods { get; init; }
     /// <summary>Skips atlas repacking when building this profile's enabled mods.</summary>
     public bool NoRepack { get; init; }
+    /// <summary>Keeps the legacy $999,999,999 wallet clamp and full-number money display in this profile's builds.</summary>
+    public bool NoBigMoney { get; init; }
     /// <summary>Per-profile roles override package defaults, including an explicit vanilla role.</summary>
     public Dictionary<string, ModRole> Roles { get; init; } = new(StringComparer.Ordinal);
     /// <summary>Selected profile preset, or the default configuration.</summary>

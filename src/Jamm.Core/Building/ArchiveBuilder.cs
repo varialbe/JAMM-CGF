@@ -28,14 +28,14 @@ public static class ArchiveBuilder
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
         CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false,
-        PerfSettings? perfSettings = null) =>
-        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack, perfSettings: perfSettings);
+        PerfSettings? perfSettings = null, bool bigMoney = true) =>
+        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack, perfSettings: perfSettings, bigMoney: bigMoney);
 
     internal static BuildResult BuildLayer(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions, bool dryRun, Action<string>? progress,
         CancellationToken cancellationToken, AnalysisOptions? options, bool noRepack,
         bool intermediate = false, IReadOnlyList<string>? additionalProtectedPaths = null, bool hasMergedBase = false,
-        PerfSettings? perfSettings = null)
+        PerfSettings? perfSettings = null, bool bigMoney = true)
     {
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
@@ -107,7 +107,7 @@ public static class ArchiveBuilder
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate);
+                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate, bigMoney);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -200,7 +200,8 @@ public static class ArchiveBuilder
 
     private static IReadOnlyDictionary<string, string> Apply(UndertaleData data, UndertaleData ancestor,
         IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan,
-        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate)
+        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate,
+        bool bigMoney)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -363,6 +364,7 @@ public static class ArchiveBuilder
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+            if (bigMoney) MoneyRuntime.Apply(baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
