@@ -24,7 +24,7 @@ public static class EndlessOceanMod
     [
         "jamm_chunk_unit", "jamm_chunk_stream", Setup, "jmk_endless_ocean_floor", "jmk_endless_ocean_height",
         "jmk_endless_ocean_biome", "jmk_endless_ocean_species", "jmk_endless_ocean_poi",
-        "jmk_endless_ocean_layout", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
+        "jmk_endless_ocean_layout", "jmk_endless_ocean_underlay_cell", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
         "jmk_endless_ocean_load", "jmk_endless_ocean_sonar", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
     ];
 
@@ -77,6 +77,23 @@ public static class EndlessOceanMod
             ocean_catch = ds_list_create();
             ocean_first = 0;
             ocean_last = -1;
+
+            var atlas_uvs = sprite_get_uvs(spr_jmk_ocean_underlay_tex, 0);
+            var atlas_u0 = atlas_uvs[0];
+            var atlas_v0 = atlas_uvs[1];
+            var atlas_uw = atlas_uvs[2] - atlas_u0;
+            var atlas_vh = atlas_uvs[3] - atlas_v0;
+            var atlas_tex = sprite_get_texture(spr_jmk_ocean_underlay_tex, 0);
+            for (var uv_i = 0; uv_i < {{EndlessOceanSprites.VariantCount}}; uv_i += 1)
+            {
+                var gx = uv_i mod {{EndlessOceanSprites.AtlasGrid}};
+                var gy = uv_i div {{EndlessOceanSprites.AtlasGrid}};
+                ocean_u0[uv_i] = atlas_u0 + ((gx * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_uw;
+                ocean_v0[uv_i] = atlas_v0 + ((gy * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_vh;
+                ocean_u1[uv_i] = atlas_u0 + ((gx * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad + EndlessOceanSprites.CellSize}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_uw;
+                ocean_v1[uv_i] = atlas_v0 + ((gy * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad + EndlessOceanSprites.CellSize}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_vh;
+                ocean_tex[uv_i] = atlas_tex;
+            }
 
             ini_open("jamm_endless_ocean.ini");
             ocean_seed = clamp(floor(ini_read_real("World", "seed", {{seed}})), 0, {{MaxSeed}});

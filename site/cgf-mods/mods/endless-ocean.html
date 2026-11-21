@@ -21,9 +21,9 @@
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>Endless Ocean (Preview)</span></nav>
     <header class="mod-header">
       <a class="back" href="../index.html#packages">← All packages</a>
-      <div class="card-head"><img src="../assets/endless-ocean.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Endless Ocean (Preview)</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">Recipe</span></div><p>Version 0.2.0</p></div></div>
-      <div class="download-row"><a class="btn" href="../packages/endless-ocean.zip" download>Download source ZIP</a><span>Source-only ZIP · 1,600 bytes</span></div>
-      <dl class="download-meta"><div><dt>Download size</dt><dd>1,600 bytes</dd></div><div><dt>SHA-256</dt><dd><code>bf9d70131aae9f0651f93c2280b7722671c9c215673b940f3c4540b2aa6171f0</code></dd></div></dl>
+      <div class="card-head"><img src="../assets/endless-ocean.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Endless Ocean (Preview)</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">Recipe</span></div><p>Version 0.2.1</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/endless-ocean.zip" download>Download source ZIP</a><span>Source-only ZIP · 1,599 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>1,599 bytes</dd></div><div><dt>SHA-256</dt><dd><code>36344f758fc77d928c3cdc9fdd75cecd13570299c6d6c86f9c477070258d0c5f</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
@@ -71,7 +71,7 @@
     <section class="mod-section">
       <h2>How it works</h2>
       <p>The floor joins the last collidable terrain and eases into a continuous profile over three chunks. The generator reserves the existing room dimensions and artwork before adding 488 exploration chunks of 2,048 pixels each.</p>
-      <p>Native CaveRock silhouettes, kelp, corals and lights mark sandy shelves, rocky slopes and trenches. Each floor strip has a matching slope mask and solid underlay to the room bottom.</p>
+      <p>Native CaveRock silhouettes, kelp, corals and lights mark sandy shelves, rocky slopes and trenches. Each floor strip has a matching slope mask and a world-aligned seamless cobble underlay to the room bottom.</p>
       <p>The camera streams at most five chunks. Each can spawn one vanilla fish per depth band, with a collision check before spawning. Wrecks appear 10–20 chunks apart and attract a rare fish within the same budget.</p>
       <p>The seed defaults to 271828 and is shared by all slots in the save directory. Primary and backup saves skip transient fish IDs.</p>
     </section>
@@ -81,10 +81,10 @@
 <div class="table-wrap"><table class="datasheet"><tbody>
 <tr><th scope="row">Package type</th><td>Recipe</td></tr>
 <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
-<tr><th scope="row">Version</th><td>0.2.0</td></tr>
+<tr><th scope="row">Version</th><td>0.2.1</td></tr>
 <tr><th scope="row">Generator</th><td><code>endless-ocean</code> (recipe generator version <code>2</code>)</td></tr>
 <tr><th scope="row">APIs used</th><td>JAMM chunk layout and streaming scripts, GameMaker instance and collision APIs, legacy Boat7, Fish and save events, and Catalog API lookup when installed.</td></tr>
-<tr><th scope="row">Assets and scripts added</th><td>Three runtime objects, four sprites built from the local archive, and fourteen standalone scripts. The recipe guards the native fish respawn script and both SaveManager writes.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>Three runtime objects, five sprites built from the local archive, and fifteen standalone scripts. The recipe guards the native fish respawn script and both SaveManager writes.</td></tr>
 <tr><th scope="row">Save-file behaviour</th><td>The seed is the only generated-world state saved. <code>jamm_endless_ocean.ini</code> stores it under <code>[World]</code> as <code>seed</code>, shared by all slots in that save directory. Transient fish instance IDs are excluded from <code>[Fishes]</code>. Normal catches, quests and Fishalog progress still use the game&#x27;s save system.</td></tr>
 <tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive or a compatible merged archive. Enable the recipe in a JAMM profile, or build it on top of a verified pack archive. Use JAMM with Endless Ocean generator version 2.</td></tr>
 </tbody></table></div>
@@ -93,7 +93,8 @@
     <section class="mod-section">
       <h2>Version history</h2>
 <ul class="changelog">
-        <li>0.2.0: Current source package.</li>
+        <li>0.2.1: Seamless cobble seafloor built from the vanilla cave rock (16 Wang tile variants on one texture page, no visible grid), matching slope caps.</li>
+        <li>0.2.0: Seeded three-biome seafloor, native scenery and wrecks, and merged-layout callback recompilation.</li>
       </ul>
     </section>
 

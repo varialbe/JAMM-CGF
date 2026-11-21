@@ -19,6 +19,8 @@ const rocks = ['CaveRockBig', 'CaveRockWide', 'CaveRockLeg', 'CaveRockSig', 'Cav
 const decor = ['JWeedSmall', 'JWeedMedium', 'Coral', 'Coral2', 'CoralDark', 'CoralFG3', 'GlowPlant', 'BulbPlantShort', 'ChainPlant'];
 const ground = 'obj_jmk_ocean_ground';
 const underlay = 'spr_jmk_ocean_underlay';
+const cellSize = 480;
+const variantCount = 16;
 
 function topOf(member, x) {
     const localX = Math.floor(x - member.x);
@@ -32,8 +34,19 @@ function topOf(member, x) {
 function setup() {
     const live = new Set();
     const blockers = [];
+    const drawCalls = [];
+    let currentBatch = null;
     const assets = [...species, ...rocks, ...decor, ground, underlay, 'Light', 'Collidable',
-        'obj_jmk_ocean_decor', 'spr_jmk_ocean_slope_down', 'spr_jmk_ocean_slope_up', 'spr_jmk_ocean_wreck'];
+        'obj_jmk_ocean_decor', 'obj_jmk_endless_ocean', 'spr_jmk_ocean_slope_down', 'spr_jmk_ocean_slope_up', 'spr_jmk_ocean_wreck'];
+    const controller = {
+        ocean_seed: seed,
+        ocean_u0: Array.from({ length: variantCount }, (_, i) => i),
+        ocean_v0: Array.from({ length: variantCount }, () => 0),
+        ocean_u1: Array.from({ length: variantCount }, (_, i) => i + 1),
+        ocean_v1: Array.from({ length: variantCount }, () => 1),
+        ocean_tex: Array.from({ length: variantCount }, () => 0),
+    };
+    const view = { x: [0], y: [0], w: [1200], h: [720], current: 0 };
     const context = vm.createContext({
         real: Number, floor: Math.floor, round: Math.round, abs: Math.abs, min: Math.min, max: Math.max,
         lerp: (a, b, t) => a + (b - a) * t, clamp: (v, lo, hi) => Math.min(Math.max(v, lo), hi),
@@ -41,6 +54,9 @@ function setup() {
         ...Object.fromEntries(assets.map(name => [name, name])),
         noone: null, ocean_seed: seed, ocean_start: start, ocean_anchor_y: anchor, room_height: bottom,
         ocean_content_chunk: content,
+        pr_trianglelist: 4,
+        c_white: 16777215,
+        view_xview: view.x, view_yview: view.y, view_wview: view.w, view_hview: view.h, view_current: 0,
         make_color_rgb: (r, g, b) => r + g * 256 + b * 65536,
         merge_color: (a, b, t) => a + (b - a) * t,
         object_get_sprite: kind => kind,
@@ -48,9 +64,21 @@ function setup() {
         sprite_get_height: () => 1024,
         sprite_get_xoffset: () => 0,
         sprite_get_yoffset: () => 0,
+        instance_find: obj => (obj === 'obj_jmk_endless_ocean' ? controller : null),
+        draw_self: () => {},
+        draw_primitive_begin_texture: (kind, tex) => {
+            currentBatch = { kind, tex, vertices: [] };
+        },
+        draw_vertex_texture_colour: (x, y, u, v, col, alpha) => {
+            currentBatch.vertices.push({ x, y, u, v, col, alpha });
+        },
+        draw_primitive_end: () => {
+            drawCalls.push(currentBatch);
+            currentBatch = null;
+        },
         instance_create(x, y, kind) {
             const member = { x, y, kind, sprite_index: kind === ground ? underlay : kind,
-                image_xscale: 1, image_yscale: 1 };
+                image_xscale: 1, image_yscale: 1, image_blend: 16777215 };
             live.add(member);
             return member;
         },
@@ -86,7 +114,7 @@ function setup() {
         script_execute: (script, ...args) => script(...args)
     });
     for (const name of ['jamm_chunk_unit', 'jamm_chunk_stream',
-        ...['floor', 'height', 'biome', 'poi', 'species', 'layout', 'ground', 'scenery', 'load']
+        ...['floor', 'height', 'biome', 'poi', 'species', 'layout', 'underlay_cell', 'ground', 'scenery', 'load']
             .map(name => 'jmk_endless_ocean_' + name)]) {
         const path = new URL(`../../src/Jamm.Core/Builtins/Worldgen/${name}.gml`, import.meta.url);
         // The legacy VM allocates local arrays on their first indexed assignment.
@@ -94,11 +122,18 @@ function setup() {
         new vm.Script(`function ${name}(argument0, argument1, argument2, argument3, argument4) { ${body} }`,
             { filename: path.pathname }).runInContext(context);
     }
+    const drawGroundPath = new URL('../../src/Jamm.Core/Builtins/Worldgen/draw_ground.gml', import.meta.url);
+    const drawGroundBody = readFileSync(drawGroundPath, 'utf8')
+        .replace(/var (px|py|qx|qy);/g, 'var $1 = [];')
+        .replace(/\bexit;/g, 'return;');
+    new vm.Script(`function draw_ground() { with (this) { ${drawGroundBody} } }`, { filename: drawGroundPath.pathname }).runInContext(context);
     return {
-        live, blockers,
+        live, blockers, drawCalls, view, controller,
         layout: (seed, index, seam = anchor, height = bottom, reserve = content) =>
             context.jmk_endless_ocean_layout(seed, index, seam, height, reserve),
         heightAt: (offset, seedToUse = seed) => context.jmk_endless_ocean_height(seedToUse, offset, anchor, bottom, content),
+        underlayCell: (seedToUse, cx, cy) => context.jmk_endless_ocean_underlay_cell(seedToUse, cx, cy),
+        drawGround: member => context.draw_ground.call(member),
         load: context.jmk_endless_ocean_load,
         stream: (map, first, last, create = context.jmk_endless_ocean_load) =>
             context.jamm_chunk_stream(map, first, last, create, member => assert.ok(live.delete(member)))
@@ -209,4 +244,118 @@ test('five chunks stream at most fifteen fish and release all owned instances on
     stream(map, 0, -1, create);
     assert.equal(map.size, 0);
     assert.equal(live.size, 0);
+});
+
+test('underlay cells are deterministic, vary by seed, and satisfy Wang edge matching', () => {
+    const { underlayCell } = setup();
+    const seen = new Set();
+    for (let cy = 20; cy <= 27; cy++) {
+        for (let cx = 130; cx <= 160; cx++) {
+            const v = underlayCell(seed, cx, cy);
+            assert.ok(Number.isInteger(v) && v >= 0 && v < variantCount);
+            assert.equal(v, underlayCell(seed, cx, cy));
+            seen.add(v);
+            const right = underlayCell(seed, cx + 1, cy);
+            assert.equal((v >> 2) & 1, right & 1);
+            const below = underlayCell(seed, cx, cy + 1);
+            assert.equal((v >> 1) & 1, (below >> 3) & 1);
+        }
+    }
+    assert.ok(seen.size >= 12);
+    const otherSeed = Array.from({ length: 16 }, (_, i) => underlayCell(seed + 1, 140 + i, 24));
+    const baseSeed = Array.from({ length: 16 }, (_, i) => underlayCell(seed, 140 + i, 24));
+    assert.notDeepEqual(baseSeed, otherSeed);
+});
+
+test('underlay and slope caps are world-aligned across strip boundaries with no brightness jump', () => {
+    const { load, drawGround, drawCalls, view } = setup();
+    const owned = [];
+    load(content + 2, owned);
+    load(content + 3, owned);
+
+    const pieces = owned.filter(piece => piece.kind === ground).sort((a, b) => a.x - b.x);
+    assert.ok(pieces.every(piece => piece.image_blend === 16777215));
+
+    const underlays = pieces.filter(piece => piece.sprite_index === underlay);
+    const caps = pieces.filter(piece => piece.sprite_index !== underlay);
+    assert.ok(caps.length > 0);
+
+    // Inspect two adjacent strips across a chunk boundary (strip 3 of chunk+2 -> strip 0 of chunk+3).
+    const leftStrip = underlays[3];
+    const rightStrip = underlays[4];
+    assert.equal(leftStrip.x + 512, rightStrip.x);
+
+    view.x[0] = leftStrip.x - 100;
+    view.y[0] = Math.min(leftStrip.y, rightStrip.y) - 100;
+    view.w[0] = 1400;
+    view.h[0] = 720;
+
+    drawCalls.length = 0;
+    drawGround(leftStrip);
+    assert.equal(drawCalls.length, 1);
+    const leftVerts = drawCalls[0].vertices;
+
+    drawCalls.length = 0;
+    drawGround(rightStrip);
+    assert.equal(drawCalls.length, 1);
+    const rightVerts = drawCalls[0].vertices;
+
+    const boundaryX = leftStrip.x + 512;
+    const sampleY = Math.max(leftStrip.y, rightStrip.y) + 50;
+    const findTriAt = (verts, x, y) => {
+        for (let i = 0; i < verts.length; i += 3) {
+            const tri = [verts[i], verts[i + 1], verts[i + 2]];
+            const xs = tri.map(p => p.x);
+            const ys = tri.map(p => p.y);
+            if (x >= Math.min(...xs) - 1e-6 && x <= Math.max(...xs) + 1e-6 &&
+                y >= Math.min(...ys) - 1e-6 && y <= Math.max(...ys) + 1e-6) {
+                return tri;
+            }
+        }
+        return null;
+    };
+
+    const triL = findTriAt(leftVerts, boundaryX, sampleY);
+    const triR = findTriAt(rightVerts, boundaryX, sampleY);
+    assert.ok(triL && triR);
+
+    const interpUv = (tri, x, y) => {
+        const minX = Math.min(...tri.map(p => p.x)), maxX = Math.max(...tri.map(p => p.x));
+        const minY = Math.min(...tri.map(p => p.y)), maxY = Math.max(...tri.map(p => p.y));
+        const minU = Math.min(...tri.map(p => p.u)), maxU = Math.max(...tri.map(p => p.u));
+        const minV = Math.min(...tri.map(p => p.v)), maxV = Math.max(...tri.map(p => p.v));
+        const u = minU + ((x - minX) / (maxX - minX)) * (maxU - minU);
+        const v = minV + ((y - minY) / (maxY - minY)) * (maxV - minV);
+        return { variant: Math.floor(minU), uLocal: u - Math.floor(minU), vLocal: v };
+    };
+
+    const endOfLeft = interpUv(triL, boundaryX, sampleY);
+    const startOfRight = interpUv(triR, boundaryX, sampleY);
+    assert.ok(Math.abs(endOfLeft.vLocal - startOfRight.vLocal) < 1e-6);
+    if (boundaryX % cellSize !== 0) {
+        assert.equal(endOfLeft.variant, startOfRight.variant);
+        assert.ok(Math.abs(endOfLeft.uLocal - startOfRight.uLocal) < 1e-6);
+    } else {
+        assert.ok(Math.abs(endOfLeft.uLocal - 1) < 1e-6);
+        assert.ok(Math.abs(startOfRight.uLocal) < 1e-6);
+        assert.equal((endOfLeft.variant >> 2) & 1, startOfRight.variant & 1);
+    }
+
+    // Verify slope cap shares the exact world-aligned cell and UVs with its underlay at y = base_y.
+    const cap = caps[0];
+    const matchingUnderlay = underlays.find(u => u.x === cap.x);
+    view.x[0] = cap.x - 50;
+    view.y[0] = cap.y - 50;
+    drawCalls.length = 0;
+    drawGround(cap);
+    assert.equal(drawCalls.length, 1);
+    const capBottomVerts = drawCalls[0].vertices.filter(p => Math.abs(p.y - matchingUnderlay.y) < 1e-6);
+    assert.ok(capBottomVerts.length >= 2);
+    drawCalls.length = 0;
+    drawGround(matchingUnderlay);
+    const underlayTopVerts = drawCalls[0].vertices.filter(p => Math.abs(p.y - matchingUnderlay.y) < 1e-6);
+    for (const cv of capBottomVerts) {
+        const match = underlayTopVerts.find(uv => Math.abs(uv.x - cv.x) < 1e-6 && Math.abs(uv.u - cv.u) < 1e-6 && Math.abs(uv.v - cv.v) < 1e-6);
+        assert.ok(match, `Expected matching vertex at (${cv.x}, ${cv.y}) with uv (${cv.u}, ${cv.v})`);
+    }
 });

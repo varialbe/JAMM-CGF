@@ -31,3 +31,20 @@ jamm_autoplay.csv, shots/).
 4. `dotnet build -c Release` zero warnings, `dotnet test` green, short report `docs/reports/ocean-sonar-crash.md`.
 
 AGENTS.md applies. Commit on this branch; do not push or merge into main.
+
+## Round 2 (Gemini; orchestrator review of 2c49631)
+Codex's fix works in-game (seeds 11002 and 11004, 15 min each, no error). Review points to fix on this branch:
+1. `jmk_endless_ocean_sonar.gml` reads `SonarPanelAdvanced.advancedDrawEnabled` and `SonarPanel.cave_sonar`
+   without checking the instances exist. Verify in the legacy base whether both always exist in every room
+   where Endless Ocean streams fish; guard with `instance_exists` (fall back to the basic branch) either way.
+2. It hardcodes asset indices (`object_index == 132`, `s1 = 238`, `424`, ...). Mods can add assets, so replace
+   them with asset names resolved at build time or at runtime (`asset_get_index`) – they must match the vanilla
+   `SonarPanel_Step_1` semantics exactly. Add a test that the generated code contains no bare vanilla indices.
+3. Follow-ups from your audit `docs/reports/ocean-fish-parity.md` (now on main), inside the Endless Ocean
+   generator only (never change vanilla fish behaviour):
+   - set `base_lunge_mod` on generated fish at creation (same value `Rod_Other_10` would give),
+   - do not stream `Torby` (and singleton/quest fish such as `Ancient_Kingfish`) from chunks, or make them safe,
+   - clear `deactivated = 0` when `jmk_endless_ocean_dispose` keeps a reactivated fish.
+4. `dotnet build -c Release` zero warnings, `dotnet test` green, update `docs/reports/ocean-sonar-crash.md`.
+The orchestrator runs the game. Every command in the foreground; simple single commands (no `&&`, `;`, pipes,
+redirections, no `rm`); if denied, write a small script file and run it. Do not commit.

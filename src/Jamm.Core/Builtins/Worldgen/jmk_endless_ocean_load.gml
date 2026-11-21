@@ -6,10 +6,7 @@ var biome = layout[5];
 
 for (var i = 0; i < 4; i += 1)
 {
-    var depth_fraction = ((layout[i] + layout[i + 1]) / 2 - 1244) / (room_height - 1244);
-    var tint = merge_color(make_color_rgb(246, 223, 183), make_color_rgb(153, 176, 191),
-                           clamp((depth_fraction - 0.73) * 5, 0, 1));
-    jmk_endless_ocean_ground(owned, left + i * 512, layout[i], layout[i + 1], tint);
+    jmk_endless_ocean_ground(owned, left + i * 512, layout[i], layout[i + 1]);
 }
 if (chunk < ocean_content_chunk) exit;
 jmk_endless_ocean_scenery(chunk, owned, left, biome, layout[6]);
