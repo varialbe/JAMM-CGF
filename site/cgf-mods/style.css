@@ -14,6 +14,10 @@
   --test-fg: #6c4800;
   --opt-bg: #e3edf9;
   --opt-fg: #1d4e83;
+  --branch-open: #bb6b00;
+  --bar-alt: #148365;
+  --bar-third: #8157b6;
+  --bar-fourth: #bb6b00;
   --shadow: 0 12px 30px rgb(27 55 70 / 7%);
 }
 @media (prefers-color-scheme: dark) {
@@ -32,6 +36,10 @@
     --test-fg: #fcd34d;
     --opt-bg: #1e293b;
     --opt-fg: #b4d2ff;
+    --branch-open: #ffc45c;
+    --bar-alt: #5bd0aa;
+    --bar-third: #c3a0ff;
+    --bar-fourth: #ffc45c;
     --shadow: 0 12px 30px rgb(0 0 0 / 18%);
   }
 }
@@ -152,6 +160,30 @@ summary { color: var(--text); font-weight: 650; cursor: pointer; }
 summary + p { margin-bottom: 0; }
 .guide-header { margin-bottom: 1.2rem; }
 .guide-back { margin: 1.5rem 0; }
+.progress-section { margin: 1.2rem 0; padding: clamp(1rem, 3vw, 1.5rem); background: var(--panel); border: 1px solid var(--border); border-radius: 16px; min-width: 0; }
+.progress-section > p:not(.eyebrow) { max-width: 900px; }
+.graph-wrap, .chart-wrap { max-width: 100%; overflow-x: auto; padding: .8rem; background: var(--panel-alt); border-radius: 12px; }
+.branch-graph { display: block; width: 100%; min-width: 620px; height: auto; }
+.branch-graph text { fill: var(--text); font: 600 13px system-ui, sans-serif; }
+.branch-graph .main-trunk { fill: none; stroke: var(--muted); stroke-width: 4; }
+.branch-graph .branch-lane path { fill: none; stroke-width: 3; }
+.branch-graph .trunk-label { font-weight: 750; }
+.graph-key { display: flex; gap: .45rem; align-items: center; font-size: .85rem; margin: .4rem 0 0; }
+.key-merged { color: var(--accent); }
+.key-open { color: var(--branch-open); margin-left: .5rem; }
+.branch-table { border-collapse: collapse; width: 100%; min-width: 690px; font-size: .9rem; }
+.branch-table th, .branch-table td { padding: .62rem .7rem; border-top: 1px solid var(--border); text-align: left; vertical-align: top; }
+.branch-table th { color: var(--text); }
+.branch-table td { color: var(--muted); }
+.branch-table code { white-space: nowrap; }
+.perf-chart { display: block; width: 100%; min-width: 760px; height: auto; }
+.perf-chart .grid-line { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 5; }
+.perf-chart text { fill: var(--text); font: 12px system-ui, sans-serif; }
+.perf-chart .bar-label { font-weight: 650; }
+.perf-chart .bar-value { font-weight: 700; }
+.perf-chart .bar-note, .perf-chart .axis-label { fill: var(--muted); font-size: 11px; }
+.scenario-list { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; padding-left: 1.25rem; font-size: .9rem; }
+.method-note { margin-top: .8rem; padding-left: .8rem; border-left: 3px solid var(--accent); }
 @media (max-width: 600px) {
   .site-nav { width: 100%; padding: .7rem 16px; align-items: flex-start; flex-direction: column; gap: .45rem; }
   .nav-links { gap: .25rem 1rem; }

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jamm.Core.Browsing;
 using Jamm.Core.Building;
 using Jamm.Core.Management;
@@ -83,6 +84,16 @@ public sealed class SitePackageTests
 
         foreach (string page in new[] { "how-jamm-builds.html", "compatibility.html" })
             Assert.True(File.Exists(Path.Combine(siteDir, page)), $"Missing generated guide page {page}");
+
+        string progressPath = Path.Combine(siteDir, "progress.html");
+        Assert.True(File.Exists(progressPath), "Missing generated progress page; run site/cgf-mods/make-pages.py");
+        string progressHtml = File.ReadAllText(progressPath);
+        Assert.Contains("progress.html", html);
+        Assert.Contains("Optimisation stages", progressHtml);
+        Assert.Contains("perf-chart", progressHtml);
+        Assert.Contains("Branch tree", progressHtml);
+        Assert.Contains("branch-graph", progressHtml);
+        Assert.DoesNotMatch(new Regex(@"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase), progressHtml);
 
         foreach (string page in new[]
         {

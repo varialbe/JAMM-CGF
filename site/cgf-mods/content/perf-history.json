@@ -1,0 +1,23 @@
+{
+  "method": "Placeholder comparison values for the legacy VM. Each stage is the median loop time per tick from a fixed all-seven profile scene; replace these sample numbers with repeatable local measurements before treating them as results.",
+  "series": [
+    {
+      "id": "all7",
+      "title": "All-seven profile",
+      "stages": [
+        {"label": "Starting point", "date": "2026-09-01", "loop_ms": 42.0, "note": "Baseline sample"},
+        {"label": "Hot-loop cleanup", "date": "2026-10-05", "loop_ms": 29.0, "note": "Fewer repeated lookups"},
+        {"label": "Scenery cache", "date": "2026-11-01", "loop_ms": 18.0, "note": "Reuse nearby scenery data"},
+        {"label": "Current", "date": "2026-11-21", "loop_ms": 12.5, "note": "Current sample placeholder"}
+      ]
+    },
+    {
+      "id": "public5",
+      "title": "Public five-pack",
+      "stages": [
+        {"label": "Starting point", "date": "2026-09-01", "loop_ms": 36.0, "note": "Baseline sample"},
+        {"label": "Current", "date": "2026-11-21", "loop_ms": 10.8, "note": "Current sample placeholder"}
+      ]
+    }
+  ]
+}
