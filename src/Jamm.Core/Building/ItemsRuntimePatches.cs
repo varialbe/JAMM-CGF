@@ -377,6 +377,72 @@ internal static class ItemsRuntimePatches
         return text;
     }
 
+    private static readonly Regex GirlUpgradeResetLoopRegex = new(
+        @"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=|<)\s*\d+\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)\s*\{\s*gear_upgrade_scalar\[i\]\s*=\s*1;\s*\}");
+    private static readonly Regex GirlUpgradeCopyLoopRegex = new(
+        @"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=|<)\s*\d+\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)\s*\{\s*gear_upgrade_scalar\[i\]\s*=\s*gear\.upgrade_scalar\[i\];\s*\}");
+    private static readonly Regex GearUpgradeResetLoopRegex = new(
+        @"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=|<)\s*\d+\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)\s*\{\s*upgrade_scalar\[i\]\s*=\s*1;\s*\}");
+
+    private const string GirlUpgradeResetLoopReplacement = """
+        var jamm_un, jamm_ui;
+            jamm_un = 18;
+            if (instance_exists(UpgradeData)) { jamm_un = array_length_1d(UpgradeData.unlocks); }
+            for (jamm_ui = 0; jamm_ui < jamm_un; jamm_ui += 1) { gear_upgrade_scalar[jamm_ui] = 1; }
+        """;
+
+    private const string GirlUpgradeCopyLoopReplacement = """
+        var jamm_un2, jamm_ui2, jamm_uglen;
+            jamm_un2 = 18;
+            if (instance_exists(UpgradeData)) { jamm_un2 = array_length_1d(UpgradeData.unlocks); }
+            jamm_uglen = array_length_1d(gear.upgrade_scalar);
+            for (jamm_ui2 = 0; jamm_ui2 < jamm_un2; jamm_ui2 += 1) {
+                if (jamm_ui2 < jamm_uglen) { gear_upgrade_scalar[jamm_ui2] = gear.upgrade_scalar[jamm_ui2]; }
+                else { gear_upgrade_scalar[jamm_ui2] = 1; }
+            }
+        """;
+
+    private const string GearUpgradeResetLoopReplacement = """
+        var jamm_un, jamm_ui;
+        jamm_un = 18;
+        if (instance_exists(UpgradeData)) { jamm_un = array_length_1d(UpgradeData.unlocks); }
+        for (jamm_ui = 0; jamm_ui < jamm_un; jamm_ui += 1) { upgrade_scalar[jamm_ui] = 1; }
+        """;
+
+    internal static string PatchGirlUpgradeScalarLoops(string text, bool requireAnchors = true)
+    {
+        const string entry = "gml_Object_Girl_Other_10";
+        if (!text.Contains("gear_upgrade_scalar", StringComparison.Ordinal))
+            return text;
+
+        if (requireAnchors)
+        {
+            if (text.Contains("UpgradeData.unlocks", StringComparison.Ordinal))
+                return text;
+            text = RegexReplaceOnce(text, entry, GirlUpgradeResetLoopRegex, GirlUpgradeResetLoopReplacement, "gear_upgrade_scalar reset loop");
+            text = RegexReplaceOnce(text, entry, GirlUpgradeCopyLoopRegex, GirlUpgradeCopyLoopReplacement, "gear_upgrade_scalar copy loop");
+            return text;
+        }
+
+        if (!text.Contains("jamm_un", StringComparison.Ordinal))
+            text = RegexReplaceIfSingle(text, GirlUpgradeResetLoopRegex, GirlUpgradeResetLoopReplacement);
+        if (!text.Contains("jamm_un2", StringComparison.Ordinal))
+            text = RegexReplaceIfSingle(text, GirlUpgradeCopyLoopRegex, GirlUpgradeCopyLoopReplacement);
+        return text;
+    }
+
+    internal static string PatchGearUpgradeScalarLoop(string text, bool requireAnchors = true)
+    {
+        const string entry = "gml_Object_Gear_Other_15";
+        if (!text.Contains("upgrade_scalar", StringComparison.Ordinal)
+            || text.Contains("UpgradeData.unlocks", StringComparison.Ordinal))
+            return text;
+
+        return requireAnchors
+            ? RegexReplaceOnce(text, entry, GearUpgradeResetLoopRegex, GearUpgradeResetLoopReplacement, "upgrade_scalar reset loop")
+            : RegexReplaceIfSingle(text, GearUpgradeResetLoopRegex, GearUpgradeResetLoopReplacement);
+    }
+
     private static string PatchGirlGearRefresh(string text, bool hasLureData, bool hasUpgradeData)
     {
         const string entry = "gml_Object_Girl_Other_10";
@@ -417,32 +483,8 @@ internal static class ItemsRuntimePatches
                     }
                 """);
         }
-        if (hasUpgradeData && !text.Contains("UpgradeData.unlocks", StringComparison.Ordinal)
-            && text.Contains("gear_upgrade_scalar", StringComparison.Ordinal))
-        {
-            text = RegexReplaceOnce(text, entry,
-                new Regex(@"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=|<)\s*\d+\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)\s*\{\s*gear_upgrade_scalar\[i\]\s*=\s*1;\s*\}"),
-                """
-                var jamm_un, jamm_ui;
-                    jamm_un = 18;
-                    if (instance_exists(UpgradeData)) { jamm_un = array_length_1d(UpgradeData.unlocks); }
-                    for (jamm_ui = 0; jamm_ui < jamm_un; jamm_ui += 1) { gear_upgrade_scalar[jamm_ui] = 1; }
-                """,
-                "gear_upgrade_scalar reset loop");
-            text = RegexReplaceOnce(text, entry,
-                new Regex(@"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=|<)\s*\d+\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)\s*\{\s*gear_upgrade_scalar\[i\]\s*=\s*gear\.upgrade_scalar\[i\];\s*\}"),
-                """
-                var jamm_un2, jamm_ui2, jamm_uglen;
-                    jamm_un2 = 18;
-                    if (instance_exists(UpgradeData)) { jamm_un2 = array_length_1d(UpgradeData.unlocks); }
-                    jamm_uglen = array_length_1d(gear.upgrade_scalar);
-                    for (jamm_ui2 = 0; jamm_ui2 < jamm_un2; jamm_ui2 += 1) {
-                        if (jamm_ui2 < jamm_uglen) { gear_upgrade_scalar[jamm_ui2] = gear.upgrade_scalar[jamm_ui2]; }
-                        else { gear_upgrade_scalar[jamm_ui2] = 1; }
-                    }
-                """,
-                "gear_upgrade_scalar copy loop");
-        }
+        if (hasUpgradeData)
+            text = PatchGirlUpgradeScalarLoops(text, requireAnchors: true);
         return text;
     }
 
@@ -467,19 +509,8 @@ internal static class ItemsRuntimePatches
                 for (jamm_li = 0; jamm_li < jamm_ln; jamm_li += 1) { lure_scalar[jamm_li] = 1; }
                 """);
         }
-        if (hasUpgradeData && !text.Contains("UpgradeData.unlocks", StringComparison.Ordinal)
-            && text.Contains("upgrade_scalar", StringComparison.Ordinal))
-        {
-            text = RegexReplaceOnce(text, entry,
-                new Regex(@"for\s*\(\s*i\s*=\s*0\s*;\s*i\s*(?:<=|<)\s*\d+\s*;\s*i\s*(?:\+\+|\+=\s*1)\s*\)\s*\{\s*upgrade_scalar\[i\]\s*=\s*1;\s*\}"),
-                """
-                var jamm_un, jamm_ui;
-                jamm_un = 18;
-                if (instance_exists(UpgradeData)) { jamm_un = array_length_1d(UpgradeData.unlocks); }
-                for (jamm_ui = 0; jamm_ui < jamm_un; jamm_ui += 1) { upgrade_scalar[jamm_ui] = 1; }
-                """,
-                "upgrade_scalar reset loop");
-        }
+        if (hasUpgradeData)
+            text = PatchGearUpgradeScalarLoop(text, requireAnchors: true);
         return text;
     }
 
@@ -658,6 +689,14 @@ internal static class ItemsRuntimePatches
             throw new InvalidDataException($"Cannot patch '{entry}' for Items API: expected anchor text not found ({anchorLabel}).");
         if (matches.Count > 1)
             throw new InvalidDataException($"Cannot patch '{entry}' for Items API: expected anchor text matched multiple times ({anchorLabel}).");
+        var m = matches[0];
+        return string.Concat(text.AsSpan(0, m.Index), replacement, text.AsSpan(m.Index + m.Length));
+    }
+
+    private static string RegexReplaceIfSingle(string text, Regex pattern, string replacement)
+    {
+        var matches = pattern.Matches(text);
+        if (matches.Count != 1) return text;
         var m = matches[0];
         return string.Concat(text.AsSpan(0, m.Index), replacement, text.AsSpan(m.Index + m.Length));
     }

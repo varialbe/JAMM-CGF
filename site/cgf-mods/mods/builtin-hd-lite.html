@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
   <title>JAMM HD Lite — JAMM CGF Mods</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>JAMM HD Lite</span></nav>
     <header class="mod-header">
-      <a class="back" href="../index.html#builtin-hd-lite">← All mods</a>
-      <div class="card-head">
-        <img src="../assets/hd-lite.svg" alt="" width="44" height="44">
-        <div>
-          <h1>JAMM HD Lite</h1>
-          <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
-          <p>Version 1.0.0</p>
-        </div>
-      </div>
-      <a class="btn" href="../packages/jamm-hd-lite.zip" download>Download jamm-hd-lite.zip</a>
-      <div class="checksum">SHA-256: 6cb930915d8bee92bdf99d18dcf0e951f95a6cc259540637f12f927bec1b1195 (374 B)</div>
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/hd-lite.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>JAMM HD Lite</h1><div class="badges"><span class="badge b-default">First-party default</span> <span class="badge b-optional">Recipe</span></div><p>Version 1.0.0</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/jamm-hd-lite.zip" download>Download source ZIP</a><span>Source-only ZIP · 374 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>374 bytes</dd></div><div><dt>SHA-256</dt><dd><code>6cb930915d8bee92bdf99d18dcf0e951f95a6cc259540637f12f927bec1b1195</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
@@ -28,37 +32,70 @@
     </section>
 
     <section class="mod-section">
-      <h2>Controls</h2>
-      <ul class="controls">
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF configured with the untouched August 2023 legacy VM <code>data.win</code> (bytecode 16).</li>
+        <li>A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, run Check, then build or install to a separate game copy.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>In-game controls</h2>
+<ul class="controls">
         <li>Press F11 to toggle between fullscreen and windowed mode.</li>
       </ul>
     </section>
 
     <section class="mod-section">
-      <h2>Technical datasheet</h2>
-      <table class="datasheet">
-        <tbody>
-          <tr><th scope="row">Package type</th><td>Recipe</td></tr>
-          <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
-          <tr><th scope="row">Generator</th><td><code>hd-lite</code> (recipe generator version <code>2</code>)</td></tr>
-          <tr><th scope="row">APIs used</th><td>GameMaker application surface, window, view ports and GUI sizing.</td></tr>
-          <tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe keeps the existing texture pages.</td></tr>
-          <tr><th scope="row">Save-file behaviour</th><td>Stores the fullscreen toggle in <code>jamm_hd.ini</code> under <code>[HD]</code>, key <code>Fullscreen</code>, shared by all slots.</td></tr>
-          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, Console and an independent third-party mod.</td></tr>
-        </tbody>
-      </table>
+      <h2>How it works</h2>
+      <p>The recipe retains the original texture pages and enables the GameMaker runner&#x27;s Scale and Interpolate flags. It sets a black window background and installs a persistent <code>obj_jamm_hd</code> controller in the native rooms.</p>
+      <p>At Room Start, the controller records every original view port, including hidden views. It fits the 1200 × 720 logical application surface using the smaller of window-width/1200 and window-height/720, then resizes the native surface and scales the saved view ports by the same factor. The runner letterboxes that surface to preserve aspect ratio and maps room mouse coordinates.</p>
+      <p>The controller keeps GUI coordinates at 1200 × 720 and watches for window or recreated-surface changes, including fullscreen switches. F11 toggles fullscreen and <code>jamm_hd.ini</code> stores the selection. It changes presentation sizing; it does not replace or repack the game&#x27;s original textures.</p>
     </section>
 
     <section class="mod-section">
-      <h2>How it works</h2>
-      <p>The recipe calls the HD generator with original texture pages. The generator enables the runner&#x27;s Scale and Interpolate flags and sets the window background to black.</p>
-      <p>At Room Start, <code>obj_jamm_hd</code> records the original view ports, including the hidden views. On resize it takes the smaller of the window width divided by 1,200 and the window height divided by 720. It resizes the native application surface and scales the stored view ports by that factor.</p>
-      <p>The runner letterboxes the application surface and maps room mouse coordinates. The controller keeps the GUI at 1,200 × 720 logical pixels and polls for window or surface changes to handle fullscreen switches and recreated surfaces.</p>
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>Recipe</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
+<tr><th scope="row">Version</th><td>1.0.0</td></tr>
+<tr><th scope="row">Generator</th><td><code>hd-lite</code> (recipe generator version <code>2</code>)</td></tr>
+<tr><th scope="row">APIs used</th><td>GameMaker application surface, window, view ports and GUI sizing.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe keeps the existing texture pages.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>Stores the fullscreen toggle in <code>jamm_hd.ini</code> under <code>[HD]</code>, key <code>Fullscreen</code>, shared by all slots.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, Console and an independent third-party mod.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>1.0.0: Aspect-correct application-surface scaling and fullscreen toggle using the original texture pages.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>Does HD Lite upscale or replace the game textures?</summary><p>It scales the original 1200 × 720 application surface and letterboxes it to preserve the aspect ratio. It keeps original texture pages.</p></details>
     </section>
 
     <section class="mod-section">
       <h2>Files in the package</h2>
-      <ul class="package-files">
+<ul class="package-files">
         <li><code>jamm-recipe.json</code></li>
       </ul>
     </section>
