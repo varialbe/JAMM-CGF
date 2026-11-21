@@ -82,6 +82,7 @@ int Run(string[] arguments)
                          proton.compatDataPath, proton.clientInstallPath, steam.appId, useSharedCompatibilityResults.
             --verbose works with every command; --yes skips the apply/play install confirmation.
             cgfmm verify <data.win> [--verbose]
+            cgfmm audit instances <data.win> [--json <file>] [--all]
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
             cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]
@@ -92,6 +93,7 @@ int Run(string[] arguments)
     string command = arguments[0];
     if (command == "modkit") return ModKitCommand.Run(arguments[1..], dataDirectory);
     if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
+    if (command == "audit") return AuditCommand.Run(arguments[1..]);
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory, verbose);

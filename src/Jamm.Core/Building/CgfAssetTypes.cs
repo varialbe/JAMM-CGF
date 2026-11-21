@@ -45,6 +45,10 @@ public static class CgfAssetTypes
         })
             registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(function,
                 new FunctionArgsMacroType([registry.FindType(type)]));
+        // Instance-guard accessors take the object whose first instance they read.
+        foreach (var script in data.Scripts.Where(s => s?.Name?.Content?.StartsWith(InstanceGuard.AccessorPrefix, StringComparison.Ordinal) == true))
+            registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(script.Name.Content,
+                new FunctionArgsMacroType([registry.FindType("Asset.Object")]));
         foreach (var (function, (minArgs, maxArgs, typed)) in ApiFunctions)
         {
             List<IMacroType> signatures = [];

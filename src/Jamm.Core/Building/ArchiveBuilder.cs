@@ -363,6 +363,8 @@ public static class ArchiveBuilder
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+            // Last, so the guard also covers code that the runtimes above generated or merged.
+            InstanceGuard.Apply(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
