@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
+  <title>Harbor Town — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>Harbor Town</span></nav>
+    <header class="mod-header">
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/harbor-town.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Harbor Town</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div><p>Version 0.1.0</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/harbor-town.zip" download>Download source ZIP</a><span>Source-only ZIP · 10,995 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>10,995 bytes</dd></div><div><dt>SHA-256</dt><dd><code>450b1e7a0308af3e58d9ed5268ca63b508ad221aae4a22285cebeec942ecbcc1</code></dd></div></dl>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>Harbor Town turns the land west of the dock into an optional endgame money sink. Walk to the Harbor Town sign and open the menu to build and upgrade three landmarks: a Lighthouse that widens your lure light radius by up to 40% at night or in deep water, an Aquarium that displays up to six caught Fishalog species swimming behind glass, and a Golden Cat statue for pure dockside prestige. Every building has unlimited levels along an exponential-to-linear cost curve and grows across five visual stages.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF with a configured August 2023 legacy VM base.</li>
+        <li>Build into a separate game copy; do not use the current Steam YYC archive as the base.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, check the profile, then build or install to a separate game copy.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>In-game controls</h2>
+<ul class="controls">
+        <li>Walk near the Harbor Town sign on the dock (lure uncast, not swimming or in another shop) and press E (gamepad X) to toggle the Harbor Town menu.</li>
+        <li>Use Up and Down (or gamepad D-pad) to select a building, Space (gamepad A) to build or upgrade, and Escape (gamepad B) to close.</li>
+        <li>Click any building card&#x27;s Build / Upgrade button or Close with the mouse.</li>
+        <li>With JAMM Console enabled (F12): type <code>harbor</code> to print levels, <code>harbor &lt;lighthouse|aquarium|statue&gt; &lt;n&gt;</code> to set a level, or <code>harbor money &lt;n&gt;</code> to add test funds.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Screenshots</h2>
+<div class="gallery">
+        <figure><a href="../images/harbor-town/dock-clean.jpg"><img src="../images/harbor-town/dock-clean-thumb.jpg" loading="lazy" alt="In-game dock view showing the Lighthouse, Aquarium and the E Harbor Town sign prompt beside the cat" width="480" height="288"></a><figcaption>Harbor Town buildings and sign prompt on the dock</figcaption></figure>
+        <figure><a href="../images/harbor-town/lighthouse-stages.png"><img src="../images/harbor-town/lighthouse-stages-thumb.png" loading="lazy" alt="Five composed recipe stages for the Lighthouse at levels 0, 1, 5, 20 and 100" width="480" height="288"></a><figcaption>Lighthouse recipe stages (Lv 0, 1, 5, 20, 100)</figcaption></figure>
+        <figure><a href="../images/harbor-town/aquarium-stages.png"><img src="../images/harbor-town/aquarium-stages-thumb.png" loading="lazy" alt="Five composed recipe stages for the Aquarium at levels 0, 1, 5, 20 and 100" width="480" height="288"></a><figcaption>Aquarium recipe stages (Lv 0, 1, 5, 20, 100)</figcaption></figure>
+        <figure><a href="../images/harbor-town/statue-stages.png"><img src="../images/harbor-town/statue-stages-thumb.png" loading="lazy" alt="Five composed recipe stages for the Golden Cat statue at levels 0, 1, 5, 20 and 100" width="480" height="288"></a><figcaption>Golden Cat statue stages (Lv 0, 1, 5, 20, 100)</figcaption></figure>
+</div>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>The <code>dock</code> Area declaration anchors the <code>harbor</code> controller to the vanilla <code>Cliff</code> landmark with a non-solid <code>follow</code> offset, leaving the cat&#x27;s walking path, shops and boat launch unobstructed. Each landmark starts as a wooden stake at level 0 and advances through composed sprite stages at levels 1, 5, 20 and 100, with a subtle logarithmic scale tail past level 100.</p>
+      <p>The Lighthouse (base $25.0K) sweeps a rotating night beam above stage 0 and multiplies the lure <code>Lightbulb</code> scale at night or at depth <code>y &gt;= 2000</code> by <code>min(0.40, 0.03 * ln(1 + level))</code>, capping at +40%. The Aquarium (base $40.0K) reads caught rows from <code>CatalogData</code> and animates up to six species inside its glass tank using sprite draws only — no fish AI, instances or collisions. The Golden Cat statue (base $10.0K) grows on progressively taller stepped plinths as a purely cosmetic landmark.</p>
+      <p>Upgrade costs follow <code>base * 1.6^level</code> through level 40 ($3.6T Lighthouse, $5.8T Aquarium, $1.4T Golden Cat) and then switch to linear growth (<code>base * 1.6^40 * (1 + 0.25 * (level - 40))</code>), capped at $1.0Qa and formatted with <code>jamm_money_format</code> when available. Every purchase and <code>harbor</code> console update immediately calls <code>SaveManager</code> to write <code>[JAMM_Harbor]</code>.</p><figure class="diagram"><svg viewBox="0 0 880 160" role="img" aria-labelledby="diag-title diag-desc"><title id="diag-title">Dock upgrade loop</title><desc id="diag-desc">Open the Harbor Town menu at the sign, buy unlimited levels along the exponential-to-linear cost curve, advance through five visual stages and persist levels in [JAMM_Harbor].</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"/></marker></defs><path d="M 212 81 H 230" marker-end="url(#arrow)"/><path d="M 430 81 H 448" marker-end="url(#arrow)"/><path d="M 648 81 H 666" marker-end="url(#arrow)"/><g><rect x="19" y="35" width="188" height="92" rx="14"/><text x="113" y="81" text-anchor="middle">Sign + menu (E)</text></g><g><rect x="237" y="35" width="188" height="92" rx="14"/><text x="331" y="81" text-anchor="middle">Cost curve buy</text></g><g><rect x="455" y="35" width="188" height="92" rx="14"/><text x="549" y="81" text-anchor="middle">5 visual stages</text></g><g><rect x="673" y="35" width="188" height="92" rx="14"/><text x="767" y="81" text-anchor="middle">Save [JAMM_Harbor]</text></g></svg><ol class="diagram-mobile" aria-label="Dock upgrade loop"><li>Sign + menu (E)</li><li>Cost curve buy</li><li>5 visual stages</li><li>Save [JAMM_Harbor]</li></ol><figcaption>Art composes locally from vanilla landscape and cat sprites; levels persist per save slot.</figcaption></figure>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>ModKit</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
+<tr><th scope="row">Version</th><td>0.1.0</td></tr>
+<tr><th scope="row">APIs used</th><td>ModKit Area API (<code>follow</code> anchor on <code>Cliff</code>), composed sprite recipes, 1 custom object (<code>harbor</code>) with <code>create</code>, <code>step</code>, <code>draw</code> and <code>drawGui</code> hooks, 8 standalone scripts, <code>CatalogData</code> Fishalog lookup, <code>Lightbulb</code> scaling and native <code>SaveManager</code> events.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>1 object (<code>harbor</code>), 4 composed sprites (<code>lighthouse</code>, <code>aquarium</code> and <code>statue</code> at 5 stages each, plus <code>sign</code>), 8 standalone scripts and 5 SVG detail parts. Build-time recipes sample the player&#x27;s own <code>spr_landscape3</code>, <code>spr_landscape4</code> and <code>spr_cat</code> pixels locally; no extracted game art is shipped.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>Building levels are stored per save slot in <code>[JAMM_Harbor]</code> of the active native save INI under keys <code>lighthouse</code>, <code>aquarium</code> and <code>statue</code>, and synced to the backup slot through <code>SaveManager</code>. Missing entries default to level 0, and removing the mod leaves vanilla save keys untouched.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive (bytecode 16). Verified in a solo build and in the 8-mod <code>harbor-personal</code> profile (Harbor Town, The Silo, Weather Pack, Endless Ocean, JAMM Perf, JAMM HD Lite, JAMM Console and JAMM Smooth) with 0 conflicts and 0 warnings; both in-game Harbor bench runs recorded all 15 building/level checks without Code Errors. Non-solid <code>follow</code> placement on <code>Cliff</code> keeps the dock walking path clear.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>0.1.0: Sign post and dock menu, Lighthouse (+40% capped night/deep lure light), 1-tank Aquarium (up to 6 caught Fishalog species), Golden Cat statue, 5 visual stages, exponential-to-linear cost curve, <code>[JAMM_Harbor]</code> save persistence and <code>harbor</code> console command.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>Where do the buildings appear?</summary><p>West of the dock along the grass, anchored to <code>Cliff</code> with non-solid placement so the cat&#x27;s walking path and boat launch stay unobstructed.</p></details>
+<details><summary>What happens to my save if I remove Harbor Town?</summary><p>All progress sits inside the <code>[JAMM_Harbor]</code> section of the native slot save INI. Vanilla ignores unknown sections and no vanilla save keys are modified.</p></details>
+<details><summary>Can I hook or catch the fish inside the Aquarium?</summary><p>No. Aquarium fish are sprite-only drawings taken from caught rows in <code>CatalogData</code>; they have no fish AI, world instances or collisions.</p></details>
+<details><summary>How does upgrade pricing scale at high levels?</summary><p>Prices start at $25.0K (Lighthouse), $40.0K (Aquarium) and $10.0K (Golden Cat), scale by <code>1.6^level</code> through level 40 ($3.6T, $5.8T and $1.4T), and then increase linearly (<code>+25%</code> of the level-40 cost per level) up to the $1.0Qa cap.</p></details>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+<ul class="package-files">
+        <li><code>README.md</code></li>
+        <li><code>hooks/create.gml</code></li>
+        <li><code>hooks/draw.gml</code></li>
+        <li><code>hooks/menu.gml</code></li>
+        <li><code>hooks/step.gml</code></li>
+        <li><code>jamm-mod.json</code></li>
+        <li><code>parts/glass.svg</code></li>
+        <li><code>parts/lantern.svg</code></li>
+        <li><code>parts/plinth-edge.svg</code></li>
+        <li><code>parts/sign.svg</code></li>
+        <li><code>parts/stake.svg</code></li>
+        <li><code>scripts/bonus.gml</code></li>
+        <li><code>scripts/buy.gml</code></li>
+        <li><code>scripts/command.gml</code></li>
+        <li><code>scripts/cost.gml</code></li>
+        <li><code>scripts/fish.gml</code></li>
+        <li><code>scripts/format.gml</code></li>
+        <li><code>scripts/save.gml</code></li>
+        <li><code>scripts/stage.gml</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
