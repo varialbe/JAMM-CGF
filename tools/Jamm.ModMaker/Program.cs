@@ -29,7 +29,7 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
-                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video]
+                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload] [--silo-video] [--silo-frames]
                   bench   <weather.win> <out.win> --scene weather
                   bench   <any.win> <out.win> --scene autoplay
                   bench   <legacy.win> <out.win> --scene maize
