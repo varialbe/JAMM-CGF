@@ -34,7 +34,7 @@ internal sealed class GuardGml
             {
                 string? target = ObjectName(new(i + 2, end));
                 int body = end + 1;
-                int last = Close(body) is int block && Is(body, "{") ? block : ExpressionEnd(body);
+                int last = StatementEnd(body);
                 scopes.Add((new(body, last), target));
             }
             if (Identifier(i) && Is(i + 1, "=") && Is(i + 2, "instance_create")
@@ -59,7 +59,7 @@ internal sealed class GuardGml
         if (qualifier == "other")
         {
             var nesting = scopes.Where(s => at >= s.Body.First && at < s.Body.End).ToArray();
-            return nesting.Length > 1 ? nesting[^2].Target : owner;
+            return nesting.Length > 1 ? nesting[^2].Target : nesting.Length == 1 ? owner : null;
         }
         if (qualifier is not null and not ("self" or "id"))
             return instances.LastOrDefault(s => s.At < at && s.Name == qualifier).Target ?? AssetName(qualifier);
@@ -141,6 +141,22 @@ internal sealed class GuardGml
             int end = ExpressionEnd(op + 1);
             if (end > op + 1) yield return new(i, qualifier, Tokens[i].Value, index, Tokens[op].Value, new(op + 1, end));
         }
+    }
+
+    private int StatementEnd(int start)
+    {
+        if (Is(start, "{") && Close(start) is int block) return block;
+        if (Is(start, "if", "while", "repeat", "with", "for") && Is(start + 1, "(") && Close(start + 1) is int condEnd)
+        {
+            int end = StatementEnd(condEnd + 1);
+            if (Is(start, "if"))
+            {
+                int next = Is(end, ";") ? end + 1 : end;
+                if (Is(next, "else")) return StatementEnd(next + 1);
+            }
+            return end;
+        }
+        return ExpressionEnd(start);
     }
 
     private int ExpressionEnd(int start)
