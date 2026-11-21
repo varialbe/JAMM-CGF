@@ -216,6 +216,30 @@
     "sizeBytes": 6718
   },
   {
+    "id": "harbor-town",
+    "name": "Harbor Town",
+    "author": "JAMM",
+    "description": "Build up the dock with a lighthouse, an aquarium, and a golden statue.",
+    "fileUrl": "https://varialbe.xyz/cgf-mods/packages/harbor-town.zip",
+    "isPreview": false,
+    "categories": [
+      "Optional",
+      "Town"
+    ],
+    "createdUtc": "2026-11-18T00:00:00Z",
+    "rating": null,
+    "iconUrl": "https://varialbe.xyz/cgf-mods/assets/harbor-town.svg",
+    "verifiedCreator": true,
+    "credits": "JAMM-CGF first-party pure-source package",
+    "catalogPage": "https://varialbe.xyz/cgf-mods/#harbor-town",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
+    "isDefault": false,
+    "version": "0.1.0",
+    "sha256": "450b1e7a0308af3e58d9ed5268ca63b508ad221aae4a22285cebeec942ecbcc1",
+    "sizeBytes": 10995
+  },
+  {
     "id": "example-rod",
     "name": "Example Rod",
     "author": "JAMM",
