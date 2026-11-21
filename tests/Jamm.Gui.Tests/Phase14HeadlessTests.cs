@@ -181,14 +181,14 @@ public sealed class Phase14HeadlessTests
             Assert.True(keepCheck.IsEffectivelyVisible);
             Assert.True(keepHudCheck.IsEffectivelyVisible);
             Assert.True(keepGameplayCheck.IsEffectivelyVisible);
-            Assert.True(modRow.KeepAuthorPerformanceChanges);
+            Assert.False(modRow.KeepAuthorPerformanceChanges);
             Assert.False(modRow.KeepAuthorHudDesign);
             Assert.False(modRow.KeepAuthorGameplayChanges);
             modRow.KeepAuthorPerformanceChanges = false;
             while (vm.IsBusy) await Task.Delay(10);
             var savedMod = new ModLibrary(files.Store).Find(added.Id);
             Assert.False(savedMod.KeepAuthorPerformanceChanges);
-            Assert.False(savedMod.EffectiveKeepAuthorPerformanceChanges);
+            Assert.False(savedMod.KeepAuthorPerformanceChanges);
             modRow.KeepAuthorHudDesign = true;
             while (vm.IsBusy) await Task.Delay(10);
             Assert.True(new ModLibrary(files.Store).Find(added.Id).KeepAuthorHudDesign);

@@ -72,7 +72,7 @@ public sealed class ModLibrary(ManagerStore store)
     public ModSanitizerReport SanitizerReport(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default) =>
         EnsurePatches(mod, progress, cancellationToken).Report;
 
-    /// <summary>Toggles whether a mod keeps its author's performance changes instead of using JAMM's sanitized patch.</summary>
+    /// <summary>Toggles whether a mod keeps all of its author's performance changes, including harmful ones stripped by default.</summary>
     public ManagedMod SetKeepAuthorPerformanceChanges(string query, bool keep)
     {
         var mod = Find(query);

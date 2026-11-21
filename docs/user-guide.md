@@ -32,7 +32,7 @@ No game files are distributed. Patches, details and logs can contain local game 
 
 ## Author performance changes
 
-Profile builds preserve performance edits included by mod authors by default. Some packs use tick throttling, distance culling, or other techniques that can make a large mod set run faster than a sanitized build. In **Advanced mode**, expand a mod and clear **Keep the author's performance changes** to let JAMM remove those edits while keeping the mod's content. The choice is per mod and takes effect on the next build. Older library entries without an explicit choice use the preserve-performance default.
+Profile builds remove harmful performance hacks by default, including timing overrides, busy-wait frame limiters, FPS-driven fish thinning, fish step throttles that can delay gameplay updates, and cuts to fish sonar visibility. JAMM keeps recognized off-screen draw culls and scene-object throttles that do not change gameplay. In **Advanced mode**, enable **Keep all the author's performance changes** to keep every author performance edit, including changes normally removed as harmful. The choice is per mod and takes effect on the next build.
 
 ## Overhauls and their addons
 
