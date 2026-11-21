@@ -367,6 +367,8 @@ public static class ArchiveBuilder
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
             NavCompatibility.RepairRoom(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
             if (bigMoney) MoneyRuntime.Apply(baseCode, recompile, generatedCode, extraDecisions);
+            // Last, so the guard also covers code that the runtimes above generated or merged.
+            InstanceGuard.Apply(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
