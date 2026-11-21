@@ -25,6 +25,9 @@ public sealed record ModKitSpriteLayer(string? From, string? File, int Frame, Mo
 
     /// <summary>Optional subpixel alpha smoothing after geometry transforms.</summary>
     public double EdgeSoftness { get; init; }
+
+    /// <summary>Optional PNG or SVG whose alpha clips the cropped layer before geometry transforms.</summary>
+    public string? AlphaMask { get; init; }
 }
 
 /// <summary>A fixed-size sprite canvas with an ordered composition for each frame.</summary>
@@ -93,7 +96,8 @@ public static partial class ModKitPackage
             OptionalDouble(obj, "opacity", $"{path}.opacity", 1, 0, 1), OptionalInt(obj, "z", $"{path}.z", 0))
         {
             Tones = TryGetNonNull(obj, "tones", out var tones) ? ParseTones(tones, $"{path}.tones") : null,
-            EdgeSoftness = OptionalDouble(obj, "edgeSoftness", $"{path}.edgeSoftness", 0, 0, 1.5)
+            EdgeSoftness = OptionalDouble(obj, "edgeSoftness", $"{path}.edgeSoftness", 0, 0, 1.5),
+            AlphaMask = OptionalAssetFile(root, obj, "alphaMask", $"{path}.alphaMask", [".png", ".svg"])
         };
     }
 
@@ -161,10 +165,13 @@ internal sealed class ModKitComposition(UndertaleData data) : IDisposable
             return new MagickImage(source);
         }
 
-        if (string.Equals(Path.GetExtension(layer.File), ".svg", StringComparison.OrdinalIgnoreCase))
-            return LoadSvg(layer.File!);
-        return new MagickImage(layer.File!, new MagickReadSettings { Format = MagickFormat.Png });
+        return LoadArtwork(layer.File!);
     }
+
+    private static MagickImage LoadArtwork(string path) =>
+        string.Equals(Path.GetExtension(path), ".svg", StringComparison.OrdinalIgnoreCase)
+            ? LoadSvg(path)
+            : new MagickImage(path, new MagickReadSettings { Format = MagickFormat.Png });
 
     private static MagickImage LoadSvg(string path)
     {
@@ -202,6 +209,14 @@ internal sealed class ModKitComposition(UndertaleData data) : IDisposable
         image.ColorType = ColorType.TrueColorAlpha;
         image.SetBitDepth(8);
         image.Alpha(AlphaOption.Set);
+        if (layer.AlphaMask is { } maskPath)
+        {
+            using var mask = LoadArtwork(maskPath);
+            if (mask.Width != image.Width || mask.Height != image.Height)
+                throw new InvalidDataException($"Alpha mask '{Path.GetFileName(maskPath)}' must match the cropped layer's {image.Width}×{image.Height} size.");
+            mask.Alpha(AlphaOption.Set);
+            image.Composite(mask, 0, 0, CompositeOperator.DstIn);
+        }
         if (layer.PaletteMap.Count > 0)
             EditPixels(image, layer.PaletteMap, tint: null, opacity: 1);
         if (layer.HueShift != 0)

@@ -3,6 +3,7 @@ using Jamm.Core.Merging;
 using Jamm.Core.ModKit;
 using Jamm.Core.Patching;
 using UndertaleModLib;
+using UndertaleModLib.Util;
 
 namespace Jamm.Core.Tests;
 
@@ -16,6 +17,9 @@ public sealed class SiloAreaRealTests
         string modsRoot = Environment.GetEnvironmentVariable("JAMM_SILO_INPUTS")!;
         string package = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
             "examples", "modkit", "silo"));
+        const string hatchObject = "jmk_jamm_silo_object_hatch";
+        var hatchPiece = Assert.Single(Assert.Single(ModKitPackage.Load(package).Areas).Pieces, p => p.Object == hatchObject);
+        Assert.InRange(hatchPiece.Set["depth"], -19.49, -19.01);
         using var directory = new ModKitAreaTests.AreaTestDirectory();
         using var original = GameFileLoader.Load(basePath);
         string siloPath = directory.PathFor("silo-source.win");
@@ -26,6 +30,25 @@ public sealed class SiloAreaRealTests
         Assert.Empty(silo.Patch.Changes["code"].Changed);
         Assert.Empty(silo.Patch.Changes["code"].Removed);
         Assert.Empty(silo.Patch.Changes["objects"].Changed);
+        using (var textures = new TextureWorker())
+        {
+            var body = source.Data.Sprites.ByName("jmk_jamm_silo_recipe_silo_body")!;
+            var rim = source.Data.Sprites.ByName("jmk_jamm_silo_recipe_silo_rim")!;
+            int offsetX = body.OriginX - rim.OriginX;
+            int offsetY = body.OriginY - rim.OriginY;
+            using var bodyImage = textures.GetTextureFor(body.Textures[0].Texture, body.Name.Content, includePadding: true);
+            using var rimImage = textures.GetTextureFor(rim.Textures[0].Texture, rim.Name.Content, includePadding: true);
+            using var bodyPixels = bodyImage.GetPixels();
+            using var rimPixels = rimImage.GetPixels();
+            byte[] back = bodyPixels.GetArea(offsetX, offsetY, rim.Width, rim.Height)!;
+            byte[] front = rimPixels.GetArea(0, 0, rim.Width, rim.Height)!;
+            for (int i = 0; i < front.Length; i += 4)
+            {
+                if (front[i + 3] == 0) continue;
+                Assert.Equal(front.AsSpan(i, 3).ToArray(), back.AsSpan(i, 3).ToArray());
+                Assert.Equal(255, back[i + 3]);
+            }
+        }
 
         string[] relativePaths =
         [
@@ -69,11 +92,12 @@ public sealed class SiloAreaRealTests
                 var hatch = Assert.Single(room.GameObjects, i => i.ObjectDefinition.Name.Content == "MissileSilo");
                 Assert.Equal(expectedAnchor, (hatch.X, hatch.Y));
                 Assert.NotNull(hatch.CreationCode);
-                var overlay = Assert.Single(room.GameObjects, i => i.ObjectDefinition.Name.Content == "jmk_jamm_silo_object_hatch");
+                var overlay = Assert.Single(room.GameObjects, i => i.ObjectDefinition.Name.Content == hatchObject);
                 Assert.Equal(expectedAnchor, (overlay.X, overlay.Y));
+                Assert.NotNull(overlay.CreationCode);
                 Assert.Equal(9, room.GameObjects.Count(i => i.ObjectDefinition.Name.Content.StartsWith("jmk_jamm_silo_", StringComparison.Ordinal)
                     && i != overlay));
-                Assert.Equal(2, merged.Data.Sprites.ByName("jmk_jamm_silo_recipe_silo_doors")!.Textures.Count);
+                Assert.Single(merged.Data.Sprites.ByName("jmk_jamm_silo_recipe_silo_door")!.Textures);
             }
             File.Delete(output);
         }

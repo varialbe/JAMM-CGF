@@ -27,7 +27,7 @@ internal sealed class SemanticCode
         Mods = sources.Select((s, i) => Read(s, $"mod {i + 1}", progress, ambiguous, options)).ToArray();
     }
 
-    private static Dictionary<string, CodeText> Read(UndertaleData data, string label, Action<string>? progress, IReadOnlySet<string> ambiguous, AnalysisOptions options, string? baseHash = null)
+    internal static Dictionary<string, CodeText> Read(UndertaleData data, string label, Action<string>? progress, IReadOnlySet<string> ambiguous, AnalysisOptions options, string? baseHash = null)
     {
         progress?.Invoke($"Resolving asset references in {label} code");
         var entries = CodeDecompiler.ReadAll(data, label, m => progress?.Invoke(m), ambiguous, options, progress, baseHash);

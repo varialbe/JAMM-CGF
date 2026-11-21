@@ -20,11 +20,16 @@
                           IsChecked="{Binding WeakPcEnabled, Mode=OneWay}" Click="WeakPcClick"
                           IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Weak PC"/>
             <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Packs textures, turns off HD Lite and updates distant fish less often." TextWrapping="Wrap" VerticalAlignment="Center" Classes="muted"/>
-            <Button Grid.Column="1" Content="Performance settings" IsEnabled="{Binding CanEditProfile}">
+            <Button x:Name="PerformanceSettingsButton" Grid.Column="1" Content="Performance settings" IsEnabled="{Binding CanEditProfile}">
               <Button.Flyout>
                 <Flyout>
                   <StackPanel Spacing="6" Width="300" IsEnabled="{Binding CanEditProfile}">
                     <CheckBox Content="Pack textures" IsChecked="{Binding ProfileRepack, Mode=OneWay}" Click="ProfileRepackClick"/>
+                    <CheckBox Content="Money above $999,999,999 (shows 3.4M, 9.5T)" IsChecked="{Binding ProfileBigMoney, Mode=OneWay}" Click="ProfileBigMoneyClick"/>
+                    <CheckBox Content="Fair-Play (guard debug stats)" IsChecked="{Binding ProfileFairPlay, Mode=OneWay}" Click="ProfileFairPlayClick"/>
+                    <TextBlock Text="Fish sale cap (0 disables it)"/>
+                    <NumericUpDown Minimum="0" Maximum="9223372036854775807" Increment="1000000" FormatString="0"
+                                   AutomationProperties.Name="Fish sale cap" Value="{Binding ProfileFishValueCap, Mode=OneWay}" ValueChanged="ProfileFishValueCapChanged"/>
                     <CheckBox Content="Start with F8 mode on" IsChecked="{Binding ProfilePerf.StartEnabled, Mode=OneWay}" Click="ProfilePerfModeClick"/>
                     <CheckBox Content="Fish grid" IsChecked="{Binding ProfilePerf.FishGrid, Mode=OneWay}" Click="ProfileFishGridClick"/>
                     <TextBlock Text="Distant fish update interval (ticks)"/>

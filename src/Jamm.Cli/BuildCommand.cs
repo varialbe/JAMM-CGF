@@ -10,6 +10,10 @@ namespace Jamm.Cli;
 
 internal static class BuildCommand
 {
+    internal static long ParseFishValueCap(string text) =>
+        long.TryParse(text, out long value) && value >= 0 ? value
+            : throw new ArgumentException("Fish value cap must be a nonnegative whole number. Use 0 to disable it.");
+
     private static readonly JsonSerializerOptions AcceptanceJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -21,10 +25,10 @@ internal static class BuildCommand
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         List<string> positional = [];
-        bool dryRun = false, noRepack = false, strict = false;
+        bool dryRun = false, noRepack = false, strict = false, noBigMoney = false, noFairPlay = false;
         string[] allowed = command switch
         {
-            "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json", "--profile"],
+            "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json", "--profile", "--fish-value-cap"],
             "restore" => ["--game"], _ => []
         };
         for (int i = 0; i < arguments.Length; i++)
@@ -32,6 +36,10 @@ internal static class BuildCommand
             string arg = arguments[i];
             if (command == "build" && arg == "--dry-run")
             { if (dryRun) throw new ArgumentException("--dry-run was given twice."); dryRun = true; }
+            else if (command == "build" && arg == "--no-big-money")
+            { if (noBigMoney) throw new ArgumentException("--no-big-money was given twice."); noBigMoney = true; }
+            else if (command == "build" && arg == "--no-fair-play")
+            { if (noFairPlay) throw new ArgumentException("--no-fair-play was given twice."); noFairPlay = true; }
             else if (command == "build" && arg == "--no-repack")
             { if (noRepack) throw new ArgumentException("--no-repack was given twice."); noRepack = true; }
             else if (command == "build" && arg == "--strict")
@@ -64,7 +72,7 @@ internal static class BuildCommand
         string output = options.GetValueOrDefault("--out", Path.Combine("build", "data.win"));
         if (options.TryGetValue("--profile", out string? profile))
         {
-            if (options.Keys.Any(key => key is not "--profile" and not "--out"))
+            if (noFairPlay || options.Keys.Any(key => key is not "--profile" and not "--out"))
                 throw new ArgumentException("Use --profile with --out, --no-repack, --dry-run or --strict. Use 'cgfmm apply --profile' to install, and 'profile resolve' to save choices.");
             var store = new ManagerStore(dataDirectory);
             var profiles = new ProfileLibrary(store);
@@ -81,6 +89,8 @@ internal static class BuildCommand
             return 0;
         }
         if (strict) throw new ArgumentException("--strict requires --profile <name>.");
+        long cap = options.TryGetValue("--fish-value-cap", out string? capText)
+            ? ParseFishValueCap(capText) : ValueGuardOptions.DefaultFishValueCap;
         if (!options.TryGetValue("--base", out string? basePath))
             throw new ArgumentException("build needs --base <data.win>. Pass --order <mod1>,<mod2>,... to include mods.");
         string[] paths = options.TryGetValue("--order", out string? order) ? order.Split(',', StringSplitOptions.TrimEntries) : [];
@@ -132,7 +142,8 @@ internal static class BuildCommand
         if (acceptanceJson is not null)
             OutputFile.Validate(acceptanceJson, [.. protectedPaths, output]);
         if (install is not null) GameInstaller.Validate(install, baseHash, [.. protectedPaths.Skip(1), output], basePath);
-        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress, noRepack: noRepack);
+        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress, noRepack: noRepack, bigMoney: !noBigMoney,
+            valueGuard: new(cap, !noFairPlay));
         foreach (string decision in result.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
         foreach (var item in result.RemappedReferences ?? new Dictionary<string, int>())
             Console.WriteLine($"Remapped references: {item.Key}: {item.Value} (changed/added source alternatives; conflict selections verified separately)");

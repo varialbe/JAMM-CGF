@@ -32,6 +32,8 @@ public sealed class ProfileLibrary(ManagerStore store)
             || profile.Roles.Values.Any(role => role is null || !role.IsValid())
             || profile.UnlockFixMods is { } fixes && (fixes.Distinct(StringComparer.Ordinal).Count() != fixes.Length || fixes.Except(profile.Mods).Any()))
             throw new InvalidDataException($"Profile '{name}' is invalid. Recreate it with a nonempty, unique mod list.");
+        if (profile.FishValueCap < 0)
+            throw new InvalidDataException($"Profile '{name}' has an invalid fishValueCap. Set it to a nonnegative whole number in its profile JSON.");
         if (profile.Perf is null || profile.Perf.Interval is < 1 or > 60
             || profile.Preset switch
             {
@@ -173,6 +175,24 @@ public sealed class ProfileLibrary(ManagerStore store)
         var profile = Get(name);
         var before = profile.BeforeWeakPc is { } previous ? previous with { NoRepack = !enabled } : null;
         store.Write(FilePath(name), profile with { NoRepack = !enabled, BeforeWeakPc = before });
+    }
+
+    /// <summary>Sets whether builds of this profile allow money above $999,999,999 with compact display.</summary>
+    public void SetBigMoney(string name, bool enabled)
+    {
+        var profile = Get(name);
+        store.Write(FilePath(name), profile with { NoBigMoney = !enabled });
+    }
+
+    /// <summary>Enables or disables debug-stat detection for this profile.</summary>
+    public void SetFairPlay(string name, bool enabled) =>
+        store.Write(FilePath(name), Get(name) with { FairPlay = enabled });
+
+    /// <summary>Sets the profile's fish sale cap. Zero disables the cap.</summary>
+    public void SetFishValueCap(string name, long value)
+    {
+        if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), "Fish value cap must be a nonnegative whole number.");
+        store.Write(FilePath(name), Get(name) with { FishValueCap = value });
     }
 
     /// <summary>Changes a profile's mode, interval and grid defaults without editing the game's INI.</summary>
