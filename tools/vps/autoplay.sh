@@ -32,6 +32,8 @@ act(){ echo -e "$(date +%s)\t$step\t$*" >> "$out/actions.tsv"; }
 win(){ wmctrl -l | awk '/Cat Goes Fishing$/{print $1; exit}'; }
 key(){ xdotool key --delay 60 "$@"; }
 hold(){ xdotool keydown "$1"; sleep "$2"; xdotool keyup "$1"; }
+# The save menu has no Esc close; click its Back button (fullscreen 1280x800 layout), then fall back to Esc.
+back_button(){ xdotool mousemove 1180 646 click 1; sleep 1; xdotool mousemove 900 300; }
 type_console(){ key F12; sleep 1.5; xdotool type --delay 90 "$1"; sleep 0.3; key Return; sleep 1.5; key F12; }
 outcome=PLAYED; step=0
 # wait for the window and the probe's first state line
@@ -50,7 +52,7 @@ while [[ $(date +%s) -lt $end ]]; do
   elif (( r < 52 )); then act "dive"; key q; sleep 1; for j in 1 2 3; do pick Up Down Left Right; k=$P; rnd 3; hold $k $((1+R)); done
   elif (( r < 57 )); then pick b h l r; k=$P; act "buy-lure $k"; key $k
   elif (( r < 61 )); then pick z x; k=$P; act "rod $k"; key $k
-  elif (( r < 65 )); then act "save-menu"; key Escape; sleep 2; key Escape
+  elif (( r < 65 )); then act "save-menu"; key Escape; sleep 3; back_button
   elif (( r < 90 )); then
     rnd 900; m=$((1+R)); rnd 90; g=$((1+R)); rnd 40; lv=$((10+R))
     pick "money ${m}000000" "money +${g}000000000" "unlockgear" "unlockall" "level $lv" "catalog all" "weather rainy" "weather fog" "weather clear" "weather windy" "weather super-sunny" "help"; c=$P
