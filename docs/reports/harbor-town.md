@@ -29,7 +29,9 @@ requested PNGs on disk. An external screen capture during the personal run showe
 computer" sign-in overlay over the game, so it could not serve as an honest dock-art review. The private concept
 passes above are complete; an in-game stage-by-stage visual review remains outstanding because concurrent runs on
 the shared Steam account displaced the game window. The bench scene now removes the legacy `GameModeMenu` overlay
-in its temporary instrumented archive; its updated GML compiles successfully. A final clean solo capture is queued.
+in its temporary instrumented archive; its updated GML compiles successfully. A final clean solo run was queued
+behind a shared autoplay session configured for 9,001 seconds, then stopped without starting to avoid bypassing the
+shared lock. The stage-by-stage dock screenshot review remains incomplete.
 
 ## Verification
 
