@@ -14,7 +14,7 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 public sealed class BuiltinMods(ManagerStore store)
 {
     /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "4";
+    public const string GeneratorVersion = "5";
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {
@@ -37,7 +37,7 @@ public sealed class BuiltinMods(ManagerStore store)
         new("maxlevel", "set level to max", IsCommand: true),
         new("level <n>", "set level to n (0..max)", IsCommand: true),
         new("catalog all", "mark all fish caught (alias: unlockfish)", IsCommand: true),
-        new("money <n>", "set dollars (0..999999999); money +<n> adds", IsCommand: true),
+        new("money <n>", "set dollars (up to 1e15); money +<n> adds", IsCommand: true),
         new("clear", "clear console log", IsCommand: true),
         new("close/exit", "close console", IsCommand: true)
     });

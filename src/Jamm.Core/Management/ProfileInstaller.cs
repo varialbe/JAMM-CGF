@@ -26,6 +26,7 @@ public sealed class ProfileInstaller(ManagerStore store)
         string builder = profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal)
             ? "menu-layout-3-fish-grid-1" : "menu-layout-3";
         var inputs = loaded.Inputs.ToArray();
+        if (!profile.NoBigMoney) builder += "/" + MoneyRuntime.Revision;
         string signatureText = JsonSerializer.Serialize(new
         {
             Builder = profile.EnabledMods.Length > 0 && !profile.NoRepack ? $"{builder}/{TextureRepacker.Revision}" : builder,

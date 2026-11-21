@@ -25,6 +25,7 @@
                 <Flyout>
                   <StackPanel Spacing="6" Width="300" IsEnabled="{Binding CanEditProfile}">
                     <CheckBox Content="Pack textures" IsChecked="{Binding ProfileRepack, Mode=OneWay}" Click="ProfileRepackClick"/>
+                    <CheckBox Content="Money above $999,999,999 (shows 3.4M, 9.5T)" IsChecked="{Binding ProfileBigMoney, Mode=OneWay}" Click="ProfileBigMoneyClick"/>
                     <CheckBox Content="Start with F8 mode on" IsChecked="{Binding ProfilePerf.StartEnabled, Mode=OneWay}" Click="ProfilePerfModeClick"/>
                     <CheckBox Content="Fish grid" IsChecked="{Binding ProfilePerf.FishGrid, Mode=OneWay}" Click="ProfileFishGridClick"/>
                     <TextBlock Text="Distant fish update interval (ticks)"/>

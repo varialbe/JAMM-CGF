@@ -175,6 +175,13 @@ public sealed class ProfileLibrary(ManagerStore store)
         store.Write(FilePath(name), profile with { NoRepack = !enabled, BeforeWeakPc = before });
     }
 
+    /// <summary>Sets whether builds of this profile allow money above $999,999,999 with compact display.</summary>
+    public void SetBigMoney(string name, bool enabled)
+    {
+        var profile = Get(name);
+        store.Write(FilePath(name), profile with { NoBigMoney = !enabled });
+    }
+
     /// <summary>Changes a profile's mode, interval and grid defaults without editing the game's INI.</summary>
     public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null)
     {
