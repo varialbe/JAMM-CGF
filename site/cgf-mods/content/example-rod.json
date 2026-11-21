@@ -7,11 +7,38 @@
   "saves": "The Items API uses `[JAMM_Items]` in the native slot INI. It remembers rod ownership under `u:rod:example-rod:copper-current`, the equipped rod key under `eq:rod` and upgrades under `slot:example-rod:copper-current:<index>`.",
   "compatibility": "Targets the August 2023 legacy VM archive. The rod gets a slot from the Items API at runtime. Ownership and upgrades follow the stable key across profile orders. If the equipped rod is removed from the profile, loading falls back to the Basic Rod.",
   "how": [
-    "The `rods` array provides the price, a single-frame PNG with origin `[19, 69]` and the rod's stats. The manifest sets `cast_speed` to 13, `rod_power` to 1.85, `rod_power_flat` to 4, `reel_speed` to 10.5 and `sinker_distance` to 4,200.",
-    "ModKit imports the sprite and generates `jamm_init_example_rod`, which calls `jamm_rod_register` with the key `example-rod:copper-current`. The Items runtime appends a `RodData` row, uses the manifest values for price and stats, and creates the corresponding `UpgradeData` row. The rod starts available in the shop.",
-    "The manifest sets `upgrade_slots` to `vanilla`. ModKit passes the automatic slot sentinel to the Items runtime, which chooses one more usable slot than the highest existing rod count, capped at 16."
+    "The `rods[]` manifest entry carries the shop price, rod stats, sprite and origin. ModKit imports the sprite, then generates `jamm_init_example_rod`. During profile initialization the shared Items runtime calls the rod registration API, appends a `RodData` row and corresponding `UpgradeData` row, and makes the Copper Current available in the normal shop. The `vanilla` upgrade-slot setting selects one more usable slot than the highest registered rod, capped at 16.",
+    "The item is identified by `example-rod:copper-current`, not its current numeric slot. `[JAMM_Items]` in the native save slot stores ownership, equipped rod and per-slot upgrade names by stable key. If the mod is removed while equipped, loading falls back to the Basic Rod; adding the same key again restores saved ownership/upgrades. Profile order changes therefore do not renumber the save identity."
   ],
   "gallery": [
-    {"image": "velrod-shop.webp", "thumbnail": "velrod-shop-thumb.webp", "alt": "The Copper Current displayed in the rod shop for $25,000", "caption": "Copper Current in the rod shop"}
+    {
+      "image": "velrod-shop.webp",
+      "thumbnail": "velrod-shop-thumb.webp",
+      "alt": "The Copper Current displayed in the rod shop for $25,000",
+      "caption": "Copper Current in the rod shop"
+    }
+  ],
+  "codeExample": {
+    "title": "Copper Current manifest",
+    "description": "This abbreviated ModKit declaration shows the item identity, price, gameplay stats, sprite origin and automatic upgrade-slot rule.",
+    "code": "{\n  \"id\": \"example-rod\",\n  \"name\": \"Example Rod\",\n  \"rods\": [{\n    \"key\": \"copper-current\",\n    \"name\": \"Copper Current\",\n    \"cost\": 25000,\n    \"cast_speed\": 13,\n    \"rod_power\": 1.85,\n    \"rod_power_flat\": 4,\n    \"reel_speed\": 10.5,\n    \"sinker_distance\": 4200,\n    \"sprite\": \"art/copper-current.png\",\n    \"origin\": [19, 69],\n    \"upgrade_slots\": \"vanilla\"\n  }]\n}"
+  },
+  "changelog": [
+    "1.0.0: Copper Current rod API walkthrough, including stable save keys and automatic upgrade slots."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy."
+  ],
+  "faq": [
+    {
+      "q": "Will rod upgrades survive profile order changes?",
+      "a": "The Items API stores ownership, equipped rod and upgrade slots by stable string key in `[JAMM_Items]`, not the runtime numeric slot."
+    }
   ]
 }

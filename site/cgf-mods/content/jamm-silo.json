@@ -1,23 +1,89 @@
 {
   "cardPackageType": "ModKit Area + Fish",
-  "summary": "Lower a cast lure to the Missile Silo in the deep trench to open its hatch. Inside the flooded shaft, you can catch Veyl, Radik, Ferrex and Garrusk using the usual lure, bait and catch rules.",
+  "summary": "Open the Missile Silo hatch in NewWorld with a nearby cast lure and descend into its flooded shaft. Silo 2.3.0 keeps the rock body intact: only the hatch plate slides, and the foreground rim briefly hides the lure, line and fish as they pass behind the rock lip. Four deep-water species use the normal fishing rules.",
   "controls": [
     "Bring a rod and boat that can reach the trench. Use a light to find the entrance and bring a cast lure within 250 room pixels of the hatch."
   ],
   "apis": "ModKit Area API, Fish and Catalog APIs, composed sprite recipes and custom object events.",
   "assets": "5 objects (4 fish and 1 hatch controller), 8 composed sprites and 11 standalone scripts in the source build on a clean base. The scripts include 8 fish hooks, 1 area declaration, 1 initializer and 1 Fish API registration stub.",
-  "saves": "The open flag is written as `jamm-silo:launch-shaft=1` in `[JAMM_Areas]` in the active slot's `sdata<N>n_beta.ini`. Fishalog progress uses `[JAMM_Catalog]` in the native slot save.",
+  "saves": "The open flag is `jamm-silo:launch-shaft=1` in `[JAMM_Areas]` of the active native save slot (`sdata<N>n_beta.ini`); it is per-slot and survives reload. Fishalog progress uses `[JAMM_Catalog]` in the native slot save.",
   "compatibility": "Targets the August 2023 legacy VM archive. The follow anchor supports moves of the MissileSilo, including Cave Expansion's relocation. JAMM reports overlapping room edits as `CGF-AREA-001` and follows the latest surviving move when mods compete for the landmark.",
   "how": [
-    "The `launch-shaft` Area API declaration places native cave rocks, Geiger lights and a custom hatch controller in `NewWorld`. Its `follow` anchor resolves the existing MissileSilo instance and translates the shaft with it. JAMM configures the placed instance and keeps MissileSilo's native object events. The controller draws the animation using the resolved hatch's rotation and scale.",
-    "A nearby cast lure triggers a 1.55-second opening. One steel plate slides into its frame while bubbles rise and the Geiger lights fade in. The static rock sits behind the lure, and a shallow rock lip at the mouth occludes the lure, line and fish as they cross. The closed mask blocks the lure through the slide. At the end, the controller switches to a separate collision mask with a passage through the shaft.",
-    "JAMM composes the sprites during the build from the player's own vanilla frames and the package's original SVG shapes. Ferrex pairs a shortened copper body with teal markings, a swept dorsal fin and a forked tail.",
-    "The four species spawn in separate `within` rectangles in the shaft. The Area API finds free-water points after other profile edits and the area's solids are applied. Create hooks enable deep-water behaviour. Step hooks call wall recovery, guide fish toward their home water and cap movement to limit tunnelling through the shaft walls."
+    "The `launch-shaft` Area API declaration adds cave-rock pieces, four Geiger lights and a hatch controller in `NewWorld`. Its `follow` anchor is the native `MissileSilo` at (33984, 11570), so JAMM translates the layout if another selected mod moves the landmark. In a competing move, area resolution follows the latest surviving placement in profile order; overlapping room edits are reported as `CGF-AREA-001`.",
+    "When closed, the native MissileSilo instance uses frame 0 of `spr_silomask` as its collision mask. A cast lure inside 250 room pixels starts a 1.55-second animation. The controller's `hatch_step.gml` advances the door state and slides one hatch plate along the hatch's local X axis; `hatch_draw.gml` draws the animation and near rim. MissileSilo's native Create and Step events stay intact. the surrounding rock does not split. At full travel it switches collision to `shaft-mask`, which clears the passage. Area placement and free-water spawn checks use the closed mask before the animation.",
+    "The controller composes a shallow foreground crop from sampled vanilla rock pixels and draws it at depth −19.25: in front of the lure and line at −1.55, and between fish and the native lighting pass at −19.5. The rear rock remains behind the lure. This ordering makes the near lip occlude the lure briefly as it crosses; the darker shaft makes it visible again below the rim. The hatch follows the anchor's rotation and scale.",
+    "The controller reads the active slot's `[JAMM_Areas]` flag at load. A saved open hatch starts passable and lit; a different slot remains closed. Four species spawn in separate `within` regions and use normal Fish parents, Fishalog registration, bites and catches. Their hooks enable deep-water movement, recover from walls and guide fish toward their home water. The package's art recipes sample the player's own base archive during the local build."
   ],
   "gallery": [
-    {"image": "chamber-solo.webp", "thumbnail": "chamber-solo-thumb.webp", "alt": "Four Silo fish swimming among rocks and green lights below the open hatch", "caption": "Inside the flooded shaft"},
-    {"image": "opening-sequence-solo.webp", "thumbnail": "opening-sequence-solo-thumb.webp", "alt": "Nine panels showing the original shutters, lights and the open chamber", "caption": "Silo 2.2 opening sequence"},
-    {"image": "art-review.webp", "thumbnail": "art-review-thumb.webp", "alt": "Silo 2.2 comparison sheet with Veyl, Radik, Ferrex and Garrusk next to vanilla fish", "caption": "Silo 2.2 fish art comparisons"},
-    {"image": "opening-solo.gif", "thumbnail": "opening-solo-thumb.webp", "alt": "Missile Silo at the start of the Silo 2.2 opening animation", "caption": "Silo 2.2 solo opening animation"}
+    {
+      "image": "opening-v3.webp",
+      "thumbnail": "opening-v3-thumb.webp",
+      "alt": "Animated solo capture of the Silo 2.3 hatch plate sliding into its frame while the surrounding rock stays intact",
+      "caption": "Silo 2.3.0 hatch opening · SOLO capture"
+    },
+    {
+      "image": "closed-v3.webp",
+      "thumbnail": "closed-v3-thumb.webp",
+      "alt": "Closed Silo hatch with the original rock body intact",
+      "caption": "Closed hatch"
+    },
+    {
+      "image": "opened-v3.webp",
+      "thumbnail": "opened-v3-thumb.webp",
+      "alt": "Open Silo shaft with the hatch plate retracted and no broken rock pieces",
+      "caption": "Hatch fully open"
+    },
+    {
+      "image": "chamber-v3.webp",
+      "thumbnail": "chamber-v3-thumb.webp",
+      "alt": "Four Silo fish swimming inside the flooded chamber below the open hatch",
+      "caption": "Flooded launch shaft"
+    },
+    {
+      "image": "rim-entry-v3.webp",
+      "thumbnail": "rim-entry-v3-thumb.webp",
+      "alt": "Cast lure entering behind the near rock rim, showing the foreground occlusion effect",
+      "caption": "Lure entering behind the rim"
+    },
+    {
+      "image": "rim-occluded-v3.webp",
+      "thumbnail": "rim-occluded-v3-thumb.webp",
+      "alt": "Near rock lip occludes the lure and line while the lure passes through the Silo hatch",
+      "caption": "Depth ordering at the lip"
+    }
+  ],
+  "diagram": {
+    "title": "Silo opening and depth layers",
+    "description": "The closed collision mask blocks the entrance; a door-only animation moves the plate and then selects the open shaft mask, while a foreground rock lip draws in front of the lure.",
+    "labels": [
+      "Closed mask",
+      "Slide one plate",
+      "Open shaft mask",
+      "Rim hides lure"
+    ],
+    "caption": "The passage opens when the door reaches full travel; the foreground lip controls what the player sees."
+  },
+  "changelog": [
+    "2.3.0: Door-only opening; intact rock silhouette; `shaft-mask` collision at full travel; v3 solo screenshots and animated capture."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.",
+    "Bring a rod and boat that can reach the deep trench; a light helps locate the hatch."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy."
+  ],
+  "faq": [
+    {
+      "q": "Does the rock split open?",
+      "a": "No. In Silo 2.3.0 the near rock stays intact and one hatch plate slides into its frame; the shaft entrance is already composed behind it."
+    },
+    {
+      "q": "Does the opening persist?",
+      "a": "Yes. The `jamm-silo:launch-shaft` flag is stored in `[JAMM_Areas]` in the active native save slot. Each slot remembers its own hatch state across reloads."
+    }
   ]
 }

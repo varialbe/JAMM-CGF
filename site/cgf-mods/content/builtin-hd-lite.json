@@ -10,8 +10,26 @@
   "saves": "Stores the fullscreen toggle in `jamm_hd.ini` under `[HD]`, key `Fullscreen`, shared by all slots.",
   "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, Console and an independent third-party mod.",
   "how": [
-    "The recipe calls the HD generator with original texture pages. The generator enables the runner's Scale and Interpolate flags and sets the window background to black.",
-    "At Room Start, `obj_jamm_hd` records the original view ports, including the hidden views. On resize it takes the smaller of the window width divided by 1,200 and the window height divided by 720. It resizes the native application surface and scales the stored view ports by that factor.",
-    "The runner letterboxes the application surface and maps room mouse coordinates. The controller keeps the GUI at 1,200 × 720 logical pixels and polls for window or surface changes to handle fullscreen switches and recreated surfaces."
+    "The recipe retains the original texture pages and enables the GameMaker runner's Scale and Interpolate flags. It sets a black window background and installs a persistent `obj_jamm_hd` controller in the native rooms.",
+    "At Room Start, the controller records every original view port, including hidden views. It fits the 1200 × 720 logical application surface using the smaller of window-width/1200 and window-height/720, then resizes the native surface and scales the saved view ports by the same factor. The runner letterboxes that surface to preserve aspect ratio and maps room mouse coordinates.",
+    "The controller keeps GUI coordinates at 1200 × 720 and watches for window or recreated-surface changes, including fullscreen switches. F11 toggles fullscreen and `jamm_hd.ini` stores the selection. It changes presentation sizing; it does not replace or repack the game's original textures."
+  ],
+  "changelog": [
+    "1.0.0: Aspect-correct application-surface scaling and fullscreen toggle using the original texture pages."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy."
+  ],
+  "faq": [
+    {
+      "q": "Does HD Lite upscale or replace the game textures?",
+      "a": "It scales the original 1200 × 720 application surface and letterboxes it to preserve the aspect ratio. It keeps original texture pages."
+    }
   ]
 }

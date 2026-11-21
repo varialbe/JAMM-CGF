@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
   <title>JAMM Perf — JAMM CGF Mods</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>JAMM Perf</span></nav>
     <header class="mod-header">
-      <a class="back" href="../index.html#builtin-perf">← All mods</a>
-      <div class="card-head">
-        <img src="../assets/perf.svg" alt="" width="44" height="44">
-        <div>
-          <h1>JAMM Perf</h1>
-          <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
-          <p>Version 1.0.0</p>
-        </div>
-      </div>
-      <a class="btn" href="../packages/jamm-perf.zip" download>Download jamm-perf.zip</a>
-      <div class="checksum">SHA-256: 00c97eed9562b6efd007752654cfdb3cceb62d1b6951b05e1f3611909b777da9 (359 B)</div>
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/perf.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>JAMM Perf</h1><div class="badges"><span class="badge b-default">First-party default</span> <span class="badge b-optional">Recipe</span></div><p>Version 1.0.0</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/jamm-perf.zip" download>Download source ZIP</a><span>Source-only ZIP · 359 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>359 bytes</dd></div><div><dt>SHA-256</dt><dd><code>00c97eed9562b6efd007752654cfdb3cceb62d1b6951b05e1f3611909b777da9</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
@@ -28,37 +32,73 @@
     </section>
 
     <section class="mod-section">
-      <h2>Controls</h2>
-      <ul class="controls">
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF configured with the untouched August 2023 legacy VM <code>data.win</code> (bytecode 16).</li>
+        <li>A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.</li>
+        <li>Scheduling is optional and experimental; press F8 to enable or disable it.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, run Check, then build or install to a separate game copy.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>In-game controls</h2>
+<ul class="controls">
         <li>Press F8 to switch between mode 0 (base optimizations) and mode 1 (base optimizations plus experimental scheduling).</li>
       </ul>
     </section>
 
     <section class="mod-section">
-      <h2>Technical datasheet</h2>
-      <table class="datasheet">
-        <tbody>
-          <tr><th scope="row">Package type</th><td>Recipe</td></tr>
-          <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
-          <tr><th scope="row">Generator</th><td><code>perf</code> (recipe generator version <code>2</code>)</td></tr>
-          <tr><th scope="row">APIs used</th><td>Built-in GameMaker event and script patches.</td></tr>
-          <tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 4 controller events and patches 7 existing code entries.</td></tr>
-          <tr><th scope="row">Save-file behaviour</th><td>Stores scheduling settings in <code>jamm_perf.ini</code>, under <code>[Perf]</code>. The default <code>Mode</code> is 0 and the default <code>Interval</code> is 4 ticks. These settings are shared across save slots.</td></tr>
-          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Smooth, HD Lite, Console and an independent third-party mod. Mode 1 can also reach custom small or medium fish through inherited End Step logic.</td></tr>
-        </tbody>
-      </table>
+      <h2>How it works</h2>
+      <p>The built-in recipe guards Magmer and Volteen light updates against stale instance IDs, skips a deep-rock collision query in fish states that cannot use its result, and avoids the trawler net collision query when the fish is ineligible for it. The avoidance patch hoists fixed radius and force expressions. The scenery object caches its depth transform while continuing to update its parallax position.</p>
+      <p>Optional F8 scheduling wraps the base <code>Fish</code> End Step. Before a fish can be skipped, the controller caches its object ancestry and requires a standard <code>FishSmall</code> or <code>FishMedium</code> lineage. FishLarge/FishHuge, named special lineages (Dragon, Noctis, Torby, Ghost, Abyssal, Kingfish, Shaku, Bagu and Curby), custom Step-event logic and custom user-event logic are excluded. It also waits one full End Step after an object type changes.</p>
+      <p>Only safe swimming or paused fish states are candidates. Fish are excluded if always-zoned, nether, deactivated, hollow, dead, dragged, aboard, or under thrall override; active lunge/flee states are not scheduled. A candidate stays unscheduled near every active view, the legacy visibility view 3, Girl, CatSwim, Lure, Boat or Net, using lunge-range-aware distance margins. The remaining instances are staggered by instance ID and tick using the interval in <code>jamm_perf.ini</code> (default 4). Engine alarms, motion and Draw still run; selected End Step logic is skipped. F8 toggles the persisted experimental mode.</p>
+      <p>The builder&#x27;s general object-index guards are a separate compatibility pass: <code>CGF-INSTANCE-004</code> replaces eligible <code>&lt;Object&gt;.object_index</code> type reads with the typed object constant; <code>005</code> guards eligible instance-member reads and writes; <code>007</code> safely handles supported lookup-result reads. They address known inactive-instance hazards and do not claim to validate arbitrary dynamic IDs. No benchmark figures are published here unless measured entries are supplied in <code>content/benchmarks.json</code>.</p>
     </section>
 
     <section class="mod-section">
-      <h2>How it works</h2>
-      <p>The generator guards light updates on Magmer and Volteen against stale instance IDs. It skips the precise deep-rock collision check and trawler net collision query in fish states that cannot use their results.</p>
-      <p>Fish avoidance computes two fixed expressions once per call and retains the original neighbour traversal. Scenery caches its depth transform per instance and still updates its parallax position each tick.</p>
-      <p>The <code>obj_jamm_perf</code> controller configures an early-out in the base Fish End Step. The scheduler checks ancestry, fish state and distances to active views, lures, swimmers, boats and nets before skipping work. Eligible instances are staggered by instance ID and tick, and their engine alarms, motion and Draw events still run.</p>
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>Recipe</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
+<tr><th scope="row">Version</th><td>1.0.0</td></tr>
+<tr><th scope="row">Generator</th><td><code>perf</code> (recipe generator version <code>2</code>)</td></tr>
+<tr><th scope="row">APIs used</th><td>Built-in GameMaker event and script patches.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 4 controller events and patches 7 existing code entries.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>Stores scheduling settings in <code>jamm_perf.ini</code>, under <code>[Perf]</code>. The default <code>Mode</code> is 0 and the default <code>Interval</code> is 4 ticks. These settings are shared across save slots.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Smooth, HD Lite, Console and an independent third-party mod. Mode 1 can also reach custom small or medium fish through inherited End Step logic.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>1.0.0: Base collision/light/scenery optimizations; optional distant-fish End Step scheduling with F8.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>Does scheduling pause every fish?</summary><p>No. It only considers standard small and medium fish in safe swimming or paused states, away from every active view, the player, lures, boats, swimmers and nets. Special ancestry, custom Step events, dragging, hooked, netted or boat fish are excluded.</p></details>
+<details><summary>Does F8 save the mode?</summary><p>Yes. The mode is stored in <code>jamm_perf.ini</code>; the default base optimization mode is off for scheduling.</p></details>
     </section>
 
     <section class="mod-section">
       <h2>Files in the package</h2>
-      <ul class="package-files">
+<ul class="package-files">
         <li><code>jamm-recipe.json</code></li>
       </ul>
     </section>

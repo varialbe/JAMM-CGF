@@ -11,18 +11,89 @@
   "saves": "The seed is the only generated-world state saved. `jamm_endless_ocean.ini` stores it under `[World]` as `seed`, shared by all slots in that save directory. Transient fish instance IDs are excluded from `[Fishes]`. Normal catches, quests and Fishalog progress still use the game's save system.",
   "compatibility": "Targets the August 2023 legacy VM archive or a compatible merged archive. For a pack, build the profile first and use that verified archive as the recipe base. The repository reports an in-game run with Antiquity, PWB, Abyss, Colour and Verdant. An existing Endless Ocean controller or colliding chunk script names prevent a second installation.",
   "how": [
-    "The generator starts at or beyond x = 170,000, the input room's width and the horizontal extents of placed sprites and masks. It then extends `NewWorld` by 488 chunks of 2,048 pixels each. Only the final vanilla boat, `Boat7`, gets the extended range, stopping 400 pixels before the new east edge.",
-    "Seeded value noise at two frequencies samples one continuous floor profile across chunk boundaries. Each chunk places four collidable `CaveRockBig` instances. Three candidate fish slots select between Celad and Inno in the upper band, Mustardfish and Elder Mustardfish in the middle band, and Dijon and Garm near the floor. A live collision check can veto each placement.",
-    "The controller keeps the camera's current chunk and two on each side, for up to 20 rocks and 15 fish owned by a full streaming window. It releases old chunks as the camera moves. Fish hooked, in the net or aboard can outlive their chunk until vanilla finishes the interaction. Revisiting an unloaded chunk rebuilds its initial layout from the seed.",
-    "The recipe supplies 271828 as the default seed. On the first visit the controller writes the seed to the INI. The generator guards the native primary and backup SaveManager writes so the streamed fish's transient IDs do not enter the per-instance fish state."
+    "At build time the recipe reads the merged `NewWorld` room and placed sprite/mask bounds. It starts generated territory at the maximum of x=170,000, the room width and the eastern extent of placed content. It extends the room by 488 chunks × 2,048 pixels (999,424 pixels); on the vanilla base the room ends at x=1,169,424. Only the final vanilla boat, `Boat7`, receives a longer MAX_X, stopping 400 pixels before that edge. The camera follows through the enlarged native room; Boat7, its buoy, lure and existing navigation keep their usual coordinate frame. The normal and deep sonar remain the vanilla bounded overlays following Girl and Lure; Endless Ocean does not add a floating-origin transform or rewrite sonar noise, which still uses absolute x and depth.",
+    "`jamm_chunk_unit(seed,index,channel)` creates deterministic layout values without consuming GameMaker's gameplay random stream. `jmk_endless_ocean_floor` samples smooth value noise at two frequencies, so adjacent chunk edges agree. A chunk places four collidable `CaveRockBig` instances and tests three candidate fish slots across upper (Celad/Inno), middle (Mustardfish/Elder Mustardfish) and near-floor (Dijon/Garm) depth bands. Before placing each fish, the loader checks its padded spawn envelope against live `Collidable` masks. The native species keep their usual swimming, bait, lunge, catch, sell and Fishalog behavior.",
+    "The room controller reads the camera center and requests the current chunk plus two neighbors on either side through `jamm_chunk_stream(chunks, first, last, create_script, release_script)`. Its callback receives the chunk index and an ownership list; the helper releases chunks outside the range and invokes the release callback for each tracked instance. A full window owns up to 20 rocks and 15 free fish. Hooked fish, fish in the net and fish aboard stay with vanilla gameplay until their interaction finishes; generated free instances are destroyed when their chunk leaves the window. Revisiting reconstructs the original layout from the seed.",
+    "The recipe default seed is 271828. On first visit it writes only `[World] seed` to `jamm_endless_ocean.ini` in the game save directory, shared by all slots. Patches to both primary and backup SaveManager `[Fishes]` writes omit transient streamed fish IDs. Native position, catches, quests and Fishalog records continue to use the game's slot format. This preview is finite: fixed chunks stop at the east edge, wave tiles are allocated at room startup, and unloading respawns the original chunk population rather than preserving local depletion. The fixed room width also remains visible to other legacy systems such as room-width-based routes and wave calculations; this recipe does not implement floating-origin travel or a streamed navigation graph."
   ],
   "gallery": [
-    {"image": "vanilla-1.webp", "thumbnail": "vanilla-1-thumb.webp", "alt": "Lure near the dark rocks at the first generated terrain checkpoint", "caption": "First terrain stop"},
-    {"image": "vanilla-2.webp", "thumbnail": "vanilla-2-thumb.webp", "alt": "Deep fish checkpoint above the generated ocean floor", "caption": "Deep fish stop"},
-    {"image": "vanilla-3.webp", "thumbnail": "vanilla-3-thumb.webp", "alt": "Generated rock terrain near the eastern end of the ocean", "caption": "Final chunk"},
-    {"image": "vanilla-1337-transition.webp", "thumbnail": "vanilla-1337-transition-thumb.webp", "alt": "Open water on the left and the first generated rock rising on the right", "caption": "Transition to generated terrain"},
-    {"image": "vanilla-1337-depths-117.webp", "thumbnail": "vanilla-1337-depths-117-thumb.webp", "alt": "Stacked views of the upper, middle and near-floor fish bands", "caption": "Three fish depth bands"},
-    {"image": "vanilla-1337-panorama.webp", "thumbnail": "vanilla-1337-panorama-thumb.webp", "alt": "Wide panorama of the ridges and troughs across five generated chunks", "caption": "Five-chunk panorama"},
-    {"image": "vanilla-314159-floor-03.webp", "thumbnail": "vanilla-314159-floor-03-thumb.webp", "alt": "An alternate seed's floor descending into a trough and rising on the right", "caption": "Floor with seed 314159"}
+    {
+      "image": "vanilla-1.webp",
+      "thumbnail": "vanilla-1-thumb.webp",
+      "alt": "Lure near the dark rocks at the first generated terrain checkpoint",
+      "caption": "First terrain stop"
+    },
+    {
+      "image": "vanilla-2.webp",
+      "thumbnail": "vanilla-2-thumb.webp",
+      "alt": "Deep fish checkpoint above the generated ocean floor",
+      "caption": "Deep fish stop"
+    },
+    {
+      "image": "vanilla-3.webp",
+      "thumbnail": "vanilla-3-thumb.webp",
+      "alt": "Generated rock terrain near the eastern end of the ocean",
+      "caption": "Final chunk"
+    },
+    {
+      "image": "vanilla-1337-transition.webp",
+      "thumbnail": "vanilla-1337-transition-thumb.webp",
+      "alt": "Open water on the left and the first generated rock rising on the right",
+      "caption": "Transition to generated terrain"
+    },
+    {
+      "image": "vanilla-1337-depths-117.webp",
+      "thumbnail": "vanilla-1337-depths-117-thumb.webp",
+      "alt": "Stacked views of the upper, middle and near-floor fish bands",
+      "caption": "Three fish depth bands"
+    },
+    {
+      "image": "vanilla-1337-panorama.webp",
+      "thumbnail": "vanilla-1337-panorama-thumb.webp",
+      "alt": "Wide panorama of the ridges and troughs across five generated chunks",
+      "caption": "Five-chunk panorama"
+    },
+    {
+      "image": "vanilla-314159-floor-03.webp",
+      "thumbnail": "vanilla-314159-floor-03-thumb.webp",
+      "alt": "An alternate seed's floor descending into a trough and rising on the right",
+      "caption": "Floor with seed 314159"
+    }
+  ],
+  "diagram": {
+    "title": "Endless Ocean chunk stream",
+    "description": "The camera selects five nearby chunks; the seeded loader builds floor, rocks and fish; distant chunk instances are released while interacting fish remain owned by vanilla gameplay.",
+    "labels": [
+      "Seed + chunk index",
+      "Five-chunk window",
+      "Build floor + fish",
+      "Release distant chunks"
+    ],
+    "caption": "The seeded chunk layout is reproducible; only the camera's nearby window is resident."
+  },
+  "changelog": [
+    "0.1.0: Preview of seeded, finite eastward chunk streaming with vanilla fish and persistent per-directory seed."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.",
+    "The recipe must run after the target mod pack has been merged so it can inspect room width and eastern artwork bounds.",
+    "Use the final vanilla boat, Boat7, to reach generated territory."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy.",
+    "For a pack, build the pack first and apply Endless Ocean as the last recipe step."
+  ],
+  "faq": [
+    {
+      "q": "How far east does the preview go?",
+      "a": "It generates 488 chunks of 2,048 pixels (999,424 pixels) from a start at or east of x=170,000, adjusted beyond the input room and placed artwork. On the vanilla base, the far edge is x=1,169,424."
+    },
+    {
+      "q": "Do caught fish come back when a chunk reloads?",
+      "a": "Unloaded chunks regenerate their initial fish layout from the seed, including fish previously caught there. Ordinary catches and Fishalog progress continue to use the native save system."
+    }
   ]
 }
