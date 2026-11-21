@@ -91,14 +91,16 @@ public static class ArchiveBuilder
             // jamm_api_init when no items runtime was injected.
             var plan = BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, unlockFixMods, hasMergedBase);
             if (!intermediate)
-                plan = CatalogRuntime.PreparePlan(
-                    FishRuntime.PreparePlan(
-                        ItemsRuntime.PreparePlan(
-                            HudRuntime.PreparePlan(
-                                MenuRuntime.PreparePlan(plan, semantics.Base, original.Data),
-                                semantics.Base),
-                            semantics.Base, semantics.BaseNames),
-                        semantics.Base, original.Data),
+                plan = UpgradeLoopBounds.PreparePlan(
+                    CatalogRuntime.PreparePlan(
+                        FishRuntime.PreparePlan(
+                            ItemsRuntime.PreparePlan(
+                                HudRuntime.PreparePlan(
+                                    MenuRuntime.PreparePlan(plan, semantics.Base, original.Data),
+                                    semantics.Base),
+                                semantics.Base, semantics.BaseNames),
+                            semantics.Base, original.Data),
+                        semantics.Base),
                     semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
             if (!intermediate) plan = NavCompatibility.GuardPatrol(plan, semantics.Base);
