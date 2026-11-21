@@ -121,7 +121,7 @@ public sealed class SitePackageTests
         using var doc = JsonDocument.Parse(File.ReadAllText(catalogPath));
         Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
         var entries = doc.RootElement.EnumerateArray().ToArray();
-        Assert.Equal(9, entries.Length);
+        Assert.Equal(10, entries.Length);
 
         var ids = entries.Select(e => e.GetProperty("id").GetString()).ToHashSet(StringComparer.Ordinal);
         Assert.Contains("builtin-perf", ids);
@@ -133,6 +133,7 @@ public sealed class SitePackageTests
         Assert.Contains("example-rod", ids);
         Assert.Contains("example-fish", ids);
         Assert.Contains("jamm-silo", ids);
+        Assert.Contains("submarine", ids);
         Assert.Contains("weather-pack", ids);
         Assert.Contains("endless-ocean", ids);
         Assert.Contains("example-rod", ids);

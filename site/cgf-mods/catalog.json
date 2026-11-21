@@ -192,6 +192,30 @@
     "sizeBytes": 1600
   },
   {
+    "id": "submarine",
+    "name": "Submarine",
+    "author": "JAMM",
+    "description": "Buy a submarine, dive with a headlight and fish from the bow.",
+    "fileUrl": "https://varialbe.xyz/cgf-mods/packages/submarine.zip",
+    "isPreview": false,
+    "categories": [
+      "Optional",
+      "Exploration"
+    ],
+    "createdUtc": "2026-11-18T00:00:00Z",
+    "rating": null,
+    "iconUrl": "https://varialbe.xyz/cgf-mods/assets/submarine.svg",
+    "verifiedCreator": true,
+    "credits": "JAMM-CGF first-party pure-source package",
+    "catalogPage": "https://varialbe.xyz/cgf-mods/#submarine",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
+    "isDefault": false,
+    "version": "0.1.0",
+    "sha256": "d5814f3dbeba4eb86a4c65a3997ad3a9a922ad0f1a9d64cac0a3317ecf67ab1d",
+    "sizeBytes": 6718
+  },
+  {
     "id": "example-rod",
     "name": "Example Rod",
     "author": "JAMM",

@@ -29,7 +29,8 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
-                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload] [--silo-video] [--silo-frames]
+                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video] [--silo-frames]
+                  bench   <submarine.win> <out.win> --scene submarine (requires JAMM Console)
                   bench   <weather.win> <out.win> --scene weather
                   bench   <any.win> <out.win> --scene autoplay
                   bench   <legacy.win> <out.win> --scene maize
@@ -95,6 +96,7 @@ public static class Program
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
+            case "bench" when SubmarineScene.Requested(args): SubmarineScene.Apply(data); Save(data, output!); return 0;
             case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
             case "bench" when AutoplayScene.Requested(args): AutoplayScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
