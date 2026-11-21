@@ -47,3 +47,14 @@ not only fish value. Extend the step into a **Fair-Play guard** (`fairPlay` conf
 * Make the JAMM Console commands `unlockall` / `unlockgear` safe with mods that change upgrade array sizes:
   analyse the TGE crash (`Rod_Step_0`, `upgrades[22]`) and guard index access so no build can crash there.
 * Tests for each category; vanilla byte-identical; the report lists every clamp in the TGE build.
+
+### Clarification (user, 2026-11-21): anti-DEBUG guard, not a balance nerf
+"Es soll Anti-Debug-Stuff-Schutz sein, nicht unbedingt TGE zerstören."
+* Only catch values that are clearly **debug/test leftovers**, never a mod's intended balance. Mods like TGE may
+  legitimately add stronger rods, boats and fish – those must stay as the author designed them.
+* Use outlier rules instead of a tight vanilla x2 limit, e.g.: a value more than ~10x the highest vanilla value of
+  that stat AND far beyond the same mod's own progression (compare with the mod's other items of that kind),
+  absurd magnitudes / placeholder numbers (>= 1e9, 999999999, 9999999, negative or 0 prices for paid items),
+  and stats that make gameplay trivial (instant reel, infinite sink speed). Fish sale value cap stays 100,000,000.
+* When unsure, do NOT clamp; report it as INFO (`[CGF-FAIR-002] possible debug value kept: ...`) instead.
+* Report for the TGE build must show which values were clamped and which were kept, with the reasoning.
