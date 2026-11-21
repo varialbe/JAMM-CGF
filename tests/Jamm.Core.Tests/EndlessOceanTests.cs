@@ -1,6 +1,7 @@
 using Jamm.Core.ModKit;
 using Jamm.ModMaker;
 using UndertaleModLib;
+using UndertaleModLib.Compiler;
 
 using UndertaleModLib.Models;
 
@@ -113,5 +114,32 @@ public sealed class EndlessOceanTests
         width = world.Width;
         EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
         Assert.Equal(width, world.Width);
+    }
+
+    [Fact]
+    public void GeneratedFishInitializeSonarStateBeforeTheyCanBeDrawn()
+    {
+        using var data = UndertaleData.CreateNew();
+        foreach (string name in new[] { "Fish", "SonarPanel", "SonarPanelAdvanced" })
+            ModObjects.Create(data, name, persistent: false);
+
+        var sonar = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jmk_endless_ocean_sonar");
+        data.Scripts.Add(new UndertaleScript
+        {
+            Name = data.Strings.MakeString("jmk_endless_ocean_sonar"),
+            Code = sonar
+        });
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(sonar, EndlessOceanMod.Source("jmk_endless_ocean_sonar"));
+        ModObjects.Compile(compiler);
+
+        string compiled = ModObjects.Decompile(data, sonar);
+        Assert.Contains("s1 = sprite_index", compiled);
+        Assert.Contains("s2 = image_index", compiled);
+        Assert.Contains("s3 = image_xscale", compiled);
+        Assert.Contains("s4 = image_yscale", compiled);
+        Assert.Contains("s5 = 1", compiled);
+        Assert.Contains("s5 = (size + 0.5) / 3.5", compiled);
+        Assert.Contains("jmk_endless_ocean_sonar(swimmer)", EndlessOceanMod.Source("jmk_endless_ocean_load"));
     }
 }

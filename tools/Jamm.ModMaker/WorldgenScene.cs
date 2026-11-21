@@ -82,7 +82,7 @@ internal static class WorldgenScene
             chunk_at_stop = -1;
             lamp = noone;
             var file = file_text_open_write("{{Report}}");
-            file_text_write_string(file, "stage,boat_x,view_x,view_y,chunks,owned,instances,rock_hits,seed,first,last,fish,writes,clear_hits,bottom_hits,seam_hits");
+            file_text_write_string(file, "stage,boat_x,view_x,view_y,chunks,owned,instances,rock_hits,seed,first,last,fish,writes,clear_hits,bottom_hits,seam_hits,sonar_missing");
             file_text_writeln(file);
             file_text_close(file);
             """);
@@ -94,6 +94,12 @@ internal static class WorldgenScene
             {
                 if (!instance_exists(SaveManager) || !SaveManager.loaded || ticks < 6) exit;
                 {{dismiss}}
+                if (instance_exists(SonarPanel))
+                {
+                    SonarPanel.active = 1;
+                    SonarPanel.shouldDraw = 1;
+                }
+                view_visible[3] = 1;
                 {{FindCheckpoints}}
                 window_set_fullscreen(false);
                 window_set_size(1200, 720);
@@ -246,6 +252,12 @@ internal static class WorldgenScene
                 if (variable_instance_exists(id, "jmk_endless_ocean_fish"))
                     ds_list_add(generated_fish, id);
             }
+            var sonar_missing = 0;
+            with (Fish)
+            {
+                if (variable_instance_exists(id, "jmk_endless_ocean_fish") &&
+                    !variable_instance_exists(id, "s5")) sonar_missing += 1;
+            }
             var rock_hits = 0;
             var clear_hits = 0;
             var bottom_hits = 0;
@@ -298,7 +310,7 @@ internal static class WorldgenScene
             row += "," + string(ds_map_size(map)) + "," + string(owned) + "," + string(instance_count) + "," + string(rock_hits);
             row += "," + string(ocean.ocean_seed) + "," + string(ocean.ocean_first) + "," + string(ocean.ocean_last);
             row += "," + string(ds_list_size(generated_fish)) + "," + string(writes);
-            row += "," + string(clear_hits) + "," + string(bottom_hits) + "," + string(seam_hits);
+            row += "," + string(clear_hits) + "," + string(bottom_hits) + "," + string(seam_hits) + "," + string(sonar_missing);
             file_text_write_string(file, row);
             file_text_writeln(file);
             file_text_close(file);

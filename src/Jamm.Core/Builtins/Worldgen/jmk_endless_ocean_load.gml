@@ -24,6 +24,9 @@ for (var i = 7; i < 19; i += 4)
     {
         var species = layout[i + 2];
         var swimmer = instance_create(sx, sy, species);
+        // SonarPanel normally initializes these fields in its Begin Step. A fish streamed after
+        // that event can reach Draw before the panel's next pass (notably on Smooth render frames).
+        jmk_endless_ocean_sonar(swimmer);
         swimmer.jmk_endless_ocean_fish = true;
         swimmer.path_position = layout[i + 3];
         if (catalog_find >= 0 && script_exists(catalog_find))
