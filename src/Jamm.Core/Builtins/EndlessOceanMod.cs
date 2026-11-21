@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jamm.Core.Building;
 using UndertaleModLib;
 using UndertaleModLib.Compiler;
 using UndertaleModLib.Models;
@@ -25,7 +26,7 @@ public static class EndlessOceanMod
         "jamm_chunk_unit", "jamm_chunk_stream", Setup, "jmk_endless_ocean_floor", "jmk_endless_ocean_height",
         "jmk_endless_ocean_biome", "jmk_endless_ocean_species", "jmk_endless_ocean_poi",
         "jmk_endless_ocean_layout", "jmk_endless_ocean_underlay_cell", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
-        "jmk_endless_ocean_load", "jmk_endless_ocean_sonar", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
+        "jmk_endless_ocean_load", FishSonarRuntime.Script, "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
     ];
 
     /// <summary>Applies the recipe to an in-memory vanilla or already merged archive.</summary>
@@ -42,7 +43,8 @@ public static class EndlessOceanMod
         }
 
         if (data.GameObjects.ByName(Controller) is not null ||
-            Scripts.Any(name => data.Scripts.ByName(name) is not null || data.Code.ByName("gml_Script_" + name) is not null))
+            Scripts.Where(name => name != FishSonarRuntime.Script)
+                .Any(name => data.Scripts.ByName(name) is not null || data.Code.ByName("gml_Script_" + name) is not null))
             throw new InvalidDataException("This archive already contains Endless Ocean or conflicting chunk scripts. Build the recipe on a compatible archive without those assets.");
 
         if (data.GameObjects.ByName("CaveRockBig")?.Sprite is not { Width: >= 512, Height: >= 512 } rock ||
@@ -60,8 +62,12 @@ public static class EndlessOceanMod
         var compiler = new CompileGroup(data);
         foreach (string script in Scripts)
         {
-            var code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + script);
-            data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(script), Code = code });
+            var code = data.Code.ByName("gml_Script_" + script);
+            if (code is null)
+            {
+                code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + script);
+                data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(script), Code = code });
+            }
             compiler.QueueCodeReplace(code, script == Setup ? Settings(edge, world.Width) : Source(script));
         }
         compiler.QueueCodeReplace(ground.EventHandlerFor(EventType.Draw, 0u, data), Source("draw_ground"));
