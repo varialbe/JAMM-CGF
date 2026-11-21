@@ -37,3 +37,15 @@ behind **in front of our lure**, and the silo's **door is the only thing that ha
 8. Tests: unit tests, vanilla byte-identical, full suite green, zero warnings. In-game: silo scene
    (`~/jamm-night/bin/run.sh <win> <label> silo`, shared game lock; `JAMM_SILO_MODE=cycle|save|reload`) solo + all-7.
 9. Report `docs/reports/silo-v3.md`. Commit on `exp/silo-v3`; do not merge into main or push main.
+
+## Orchestrator notes (where the "rock breaks in half" comes from)
+* `examples/modkit/silo/hooks/hatch_draw.gml` draws two frames of the `silo-doors` sprite recipe
+  (`jmk_jamm_silo_recipe_silo_doors`, cropped from `spr_silo` around x≈545, 309×647 px) and slides them
+  ±160 px along the hatch axis with a small rotation. Because those crops contain rock/silo body pixels,
+  the whole top of the silo appears to split. v3: crop only the actual door/hatch plate (check `spr_silo`
+  frames and `spr_silomask` to find the door region), animate only that plate, keep the rest of `spr_silo`
+  static under it.
+* `hatch_step.gml` swaps the mask to the `open-silo` sprite's passable mask at the end; keep that timing.
+* The foreground layer can be an Area API piece with a custom object (`objects[]` with `depth`) drawing a
+  cropped recipe sprite of the rock rim at a depth lower than `Lure` (`Lure_Create_0`: `natural_depth = -1.55`,
+  hooked: `fish.depth + 0.002`) – e.g. depth −3 – while the existing rocks stay at their vanilla depth.
