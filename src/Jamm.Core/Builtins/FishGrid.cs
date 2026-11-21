@@ -51,9 +51,11 @@ public static partial class FishGrid
 
         if (!Matches(source))
             return Decision("skipped (avoidance loop differs from the audited pattern)");
+        var inlineNames = new[] { "jamm_fg_inline_touch", "jamm_fg_inline_dirty", "jamm_fg_inline_enter", "jamm_fg_inline_leave" };
         if (FishGridScripts.Scripts.Keys.Concat(Lifecycle.Keys.Select(call => WrapperName(call.Name, call.Count)))
             .Any(name => data.Scripts.ByName(name) is not null || data.Code.ByName("gml_Script_" + name) is not null
-                || data.Functions.ByName(name) is not null))
+                || data.Functions.ByName(name) is not null)
+            || inlineNames.Any(name => data.Scripts.ByName(name) is not null || data.Code.ByName("gml_Script_" + name) is not null))
             return Decision("skipped (runtime script names already in use)");
 
         // Capture the game's entries before adding helper code. The instrumented game code
@@ -84,20 +86,38 @@ public static partial class FishGrid
         AddEvent(EventType.Step, (uint)EventSubtypeStep.BeginStep, FishGridScripts.Reset);
         AddEvent(EventType.Other, (uint)EventSubtypeOther.RoomStart, FishGridScripts.Reset);
         Queue(avoid, FishGridScripts.Avoidance(source));
+        foreach (string helper in new[] { "touch", "dirty", "enter", "leave" })
+        {
+            Function("jamm_fg_" + helper);
+            var template = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jamm_fg_inline_" + helper);
+            compiler.QueueCodeReplace(template, FishGridScripts.GuardedCall("jamm_fg_" + helper));
+        }
         ModObjects.Compile(compiler);
+
+        IReadOnlyList<UndertaleInstruction> HookTemplate(string suffix)
+        {
+            var template = data.Code.ByName("gml_Script_jamm_fg_inline_" + suffix)
+                ?? throw new InvalidDataException($"Fish-grid hook template '{suffix}' was not compiled.");
+            var instructions = template.Instructions.ToArray();
+            data.Code.Remove(template);
+            return instructions;
+        }
+
+        var touchInline = HookTemplate("touch");
+        var dirtyInline = HookTemplate("dirty");
+        var enterInline = HookTemplate("enter");
+        var leaveInline = HookTemplate("leave");
 
         foreach (var room in data.Rooms)
             ModObjects.PlaceInstance(data, room.Name.Content, controller, first: true);
 
-        var dirty = Function("jamm_fg_dirty");
-        var touch = Function("jamm_fg_touch");
-        var enter = Function("jamm_fg_enter");
-        var leave = Function("jamm_fg_leave");
         var lifecycle = Lifecycle.Keys.ToDictionary(call => call, call => Function(WrapperName(call.Name, call.Count)));
         var relatedObjects = data.GameObjects.Select(obj => Related(obj, fishLarge)).ToArray();
 
         foreach (var code in originals)
-            if (LegacyCodeHooks.Insert(code, Select, code == endStep ? enter : null, code == endStep ? leave : null))
+            if (LegacyCodeHooks.Insert(code, Select,
+                enterInline: code == endStep ? enterInline : null,
+                leaveInline: code == endStep ? leaveInline : null))
                 edits.Add(code);
 
         return Decision($"enabled (default {(enabledByDefault ? "on" : "off")}, FishLarge avoidance with ordered cells and live-position guards)");
@@ -126,7 +146,7 @@ public static partial class FishGrid
             {
                 if (lifecycle.TryGetValue((name, instruction.ArgumentsCount), out var wrapper))
                     return new(ReplaceCall: wrapper);
-                if (SelfMovement.Contains(name)) return new(After: touch);
+                if (SelfMovement.Contains(name)) return new(AfterInline: touchInline);
                 if (name.StartsWith("instance_activate_", StringComparison.Ordinal)
                     || name.StartsWith("instance_deactivate_", StringComparison.Ordinal)
                     || name.StartsWith("room_", StringComparison.Ordinal)
@@ -136,16 +156,16 @@ public static partial class FishGrid
                         or "variable_instance_set" or "game_restart" or "game_load"
                         or "action_kill_object" or "action_change_object" or "instance_create" or "instance_copy"
                         or "instance_destroy" or "instance_change" or "instance_create_layer" or "instance_create_depth")
-                    return new(Before: dirty);
+                    return new(BeforeInline: dirtyInline);
             }
             if (instruction.Kind != Opcode.Pop || instruction.ValueVariable?.Name.Content is not ("x" or "y" or "path_position" or "phy_position_x" or "phy_position_y"))
                 return default;
             if (instruction.TypeInst is InstanceType.Local or InstanceType.Global or InstanceType.Arg)
                 return default;
-            if (instruction.ReferenceType != VariableType.Normal) return new(Before: dirty);
-            if (instruction.TypeInst is InstanceType.Self or InstanceType.Builtin) return new(After: touch);
+            if (instruction.ReferenceType != VariableType.Normal) return new(BeforeInline: dirtyInline);
+            if (instruction.TypeInst is InstanceType.Self or InstanceType.Builtin) return new(AfterInline: touchInline);
             int index = (int)instruction.TypeInst;
-            return index >= 0 && index < relatedObjects.Length && !relatedObjects[index] ? default : new(Before: dirty);
+            return index >= 0 && index < relatedObjects.Length && !relatedObjects[index] ? default : new(BeforeInline: dirtyInline);
         }
     }
 

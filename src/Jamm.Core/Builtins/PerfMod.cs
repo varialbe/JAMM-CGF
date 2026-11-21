@@ -50,17 +50,8 @@ public static class PerfMod
             + avoidance.Replace("(argument1 * argument1)", "jamm_perf_radius2", StringComparison.Ordinal)
                 .Replace("(100000 * argument2)", "jamm_perf_force", StringComparison.Ordinal));
 
-        // Parallax still follows the camera every tick, including off-screen scenery (other
-        // objects may read its coordinates). Only the pure depth transform is memoized.
-        var scene = data.Code.ByName("gml_Object_SceneItem_Step_2")
-            ?? throw new InvalidDataException("SceneItem step missing: use the original legacy data.win.");
-        string source = ModObjects.Decompile(data, scene);
-        int end = source.IndexOf("x = home_x", StringComparison.Ordinal);
-        if (end < 0 || !source.StartsWith("scene_depth = depth + 18;", StringComparison.Ordinal))
-            throw new InvalidDataException("SceneItem step differs: use the original legacy data.win.");
-        compiler.QueueCodeReplace(scene, "if (!variable_instance_exists(id, \"jamm_perf_depth\")) { jamm_perf_depth = depth + 1; jamm_perf_object = object_index; }\n"
-            + "if (jamm_perf_depth != depth || jamm_perf_object != object_index)\n{\n" + source[..end]
-            + "jamm_perf_scene_depth = scene_depth;\njamm_perf_depth = depth;\njamm_perf_object = object_index;\n}\nscene_depth = jamm_perf_scene_depth;\n" + source[end..]);
+        // Leave SceneItem's per-instance depth transform alone. Runtime profiling on large
+        // packs showed the cache probes cost more than the small transform they replace.
         PerfMode.Queue(data, compiler, debug);
         ModObjects.Compile(compiler);
         if (applyFishGrid) FishGrid.Apply(data);

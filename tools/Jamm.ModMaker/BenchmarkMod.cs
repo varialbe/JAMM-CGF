@@ -1069,11 +1069,11 @@ public static partial class BenchmarkMod
                 {
                     file_text_write_string(jamm_b_f, "# jamm_bench v1");
                     file_text_writeln(jamm_b_f);
+                    var jamm_b_fish_grid = 0;
                     if (variable_global_exists("jamm_fg_enabled"))
-                    {
-                        file_text_write_string(jamm_b_f, "# fish_grid=" + string(global.jamm_fg_enabled));
-                        file_text_writeln(jamm_b_f);
-                    }
+                        jamm_b_fish_grid = global.jamm_fg_enabled;
+                    file_text_write_string(jamm_b_f, "# fish_grid=" + string(jamm_b_fish_grid));
+                    file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# fish_mode=" + jamm_b_fish_mode + " fish_mode_requested=" + jamm_b_fish_mode_req + " fish_cap=" + string(jamm_b_fish_cap) + " fish_scale=" + string(jamm_b_fish_scale));
@@ -1082,11 +1082,19 @@ public static partial class BenchmarkMod
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# active_fish_mean=" + string(jamm_b_fish_total / max(1, jamm_b_loop_n)));
                     file_text_writeln(jamm_b_f);
+                    var jamm_b_perf_mode = 0;
+                    var jamm_b_perf_interval = 4;
+                    var jamm_b_perf_eligible = 0;
+                    var jamm_b_perf_skipped = 0;
                     if (variable_global_exists("jamm_perf_mode"))
                     {
-                        file_text_write_string(jamm_b_f, "# perf_mode=" + string(global.jamm_perf_mode) + " interval=" + string(global.jamm_perf_interval) + " eligible_events=" + string(global.jamm_perf_eligible) + " skipped_events=" + string(global.jamm_perf_skipped));
-                        file_text_writeln(jamm_b_f);
+                        jamm_b_perf_mode = global.jamm_perf_mode;
+                        jamm_b_perf_interval = global.jamm_perf_interval;
+                        jamm_b_perf_eligible = global.jamm_perf_eligible;
+                        jamm_b_perf_skipped = global.jamm_perf_skipped;
                     }
+                    file_text_write_string(jamm_b_f, "# perf_mode=" + string(jamm_b_perf_mode) + " interval=" + string(jamm_b_perf_interval) + " eligible_events=" + string(jamm_b_perf_eligible) + " skipped_events=" + string(jamm_b_perf_skipped));
+                    file_text_writeln(jamm_b_f);
                     if (!jamm_b_size_ok)
                     {
                         file_text_write_string(jamm_b_f, "# warning=render_size_normalization_not_applied_or_overridden_requested_window=1200x720_application_surface=1200x720_fullscreen=0");

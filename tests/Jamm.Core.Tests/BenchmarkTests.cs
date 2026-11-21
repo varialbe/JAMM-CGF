@@ -153,6 +153,11 @@ public class BenchmarkTests
         Assert.Equal(countBeforeBench + 12, data.Code.Count);
         Assert.Equal(-999999, data.GameObjects.ByName(BenchmarkMod.ObjectName)!.Depth);
         Assert.Equal(-1000000, data.GameObjects.ByName(SmoothMod.ObjectName)!.Depth);
+        string summary = Code(data, $"Draw_{(uint)EventSubtypeDraw.DrawGUIEnd}");
+        Assert.Contains("# fish_grid=", summary);
+        Assert.Contains("# perf_mode=", summary);
+        Assert.Contains("var jamm_b_fish_grid = 0", summary);
+        Assert.Contains("var jamm_b_perf_mode = 0", summary);
 
         // Double instrumentation is cleanly rejected.
         Assert.Throws<InvalidDataException>(() => BenchmarkMod.Apply(data));
