@@ -185,7 +185,8 @@ public static class InstanceGuard
         foreach (Match match in Lookup.Matches(masked))
         {
             string variable = match.Groups[1].Value;
-            if (facts.Names.Contains(variable)) continue;
+            // JAMM's own runtimes (jamm_* variables) validate their lookups in their own way.
+            if (facts.Names.Contains(variable) || variable.StartsWith("jamm_", StringComparison.Ordinal)) continue;
             int from = match.Index + match.Length;
             // Guard dereferences until the variable is checked or assigned again.
             var reassigned = new Regex($@"(?<![\w.]){Regex.Escape(variable)}\s*=(?!=)");

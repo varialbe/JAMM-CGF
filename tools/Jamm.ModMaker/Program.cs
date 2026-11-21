@@ -31,6 +31,8 @@ public static class Program
                   console <original.win> <out.win>
                   bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video]
                   bench   <weather.win> <out.win> --scene weather
+                  bench   <legacy.win> <out.win> --scene maize
+                  bench   <modded.win> <out.win> --scene money
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid]
                   export-pages <original.win> <dir>
@@ -91,7 +93,9 @@ public static class Program
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
+            case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when OptionValue(args, "--scene") == "maize": MaizeScene.Apply(data); Save(data, output!); return 0;
             case "bench" when SiloScene.Requested(args): SiloScene.Apply(data, args); Save(data, output!); return 0;
             case "bench" when WorldgenScene.Requested(args): WorldgenScene.Apply(data, args.Contains("--showcase")); Save(data, output!); return 0;
             case "bench":

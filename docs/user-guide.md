@@ -346,6 +346,19 @@ Shared compatibility results: before checking a mod itself, JAMM asks
 against exactly your game version (a plain HTTPS request without cookies or identifiers; the
 server sees your IP like any website). Switch it off in Settings. Details: [compat-db.md](compat-db.md).
 
+## Money above $999,999,999
+
+The original game stops the wallet at $999,999,999. Modded builds lift that limit up to
+$1,000,000,000,000,000 and show large amounts compactly: `$9,999`, `$25.0K`, `$3.4M`,
+`$9.5B`, `$3.4T`, `$1.0Qa`. The short form keeps one decimal and never rounds up, so
+$999,999 shows as `$999.9K`. Shop prices, sell dialogs, the Fishalog and quest rewards use
+the same format. Fish sale values are unchanged.
+
+Turn it off per profile with **Performance settings → Money above $999,999,999** or
+`cgfmm profile bigmoney <name> off`. A vanilla-only install is never changed. Saves keep
+the money as an INI real, so large amounts load back exactly. Opening such a save in an
+unmodded game shows the old $999,999,999 wallet cap.
+
 ## Built-in mods
 
 After choosing your untouched legacy base in Settings, the **Built-in (JAMM)** group

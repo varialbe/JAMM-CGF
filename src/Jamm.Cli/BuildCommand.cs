@@ -21,7 +21,7 @@ internal static class BuildCommand
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         List<string> positional = [];
-        bool dryRun = false, noRepack = false, strict = false;
+        bool dryRun = false, noRepack = false, strict = false, noBigMoney = false;
         string[] allowed = command switch
         {
             "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json", "--profile"],
@@ -32,6 +32,8 @@ internal static class BuildCommand
             string arg = arguments[i];
             if (command == "build" && arg == "--dry-run")
             { if (dryRun) throw new ArgumentException("--dry-run was given twice."); dryRun = true; }
+            else if (command == "build" && arg == "--no-big-money")
+            { if (noBigMoney) throw new ArgumentException("--no-big-money was given twice."); noBigMoney = true; }
             else if (command == "build" && arg == "--no-repack")
             { if (noRepack) throw new ArgumentException("--no-repack was given twice."); noRepack = true; }
             else if (command == "build" && arg == "--strict")
@@ -132,7 +134,7 @@ internal static class BuildCommand
         if (acceptanceJson is not null)
             OutputFile.Validate(acceptanceJson, [.. protectedPaths, output]);
         if (install is not null) GameInstaller.Validate(install, baseHash, [.. protectedPaths.Skip(1), output], basePath);
-        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress, noRepack: noRepack);
+        var result = ArchiveBuilder.Build(basePath, inputs, output, resolutions, dryRun, Progress, noRepack: noRepack, bigMoney: !noBigMoney);
         foreach (string decision in result.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
         foreach (var item in result.RemappedReferences ?? new Dictionary<string, int>())
             Console.WriteLine($"Remapped references: {item.Key}: {item.Value} (changed/added source alternatives; conflict selections verified separately)");

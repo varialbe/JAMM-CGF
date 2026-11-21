@@ -21,7 +21,10 @@ public static class CgfAssetTypes
             ["jamm_tool_register"] = (8, 9, [(4, "objects"), (5, "objects"), (6, "sprites")]),
             ["jamm_hat_register"] = (6, 9, [(1, "objects")]),
             ["jamm_upgrade_register"] = (9, 9, [(5, "sprites"), (7, "scripts"), (8, "scripts")]),
-            ["part_type_sprite"] = (5, 5, [(1, "sprites")])
+            ["part_type_sprite"] = (5, 5, [(1, "sprites")]),
+            // Endless Ocean passes its load/release scripts by index; untyped they would keep a stale
+            // index when another mod adds scripts first (crash in a silo fish step while streaming).
+            ["jamm_chunk_stream"] = (5, 5, [(3, "scripts"), (4, "scripts")])
         };
     private static Dictionary<string, Definition> Read()
     {

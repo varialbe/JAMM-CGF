@@ -69,6 +69,11 @@ public sealed partial class MainWindow : Window
         if (Model is { CanEditProfile: true } vm) await vm.ToggleProfileRepackAsync();
     }
 
+    private async void ProfileBigMoneyClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm) await vm.ToggleProfileBigMoneyAsync();
+    }
+
     private async void ProfilePerfModeClick(object? sender, RoutedEventArgs e)
     {
         if (Model is { CanEditProfile: true } vm)

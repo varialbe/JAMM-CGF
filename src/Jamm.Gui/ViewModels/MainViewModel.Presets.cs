@@ -11,6 +11,8 @@ public sealed partial class MainViewModel
     public bool WeakPcEnabled => presetProfile?.Preset == ProfileLibrary.WeakPcPreset;
     /// <summary>Whether texture repacking is on in the current profile.</summary>
     public bool ProfileRepack => presetProfile?.NoRepack != true;
+    /// <summary>Whether money may exceed $999,999,999 (compact display) in the current profile.</summary>
+    public bool ProfileBigMoney => presetProfile?.NoBigMoney != true;
     /// <summary>Current profile defaults. The game can override these from its INI.</summary>
     public PerfSettings ProfilePerf => presetProfile?.Perf ?? new();
 
@@ -19,6 +21,7 @@ public sealed partial class MainViewModel
         presetProfile = profile;
         OnPropertyChanged(nameof(WeakPcEnabled));
         OnPropertyChanged(nameof(ProfileRepack));
+        OnPropertyChanged(nameof(ProfileBigMoney));
         OnPropertyChanged(nameof(ProfilePerf));
     }
 
@@ -45,6 +48,9 @@ public sealed partial class MainViewModel
 
     /// <summary>Changes the active profile's texture repacking setting.</summary>
     public Task ToggleProfileRepackAsync() => UpdatePresetOptionAsync((profiles, name) => profiles.SetRepack(name, !ProfileRepack));
+
+    /// <summary>Changes whether the active profile allows money above $999,999,999.</summary>
+    public Task ToggleProfileBigMoneyAsync() => UpdatePresetOptionAsync((profiles, name) => profiles.SetBigMoney(name, !ProfileBigMoney));
 
     /// <summary>Changes the active profile's Perf defaults.</summary>
     public Task UpdateProfilePerfAsync(bool? startEnabled = null, bool? fishGrid = null, int? interval = null) =>

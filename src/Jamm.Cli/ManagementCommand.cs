@@ -139,6 +139,7 @@ internal static class ManagementCommand
                             PrintGroup(profiles.Group(profile), includeDisabled: true);
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
                             Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for modded builds")}");
+                            Console.WriteLine($"  Big money (above $999,999,999, compact display): {(profile.NoBigMoney ? "off" : "on for modded builds")}");
                             Console.WriteLine($"  Perf defaults: F8 mode {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid {(profile.Perf.FishGrid ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence).");
                             foreach (string id in profile.UnlockFixMods ?? [])
                                 Console.WriteLine($"  Repair legacy shop unlocks: {library.Find(id).Name}");
@@ -149,6 +150,11 @@ internal static class ManagementCommand
                         Count(3);
                         profiles.SetRepack(positional[1], OnOff(positional[2]));
                         Console.WriteLine($"Texture repacking for '{positional[1]}': {positional[2]}.");
+                        break;
+                    case "bigmoney":
+                        Count(3);
+                        profiles.SetBigMoney(positional[1], OnOff(positional[2]));
+                        Console.WriteLine($"Money above $999,999,999 with compact display for '{positional[1]}': {positional[2]}.");
                         break;
                     case "preset":
                         Count(3);
