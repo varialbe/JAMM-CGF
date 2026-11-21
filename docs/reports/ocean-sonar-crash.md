@@ -22,3 +22,16 @@ The ModMaker `worldgen` scene now enables the sonar view during its streaming ro
 - Autoplay v2, seed 11004, 15 minutes: `PLAYED`, 96 actions, no error. Reached x=81,704 with five chunks loaded; it did not travel to the original crash coordinate.
 
 The autoplay bot could not select Boat7 on seed 11002 (`boat icon unavailable`) and stayed at the dock. Seed 11004 selected Boat7 and entered Endless Ocean but did not reach x≈152,600; the dedicated worldgen/sonar scene covered the deeper generated checkpoints.
+
+## Round 2
+
+- **Instance existence guards (`jmk_endless_ocean_sonar.gml`)**: Verified in the August 2023 legacy base that `SonarPanel` is placed as a non-persistent room instance in `NewWorld` (and `room11`, absent in `room2` and `ArcadeRoom`), and creates `SonarPanelAdvanced` in `SonarPanel_Create_0`. `jmk_endless_ocean_sonar.gml` now looks up both via `asset_get_index` and checks `instance_exists` before reading `advancedDrawEnabled` or `cave_sonar`, falling back to the basic sonar branch if either instance is missing.
+- **No hardcoded asset indices (`jmk_endless_ocean_sonar.gml`)**: Replaced vanilla object and sprite IDs (`132`, `135`, `225`, `238`, `242`, `334`, `424`) with runtime `asset_get_index` lookups (`Abyssal`, `Dragon`, `Problematicus`, `spr_abyssal_head`, `spr_dragon_head`, `spr_problem_head`, `spr_sonarblip`) matching `SonarPanel_Step_1` semantics even when mods add or reorder assets.
+- **Fish parity follow-ups (Endless Ocean generator only)**:
+  - `jmk_endless_ocean_load.gml` now initializes `base_lunge_mod` and `base_lunge_offset` at fish creation using the exact `Rod_Other_10` upgrade and gear formula (defaulting to `1` and `0` when `Rod`/`Girl` are absent or uninitialized).
+  - `jmk_endless_ocean_species.gml` no longer streams `Torby` (paired/extinction-tracked) or `Ancient_Kingfish` (singleton boss/save-tracked), substituting `Stankfin` and `Underfin` respectively.
+  - `jmk_endless_ocean_dispose.gml` now clears `deactivated = 0` whenever it keeps a reactivated fish (`state == 4 || state == 15`, hooked on `Lure`, or held by `CatSwim`) so `Fish_Step_2` does not re-deactivate it after a `FishThinner` pass.
+- **Verification**:
+  - Updated `EndlessOceanTests` to shift asset indices past 500, assert `instance_exists` and `asset_get_index` usage, assert zero bare vanilla indices in decompiled GML and bytecode instructions, and verify `base_lunge_mod`, singleton exclusions, and `deactivated = 0` on preserved fish.
+  - Updated `tests/worldgen/chunks.test.mjs` to stub the sonar initializer and assert `Torby`/`Ancient_Kingfish` exclusion (8/8 passing).
+  - `dotnet build -c Release` (0 warnings, 0 errors) and `dotnet test -c Release` green (626 core and 130 GUI tests passed; 17 optional real-file tests skipped).
