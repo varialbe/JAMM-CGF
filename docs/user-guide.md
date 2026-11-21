@@ -219,6 +219,52 @@ folders are retained. After saving any wanted source changes you can remove the
 installer source directory manually. Restore the game in JAMM before uninstalling
 if you want its original archive back.
 
+## My PC is slow
+
+Turn on **Weak PC** in the **Manager** tab, then press **Play** to rebuild the
+active profile. From the CLI, run `cgfmm profile preset <name> weak-pc`, then
+`cgfmm apply --profile <name>`.
+
+| Setting | Effect |
+| --- | --- |
+| JAMM Perf and F8 mode | Perf includes guarded event optimizations. F8 mode runs fewer updates for eligible distant fish, so they can move less often. The Weak PC default runs their full update every 8 ticks. |
+| Fish grid | Uses JAMM Perf's guarded neighbour search when the merged avoidance script is compatible. |
+| Pack textures | Packs the same sprite and background pixels into fewer texture pages where it can. Recent default builds already pack textures. |
+| HD Lite off | Uses the game's normal rendering size instead of HD Lite scaling. |
+
+Use **Performance settings** to change texture packing, the startup F8 default,
+the fish grid or the update interval. Use the **Built-in (JAMM)** switches for
+Perf and HD Lite. `cgfmm profile show <name>` lists the settings, and the
+[CLI reference](cli.md) lists the matching commands. Turn off **Weak PC** or run
+`cgfmm profile preset <name> default` to restore the profile settings you had
+before applying the preset. Changes you make to individual settings while Weak PC
+is on are kept.
+
+If the game's save folder already has a Perf preference in `jamm_perf.ini`,
+JAMM keeps it. Press **F8** in game to change the saved mode. The `[Perf]`
+section can also override the profile defaults with `Mode`, `FishGrid` and
+`Interval`. When the runner has yet to initialize its save folder, the game
+uses the profile defaults on first launch.
+
+### Check it on your PC
+
+1. Install the same pack with Weak PC off and on. Keep the save, scene, window
+   size, sonar and fullscreen settings the same. Keep the window visible and
+   wait for it to reach the title screen. Record startup time or whether it
+   stays black.
+2. Use your FPS overlay to record 30 seconds at the dock and in deep water.
+   Compare typical FPS and lows over each window. Check the Perf mode toast
+   and use F8 if a saved choice overrides the profile.
+3. Record GPU memory at the title and during both scenes. In Windows Task Manager,
+   open **Performance → GPU** and note both dedicated and shared GPU memory,
+   especially on an integrated GPU. On Linux, use your system GPU monitor if it
+   exposes those counters. Keep the same monitor and close other GPU-heavy
+   apps for both tests.
+
+Weak PC uses the existing texture repacker. The legacy runner still loads atlas
+pages at startup, and there is no separate Low-VRAM option. If the all-seven pack
+stays black before the title screen, try a profile with fewer large texture mods.
+
 ## Performance and launch troubleshooting
 
 - Start Steam before Play (required by the Flatpak runner and the Steam game).

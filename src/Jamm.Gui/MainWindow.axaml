@@ -11,12 +11,36 @@
     </Style>
   </Window.Styles>
   <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="24" RowSpacing="16">
-    <Grid ColumnDefinitions="*,Auto">
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
       <StackPanel Spacing="3"><CheckBox Content="Advanced mode" IsChecked="{Binding AdvancedMode, Mode=TwoWay}" IsEnabled="{Binding CanEdit}"/><TextBlock Text="JAMM" FontSize="30" FontWeight="Bold"/><TextBlock Classes="muted" Text="Cat Goes Fishing · Your mods, together."/></StackPanel>
-      <Button Grid.Column="1" Content="Settings" Click="SettingsClick" IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
+      <Panel Grid.Column="1" IsVisible="{Binding #ManagerTab.IsSelected}" VerticalAlignment="Center">
+        <Border Classes="card" IsVisible="{Binding HasBuiltins}" Padding="8">
+          <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <ToggleSwitch x:Name="WeakPcSwitch" Content="Weak PC" OnContent="" OffContent=""
+                          IsChecked="{Binding WeakPcEnabled, Mode=OneWay}" Click="WeakPcClick"
+                          IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Weak PC"/>
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Packs textures, turns off HD Lite and updates distant fish less often." TextWrapping="Wrap" VerticalAlignment="Center" Classes="muted"/>
+            <Button Grid.Column="1" Content="Performance settings" IsEnabled="{Binding CanEditProfile}">
+              <Button.Flyout>
+                <Flyout>
+                  <StackPanel Spacing="6" Width="300" IsEnabled="{Binding CanEditProfile}">
+                    <CheckBox Content="Pack textures" IsChecked="{Binding ProfileRepack, Mode=OneWay}" Click="ProfileRepackClick"/>
+                    <CheckBox Content="Start with F8 mode on" IsChecked="{Binding ProfilePerf.StartEnabled, Mode=OneWay}" Click="ProfilePerfModeClick"/>
+                    <CheckBox Content="Fish grid" IsChecked="{Binding ProfilePerf.FishGrid, Mode=OneWay}" Click="ProfileFishGridClick"/>
+                    <TextBlock Text="Distant fish update interval (ticks)"/>
+                    <NumericUpDown Minimum="1" Maximum="60" FormatString="0" Value="{Binding ProfilePerf.Interval, Mode=OneWay}" ValueChanged="ProfileFishIntervalChanged"/>
+                    <TextBlock Text="JAMM Perf and HD Lite can be switched in Built-in (JAMM). Your in-game Perf settings take precedence." TextWrapping="Wrap" Classes="muted"/>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+          </Grid>
+        </Border>
+      </Panel>
+      <Button Grid.Column="2" Content="Settings" Click="SettingsClick" IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
     </Grid>
     <TabControl Grid.Row="1" x:Name="MainTabs">
-    <TabItem Header="Manager">
+    <TabItem x:Name="ManagerTab" Header="Manager">
     <DockPanel LastChildFill="True">
     <Border DockPanel.Dock="Top" Classes="card" IsVisible="{Binding ShowBuiltinHeader}" Margin="0,0,0,8" Padding="12">
       <StackPanel Spacing="8">

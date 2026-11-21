@@ -70,10 +70,9 @@ internal static class FlatpakSteamLauncher
             throw new IOException($"Cannot read the running Steam environment from /proc/{pid}. Restart Flatpak Steam, then press Play.", ex);
         }
 
-        string steamPath = config.Proton.ClientInstallPath ?? Path.Combine(host.Home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam");
+        string steamPath = SteamPath(config, host.Home);
         string proton = Path.Combine(config.Proton.Path ?? Path.Combine(steamPath, "steamapps", "common", "Proton - Experimental"), "proton");
-        string compat = ManagerStore.NormalizeCompatDataPath(config.Proton.CompatDataPath)
-            ?? Path.Combine(steamPath, "steamapps", "compatdata", config.Steam.AppId);
+        string compat = CompatDataPath(config, host.Home);
         string instance = pid.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (!Visible("-d", game))
             throw new IOException($"Game folder '{game}' is not visible inside Flatpak Steam. Move the whole legacy game folder under '{steamPath}' or grant Steam access to that folder, then set gameDir.");
@@ -98,4 +97,11 @@ internal static class FlatpakSteamLauncher
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(int.Parse);
         bool Visible(string kind, string path) => host.Run("enter", instance, "test", kind, path).ExitCode == 0;
     }
+
+    internal static string CompatDataPath(ManagerConfig config, string home) =>
+        ManagerStore.NormalizeCompatDataPath(config.Proton.CompatDataPath)
+        ?? Path.Combine(SteamPath(config, home), "steamapps", "compatdata", config.Steam.AppId);
+
+    private static string SteamPath(ManagerConfig config, string home) =>
+        config.Proton.ClientInstallPath ?? Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam");
 }

@@ -54,6 +54,11 @@ display names. `keep-both` has Phase 3's insertion-only restriction. Code hunk k
 be removed while any profile references it. Deleting the active profile clears
 the selection; it does not alter the installed game or delete backups.
 
+`preset` defaults to `default`. `noRepack` and `perf` record the profile's
+effective build and startup settings. While `preset` is `weak-pc`,
+`beforeWeakPc` records the settings to restore when the preset is disabled.
+Change them through the Manager or the [profile CLI commands](cli.md).
+
 `config.json` uses these CLI keys (paths are stored absolute):
 
 | CLI key | JSON field | Default / purpose |
