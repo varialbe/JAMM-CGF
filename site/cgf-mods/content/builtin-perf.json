@@ -10,8 +10,32 @@
   "saves": "Stores scheduling settings in `jamm_perf.ini`, under `[Perf]`. The default `Mode` is 0 and the default `Interval` is 4 ticks. These settings are shared across save slots.",
   "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Smooth, HD Lite, Console and an independent third-party mod. Mode 1 can also reach custom small or medium fish through inherited End Step logic.",
   "how": [
-    "The generator guards light updates on Magmer and Volteen against stale instance IDs. It skips the precise deep-rock collision check and trawler net collision query in fish states that cannot use their results.",
-    "Fish avoidance computes two fixed expressions once per call and retains the original neighbour traversal. Scenery caches its depth transform per instance and still updates its parallax position each tick.",
-    "The `obj_jamm_perf` controller configures an early-out in the base Fish End Step. The scheduler checks ancestry, fish state and distances to active views, lures, swimmers, boats and nets before skipping work. Eligible instances are staggered by instance ID and tick, and their engine alarms, motion and Draw events still run."
+    "The built-in recipe guards Magmer and Volteen light updates against stale instance IDs, skips a deep-rock collision query in fish states that cannot use its result, and avoids the trawler net collision query when the fish is ineligible for it. The avoidance patch hoists fixed radius and force expressions. The scenery object caches its depth transform while continuing to update its parallax position.",
+    "Optional F8 scheduling wraps the base `Fish` End Step. Before a fish can be skipped, the controller caches its object ancestry and requires a standard `FishSmall` or `FishMedium` lineage. FishLarge/FishHuge, named special lineages (Dragon, Noctis, Torby, Ghost, Abyssal, Kingfish, Shaku, Bagu and Curby), custom Step-event logic and custom user-event logic are excluded. It also waits one full End Step after an object type changes.",
+    "Only safe swimming or paused fish states are candidates. Fish are excluded if always-zoned, nether, deactivated, hollow, dead, dragged, aboard, or under thrall override; active lunge/flee states are not scheduled. A candidate stays unscheduled near every active view, the legacy visibility view 3, Girl, CatSwim, Lure, Boat or Net, using lunge-range-aware distance margins. The remaining instances are staggered by instance ID and tick using the interval in `jamm_perf.ini` (default 4). Engine alarms, motion and Draw still run; selected End Step logic is skipped. F8 toggles the persisted experimental mode.",
+    "The builder's general object-index guards are a separate compatibility pass: `CGF-INSTANCE-004` replaces eligible `<Object>.object_index` type reads with the typed object constant; `005` guards eligible instance-member reads and writes; `007` safely handles supported lookup-result reads. They address known inactive-instance hazards and do not claim to validate arbitrary dynamic IDs. No benchmark figures are published here unless measured entries are supplied in `content/benchmarks.json`."
+  ],
+  "changelog": [
+    "1.0.0: Base collision/light/scenery optimizations; optional distant-fish End Step scheduling with F8."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.",
+    "Scheduling is optional and experimental; press F8 to enable or disable it."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy."
+  ],
+  "faq": [
+    {
+      "q": "Does scheduling pause every fish?",
+      "a": "No. It only considers standard small and medium fish in safe swimming or paused states, away from every active view, the player, lures, boats, swimmers and nets. Special ancestry, custom Step events, dragging, hooked, netted or boat fish are excluded."
+    },
+    {
+      "q": "Does F8 save the mode?",
+      "a": "Yes. The mode is stored in `jamm_perf.ini`; the default base optimization mode is off for scheduling."
+    }
   ]
 }

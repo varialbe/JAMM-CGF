@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
   <title>Example Fish — JAMM CGF Mods</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>Example Fish</span></nav>
     <header class="mod-header">
-      <a class="back" href="../index.html#example-fish">← All mods</a>
-      <div class="card-head">
-        <img src="../assets/example-fish.svg" alt="" width="44" height="44">
-        <div>
-          <h1>Example Fish</h1>
-          <div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div>
-          <p>Version 1.0.0</p>
-        </div>
-      </div>
-      <a class="btn" href="../packages/example-fish.zip" download>Download example-fish.zip</a>
-      <div class="checksum">SHA-256: 3608467830072fbdd1d3fd1f06bde8308898d576d6c8309e81354df2c7ecd9a9 (2,671 B)</div>
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/example-fish.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Example Fish</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div><p>Version 1.0.0</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/example-fish.zip" download>Download source ZIP</a><span>Source-only ZIP · 2,671 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>2,671 bytes</dd></div><div><dt>SHA-256</dt><dd><code>3608467830072fbdd1d3fd1f06bde8308898d576d6c8309e81354df2c7ecd9a9</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
@@ -28,28 +32,78 @@
     </section>
 
     <section class="mod-section">
-      <h2>Technical datasheet</h2>
-      <table class="datasheet">
-        <tbody>
-          <tr><th scope="row">Package type</th><td>ModKit</td></tr>
-          <tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
-          <tr><th scope="row">APIs used</th><td>ModKit <code>fish</code> declarations, Fish API <code>jamm_fish_register</code>, and shared Fishalog registration through the Catalog API.</td></tr>
-          <tr><th scope="row">Assets and scripts added</th><td>2 fish objects, 2 sprites and 4 standalone scripts in the source build on a clean base. The scripts are two Glowfin hooks, a package initializer and the Fish API registration stub.</td></tr>
-          <tr><th scope="row">Save-file behaviour</th><td>The native slot INI stores Fishalog catch quality, discovery and population under <code>[JAMM_Catalog]</code>, keyed by the object names <code>jmk_example_fish_goldie</code> and <code>jmk_example_fish_glowfin</code>.</td></tr>
-          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. A verified build combined Example Fish with Harbor Pack and Showcase Upgrades without conflicts. The Fish API registers species by package and fish key, and the Catalog API tracks progress across profile orders by object name.</td></tr>
-        </tbody>
-      </table>
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF configured with the untouched August 2023 legacy VM <code>data.win</code> (bytecode 16).</li>
+        <li>A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.</li>
+        <li>Fish hooks must use GameMaker 1.4 GML syntax.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, run Check, then build or install to a separate game copy.</li>
+      </ul>
     </section>
 
     <section class="mod-section">
       <h2>How it works</h2>
-      <p>The manifest supplies single-frame PNGs and stats for fish that inherit the base <code>FishSmall</code> and <code>FishMedium</code> objects. The generated initializer registers four Goldies in x = 1,100–2,200 and y = 1,400–1,900, and three Glowfins in x = 1,400–2,800 and y = 1,600–2,300.</p>
-      <p>Glowfin&#x27;s Create hook randomizes its glow phase and initializes a dart cooldown. Its End Step hook runs after inherited fish logic. At night it pulses the sprite tint and adds a velocity burst away from a cast lure within 120 pixels while the fish is swimming and the cooldown has expired. During the day it dims and sinks while shallow.</p>
+      <p>The ModKit manifest declares two species with stats, single-frame PNG sprites and coordinate rectangles. The builder generates namespaced fish objects inheriting from <code>FishSmall</code> or <code>FishMedium</code>, hook scripts when present, a package initializer and Fish API registration. That initializer calls <code>jamm_fish_register</code> with stable package and fish keys. The shared runtime assigns Fishalog entries and saves discovery/catch progress by object name in <code>[JAMM_Catalog]</code> in the native slot INI.</p>
+      <p>The initializer places four Goldies in x=1100–2200, y=1400–1900 and three Glowfins in x=1400–2800, y=1600–2300. Goldie uses the normal shallow FishSmall behavior. Glowfin&#x27;s Create hook selects a glow phase and dart cooldown. Its End Step hook runs after inherited fish behavior: at night it pulses tint and, while swimming, darts away from a cast lure within 120 pixels after cooldown; during the day it dims and sinks. Catching and selling remain native.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Goldie manifest walkthrough</h2>
+<p>A ModKit <code>fish</code> entry declares the stable key, parent size, art, stats and initial spawn region. The builder converts this data into a namespaced GameMaker object and initializer call.</p><pre><code>{
+  &quot;id&quot;: &quot;example-fish&quot;,
+  &quot;name&quot;: &quot;Example Fish&quot;,
+  &quot;fish&quot;: [{
+    &quot;key&quot;: &quot;goldie&quot;,
+    &quot;name&quot;: &quot;Goldie&quot;,
+    &quot;size&quot;: &quot;small&quot;,
+    &quot;sprite&quot;: &quot;art/goldie.png&quot;,
+    &quot;value&quot;: 300,
+    &quot;spawn&quot;: { &quot;x&quot;: [1100, 2200], &quot;y&quot;: [1400, 1900], &quot;count&quot;: 4 }
+  }]
+}</code></pre>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>ModKit</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
+<tr><th scope="row">Version</th><td>1.0.0</td></tr>
+<tr><th scope="row">APIs used</th><td>ModKit <code>fish</code> declarations, Fish API <code>jamm_fish_register</code>, and shared Fishalog registration through the Catalog API.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>2 fish objects, 2 sprites and 4 standalone scripts in the source build on a clean base. The scripts are two Glowfin hooks, a package initializer and the Fish API registration stub.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>The native slot INI stores Fishalog catch quality, discovery and population under <code>[JAMM_Catalog]</code>, keyed by the object names <code>jmk_example_fish_goldie</code> and <code>jmk_example_fish_glowfin</code>.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive. A verified build combined Example Fish with Harbor Pack and Showcase Upgrades without conflicts. The Fish API registers species by package and fish key, and the Catalog API tracks progress across profile orders by object name.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>1.0.0: Goldie and Glowfin ModKit walkthrough fish with original art and example hooks.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>Where do the example fish appear?</summary><p>Goldie is placed in the shallow dock area; Glowfin uses a deeper rectangle and its hooks add nocturnal glow and a lure-triggered dart.</p></details>
     </section>
 
     <section class="mod-section">
       <h2>Files in the package</h2>
-      <ul class="package-files">
+<ul class="package-files">
         <li><code>art/glowfin.png</code></li>
         <li><code>art/goldie.png</code></li>
         <li><code>hooks/glowfin_create.gml</code></li>
