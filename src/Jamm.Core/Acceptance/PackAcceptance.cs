@@ -663,26 +663,149 @@ public static class PackAcceptance
 
     private static void CheckUpgradeExternalLoopBounds(CodeReader mergedReader, int actualLength, List<RuntimeRisk> risks)
     {
-        foreach (var (codeEntry, loopVar) in new[]
+        string? alarmText = mergedReader.Get("gml_Object_UpgradeMenu_Alarm_0");
+        if (!string.IsNullOrEmpty(alarmText))
         {
-            ("gml_Object_UpgradeMenu_Alarm_0", "iCard"),
-            ("gml_Object_Girl_Other_10", "i"),
-            ("gml_Object_Gear_Other_15", "i")
-        })
-        {
-            string? text = mergedReader.Get(codeEntry);
-            if (string.IsNullOrEmpty(text)) continue;
-            if (codeEntry != "gml_Object_UpgradeMenu_Alarm_0" && !text.Contains("upgrade_scalar", StringComparison.Ordinal))
-                continue;
-
-            int? bound = FindLiteralLoopBound(GmlReferences.Tokens(text), loopVar);
-            if (bound is { } b && b < actualLength)
+            int? alarmBound = FindUpgradeMenuCardLoopBound(GmlReferences.Tokens(alarmText));
+            if (alarmBound is { } ab && ab < actualLength)
             {
-                risks.Add(new("TABLE-LENGTH", "WARNING", $"{specTable("UpgradeData")}/{codeEntry}",
-                    $"UpgradeData has {actualLength} entries, but {codeEntry} still loops to a hardcoded bound of {b}."));
+                risks.Add(new("TABLE-LENGTH", "WARNING", "UpgradeData/gml_Object_UpgradeMenu_Alarm_0",
+                    $"UpgradeData has {actualLength} entries, but gml_Object_UpgradeMenu_Alarm_0 still loops to a hardcoded bound of {ab}."));
             }
         }
-        static string specTable(string name) => name;
+
+        string? girlText = mergedReader.Get("gml_Object_Girl_Other_10");
+        int? girlResetBound = null;
+        int? girlCopyBound = null;
+        bool girlCopyGuarded = false;
+        if (!string.IsNullOrEmpty(girlText) && girlText.Contains("upgrade_scalar", StringComparison.Ordinal))
+        {
+            var girlTokens = GmlReferences.Tokens(girlText);
+            girlCopyGuarded = HasGearUpgradeScalarLengthCheck(girlTokens);
+            for (int i = 0; i < girlTokens.Count; i++)
+            {
+                if (girlTokens[i].Kind != 'i' || girlTokens[i].Value != "for"
+                    || !LegacyUpgradeRelocation.TryMatchCountBoundLoop(girlTokens, i, out _, out int boundTokenIdx, out bool inclusive, out int bodyEnd)
+                    || !int.TryParse(girlTokens[boundTokenIdx].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int limit))
+                {
+                    continue;
+                }
+
+                int bound = inclusive ? limit + 1 : limit;
+                bool writesGearScalar = false;
+                bool readsGearUpgradeScalar = false;
+                for (int j = boundTokenIdx + 1; j <= bodyEnd && j < girlTokens.Count; j++)
+                {
+                    if (girlTokens[j].Kind == 'i' && girlTokens[j].Value == "gear_upgrade_scalar")
+                        writesGearScalar = true;
+                    if (j + 2 <= bodyEnd && girlTokens[j].Kind == 'i' && girlTokens[j].Value == "gear"
+                        && girlTokens[j + 1].Value == "." && girlTokens[j + 2].Kind == 'i' && girlTokens[j + 2].Value == "upgrade_scalar")
+                    {
+                        readsGearUpgradeScalar = true;
+                    }
+                }
+
+                if (readsGearUpgradeScalar)
+                    girlCopyBound = girlCopyBound is null ? bound : Math.Max(girlCopyBound.Value, bound);
+                else if (writesGearScalar)
+                    girlResetBound = girlResetBound is null ? bound : Math.Min(girlResetBound.Value, bound);
+            }
+        }
+
+        string? gearText = mergedReader.Get("gml_Object_Gear_Other_15");
+        int? gearBound = null;
+        if (!string.IsNullOrEmpty(gearText) && gearText.Contains("upgrade_scalar", StringComparison.Ordinal))
+        {
+            var gearTokens = GmlReferences.Tokens(gearText);
+            for (int i = 0; i < gearTokens.Count; i++)
+            {
+                if (gearTokens[i].Kind != 'i' || gearTokens[i].Value != "for"
+                    || !LegacyUpgradeRelocation.TryMatchCountBoundLoop(gearTokens, i, out _, out int boundTokenIdx, out bool inclusive, out int bodyEnd)
+                    || !int.TryParse(gearTokens[boundTokenIdx].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int limit))
+                {
+                    continue;
+                }
+
+                bool writesUpgradeScalar = false;
+                for (int j = boundTokenIdx + 1; j <= bodyEnd && j < gearTokens.Count; j++)
+                {
+                    if (gearTokens[j].Kind == 'i' && gearTokens[j].Value == "upgrade_scalar")
+                    {
+                        writesUpgradeScalar = true;
+                        break;
+                    }
+                }
+                if (writesUpgradeScalar)
+                {
+                    int bound = inclusive ? limit + 1 : limit;
+                    gearBound = gearBound is null ? bound : Math.Min(gearBound.Value, bound);
+                }
+            }
+        }
+
+        bool copyExceedsGear = girlCopyBound is { } cb && !girlCopyGuarded
+            && ((gearBound is { } gb && cb > gb) || (gearBound is null && cb > actualLength));
+        if (copyExceedsGear)
+        {
+            string gearDetail = gearBound is { } gb2
+                ? $"while gml_Object_Gear_Other_15 only initializes {gb2} entries"
+                : $"exceeding UpgradeData's {actualLength} entries";
+            risks.Add(new("TABLE-LENGTH", "WARNING", "UpgradeData/gml_Object_Girl_Other_10",
+                $"Crash risk: gml_Object_Girl_Other_10 copies gear.upgrade_scalar up to {girlCopyBound!.Value} without a bounds check, {gearDetail} (out-of-bounds read when equipping a hat)."));
+        }
+
+        if (gearBound is { } gBound && gBound < actualLength)
+        {
+            string reason = copyExceedsGear
+                ? $"leaving slots {gBound}..{actualLength - 1} uninitialized, which triggers an out-of-bounds read in gml_Object_Girl_Other_10"
+                : $"missing scalar init for slot {gBound}+; no hat-equip crash risk while gml_Object_Girl_Other_10 stays within {gBound} or checks array_length_1d(gear.upgrade_scalar)";
+            risks.Add(new("TABLE-LENGTH", "WARNING", "UpgradeData/gml_Object_Gear_Other_15",
+                $"Missing scalar init: UpgradeData has {actualLength} entries, but gml_Object_Gear_Other_15 only initializes {gBound} upgrade_scalar entries ({reason})."));
+        }
+
+        if (girlResetBound is { } rBound && rBound < actualLength)
+        {
+            risks.Add(new("TABLE-LENGTH", "WARNING", "UpgradeData/gml_Object_Girl_Other_10",
+                $"Missing scalar init: UpgradeData has {actualLength} entries, but gml_Object_Girl_Other_10 reset loop only initializes {rBound} gear_upgrade_scalar entries."));
+        }
+
+        if (girlCopyBound is { } cBound && cBound < actualLength && !copyExceedsGear)
+        {
+            risks.Add(new("TABLE-LENGTH", "WARNING", "UpgradeData/gml_Object_Girl_Other_10",
+                $"Missing scalar init: UpgradeData has {actualLength} entries, but gml_Object_Girl_Other_10 hat-copy loop only copies {cBound} gear_upgrade_scalar entries (no hat-equip crash risk; slots {cBound}..{actualLength - 1} keep default scalar when equipping a hat)."));
+        }
+    }
+
+    private static int? FindUpgradeMenuCardLoopBound(List<GmlReferences.Token> tokens)
+    {
+        for (int i = 0; i + 2 < tokens.Count; i++)
+        {
+            if (tokens[i].Kind == 'i' && tokens[i].Value == "iCard"
+                && tokens[i + 1].Value is "<" or "<="
+                && tokens[i + 2].Kind == 'n'
+                && int.TryParse(tokens[i + 2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int limit))
+            {
+                return tokens[i + 1].Value == "<=" ? limit + 1 : limit;
+            }
+        }
+        return null;
+    }
+
+    private static bool HasGearUpgradeScalarLengthCheck(List<GmlReferences.Token> tokens)
+    {
+        for (int i = 0; i + 5 < tokens.Count; i++)
+        {
+            if (tokens[i].Kind == 'i' && tokens[i].Value == "array_length_1d"
+                && tokens[i + 1].Value == "("
+                && tokens[i + 2].Kind == 'i' && tokens[i + 2].Value == "gear"
+                && tokens[i + 3].Value == "."
+                && tokens[i + 4].Kind == 'i' && tokens[i + 4].Value == "upgrade_scalar"
+                && tokens[i + 5].Value == ")")
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static (int? Length, string Label) ReadDeclaredTableLength(
