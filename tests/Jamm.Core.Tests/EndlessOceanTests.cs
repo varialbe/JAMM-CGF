@@ -217,7 +217,12 @@ public sealed class EndlessOceanTests
         Assert.DoesNotContain("Ancient_Kingfish", EndlessOceanMod.Source("jmk_endless_ocean_species"));
 
         string compiledLoad = ModObjects.Decompile(data, loadCode);
-        Assert.Contains("base_lunge_mod = 1", compiledLoad);
+        int guardPos = compiledLoad.IndexOf("instance_exists(swimmer)", StringComparison.Ordinal);
+        int sonarPos = compiledLoad.IndexOf("jamm_fish_sonar_init(swimmer)", StringComparison.Ordinal);
+        int lungePos = compiledLoad.IndexOf("base_lunge_mod = 1", StringComparison.Ordinal);
+        Assert.True(guardPos >= 0, compiledLoad);
+        Assert.True(sonarPos > guardPos, compiledLoad);
+        Assert.True(lungePos > sonarPos, compiledLoad);
         Assert.Contains("base_lunge_offset = 0", compiledLoad);
         Assert.Contains("gear_attract_scalar", compiledLoad);
         Assert.Contains("gear_repel_scalar", compiledLoad);

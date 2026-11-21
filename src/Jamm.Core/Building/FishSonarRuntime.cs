@@ -12,11 +12,14 @@ internal static class FishSonarRuntime
     internal static void Ensure(UndertaleData data, Dictionary<string, string> recompile,
         Dictionary<string, string> generated)
     {
-        if (data.Scripts.ByName(Script) is null)
+        var code = data.Code.ByName(Code) ?? UndertaleCode.CreateEmptyEntry(data, Code);
+        if (data.Scripts.ByName(Script) is { } existing)
+            existing.Code = code;
+        else
             data.Scripts.Add(new UndertaleScript
             {
                 Name = data.Strings.MakeString(Script),
-                Code = UndertaleCode.CreateEmptyEntry(data, Code)
+                Code = code
             });
 
         string source;
