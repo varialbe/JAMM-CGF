@@ -90,6 +90,8 @@ and returned west with no generated instances remaining.
 | Returned west | 140,038 | 0 | 0 | 14,370 | 0 | — | — |
 
 The full route data is `~/jamm-night/runs/worldgen-v1-all7-final-worldgen/jamm_bench_worldgen.csv`.
+The merged archive verifier also reported six inherited texture items extending beyond their
+source pages; their original geometry was preserved. The route completed without a CODE ERROR.
 
 ## Showcase captures
 
