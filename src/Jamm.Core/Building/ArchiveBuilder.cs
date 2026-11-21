@@ -94,6 +94,7 @@ public static class ArchiveBuilder
                         semantics.Base, original.Data),
                     semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
+            if (!intermediate) plan = NavCompatibility.GuardPatrol(plan, semantics.Base);
             ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
             // In the addon pass the first source is the already merged base. Start with its
             // asset indices and room IDs while planning edits in the raw ancestor's coordinates.
@@ -364,6 +365,7 @@ public static class ArchiveBuilder
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+            NavCompatibility.RepairRoom(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
             if (bigMoney) MoneyRuntime.Apply(baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
