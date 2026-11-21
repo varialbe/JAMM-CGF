@@ -25,3 +25,18 @@ repetition.
 ## Rules
 AGENTS.md applies. Every command in the foreground (no background tasks). Simple single commands (no `&&`, pipes,
 redirections, no `rm`). Do not commit; the orchestrator commits.
+
+## Round 2 – orchestrator in-game review of round 1 (REJECTED)
+Captures of your 0.2.1 build: `~/jamm-night/n21/ocean/pans/jamm_worldgen_wreck.png` and
+`jamm_worldgen_pan_3_0.png` (compare with 0.2.0: `~/jamm-night/worldgen-v1/showcase/wreck.png`).
+- The underlay now shows large flat light/dark blotches; the cobble outlines of vanilla rock are gone. It looks
+  magnified roughly 3–4x: a visible square grid of ~140 px cells, not 480 px.
+- Cell borders are clearly visible as hard straight lines (both horizontal and vertical).
+Likely causes to check first: texture coordinates (map exactly one 480x480 frame per 480x480 world cell using the
+frame's UV rectangle from `sprite_get_uvs`, which is normalized and may include padding/cropping offsets
+[left, top, right, bottom, x-offset, y-offset, ...]); texture page scaling (`draw_vertex_texture` expects 0..1 within
+the page); whether the synthesized tiles really contain cobble outlines (dump one tile PNG to `.audit/` and look at it
+with an image tool); seams in the tile synthesis.
+Goal: looks like vanilla cave rock (irregular cobbles with dark outlines) at 1:1 scale, no visible grid. Write a
+small headless check that renders a 3x3 cell block from the tile sprites into `.audit/preview.png` (C# test helper or
+python3 with the dumped tiles) so you can verify the look yourself before finishing.
