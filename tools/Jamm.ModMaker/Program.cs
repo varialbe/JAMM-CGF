@@ -29,14 +29,16 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
-                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload] [--silo-video] [--silo-frames]
+                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video] [--silo-frames]
+                  bench   <submarine.win> <out.win> --scene submarine (requires JAMM Console)
                   bench   <weather.win> <out.win> --scene weather
                   bench   <any.win> <out.win> --scene autoplay
                   bench   <legacy.win> <out.win> --scene maize
                   bench   <modded.win> <out.win> --scene money
+                  bench   <harbor-town.win> <out.win> --scene harbor
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -95,7 +97,9 @@ public static class Program
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
+            case "bench" when SubmarineScene.Requested(args): SubmarineScene.Apply(data); Save(data, output!); return 0;
             case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when HarborScene.Requested(args): HarborScene.Apply(data); Save(data, output!); return 0;
             case "bench" when AutoplayScene.Requested(args): AutoplayScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
             case "bench" when OptionValue(args, "--scene") == "maize": MaizeScene.Apply(data); Save(data, output!); return 0;
@@ -125,7 +129,8 @@ public static class Program
         }
     }
 
-    private static BenchmarkOptions ParseBenchOptions(string[] args)
+    /// <summary>Parses CLI arguments for the <c>bench</c> subcommand.</summary>
+    public static BenchmarkOptions ParseBenchOptions(string[] args)
     {
         var scene = BenchmarkScene.Dock;
         double warmup = 5.0;
@@ -146,6 +151,9 @@ public static class Program
         bool fishGrid = false;
         bool decorSleep = false;
         bool screenshot = false;
+        var fishMode = BenchmarkFishMode.Full;
+        int fishCap = -1;
+        double fishScale = 1.0;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -176,11 +184,23 @@ public static class Program
                 case "--deep-x": deepX = ParseDouble(RequireValue(args, ref i, arg), arg); break;
                 case "--deep-y": deepY = ParseDouble(RequireValue(args, ref i, arg), arg); break;
                 case "--boat-slot": boatSlot = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                case "--fish-mode": fishMode = BenchmarkMod.ParseFishMode(RequireValue(args, ref i, arg)); break;
+                case "--fish-cap":
+                    fishCap = ParseInt(RequireValue(args, ref i, arg), arg);
+                    if (fishCap < 0) throw new ArgumentException("--fish-cap must be >= 0.");
+                    break;
+                case "--fish-scale":
+                    fishScale = ParseDouble(RequireValue(args, ref i, arg), arg);
+                    if (double.IsNaN(fishScale) || double.IsInfinity(fishScale) || fishScale < 1.0)
+                        throw new ArgumentException("--fish-scale must be >= 1.");
+                    break;
                 default: throw new ArgumentException($"Unknown bench option '{arg}'.");
             }
         }
 
-        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot);
+        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot, fishMode, fishCap, fishScale);
+        BenchmarkMod.ValidateOptions(options);
+        return options;
     }
 
     private static string RequireValue(string[] args, ref int i, string option)
@@ -210,7 +230,7 @@ public static class Program
             ?? throw new InvalidDataException("Saved archive missing 'NewWorld'.");
         if (!newWorld.GameObjects.Any(g => g.ObjectDefinition == ctrl))
             throw new InvalidDataException($"Saved 'NewWorld' does not contain '{BenchmarkMod.ObjectName}'.");
-        Console.WriteLine($"bench: scene={BenchmarkMod.SceneName(opts.Scene)}, warmup={opts.WarmupSeconds}s, duration={opts.CaptureSeconds}s, max_samples={opts.MaxSamples}, auto_exit={opts.AutoExit}");
+        Console.WriteLine($"bench: scene={BenchmarkMod.SceneName(opts.Scene)}, warmup={opts.WarmupSeconds}s, duration={opts.CaptureSeconds}s, max_samples={opts.MaxSamples}, auto_exit={opts.AutoExit}, fish_mode={BenchmarkMod.FishModeName(opts.FishMode)}, fish_cap={opts.FishCap}, fish_scale={opts.FishScale}");
     }
 
     private static string? OptionValue(string[] args, string name)

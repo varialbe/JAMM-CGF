@@ -82,6 +82,23 @@ public static class ArchiveBuilder
             }
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
+            bool perfIdentityBuild = !intermediate && inputs.Count == 1 && IsPerfIdentityPatch(inputs[0].Patch)
+                && (resolutions is null || resolutions.Count == 0)
+                && perfSettings?.StartEnabled != true && perfSettings?.FishGrid != true
+                && perfSettings?.DecorSleep != true;
+            if (perfIdentityBuild && noRepack)
+            {
+                var emptyPlan = new BuildPlan([], ["JAMM Perf contains no asset changes; preserving the original archive."]);
+                var unchanged = new BuildResult(emptyPlan, original.Inspection, null, original.Inspection.Counts, 0);
+                if (dryRun) return unchanged;
+                progress?.Invoke("JAMM Perf contains no asset changes; copying the original archive byte for byte");
+                var verifiedCopy = Publish(output, protectedPaths, emptyPlan, original.Inspection, stream =>
+                {
+                    using var source = new CancellableGameStream(basePath, cancellationToken);
+                    source.CopyTo(stream);
+                }, progress, cancellationToken, options, exactCopy: true);
+                return unchanged with { Verification = verifiedCopy, SizeBytes = verifiedCopy.Inspection.FileSize };
+            }
             var vanillaCode = vanillaArchive is null ? semantics.Base : SemanticCode.Read(vanillaArchive.Data, "vanilla guard baseline", progress,
                 AssetSymbols.Ambiguous([SemanticReferences.Names(vanillaArchive.Data), semantics.BaseNames]), options, vanillaArchive.Inspection.Sha256);
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
@@ -90,18 +107,25 @@ public static class ArchiveBuilder
             // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
             // jamm_api_init when no items runtime was injected.
             var plan = BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, unlockFixMods, hasMergedBase);
-            if (!intermediate)
-                plan = CatalogRuntime.PreparePlan(
-                    FishRuntime.PreparePlan(
-                        ItemsRuntime.PreparePlan(
-                            HudRuntime.PreparePlan(
-                                MenuRuntime.PreparePlan(plan, semantics.Base, original.Data),
-                                semantics.Base),
-                            semantics.Base, semantics.BaseNames),
-                        semantics.Base, original.Data),
+            if (!intermediate && !perfIdentityBuild)
+                plan = UpgradeLoopBounds.PreparePlan(
+                    CatalogRuntime.PreparePlan(
+                        FishRuntime.PreparePlan(
+                            ItemsRuntime.PreparePlan(
+                                HudRuntime.PreparePlan(
+                                    MenuRuntime.PreparePlan(plan, semantics.Base, original.Data),
+                                    semantics.Base),
+                                semantics.Base, semantics.BaseNames),
+                            semantics.Base, original.Data),
+                        semantics.Base),
                     semantics.Base);
-            plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
-            if (!intermediate) plan = NavCompatibility.GuardPatrol(plan, semantics.Base);
+            if (!perfIdentityBuild)
+            {
+                plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
+                if (!intermediate) plan = NavCompatibility.GuardPatrol(plan, semantics.Base);
+            }
+            else
+                plan = plan with { Decisions = [.. plan.Decisions, "JAMM Perf contains no asset changes; skipped generic runtime injection."] };
             ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
             // In the addon pass the first source is the already merged base. Start with its
             // asset indices and room IDs while planning edits in the raw ancestor's coordinates.
@@ -115,7 +139,7 @@ public static class ArchiveBuilder
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate, bigMoney, valueGuard, vanillaArchive?.Data ?? original.Data, vanillaCode);
+                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate, bigMoney, valueGuard, vanillaArchive?.Data ?? original.Data, vanillaCode, perfIdentityBuild);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -131,15 +155,32 @@ public static class ArchiveBuilder
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
             var acceptance = intermediate ? null : AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
-            if (!intermediate && data.GameObjects.ByName(PerfMode.ControllerName) is not null)
+            if (!intermediate && (data.GameObjects.ByName(PerfMode.ControllerName) is not null
+                || perfSettings?.StartEnabled == true || perfSettings?.FishGrid == true || perfSettings?.DecorSleep == true))
             {
                 // Verify selected source references and acceptance before profiling-independent
                 // runtime edits. The read-back verifier then checks the generated bytecode too.
                 List<UndertaleCode> perfEdits = [];
-                if (perfSettings is not null) PerfMode.ApplyDefaults(data, perfSettings, perfEdits);
-                string decision = FishGrid.Apply(data, perfEdits, perfSettings?.FishGrid ?? true);
-                var decorDecisions = DecorSleep.Apply(data, perfEdits, perfSettings?.DecorSleep ?? true);
-                plan = plan with { Decisions = [.. plan.Decisions, decision, .. decorDecisions] };
+                if (data.GameObjects.ByName(PerfMode.ControllerName) is null && perfSettings?.StartEnabled == true)
+                {
+                    var controllerCompiler = new CompileGroup(data);
+                    PerfMode.Queue(data, controllerCompiler, debug: false);
+                    ModObjects.Compile(controllerCompiler);
+                }
+                if (perfSettings is not null && data.GameObjects.ByName(PerfMode.ControllerName) is not null)
+                    PerfMode.ApplyDefaults(data, perfSettings, perfEdits);
+                if (perfSettings?.StartEnabled == true)
+                    PerfMode.ApplyScheduling(data, perfEdits);
+                if (perfSettings?.FishGrid == true)
+                {
+                    string decision = FishGrid.Apply(data, perfEdits, enabledByDefault: true);
+                    plan = plan with { Decisions = [.. plan.Decisions, decision] };
+                }
+                if (perfSettings?.DecorSleep == true)
+                {
+                    var decorDecisions = DecorSleep.Apply(data, perfEdits, enabledByDefault: true);
+                    plan = plan with { Decisions = [.. plan.Decisions, .. decorDecisions] };
+                }
                 if (perfEdits.Count > 0)
                 {
                     var names = SemanticReferences.Names(data);
@@ -158,6 +199,14 @@ public static class ArchiveBuilder
             return new(plan, original.Inspection, verification, counts, verification.Inspection.FileSize, remapped, expectedReferences.Count, acceptance);
         }
         finally { foreach (var source in sources) source.Dispose(); }
+    }
+
+    private static bool IsPerfIdentityPatch(ModPatch patch)
+    {
+        string identity = $"{patch.Mod.Name} {patch.Mod.FileName}";
+        return identity.Contains("perf", StringComparison.OrdinalIgnoreCase)
+            && !patch.Changes.Values.Any(changes =>
+                changes.Added.Count > 0 || changes.Changed.Count > 0 || changes.Removed.Count > 0);
     }
 
     private static VerificationResult Publish(string output, string[] protectedPaths, BuildPlan plan, GameInspection original,
@@ -210,8 +259,10 @@ public static class ArchiveBuilder
     private static IReadOnlyDictionary<string, string> Apply(UndertaleData data, UndertaleData ancestor,
         IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan,
         IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate,
-        bool bigMoney, ValueGuardOptions valueGuard, UndertaleData vanilla, IReadOnlyDictionary<string, CodeText> vanillaCode)
+        bool bigMoney, ValueGuardOptions valueGuard, UndertaleData vanilla, IReadOnlyDictionary<string, CodeText> vanillaCode,
+        bool perfIdentityBuild)
     {
+        if (perfIdentityBuild) return new Dictionary<string, string>(StringComparer.Ordinal);
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
         Dictionary<string, string> recompile = new(StringComparer.Ordinal);
@@ -373,6 +424,8 @@ public static class ArchiveBuilder
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile, generatedCode, valueGuard.FishValueCap);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+            HarborRuntime.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
+            EndlessOceanMod.RefreshMergedLayout(data, recompile, generatedCode, extraDecisions);
             NavCompatibility.RepairRoom(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
             if (bigMoney) MoneyRuntime.Apply(baseCode, recompile, generatedCode, extraDecisions);
             ValueGuard.Apply(data, vanilla, vanillaCode, baseCode, recompile, generatedCode, plan, patches, valueGuard, extraDecisions,

@@ -128,7 +128,7 @@ Examining every non-Fish placed sprite and every `AbstractLight` sprite in `all7
 
 ### 2.1 Architecture & Generic Build-Time Analysis
 
-`DecorSleep` (`src/Jamm.Core/Builtins/DecorSleep.cs` and `src/Jamm.Core/Builtins/DecorSleepAnalysis.cs`) is integrated into the JAMM Perf builtin (`PerfMod`, `PerfSettings.DecorSleep = true` by default) and runs independently of the `F8` distance-throttling toggle via its own INI switch `[Perf] DecorSleep=1` in `jamm_perf.ini` (and CLI `cgfmm profile perf <name> decor on|off`).
+`DecorSleep` (`src/Jamm.Core/Builtins/DecorSleep.cs` and `src/Jamm.Core/Builtins/DecorSleepAnalysis.cs`) is integrated into the JAMM Perf profile build path (`PerfSettings.DecorSleep = true` by default in profiles; `StartEnabled = false`, `FishGrid = false`, `Interval = 4`). Following the `CGF-PERF-REGRESS-001` rework, `BuiltinMods("perf")` (`GeneratorVersion = "8"`) and `RecipePackage("perf")` inject no per-frame code on their own (`applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false, applyDecorSleep: false`), and `ArchiveBuilder` installs `DecorSleep` only when `perfSettings?.DecorSleep == true` (never in plain `perfSettings == null` / defaults-off builds, keeping `vanilla + builtin-perf` byte-identical). When installed, it is also configurable at runtime via `[Perf] DecorSleep=1|0` in `jamm_perf.ini` (and CLI `cgfmm profile perf <name> decor on|off`), independent of F8.
 
 At build time, `DecorSleepAnalysis.Analyze(UndertaleData)` inspects object hierarchies, room placements, external references, and GML event handlers generically so modded decor objects are covered automatically:
 
@@ -198,6 +198,18 @@ Per-hotspot `--profile` call/cost reductions (`all7` `dock`, 85 vs 142 ticks):
 
 **Full `builtin-perf` build + F8 independence (`dsf-perf-f8off-dock`, 10 s)**: Built `all7.win` + `builtin-perf` via `cgfmm build` (`Semantic reference verification: PASS (3212 code entries)`, `Catalog verification passed: 425 fish...`) and ran with `[Perf] Mode=0, FishGrid=0, DecorSleep=1`: `# perf_mode=0 interval=4 eligible_events=0 skipped_events=0`, `# fish_grid=0`, `# decor_sleep=1 tracked=8928 sleeping_deact=3156`, `instances=9267`, `loop_us mean=45,659 µs (p50=42,494 µs)`. `DecorSleep` operates cleanly and independently of F8.
 
+**Post-merge (`main` + `CGF-PERF-REGRESS-001` / sanitizer split) dock re-bench (20 s capture via `~/jamm-bench/run.sh`, `DecorSleep` not installed vs `--decor-sleep`)**:
+
+Note: During the `all7` and `pub5` runs (`decor3-*`), Xwayland/desktop idle SwapBuffers throttling capped `present_sleep_us_mean` at ~864–934 ms (`1.00 FPS`); `loop_us`, `step_us`, and `draw_us` measure pure in-frame CPU game-loop duration (`BeginStep`–`DrawGUIEnd`, excluding `present_sleep_us`). `vanilla` ran unthrottled (`decor4-*`, 41.28 vs 32.08 FPS, with two OS stall frames #427/#608 of 419 ms and 1,937 ms skewing `decor4-vanilla-on` mean).
+
+| Build & Scene | Active instances (off -> on) | `loop_us` mean (off -> on) | `loop_us` p50 (off -> on) | `loop_us` p95 (off -> on) | `step_us` / `draw_us` p50 (off -> on) | Change (`loop_us` mean / p50) |
+|---|---:|---:|---:|---:|---:|---|
+| `all7` dock (`decor3`) | 12,393 -> 9,263 (`3,156` deact) | 74.87 -> 66.84 ms | 70.16 -> 61.78 ms | 95.50 -> 80.56 ms | 63.14/6.81 -> 57.33/4.44 ms | **-10.7% / -12.0%** |
+| `pub5` dock (`decor3`) | 10,170 -> 8,299 (`1,872` deact) | 136.90 -> 126.67 ms | 138.72 -> 121.81 ms | 148.26 -> 139.30 ms | 110.23/27.99 -> 97.42/24.39 ms | **-7.5% / -12.2%** |
+| `vanilla` dock (`decor4`) | 2,285 -> 1,940 (`336` deact) | 23.37 -> 26.79 ms | 22.92 -> 22.75 ms | 27.12 -> 26.11 ms | 20.28/2.62 -> 20.19/2.52 ms | **+14.6% (2-frame stall) / -0.7% p50 (-3.7% p95)** |
+
+* **Plain `builtin-perf` & profile toggle parity**: `cgfmm build --base <vanilla> --order jamm-perf.win --no-repack` and `cgfmm apply` with `profile perf <name> decor off` both produced SHA-256 `dbb2e5c4…9286d2c1` (byte-identical to vanilla); `cgfmm apply` with default `DecorSleep = true` installed `DecorSleep` without `obj_jamm_perf` or `FishGrid`.
+
 ### 3.3 Visual Parity Check
 
 Captured in-game GM framebuffer screenshots (`screen_save` via `jamm-modmaker bench --screenshot`) at identical camera positions (`dock` `X:928 Y:1062` and `deepwater` `X:21000 Y:7200`) with `DecorSleep=0` vs `DecorSleep=1`:
@@ -212,5 +224,5 @@ Visual inspection confirms foreground plants, swaying weeds, background parallax
 
 ### 3.4 Automated Tests & Build
 
-* Synthetic .NET/GML tests in `tests/Jamm.Core.Tests/DecorSleepTests.cs` verify pattern-based coverage, exemptions (`Fish`, `Batfin`, `Coral`, `BreakableRock`, `MissileSilo`, `Lilypad`, `CrystalfishLight`, `Camera`, `SaveManager`, `jamm_chunk_stream`), `SonarPanel_Draw_0` `with (SceneItem)` deactivation-safe exception, child-light ownership (`GlowPlant` active-guarded), `light_anchor` patching, parallax/alpha-lerp/angle-pulse catch-up setup, INI toggle persistence, and graceful skip on missing legacy room/layout.
-* Full build (`dotnet build -c Release`) passes with 0 warnings and 0 errors, and the full test suite passes (`579 passed, 16 skipped` real-file tests in `Jamm.Core.Tests`; `130 passed, 1 skipped` in `Jamm.Gui.Tests`).
+* Synthetic .NET/GML tests in `tests/Jamm.Core.Tests/DecorSleepTests.cs` verify pattern-based coverage, exemptions (`Fish`, `Batfin`, `Coral`, `BreakableRock`, `MissileSilo`, `Lilypad`, `CrystalfishLight`, `Camera`, `SaveManager`, `jamm_chunk_stream`), `SonarPanel_Draw_0` `with (SceneItem)` deactivation-safe exception, child-light ownership (`GlowPlant` active-guarded), `light_anchor` patching, parallax/alpha-lerp/angle-pulse catch-up setup, INI toggle persistence, legacy profile JSON `DecorSleep` default (`true`), `ArchiveBuilder` opt-in installation (`DecorSleep` omitted on `perfSettings: null` or `DecorSleep: false`, installed on default `PerfSettings`), and graceful skip on missing legacy room/layout.
+* Full build (`dotnet build -c Release`) passes with 0 warnings and 0 errors, and the full test suite passes after merging `main` (`649 passed, 17 skipped` real-file tests in `Jamm.Core.Tests`; `130 passed, 1 skipped` in `Jamm.Gui.Tests`).

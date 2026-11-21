@@ -14,11 +14,11 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 public sealed class BuiltinMods(ManagerStore store)
 {
     /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "6";
+    public const string GeneratorVersion = "8";
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {
-        new BuiltinMod("perf", "JAMM Perf", "Performance optimizations and optional fish scheduling. F8 switches modes."),
+        new BuiltinMod("perf", "JAMM Perf", "Optional fish scheduling. Enable the scheduler in the profile to use F8."),
         new BuiltinMod("smooth", "JAMM Smooth", "Smoother rendering. F7 cycles 60/120/off."),
         new BuiltinMod("hd-lite", "JAMM HD Lite", "Fullscreen rendering with original textures. F11 toggles fullscreen."),
         new BuiltinMod("console", "JAMM Console", "F12 or backtick opens the console. Type help for commands; unlockall unlocks everything (equipment, max level, full catalog).")
@@ -27,7 +27,7 @@ public sealed class BuiltinMods(ManagerStore store)
     /// <summary>Single source of truth for in-game hotkeys and console commands.</summary>
     public static IReadOnlyList<BuiltinHotkey> Hotkeys { get; } = Array.AsReadOnly(new BuiltinHotkey[]
     {
-        new("F8", "Perf overlay (switches modes)"),
+        new("F8", "Perf overlay (switches enabled scheduling modes)"),
         new("F7", "Smooth (cycles 60/120/off)"),
         new("F11", "HD Lite fullscreen (toggles fullscreen)"),
         new("F12 or backtick", "Console (opens in-game console; ` also toggles)"),
@@ -79,7 +79,7 @@ public sealed class BuiltinMods(ManagerStore store)
                 cancellationToken.ThrowIfCancellationRequested();
                 switch (id)
                 {
-                    case "perf": PerfMod.Apply(data, applyFishGrid: false, applyDecorSleep: false); break;
+                    case "perf": PerfMod.Apply(data, applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false, applyDecorSleep: false); break;
                     case "smooth": SmoothMod.Apply(data); break;
                     case "hd-lite": HdMod.Apply(data, null); break;
                     case "console": ConsoleMod.Apply(data); break;

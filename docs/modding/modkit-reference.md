@@ -36,6 +36,7 @@ my-mod/
   * Upgrades: icon sprite `jmk_<id>_<key>_icon`, optional hooks `jmk_<id>_<key>_{apply,step}`.
   * Room objects use `jmk_<id>_object_<key>`.
   * Init script: `jamm_init_<id>` when the package registers fish or items (with hyphens replaced by underscores).
+* Shared package scripts use `jmk_<id>_script_<key>` and can be called from any package hook.
 * **Standalone placeholders**: `ModKitBuilder` adds `return -1;` placeholder scripts only for the `jamm_*_register` functions the package actually calls, so the built `.win` verifies standalone and merges with zero conflicts when JAMM replaces them at merge time.
 
 ---
@@ -61,13 +62,16 @@ my-mod/
 | `weathers` | array | No | `[]` | [Weather schedule, visuals, audio and fish](weather.md). |
 | `areas` | array | No | `[]` | [Room areas and follow anchors](areas.md). |
 | `objects` | array | No | `[]` | Custom room objects with optional event hooks. |
+| `scripts` | array | No | `[]` | Namespaced GML scripts callable by package hooks: `{ "key": "cost", "file": "scripts/cost.gml" }`. |
 | `sprites` | array | No | `[]` | [Build-time sprite recipes](#sprite-recipes). |
 
 ---
 
 ## `objects` entries
 
-Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step` and `hooks.draw` accept package-relative `.gml` files and run as the object's Create, normal Step and Draw events. A Draw hook can call `draw_self()` to include the object's assigned sprite.
+Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step`, `hooks.draw` and `hooks.drawGui` accept package-relative `.gml` files and run as the object's Create, normal Step, Draw and Draw GUI events. A Draw hook can call `draw_self()` to include the object's assigned sprite. A Draw GUI hook is useful for a package-owned interface tied to that room object.
+
+Use `scripts[]` for reusable GML functions shared by a package's hooks. Each entry has a unique `key` and a package-relative `.gml` `file`; JAMM creates `jmk_<id>_script_<key>`. Call it directly by its generated name or use `script_execute` when the name is selected dynamically.
 
 Place the object by referring to `jmk_<id>_object_<key>` in an area's `pieces` or `lights`. Room objects have no parent and are recreated with the room. An area can use a colocated controller for an animation or trigger in [the Silo tutorial](../../examples/modkit/silo/README.md).
 
@@ -157,7 +161,7 @@ ModKit fish override `Other_10` (`ev_user0`) with **path-free idle swimming** so
 
 ## `boats` Entries
 
-Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. Boats do not support `hooks`.
+Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. A boat may use the optional lifecycle hooks below to add vehicle behavior while keeping JAMM's normal shop and save integration.
 
 | Field | Type | Required | Default | Constraints / Notes |
 | :--- | :--- | :---: | :--- | :--- |
@@ -170,6 +174,13 @@ Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. Boats
 | `unlocked` | bool | No | `false` | `false` (`0`, purchasable in shop) or `true` (`1`, already owned). |
 | `stats` | object | No | See right | `maxSpeed` (`4`, min `0.1`), `capacity` (`4`, int min `1`), `maxDistance` (`4500`, min `500`), `moveBonus` (`0`, min `0`). |
 | `origin` | `[x, y]` | No | center | 2-integer origin for the world `sprite` (the `card` sprite is always centered). |
+| `hooks` | object | No | `{}` | Optional package-relative `.gml` files: `create`, `beginStep`, `step`, `endStep`, `drawGui`, `destroy`. |
+
+### Vehicle hooks
+
+Hooks run on the registered child of `Boat`, so the instance keeps the normal rider, storage, shop, and save behavior. Each file contains the event body, not a script name. `create` runs after `event_inherited()` and JAMM's standard boat fields are initialized. The three Step hooks replace their matching child event; call `event_inherited()` explicitly when vanilla behavior is needed. `drawGui` replaces the Draw GUI event. `destroy` runs before `event_inherited()` cleanup automatically. No other hook calls inherited behavior automatically.
+
+Use these hooks to implement an opt-in vehicle such as a submarine. Store state on the boat instance, keep the rider's position and rod anchors in sync, and return those fields to a valid surface state when the vehicle exits. Hooks use the same path validation and GML compilation as other ModKit hooks. A shared read-only query for submerged vehicles is not available yet; mods that need to coordinate should agree on a qualified instance variable or wait for a future Vehicle API.
 
 ---
 

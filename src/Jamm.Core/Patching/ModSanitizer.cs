@@ -45,15 +45,16 @@ public sealed record ModSanitizerResult(ModPatch Patch, ModSanitizerReport Repor
 
 /// <summary>
 /// Deterministic hunk-level and HUD-asset sanitizer over portable <see cref="ModPatch"/> documents.
-/// Classifies code hunks into <c>timing</c>, <c>tick-throttle</c>, <c>distance-cull</c>, <c>fps-adaptive</c>,
-/// <c>debug-overlay</c>, <c>content</c>, or <c>unclassified</c>; reverts non-content performance hacks and
+/// Classifies code hunks into harmful categories such as <c>timing</c>, <c>tick-throttle</c>, <c>distance-cull</c>,
+/// <c>fps-adaptive</c>, and <c>debug-overlay</c>, while marking recognized safe render/scene reductions
+/// <c>benign-perf</c>; reverts harmful performance hacks and
 /// third-party HUD/UI replacements (<c>hud-style</c>) to the base version while preserving content (including
 /// code-referenced appended frames on HUD sprites such as <c>spr_upgradeicons</c>); and removes unreferenced helpers.
 /// </summary>
 public static partial class ModSanitizer
 {
     /// <summary>Current deterministic sanitizer rule revision used to invalidate cached sanitized patches and compatibility checks.</summary>
-    public const int Version = 3;
+    public const int Version = 5;
 
     /// <summary>Category for delta/time_scalar/DELTA_INSTANT/room_speed/game_set_speed/frame-limiter edits.</summary>
     public const string Timing = "timing";
@@ -65,6 +66,8 @@ public static partial class ModSanitizer
     public const string FpsAdaptive = "fps-adaptive";
     /// <summary>Category for <c>draw_text*</c> overlays displaying FPS or camera/instance coordinates.</summary>
     public const string DebugOverlay = "debug-overlay";
+    /// <summary>Recognized off-screen work reductions kept by default because they do not alter gameplay results.</summary>
+    public const string BenignPerformance = "benign-perf";
     /// <summary>Category for third-party replacements of base HUD/UI sprites, fonts, or backgrounds.</summary>
     public const string HudStyle = "hud-style";
     /// <summary>Category for gameplay, fish, item, catalog, room, or UI content kept intact.</summary>
@@ -190,6 +193,8 @@ public static partial class ModSanitizer
             string[] bSlice = baseLines[b0..b1];
             string[] mSlice = modLines[m0..m1];
             var (category, revertedSlice, summary) = ClassifyAndRevertSlice(entryName, bSlice, mSlice, throttleVariables);
+            if (IsBenignPerformanceHunk(entryName, category, JoinLines(mSlice)))
+                category = BenignPerformance;
             result.Add(new(
                 category,
                 b0 + 1,
@@ -204,7 +209,7 @@ public static partial class ModSanitizer
         return result;
     }
 
-    /// <summary>Sanitizes a portable <see cref="ModPatch"/> deterministically without touching game archives.</summary>
+    /// <summary>Sanitizes harmful author changes while keeping recognized benign performance edits by default.</summary>
     public static ModSanitizerResult Sanitize(
         ModPatch patch,
         bool keepPerformanceChanges = false,
@@ -268,7 +273,8 @@ public static partial class ModSanitizer
                     int bStart = hunk.BaseStart - 1;
                     int bEnd = bStart + hunk.BaseLength;
                     rebuilt.AddRange(baseLines[baseCursor..bStart]);
-                    if (hunk.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
+                    bool benignPerformance = IsBenignPerformanceHunk(entry.Name, hunk.Category, hunk.ModText);
+                    if (!benignPerformance && hunk.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
                     {
                         anyReverted = true;
                         rebuilt.AddRange(SplitLines(hunk.RevertedText));
@@ -319,6 +325,8 @@ public static partial class ModSanitizer
                 }
                 string[] lines = SplitLines(LineDiff.Normalize(modCode.Text));
                 var (cat, _, summary) = ClassifyAndRevertSlice(addedCode.Name, [], lines, throttleVars);
+                if (IsBenignPerformanceHunk(addedCode.Name, cat, modCode.Text))
+                    cat = BenignPerformance;
                 addedCodeClassifications[addedCode.Name] = (cat, summary);
             }
 
@@ -351,7 +359,8 @@ public static partial class ModSanitizer
                     continue;
                 }
                 if (addedCodeClassifications.TryGetValue(addedCode.Name, out var info)
-                    && info.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay)
+                    && info.Category is Timing or TickThrottle or DistanceCull or FpsAdaptive or DebugOverlay
+                    && !IsBenignPerformanceHunk(addedCode.Name, info.Category, addedCode.ModCode?.Text ?? ""))
                 {
                     candidateHelperCode.Add(addedCode.Name);
                 }
@@ -1123,6 +1132,24 @@ public static partial class ModSanitizer
     }
 
     private static bool IsStructuralToken(string trimmed) => trimmed is "" or "{" or "}" or "else";
+
+    private static bool IsBenignPerformanceHunk(string entryName, string category, string modText)
+    {
+        if (category == BenignPerformance)
+            return true;
+        // These changes only throttle or hide environmental cave rocks.
+        if (category == TickThrottle && entryName.StartsWith("gml_Object_CaveRock_", StringComparison.Ordinal))
+            return true;
+
+        // Draw-only fish culls and decor step cut-offs do not deactivate fish or alter sonar.
+        if (category == DistanceCull && entryName is "gml_Object_Fish_Draw_0"
+            or "gml_Script_fish_basicdraw" or "gml_Script_fish_predraw_switchcase")
+            return modText.Contains("point_distance", StringComparison.Ordinal);
+        if (category == DistanceCull && entryName is "gml_Object_Weed_Step_0" or "gml_Object_Dangler_Step_0")
+            return modText.Contains("point_distance", StringComparison.Ordinal)
+                && (modText.Contains("visible = false", StringComparison.Ordinal) || modText.Contains("exit", StringComparison.Ordinal));
+        return false;
+    }
 
     private static bool IsTimingLine(string trimmed) =>
         TimingWriteRegex().IsMatch(trimmed)

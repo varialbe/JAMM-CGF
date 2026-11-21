@@ -1,0 +1,200 @@
+{
+  "id": "harbor-town",
+  "name": "Harbor Town",
+  "version": "0.1.0",
+  "author": "JAMM",
+  "description": "Build up the dock with a lighthouse, an aquarium, and a golden statue.",
+  "scripts": [
+    {
+      "key": "cost",
+      "file": "scripts/cost.gml"
+    },
+    {
+      "key": "bonus",
+      "file": "scripts/bonus.gml"
+    },
+    {
+      "key": "stage",
+      "file": "scripts/stage.gml"
+    },
+    {
+      "key": "format",
+      "file": "scripts/format.gml"
+    },
+    {
+      "key": "save",
+      "file": "scripts/save.gml"
+    },
+    {
+      "key": "buy",
+      "file": "scripts/buy.gml"
+    },
+    {
+      "key": "fish",
+      "file": "scripts/fish.gml"
+    },
+    {
+      "key": "command",
+      "file": "scripts/command.gml"
+    }
+  ],
+  "sprites": [
+    {
+      "key": "lighthouse",
+      "width": 144,
+      "height": 124,
+      "origin": [
+        72,
+        123
+      ],
+      "compose": [
+        [
+          {"file": "parts/stake.svg", "x": 59, "y": 110, "scaleX": 1, "scaleY": 1}
+        ],
+        [
+          {"from": "spr_landscape3", "crop": {"x": 18, "y": 230, "w": 222, "h": 295}, "x": 55, "y": 91, "scaleX": 0.157658, "scaleY": 0.105085, "paletteMap": {"#3b6f58": "#a9ad84", "#4e7e6a": "#e7d9a4"}, "edgeSoftness": 0.4},
+          {"from": "spr_landscape3", "crop": {"x": 28, "y": 119, "w": 208, "h": 116}, "x": 50, "y": 62, "scaleX": 0.211538, "scaleY": 0.15, "paletteMap": {"#3b6f58": "#647762", "#4e7e6a": "#7d9274"}, "edgeSoftness": 0.42},
+          {"file": "parts/lantern.svg", "x": 60, "y": 77, "scaleX": 1, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 49, "y": 119, "scaleX": 0.7833333333333333, "scaleY": 0.85}
+        ],
+        [
+          {"from": "spr_landscape3", "crop": {"x": 18, "y": 230, "w": 222, "h": 295}, "x": 52, "y": 79, "scaleX": 0.184685, "scaleY": 0.145763, "paletteMap": {"#3b6f58": "#a9ad84", "#4e7e6a": "#e7d9a4"}, "edgeSoftness": 0.4},
+          {"from": "spr_landscape3", "crop": {"x": 28, "y": 119, "w": 208, "h": 116}, "x": 47, "y": 50, "scaleX": 0.240385, "scaleY": 0.15, "paletteMap": {"#3b6f58": "#647762", "#4e7e6a": "#7d9274"}, "edgeSoftness": 0.42},
+          {"file": "parts/lantern.svg", "x": 60, "y": 65, "scaleX": 1, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 46, "y": 119, "scaleX": 0.8833333333333333, "scaleY": 0.85}
+        ],
+        [
+          {"from": "spr_landscape3", "crop": {"x": 18, "y": 230, "w": 222, "h": 295}, "x": 49, "y": 67, "scaleX": 0.211712, "scaleY": 0.186441, "paletteMap": {"#3b6f58": "#a9ad84", "#4e7e6a": "#e7d9a4"}, "edgeSoftness": 0.4},
+          {"from": "spr_landscape3", "crop": {"x": 28, "y": 119, "w": 208, "h": 116}, "x": 44, "y": 38, "scaleX": 0.269231, "scaleY": 0.15, "paletteMap": {"#3b6f58": "#647762", "#4e7e6a": "#7d9274"}, "edgeSoftness": 0.42},
+          {"file": "parts/lantern.svg", "x": 60, "y": 53, "scaleX": 1, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 43, "y": 119, "scaleX": 0.9833333333333333, "scaleY": 0.85}
+        ],
+        [
+          {"from": "spr_landscape3", "crop": {"x": 18, "y": 230, "w": 222, "h": 295}, "x": 46, "y": 55, "scaleX": 0.238739, "scaleY": 0.227119, "paletteMap": {"#3b6f58": "#a9ad84", "#4e7e6a": "#e7d9a4"}, "edgeSoftness": 0.4},
+          {"from": "spr_landscape3", "crop": {"x": 28, "y": 119, "w": 208, "h": 116}, "x": 41, "y": 26, "scaleX": 0.298077, "scaleY": 0.15, "paletteMap": {"#3b6f58": "#647762", "#4e7e6a": "#7d9274"}, "edgeSoftness": 0.42},
+          {"file": "parts/lantern.svg", "x": 60, "y": 41, "scaleX": 1, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 40, "y": 119, "scaleX": 1.0833333333333333, "scaleY": 0.85}
+        ]
+      ]
+    },
+    {
+      "key": "aquarium",
+      "width": 144,
+      "height": 124,
+      "origin": [
+        72,
+        123
+      ],
+      "compose": [
+        [
+          {"file": "parts/stake.svg", "x": 59, "y": 110, "scaleX": 1, "scaleY": 1}
+        ],
+        [
+          {"from": "spr_landscape4", "crop": {"x": 0, "y": 137, "w": 192, "h": 206}, "x": 33, "y": 61, "scaleX": 0.40625, "scaleY": 0.300971, "paletteMap": {"#3b6f58": "#60877a", "#4e7e6a": "#8eab8d"}, "edgeSoftness": 0.42},
+          {"file": "parts/glass.svg", "x": 44, "y": 80, "scaleX": 0.636364, "scaleY": 1.05}
+        ],
+        [
+          {"from": "spr_landscape4", "crop": {"x": 0, "y": 137, "w": 192, "h": 206}, "x": 27, "y": 56, "scaleX": 0.46875, "scaleY": 0.325243, "paletteMap": {"#3b6f58": "#60877a", "#4e7e6a": "#8eab8d"}, "edgeSoftness": 0.42},
+          {"file": "parts/glass.svg", "x": 38, "y": 77, "scaleX": 0.772727, "scaleY": 1.05}
+        ],
+        [
+          {"from": "spr_landscape4", "crop": {"x": 0, "y": 137, "w": 192, "h": 206}, "x": 21, "y": 51, "scaleX": 0.53125, "scaleY": 0.349515, "paletteMap": {"#3b6f58": "#60877a", "#4e7e6a": "#8eab8d"}, "edgeSoftness": 0.42},
+          {"file": "parts/glass.svg", "x": 32, "y": 74, "scaleX": 0.909091, "scaleY": 1.05}
+        ],
+        [
+          {"from": "spr_landscape4", "crop": {"x": 0, "y": 137, "w": 192, "h": 206}, "x": 15, "y": 46, "scaleX": 0.59375, "scaleY": 0.373786, "paletteMap": {"#3b6f58": "#60877a", "#4e7e6a": "#8eab8d"}, "edgeSoftness": 0.42},
+          {"file": "parts/glass.svg", "x": 26, "y": 71, "scaleX": 1.045455, "scaleY": 1.05}
+        ]
+      ]
+    },
+    {
+      "key": "statue",
+      "width": 144,
+      "height": 124,
+      "origin": [
+        72,
+        123
+      ],
+      "compose": [
+        [
+          {"file": "parts/stake.svg", "x": 59, "y": 110, "scaleX": 1, "scaleY": 1}
+        ],
+        [
+          {"file": "parts/plinth-edge.svg", "x": 52, "y": 118, "scaleX": 0.6666666666666666, "scaleY": 1},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 57, "y": 81, "scaleX": 0.203717, "scaleY": 0.203717, "tint": "#6e4a1e", "edgeSoftness": 0.35},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 58, "y": 82, "scaleX": 0.193717, "scaleY": 0.193717, "tones": {"colors": ["#8c632d", "#bb8937", "#e4b64d"], "cutoffs": [119, 228]}, "edgeSoftness": 0.45}
+        ],
+        [
+          {"file": "parts/plinth-edge.svg", "x": 48, "y": 118, "scaleX": 0.8166666666666667, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 52, "y": 114, "scaleX": 0.6666666666666666, "scaleY": 1},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 54, "y": 67, "scaleX": 0.256073, "scaleY": 0.256073, "tint": "#6e4a1e", "edgeSoftness": 0.35},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 55, "y": 68, "scaleX": 0.246073, "scaleY": 0.246073, "tones": {"colors": ["#805a29", "#b47d31", "#e5b449"], "cutoffs": [119, 228]}, "edgeSoftness": 0.45}
+        ],
+        [
+          {"file": "parts/plinth-edge.svg", "x": 43, "y": 118, "scaleX": 0.9666666666666667, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 48, "y": 114, "scaleX": 0.8166666666666667, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 52, "y": 110, "scaleX": 0.6666666666666666, "scaleY": 1},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 50, "y": 53, "scaleX": 0.308429, "scaleY": 0.308429, "tint": "#6e4a1e", "edgeSoftness": 0.35},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 51, "y": 54, "scaleX": 0.298429, "scaleY": 0.298429, "tones": {"colors": ["#765225", "#ae792d", "#e7b448"], "cutoffs": [119, 228]}, "edgeSoftness": 0.45}
+        ],
+        [
+          {"file": "parts/plinth-edge.svg", "x": 39, "y": 118, "scaleX": 1.1166666666666667, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 43, "y": 114, "scaleX": 0.9666666666666667, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 48, "y": 110, "scaleX": 0.8166666666666667, "scaleY": 1},
+          {"file": "parts/plinth-edge.svg", "x": 52, "y": 106, "scaleX": 0.6666666666666666, "scaleY": 1},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 46, "y": 39, "scaleX": 0.360785, "scaleY": 0.360785, "tint": "#6e4a1e", "edgeSoftness": 0.35},
+          {"from": "spr_cat", "crop": {"x": 29, "y": 5, "w": 142, "h": 191}, "x": 47, "y": 40, "scaleX": 0.350785, "scaleY": 0.350785, "tones": {"colors": ["#6d4b22", "#a86f27", "#e9b33e"], "cutoffs": [119, 228]}, "edgeSoftness": 0.45}
+        ]
+      ]
+    },
+    {
+      "key": "sign",
+      "width": 26,
+      "height": 24,
+      "origin": [
+        13,
+        23
+      ],
+      "compose": [
+        {"file": "parts/sign.svg", "x": 0, "y": 0, "scaleX": 1, "scaleY": 1}
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "key": "harbor",
+      "depth": -1,
+      "hooks": {
+        "create": "hooks/create.gml",
+        "step": "hooks/step.gml",
+        "draw": "hooks/draw.gml",
+        "drawGui": "hooks/menu.gml"
+      }
+    }
+  ],
+  "areas": [
+    {
+      "id": "dock",
+      "bounds": {
+        "x": 518,
+        "y": 1040,
+        "w": 422,
+        "h": 145
+      },
+      "anchor": {
+        "mode": "follow",
+        "object": "Cliff",
+        "x": 95,
+        "y": 1155
+      },
+      "pieces": [
+        {
+          "object": "jmk_harbor_town_object_harbor",
+          "x": 222,
+          "y": 115,
+          "solid": false
+        }
+      ]
+    }
+  ]
+}

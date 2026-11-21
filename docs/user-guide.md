@@ -30,6 +30,10 @@ Before replacement, SHA-256-verified originals are retained at `data.win.cgfmm-o
 
 No game files are distributed. Patches, details and logs can contain local game code or strings: do not redistribute them. Static verification checks archives, references and compilation; gameplay still needs testing with the legacy executable.
 
+## Author performance changes
+
+Profile builds remove harmful performance hacks by default, including timing overrides, busy-wait frame limiters, FPS-driven fish thinning, fish step throttles that can delay gameplay updates, and cuts to fish sonar visibility. JAMM keeps recognized off-screen draw culls and scene-object throttles that do not change gameplay. In **Advanced mode**, enable **Keep all the author's performance changes** to keep every author performance edit, including changes normally removed as harmful. The choice is per mod and takes effect on the next build.
+
 ## Overhauls and their addons
 
 Keep **Settings → Base** pointed at the original August 2023 game. To play an

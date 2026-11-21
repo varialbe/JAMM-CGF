@@ -249,7 +249,7 @@ public sealed class ProfileLibrary(ManagerStore store)
             result = SetBuiltin(SetBuiltin(profile, PerfId, true), HdId, before.HdEnabled is null ? null : false) with
             {
                 Preset = WeakPcPreset, BeforeWeakPc = before, NoRepack = false,
-                Perf = new(StartEnabled: true, FishGrid: true, Interval: 8)
+                Perf = new(StartEnabled: true, FishGrid: false, Interval: 8)
             };
         }
         else

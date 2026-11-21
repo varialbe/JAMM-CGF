@@ -124,11 +124,14 @@ public static class InstanceGuard
     {
         accessors = new(StringComparer.Ordinal);
         text = LegacyInstanceSites.Rewrite(code, text, found);
-        string masked = Mask(text);
+        var tokens = GmlReferences.Tokens(text);
+        var info = TokenInfo.Analyze(tokens);
+        string masked = Mask(text, tokens);
         var lineStarts = LineStarts(text);
-        var shadowed = ShadowedObjects(masked, facts);
+        var shadowed = ShadowedObjects(tokens, facts);
         List<(int Start, int Length, string Replacement)> edits = [];
-        HashSet<int> guardedLines = [];
+        HashSet<int> guardedStatements = [];
+        Dictionary<string, List<(int Start, int End)>> guardCache = new(StringComparer.Ordinal);
         foreach (Match match in Regex.Matches(masked, @"\bwith\s*\(\s*([A-Za-z_]\w*)\s*\)"))
         {
             string token = match.Groups[1].Value;
@@ -144,7 +147,8 @@ public static class InstanceGuard
             var after = masked.AsSpan(end).TrimStart();
             var before = masked.AsSpan(0, match.Index).TrimEnd();
             if (before.EndsWith(".", StringComparison.Ordinal)) continue;
-            bool write = IsWrite(before, after);
+            bool prefixInc = IsPrefixIncrement(tokens, match.Index);
+            bool write = IsWrite(prefixInc, after);
             bool array = after.StartsWith("[", StringComparison.Ordinal);
             bool chained = after.StartsWith(".", StringComparison.Ordinal);
             int line = LineOf(lineStarts, match.Index);
@@ -161,13 +165,13 @@ public static class InstanceGuard
                 continue;
             }
             if (!facts.Risky.Contains(obj)) continue;
-            if (InExistenceGuard(masked, match.Index, token, Symbol(obj))) continue;
+            if (InSafeRange(ObjectGuards(token, obj), match.Index)) continue;
             // A call around a typed member (object_index, sprite_index, ...) would untype the asset
             // constant it is compared with, so those reads stay as they are and are only reported.
             bool typedMember = CgfAssetTypes.Family(member, code) is not null;
-            if (write && SimpleStatement(masked, lineStarts, line, token) is { } statement)
+            if (write && !array && SimpleWriteStatement(tokens, info, match.Index, prefixInc) is { } statement)
             {
-                if (guardedLines.Add(line))
+                if (guardedStatements.Add(statement.Start))
                 {
                     // Two insertions, so reads inside the statement can still be rewritten independently.
                     edits.Add((statement.Start + statement.Length, 0, " } }"));
@@ -185,23 +189,20 @@ public static class InstanceGuard
             edits.Add((match.Index, match.Length, $"{AccessorPrefix}{member}({Symbol(obj)})"));
             found.Add(new(code, line, "fish-read", obj, snippet, true));
         }
-        foreach (Match match in Lookup.Matches(masked))
+        var lookupMatches = Lookup.Matches(masked);
+        var lookupStarts = lookupMatches.Select(m => m.Index).ToHashSet();
+        foreach (Match match in lookupMatches)
         {
             string variable = match.Groups[1].Value;
             // JAMM's own runtimes (jamm_* variables) validate their lookups in their own way.
-            if (facts.Names.Contains(variable) || variable.StartsWith("jamm_", StringComparison.Ordinal)) continue;
+            if (variable.StartsWith("jamm_", StringComparison.Ordinal)) continue;
             int from = match.Index + match.Length;
-            // Guard dereferences until the variable is checked or assigned again.
-            var reassigned = new Regex($@"(?<![\w.]){Regex.Escape(variable)}\s*=(?!=)");
-            var stop = reassigned.Match(masked, from);
-            int limit = stop.Success ? stop.Index : masked.Length;
-            string value = Regex.Escape(variable);
-            var check = new Regex($@"\bif\s*\(\s*(?:!?\s*instance_exists\s*\(\s*{value}\s*\)|!?\s*{value}\s*(?=[)&|])|{value}\s*(?:(?:!=|==)\s*(?:noone\b|-1\b)|(?:>=|>|<|<=)\s*0\b))");
-            var checkedAt = check.Match(masked, from);
-            if (checkedAt.Success && checkedAt.Index < limit) limit = checkedAt.Index;
+            int limit = LookupLimit(tokens, info, from, variable, text.Length, lookupStarts);
+            var safeRanges = SafeRanges(tokens, info, from, limit, new HashSet<string>(StringComparer.Ordinal) { variable }, allowLookupChecks: true);
             var deref = new Regex($@"(?<![\w.$]){Regex.Escape(variable)}\s*\.\s*([A-Za-z_]\w*)");
             for (var use = deref.Match(masked, from); use.Success && use.Index < limit; use = use.NextMatch())
             {
+                if (InSafeRange(safeRanges, use.Index)) continue;
                 // Collision and nav results can model control flow or shared instance fields.
                 // Report unfamiliar paths for review instead of supplying invented coordinates.
                 if (!match.Groups[2].Value.StartsWith("instance_", StringComparison.Ordinal))
@@ -214,11 +215,13 @@ public static class InstanceGuard
                 var tail = masked.AsSpan(end).TrimStart();
                 var head = masked.AsSpan(0, use.Index).TrimEnd();
                 if (head.EndsWith(".", StringComparison.Ordinal)) continue;
-                bool write = IsWrite(head, tail);
+                bool prefixInc = IsPrefixIncrement(tokens, use.Index);
+                bool write = IsWrite(prefixInc, tail);
+                bool array = tail.StartsWith("[", StringComparison.Ordinal);
                 int line = LineOf(lineStarts, use.Index);
-                if (write && SimpleStatement(masked, lineStarts, line, variable) is { } statement)
+                if (write && !array && SimpleWriteStatement(tokens, info, use.Index, prefixInc) is { } statement)
                 {
-                    if (guardedLines.Add(line))
+                    if (guardedStatements.Add(statement.Start))
                     {
                         edits.Add((statement.Start + statement.Length, 0, " } }"));
                         edits.Add((statement.Start, 0, $"{{ if ({variable} >= 0 && instance_exists({variable})) {{ "));
@@ -226,7 +229,7 @@ public static class InstanceGuard
                     found.Add(new(code, line, "unchecked-lookup", variable, Line(text, lineStarts, line), true));
                     continue;
                 }
-                if (write || tail.StartsWith("[", StringComparison.Ordinal) || tail.StartsWith(".", StringComparison.Ordinal)
+                if (write || array || tail.StartsWith(".", StringComparison.Ordinal)
                     || CgfAssetTypes.Family(use.Groups[1].Value, code) is not null)
                 {
                     found.Add(new(code, line, "unchecked-lookup", variable, Line(text, lineStarts, line), false));
@@ -251,67 +254,583 @@ public static class InstanceGuard
             name = token;
             return facts.Names.Contains(token) && !shadowed.Contains(token);
         }
+
+        List<(int Start, int End)> ObjectGuards(string token, string obj)
+        {
+            if (guardCache.TryGetValue(token, out var cached)) return cached;
+            string symbol = Symbol(obj);
+            var names = new HashSet<string>(StringComparer.Ordinal) { token, symbol };
+            if (token != obj && !shadowed.Contains(obj)) names.Add(obj);
+            return guardCache[token] = SafeRanges(tokens, info, 0, text.Length, names, allowLookupChecks: false);
+        }
     }
 
-    private static bool InExistenceGuard(string masked, int use, string target, string symbol)
+    private sealed class TokenInfo
     {
-        // A previously generated guard or an existing explicit existence check can
-        // protect an entire body. Look only at positive final condition terms.
-        string check = $@"\bif\s*\(([^;{{}}]*?&&\s*)?instance_exists\(\s*(?:{Regex.Escape(target)}|{Regex.Escape(symbol)})\s*\)\s*\)\s*";
-        foreach (Match guard in Regex.Matches(masked[..use], check))
+        internal required int[] ParenDepth { get; init; }
+        internal required int[] BraceDepth { get; init; }
+        internal required bool[] IsStatementStart { get; init; }
+        internal required bool[] IsDirectStatement { get; init; }
+
+        internal static TokenInfo Analyze(IReadOnlyList<GmlReferences.Token> tokens)
         {
-            var prefix = guard.Groups[1].ValueSpan;
-            if (prefix.Contains("||", StringComparison.Ordinal) || prefix.Count('(') != prefix.Count(')')) continue;
-            int start = guard.Index + guard.Length;
-            if (start >= use) return true;
-            if (masked[start] != '{')
+            int n = tokens.Count;
+            int[] parenDepth = new int[n];
+            int[] braceDepth = new int[n];
+            bool[] isStatementStart = new bool[n];
+            bool[] isDirectStatement = new bool[n];
+            int pDepth = 0, bDepth = 0;
+            bool inCaseLabel = false;
+            Stack<(int Depth, bool ControlHeader)> parenStack = new();
+            bool prevControlClose = false;
+            for (int i = 0; i < n; i++)
             {
-                if (!masked.AsSpan(start, use - start).Contains(';')) return true;
-                continue;
+                var t = tokens[i];
+                parenDepth[i] = pDepth;
+                braceDepth[i] = bDepth;
+                if (pDepth == 0)
+                {
+                    if (i == 0)
+                    {
+                        isStatementStart[i] = isDirectStatement[i] = true;
+                    }
+                    else
+                    {
+                        var prev = tokens[i - 1];
+                        if (prev.Value is ";" or "{" or "}")
+                        {
+                            isStatementStart[i] = isDirectStatement[i] = true;
+                        }
+                        else if (prev.Value is "else" or "do" || prevControlClose || (prev.Value == ":" && inCaseLabel))
+                        {
+                            isStatementStart[i] = true;
+                            inCaseLabel = false;
+                        }
+                        else if (t.Line > prev.EndLine && EndsOperand(prev) && StartsOperand(t))
+                        {
+                            isStatementStart[i] = isDirectStatement[i] = true;
+                        }
+                    }
+                    if (t.Kind == 'i' && t.Value is "case" or "default") inCaseLabel = true;
+                }
+                prevControlClose = false;
+                if (t.Value is "(" or "[")
+                {
+                    bool controlHeader = t.Value == "(" && i > 0 && tokens[i - 1].Kind == 'i'
+                        && tokens[i - 1].Value is "if" or "while" or "for" or "with" or "repeat";
+                    parenStack.Push((pDepth, controlHeader));
+                    pDepth++;
+                }
+                else if (t.Value is ")" or "]")
+                {
+                    pDepth = Math.Max(0, pDepth - 1);
+                    if (parenStack.Count > 0 && parenStack.Peek().Depth == pDepth)
+                        prevControlClose = parenStack.Pop().ControlHeader && t.Value == ")";
+                }
+                else if (t.Value == "{")
+                {
+                    bDepth++;
+                }
+                else if (t.Value == "}")
+                {
+                    bDepth = Math.Max(0, bDepth - 1);
+                }
             }
-            int depth = 1;
-            for (int i = start + 1; i < use && depth > 0; i++)
+            return new TokenInfo { ParenDepth = parenDepth, BraceDepth = braceDepth, IsStatementStart = isStatementStart, IsDirectStatement = isDirectStatement };
+        }
+    }
+
+    private static bool InSafeRange(IReadOnlyList<(int Start, int End)> ranges, int index)
+    {
+        foreach (var (start, end) in ranges)
+            if (index >= start && index < end) return true;
+        return false;
+    }
+
+    private static int LookupLimit(IReadOnlyList<GmlReferences.Token> tokens, TokenInfo info, int from, string variable, int textLength, HashSet<int> lookupStarts)
+    {
+        int startToken = FirstTokenAtOrAfter(tokens, from);
+        for (int i = startToken; i < tokens.Count; i++)
+        {
+            if (tokens[i].Kind != 'i' || tokens[i].Value != variable) continue;
+            if (i > 0 && tokens[i - 1].Value == ".") continue;
+            if (AssignmentWidth(tokens, i + 1) != 1 || tokens[i + 1].Value != "=") continue;
+            if (lookupStarts.Contains(tokens[i].Start)) return tokens[i].Start;
+            int endToken = StatementEnd(tokens, info, i);
+            return tokens[endToken].Start + tokens[endToken].Length;
+        }
+        return textLength;
+    }
+
+    private static List<(int Start, int End)> SafeRanges(IReadOnlyList<GmlReferences.Token> tokens, TokenInfo info,
+        int searchFromChar, int searchLimitChar, IReadOnlySet<string> names, bool allowLookupChecks)
+    {
+        List<(int Start, int End)> ranges = [];
+        int first = FirstTokenAtOrAfter(tokens, searchFromChar);
+        for (int i = first; i < tokens.Count && tokens[i].Start < searchLimitChar; i++)
+        {
+            if (tokens[i].Kind != 'i' || tokens[i].Value != "if") continue;
+            if (i + 1 >= tokens.Count || tokens[i + 1].Value != "(") continue;
+            int condEnd = MatchParen(tokens, i + 1);
+            if (condEnd < 0 || condEnd + 1 >= tokens.Count) continue;
+            int thenStart = condEnd + 1;
+            int thenEnd = StatementEnd(tokens, info, thenStart);
+            int? elseStart = thenEnd + 1 < tokens.Count && tokens[thenEnd + 1].Value == "else" && thenEnd + 2 < tokens.Count ? thenEnd + 2 : null;
+            int? elseEnd = elseStart is { } es ? StatementEnd(tokens, info, es) : null;
+
+            AnalyzeCondition(i + 2, condEnd, thenStart, thenEnd, elseStart, elseEnd);
+        }
+        return ranges;
+
+        void AnalyzeCondition(int start, int end, int thenStart, int thenEnd, int? elseStart, int? elseEnd)
+        {
+            int depth = 0;
+            List<(int Start, int End)> orBranches = [];
+            List<string> orOps = [];
+            int branchStart = start;
+            for (int k = start; k < end; k++)
             {
-                if (masked[i] == '{') depth++;
-                if (masked[i] == '}') depth--;
+                string val = tokens[k].Value;
+                if (val is "(" or "[") { depth++; continue; }
+                if (val is ")" or "]") { depth--; continue; }
+                if (depth != 0) continue;
+                if (val == "?") return;
+                if (val is "or" or "xor")
+                {
+                    orBranches.Add((branchStart, k));
+                    orOps.Add(val);
+                    branchStart = k + 1;
+                }
+                else if (IsAdjacentPair(tokens, k, "|", "|") || IsAdjacentPair(tokens, k, "^", "^"))
+                {
+                    orBranches.Add((branchStart, k));
+                    orOps.Add(val + val);
+                    branchStart = k + 2;
+                    k++;
+                }
             }
-            if (depth > 0) return true;
+            orBranches.Add((branchStart, end));
+
+            if (orBranches.Count == 1)
+            {
+                var conjuncts = SplitAnd(start, end);
+                foreach (var (cStart, cEnd) in conjuncts)
+                {
+                    if (IsConditionTerm(tokens, cStart, cEnd, names, allowLookupChecks, positive: true))
+                    {
+                        if (tokens[cEnd].Start < tokens[end].Start)
+                            ranges.Add((tokens[cEnd].Start, tokens[end].Start));
+                        ranges.Add((tokens[thenStart].Start, tokens[thenEnd].Start + tokens[thenEnd].Length));
+                        return;
+                    }
+                }
+                if (conjuncts.Count == 1 && IsConditionTerm(tokens, conjuncts[0].Start, conjuncts[0].End, names, allowLookupChecks, positive: false))
+                    AddNegativeProtection(thenStart, thenEnd, elseStart, elseEnd, start - 2);
+                return;
+            }
+
+            if (orOps.Any(op => op is "^^" or "xor")) return;
+            foreach (var (bStart, bEnd) in orBranches)
+            {
+                var conjuncts = SplitAnd(bStart, bEnd);
+                if (conjuncts.Count == 1 && IsConditionTerm(tokens, conjuncts[0].Start, conjuncts[0].End, names, allowLookupChecks, positive: false))
+                {
+                    AddNegativeProtection(thenStart, thenEnd, elseStart, elseEnd, start - 2);
+                    return;
+                }
+            }
+        }
+
+        void AddNegativeProtection(int thenStart, int thenEnd, int? elseStart, int? elseEnd, int ifToken)
+        {
+            if (elseStart is { } es && elseEnd is { } ee)
+                ranges.Add((tokens[es].Start, tokens[ee].Start + tokens[ee].Length));
+            if (info.IsDirectStatement[ifToken] && UnconditionallyTerminates(tokens, info, thenStart, thenEnd))
+            {
+                int blockEnd = Math.Min(searchLimitChar, EnclosingBlockEndChar(tokens, ifToken, searchLimitChar));
+                int afterIf = tokens[thenEnd].Start + tokens[thenEnd].Length;
+                if (afterIf < blockEnd) ranges.Add((afterIf, blockEnd));
+            }
+        }
+
+        List<(int Start, int End)> SplitAnd(int start, int end)
+        {
+            List<(int Start, int End)> parts = [];
+            int depth = 0, partStart = start;
+            for (int k = start; k < end; k++)
+            {
+                string val = tokens[k].Value;
+                if (val is "(" or "[") { depth++; continue; }
+                if (val is ")" or "]") { depth--; continue; }
+                if (depth != 0) continue;
+                if (val == "and")
+                {
+                    parts.Add((partStart, k));
+                    partStart = k + 1;
+                }
+                else if (IsAdjacentPair(tokens, k, "&", "&"))
+                {
+                    parts.Add((partStart, k));
+                    partStart = k + 2;
+                    k++;
+                }
+            }
+            parts.Add((partStart, end));
+            return parts;
+        }
+    }
+
+    private static bool IsConditionTerm(IReadOnlyList<GmlReferences.Token> tokens, int start, int end,
+        IReadOnlySet<string> names, bool allowLookupChecks, bool positive)
+    {
+        while (end - start >= 2 && tokens[start].Value == "(" && MatchParen(tokens, start) == end - 1)
+        {
+            start++;
+            end--;
+        }
+        int len = end - start;
+        if (len <= 0) return false;
+        if (positive)
+        {
+            if (len == 4 && tokens[start].Value == "instance_exists" && tokens[start + 1].Value == "("
+                && tokens[end - 1].Value == ")" && IsTargetName(tokens, start + 2, names))
+                return true;
+            if (!allowLookupChecks) return false;
+            if (len == 1 && IsTargetName(tokens, start, names)) return true;
+            if (len >= 3)
+            {
+                if (IsTargetName(tokens, start, names))
+                    return IsPositiveRightComparison(tokens, start + 1, end);
+                if (IsTargetName(tokens, end - 1, names))
+                    return IsPositiveLeftComparison(tokens, start, end - 1);
+            }
+            return false;
+        }
+        if (len == 5 && tokens[start].Value is "!" or "not" && tokens[start + 1].Value == "instance_exists"
+            && tokens[start + 2].Value == "(" && tokens[end - 1].Value == ")" && IsTargetName(tokens, start + 3, names))
+            return true;
+        if (!allowLookupChecks) return false;
+        if (len == 2 && tokens[start].Value is "!" or "not" && IsTargetName(tokens, start + 1, names)) return true;
+        if (len >= 3)
+        {
+            if (IsTargetName(tokens, start, names))
+                return IsNegativeRightComparison(tokens, start + 1, end);
+            if (IsTargetName(tokens, end - 1, names))
+                return IsNegativeLeftComparison(tokens, start, end - 1);
+        }
+        return false;
+
+        static bool IsTargetName(IReadOnlyList<GmlReferences.Token> tokens, int idx, IReadOnlySet<string> names) =>
+            tokens[idx].Kind == 'i' && names.Contains(tokens[idx].Value) && (idx == 0 || tokens[idx - 1].Value != ".");
+
+        static bool IsMinusOne(IReadOnlyList<GmlReferences.Token> tokens, int start, int end) =>
+            end - start == 2 && tokens[start].Value == "-" && tokens[start + 1].Value == "1";
+
+        static bool IsZero(IReadOnlyList<GmlReferences.Token> tokens, int start, int end) =>
+            end - start == 1 && tokens[start].Value == "0";
+
+        static bool IsNoone(IReadOnlyList<GmlReferences.Token> tokens, int start, int end) =>
+            end - start == 1 && tokens[start].Value == "noone";
+
+        static bool IsPositiveRightComparison(IReadOnlyList<GmlReferences.Token> tokens, int op, int end) =>
+            (tokens[op].Value == "!=" && (IsNoone(tokens, op + 1, end) || IsMinusOne(tokens, op + 1, end)))
+            || (tokens[op].Value is ">=" or ">" && IsZero(tokens, op + 1, end))
+            || (tokens[op].Value == ">" && IsMinusOne(tokens, op + 1, end));
+
+        static bool IsPositiveLeftComparison(IReadOnlyList<GmlReferences.Token> tokens, int start, int op) =>
+            (tokens[op - 1].Value == "!=" && (IsNoone(tokens, start, op - 1) || IsMinusOne(tokens, start, op - 1)))
+            || (tokens[op - 1].Value is "<=" or "<" && IsZero(tokens, start, op - 1))
+            || (tokens[op - 1].Value == "<" && IsMinusOne(tokens, start, op - 1));
+
+        static bool IsNegativeRightComparison(IReadOnlyList<GmlReferences.Token> tokens, int op, int end) =>
+            (tokens[op].Value == "==" && (IsNoone(tokens, op + 1, end) || IsMinusOne(tokens, op + 1, end)))
+            || (tokens[op].Value == "<" && IsZero(tokens, op + 1, end))
+            || (tokens[op].Value == "<=" && IsMinusOne(tokens, op + 1, end));
+
+        static bool IsNegativeLeftComparison(IReadOnlyList<GmlReferences.Token> tokens, int start, int op) =>
+            (tokens[op - 1].Value == "==" && (IsNoone(tokens, start, op - 1) || IsMinusOne(tokens, start, op - 1)))
+            || (tokens[op - 1].Value == ">" && IsZero(tokens, start, op - 1))
+            || (tokens[op - 1].Value == ">=" && IsMinusOne(tokens, start, op - 1));
+    }
+
+    private static bool UnconditionallyTerminates(IReadOnlyList<GmlReferences.Token> tokens, TokenInfo info, int start, int end)
+    {
+        if (tokens[start].Value != "{")
+            return tokens[start].Value is "exit" or "return" or "break" or "continue";
+        int targetBraceDepth = info.BraceDepth[start] + 1;
+        for (int k = start + 1; k < end; k++)
+        {
+            if (info.BraceDepth[k] == targetBraceDepth && info.IsDirectStatement[k]
+                && tokens[k].Value is "exit" or "return" or "break" or "continue")
+                return true;
         }
         return false;
     }
 
-    private static bool IsWrite(ReadOnlySpan<char> before, ReadOnlySpan<char> after) =>
-        before.EndsWith("++", StringComparison.Ordinal) || before.EndsWith("--", StringComparison.Ordinal)
+    private static int EnclosingBlockEndChar(IReadOnlyList<GmlReferences.Token> tokens, int idx, int fallback)
+    {
+        int depth = 0;
+        for (int k = idx - 1; k >= 0; k--)
+        {
+            if (tokens[k].Value == "}") depth++;
+            else if (tokens[k].Value == "{")
+            {
+                if (depth == 0)
+                {
+                    int close = MatchBrace(tokens, k);
+                    return close >= 0 ? tokens[close].Start : fallback;
+                }
+                depth--;
+            }
+        }
+        return fallback;
+    }
+
+    private static int StatementEnd(IReadOnlyList<GmlReferences.Token> tokens, TokenInfo info, int start)
+    {
+        if (start >= tokens.Count) return tokens.Count - 1;
+        string kw = tokens[start].Value;
+        if (kw == "{")
+        {
+            int close = MatchBrace(tokens, start);
+            return close >= 0 ? close : tokens.Count - 1;
+        }
+        if (kw == "if" && start + 1 < tokens.Count && tokens[start + 1].Value == "(")
+        {
+            int condEnd = MatchParen(tokens, start + 1);
+            if (condEnd >= 0 && condEnd + 1 < tokens.Count)
+            {
+                int bodyEnd = StatementEnd(tokens, info, condEnd + 1);
+                if (bodyEnd + 1 < tokens.Count && tokens[bodyEnd + 1].Value == "else" && bodyEnd + 2 < tokens.Count)
+                    return StatementEnd(tokens, info, bodyEnd + 2);
+                return bodyEnd;
+            }
+        }
+        if (kw is "while" or "for" or "with" or "repeat" && start + 1 < tokens.Count && tokens[start + 1].Value == "(")
+        {
+            int headerEnd = MatchParen(tokens, start + 1);
+            if (headerEnd >= 0 && headerEnd + 1 < tokens.Count)
+                return StatementEnd(tokens, info, headerEnd + 1);
+        }
+        if (kw == "do" && start + 1 < tokens.Count)
+        {
+            int bodyEnd = StatementEnd(tokens, info, start + 1);
+            if (bodyEnd + 1 < tokens.Count && tokens[bodyEnd + 1].Value == "until"
+                && bodyEnd + 2 < tokens.Count && tokens[bodyEnd + 2].Value == "(")
+            {
+                int untilEnd = MatchParen(tokens, bodyEnd + 2);
+                if (untilEnd >= 0)
+                    return untilEnd + 1 < tokens.Count && tokens[untilEnd + 1].Value == ";" ? untilEnd + 1 : untilEnd;
+            }
+            return bodyEnd;
+        }
+        int baseDepth = info.ParenDepth[start];
+        for (int k = start; k < tokens.Count; k++)
+        {
+            if (tokens[k].Value == "{" && k > start)
+            {
+                int close = MatchBrace(tokens, k);
+                if (close >= 0) return close;
+            }
+            if (info.ParenDepth[k] == baseDepth)
+            {
+                if (tokens[k].Value == ";") return k;
+                if (k > start && tokens[k].Line > tokens[k - 1].EndLine && EndsOperand(tokens[k - 1]) && StartsOperand(tokens[k]))
+                    return k - 1;
+            }
+        }
+        return tokens.Count - 1;
+    }
+
+    private static int MatchParen(IReadOnlyList<GmlReferences.Token> tokens, int openIdx)
+    {
+        int depth = 0;
+        for (int k = openIdx; k < tokens.Count; k++)
+        {
+            if (tokens[k].Value == "(") depth++;
+            else if (tokens[k].Value == ")")
+            {
+                depth--;
+                if (depth == 0) return k;
+            }
+        }
+        return -1;
+    }
+
+    private static int MatchBrace(IReadOnlyList<GmlReferences.Token> tokens, int openIdx)
+    {
+        int depth = 0;
+        for (int k = openIdx; k < tokens.Count; k++)
+        {
+            if (tokens[k].Value == "{") depth++;
+            else if (tokens[k].Value == "}")
+            {
+                depth--;
+                if (depth == 0) return k;
+            }
+        }
+        return -1;
+    }
+
+    private static int FirstTokenAtOrAfter(IReadOnlyList<GmlReferences.Token> tokens, int charIndex)
+    {
+        int lo = 0, hi = tokens.Count;
+        while (lo < hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            if (tokens[mid].Start < charIndex) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
+    }
+
+    private static bool IsPrefixIncrement(IReadOnlyList<GmlReferences.Token> tokens, int charIndex)
+    {
+        int t = FirstTokenAtOrAfter(tokens, charIndex);
+        if (t < 2 || tokens[t].Start != charIndex) return false;
+        return (IsAdjacentPair(tokens, t - 2, "+", "+") || IsAdjacentPair(tokens, t - 2, "-", "-"))
+            && tokens[t - 2].Line == tokens[t].Line && (t < 3 || !EndsOperand(tokens[t - 3]));
+    }
+
+    private static bool IsWrite(bool prefixIncrement, ReadOnlySpan<char> after) =>
+        prefixIncrement
         || (after.StartsWith("=", StringComparison.Ordinal) && !after.StartsWith("==", StringComparison.Ordinal))
         || (after.Length >= 2 && ((after[1] == '=' && "+-*/%&|^".Contains(after[0]))
             || (after[0] is '+' or '-' && after[0] == after[1])))
         || after.StartsWith("<<=", StringComparison.Ordinal) || after.StartsWith(">>=", StringComparison.Ordinal);
 
-    private static HashSet<string> ShadowedObjects(string masked, ObjectFacts facts)
+    private static HashSet<string> ShadowedObjects(IReadOnlyList<GmlReferences.Token> tokens, ObjectFacts facts)
     {
         var shadowed = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match declaration in Regex.Matches(masked, @"\b(?:var|globalvar)\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)"))
-            foreach (Match name in Regex.Matches(declaration.Groups[1].Value, @"\w+"))
-                if (facts.Names.Contains(name.Value)) shadowed.Add(name.Value);
-        foreach (Match assignment in Regex.Matches(masked, @"(?<![\w.])([A-Za-z_]\w*)\s*=(?!=)"))
-            if (facts.Names.Contains(assignment.Groups[1].Value)) shadowed.Add(assignment.Groups[1].Value);
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var t = tokens[i];
+            if (t.Kind != 'i') continue;
+            if (t.Value is "var" or "globalvar")
+            {
+                int j = i + 1;
+                while (j < tokens.Count && tokens[j].Kind == 'i')
+                {
+                    if (facts.Names.Contains(tokens[j].Value)) shadowed.Add(tokens[j].Value);
+                    j++;
+                    if (j < tokens.Count && tokens[j].Value == "=")
+                    {
+                        j++;
+                        int depth = 0;
+                        while (j < tokens.Count)
+                        {
+                            string v = tokens[j].Value;
+                            if (depth == 0 && (v is "," or ";")) break;
+                            if (depth == 0 && j > i + 1 && tokens[j].Line > tokens[j - 1].EndLine
+                                && EndsOperand(tokens[j - 1]) && StartsOperand(tokens[j])) break;
+                            if (v is "(" or "[" or "{") depth++;
+                            else if (v is ")" or "]" or "}") { depth--; if (depth < 0) break; }
+                            j++;
+                        }
+                    }
+                    if (j < tokens.Count && tokens[j].Value == ",") j++;
+                    else break;
+                }
+                continue;
+            }
+            if (t.Value == "function")
+            {
+                int j = i + 1;
+                if (j < tokens.Count && tokens[j].Kind == 'i') j++;
+                if (j < tokens.Count && tokens[j].Value == "(")
+                {
+                    j++;
+                    int depth = 1;
+                    bool expectParam = true;
+                    while (j < tokens.Count && depth > 0)
+                    {
+                        string v = tokens[j].Value;
+                        if (v is "(" or "[" or "{") { depth++; expectParam = false; }
+                        else if (v is ")" or "]" or "}") { depth--; expectParam = false; }
+                        else if (depth == 1 && v == ",") expectParam = true;
+                        else if (depth == 1 && expectParam && tokens[j].Kind == 'i')
+                        {
+                            if (facts.Names.Contains(v)) shadowed.Add(v);
+                            expectParam = false;
+                        }
+                        j++;
+                    }
+                }
+                continue;
+            }
+            if ((i == 0 || tokens[i - 1].Value != ".") && (i + 1 >= tokens.Count || tokens[i + 1].Value != ".")
+                && facts.Names.Contains(t.Value))
+            {
+                bool mutated = AssignmentWidth(tokens, i + 1) > 0
+                    || IsAdjacentPair(tokens, i + 1, "+", "+") || IsAdjacentPair(tokens, i + 1, "-", "-")
+                    || (i >= 2 && (IsAdjacentPair(tokens, i - 2, "+", "+") || IsAdjacentPair(tokens, i - 2, "-", "-"))
+                        && tokens[i - 2].Line == t.Line && (i < 3 || !EndsOperand(tokens[i - 3])));
+                if (mutated) shadowed.Add(t.Value);
+            }
+        }
         return shadowed;
     }
 
-    /// <summary>
-    /// Returns the statement span when a line is exactly one simple write to <paramref name="obj"/>
-    /// (<c>Obj.var = expr;</c>, <c>Obj.var += expr;</c>, <c>Obj.var++;</c>).
-    /// A block around the guard preserves an enclosing if/else or loop body.
-    /// </summary>
-    private static (int Start, int Length)? SimpleStatement(string text, List<int> starts, int line, string obj)
+    private static (int Start, int Length)? SimpleWriteStatement(IReadOnlyList<GmlReferences.Token> tokens, TokenInfo info, int memberCharIndex, bool isPrefix)
     {
-        int start = starts[line - 1];
-        int end = line < starts.Count ? starts[line] - 1 : text.Length;
-        string masked = text[start..end];
-        var statement = Regex.Match(masked, $@"^(\s*)({Regex.Escape(obj)}\s*\.\s*[A-Za-z_]\w*\s*(?:(?:=(?!=)|\+=|-=|\*=|/=)[^;{{}}]*|\+\+|--)\s*;)\s*$");
-        if (!statement.Success) return null;
-        return (start + statement.Groups[2].Index, statement.Groups[2].Length);
+        int t = FirstTokenAtOrAfter(tokens, memberCharIndex);
+        if (t + 2 >= tokens.Count || tokens[t].Start != memberCharIndex || tokens[t + 1].Value != ".") return null;
+        int stmtStart = isPrefix ? t - 2 : t;
+        if (stmtStart < 0 || !info.IsStatementStart[stmtStart] || info.ParenDepth[stmtStart] != 0) return null;
+        if (isPrefix)
+        {
+            if (t + 3 >= tokens.Count || tokens[t + 3].Value != ";") return null;
+            return (tokens[stmtStart].Start, tokens[t + 3].Start + 1 - tokens[stmtStart].Start);
+        }
+        if (IsAdjacentPair(tokens, t + 3, "+", "+") || IsAdjacentPair(tokens, t + 3, "-", "-"))
+        {
+            if (t + 5 >= tokens.Count || tokens[t + 5].Value != ";") return null;
+            return (tokens[stmtStart].Start, tokens[t + 5].Start + 1 - tokens[stmtStart].Start);
+        }
+        int opWidth = AssignmentWidth(tokens, t + 3);
+        if (opWidth == 0) return null;
+        int rhsStart = t + 3 + opWidth;
+        int depth = 0;
+        for (int k = rhsStart; k < tokens.Count; k++)
+        {
+            string v = tokens[k].Value;
+            if (v is "{" or "}") return null;
+            if (depth == 0 && v == ";")
+                return (tokens[stmtStart].Start, tokens[k].Start + 1 - tokens[stmtStart].Start);
+            if (depth == 0 && k > rhsStart && tokens[k].Line > tokens[k - 1].EndLine
+                && EndsOperand(tokens[k - 1]) && StartsOperand(tokens[k]))
+                return null;
+            if (v is "(" or "[") depth++;
+            else if (v is ")" or "]") { depth--; if (depth < 0) return null; }
+        }
+        return null;
     }
+
+    private static bool IsAdjacentPair(IReadOnlyList<GmlReferences.Token> tokens, int index, string first, string second) =>
+        index >= 0 && index + 1 < tokens.Count
+        && tokens[index].Value == first && tokens[index + 1].Value == second
+        && tokens[index + 1].Start == tokens[index].Start + tokens[index].Length;
+
+    private static int AssignmentWidth(IReadOnlyList<GmlReferences.Token> tokens, int index)
+    {
+        if (index >= tokens.Count) return 0;
+        if (tokens[index].Value is "=" or "+=" or "-=" or "*=" or "/=") return 1;
+        if (IsAdjacentPair(tokens, index, "%", "=") || IsAdjacentPair(tokens, index, "&", "=")
+            || IsAdjacentPair(tokens, index, "|", "=") || IsAdjacentPair(tokens, index, "^", "=")
+            || IsAdjacentPair(tokens, index, "<", "<=") || IsAdjacentPair(tokens, index, ">", ">="))
+            return 2;
+        return 0;
+    }
+
+    private static bool EndsOperand(GmlReferences.Token token) => token.Kind == 'i'
+        ? token.Value is not ("and" or "or" or "xor" or "not" or "div" or "mod"
+            or "if" or "else" or "while" or "for" or "with" or "repeat" or "switch" or "case" or "default"
+            or "do" or "until" or "var" or "globalvar" or "function" or "return" or "then" or "begin" or "end")
+        : token.Kind is 'n' or 's' || token.Value is ")" or "]" or "}";
+
+    private static bool StartsOperand(GmlReferences.Token token) => token.Kind == 'i'
+        ? token.Value is not ("and" or "or" or "xor" or "not" or "div" or "mod")
+        : token.Kind is 'n' or 's';
 
     /// <summary>Typed object symbol; linking turns it into the object index even when a sprite has the same name.</summary>
     internal static string Symbol(string obj) => AssetSymbols.Symbol("objects", obj);
@@ -323,10 +842,12 @@ public static class InstanceGuard
     }
 
     /// <summary>Blanks string literals and comments so pattern matches only see code.</summary>
-    internal static string Mask(string text)
+    internal static string Mask(string text) => Mask(text, GmlReferences.Tokens(text));
+
+    private static string Mask(string text, IReadOnlyList<GmlReferences.Token> tokens)
     {
         var chars = text.Select(c => c == '\n' ? '\n' : ' ').ToArray();
-        foreach (var token in GmlReferences.Tokens(text))
+        foreach (var token in tokens)
         {
             if (token.Kind != 's')
                 text.AsSpan(token.Start, token.Length).CopyTo(chars.AsSpan(token.Start));

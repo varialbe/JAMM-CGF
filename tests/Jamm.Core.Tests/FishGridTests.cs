@@ -9,6 +9,59 @@ namespace Jamm.Core.Tests;
 public sealed class FishGridTests
 {
     [Fact]
+    public void DisabledGridHotHooksGuardCallsInline()
+    {
+        foreach (string helper in new[] { "touch", "dirty", "enter", "leave" })
+            Assert.Equal($"if (global.jamm_fg_enabled) jamm_fg_{helper}();", FishGridScripts.GuardedCall("jamm_fg_" + helper));
+    }
+
+    [Fact]
+    public void InlineGuardHooksRelocateBranchesAndKeepCallsBehindTheSwitch()
+    {
+        using var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Major = 1;
+        data.GeneralInfo.BytecodeVersion = 16;
+        var obj = ModObjects.Create(data, "obj_inline_guard_fixture", false);
+        var code = obj.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data);
+        data.Functions.EnsureDefined("jamm_fg_touch", data.Strings);
+        var template = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jamm_fg_inline_fixture");
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(code, "x += 1; if (x > 0) x += 2; x += 3;");
+        compiler.QueueCodeReplace(template, FishGridScripts.GuardedCall("jamm_fg_touch"));
+        ModObjects.Compile(compiler);
+
+        Assert.True(LegacyCodeHooks.Insert(code, _ => default, enterInline: template.Instructions.ToArray()));
+
+        var addresses = new HashSet<int>();
+        var invalidBranches = new List<string>();
+        int address = 0;
+        foreach (var instruction in code.Instructions)
+        {
+            addresses.Add(address);
+            if (instruction.Kind is UndertaleInstruction.Opcode.B or UndertaleInstruction.Opcode.Bt or UndertaleInstruction.Opcode.Bf)
+                invalidBranches.Add($"{address}->{address + instruction.JumpOffset} ({instruction.Kind}, jump {instruction.JumpOffset})");
+            address += (int)instruction.CalculateInstructionSize();
+        }
+        addresses.Add(address);
+        Assert.All(invalidBranches, branch => Assert.Contains(int.Parse(branch.Split("->")[1].Split(' ')[0]), addresses));
+
+        Assert.Equal(UndertaleInstruction.Opcode.PushGlb, code.Instructions[0].Kind);
+        Assert.Equal("jamm_fg_enabled", code.Instructions[0].ValueVariable.Name.Content);
+        Assert.Equal(UndertaleInstruction.Opcode.Bf, code.Instructions[2].Kind);
+        Assert.Equal(4, code.Instructions[2].JumpOffset);
+        Assert.Equal(UndertaleInstruction.Opcode.Call, code.Instructions[3].Kind);
+        Assert.Equal("jamm_fg_touch", code.Instructions[3].ValueFunction.Name.Content);
+        Assert.Equal(UndertaleInstruction.Opcode.Popz, code.Instructions[4].Kind);
+
+        using var stream = new MemoryStream();
+        UndertaleIO.Write(stream, data);
+        stream.Position = 0;
+        using var reloaded = UndertaleIO.Read(stream);
+        var reloadedCode = reloaded.Code.ByName(code.Name.Content)!;
+        _ = ModObjects.Decompile(reloaded, reloadedCode);
+    }
+
+    [Fact]
     public void PaddedCellUnionPreservesBruteForceOrderAtBoundariesAndAfterBoundedMotion()
     {
         const int size = FishGridScripts.CellSize;

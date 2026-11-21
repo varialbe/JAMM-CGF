@@ -206,6 +206,19 @@ public static class PerfMode
         edits.Add(create);
     }
 
+    internal static void ApplyScheduling(UndertaleData data, List<UndertaleCode> edits)
+    {
+        var fishStep = data.Code.ByName("gml_Object_Fish_Step_2")
+            ?? throw new InvalidDataException("The Fish End Step event is missing. Re-add JAMM Perf and build again.");
+        string source = ModObjects.Decompile(data, fishStep);
+        const string marker = "// WHY: cache runtime ancestry";
+        if (source.Contains(marker, StringComparison.Ordinal)) return;
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(fishStep, Prefix(data) + source);
+        ModObjects.Compile(compiler);
+        edits.Add(fishStep);
+    }
+
     private static string ReplaceDefault(string source, string expected, string replacement)
     {
         if (source.Split(expected, StringSplitOptions.None).Length != 2)

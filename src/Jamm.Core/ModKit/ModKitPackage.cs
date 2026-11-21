@@ -21,7 +21,14 @@ public sealed record ModKitSpawnBox(double XMin, double XMax, double YMin, doubl
 public sealed record ModKitFishHooks(string? Create, string? Step, string? Caught, string? Draw);
 
 /// <summary>A nonpersistent room object with optional event hooks.</summary>
-public sealed record ModKitObject(string Key, string? Sprite, int Depth, string? Create, string? Step, string? Draw);
+public sealed record ModKitObject(string Key, string? Sprite, int Depth, string? Create, string? Step, string? Draw)
+{
+    /// <summary>Optional Draw GUI hook for a room object's interface.</summary>
+    public string? DrawGui { get; init; }
+}
+
+/// <summary>A namespaced GML script callable by package hooks.</summary>
+public sealed record ModKitScript(string Key, string Path);
 
 /// <summary>A fish definition in a ModKit package.</summary>
 public sealed record ModKitFish(
@@ -56,6 +63,9 @@ public sealed record ModKitFish(
 /// <summary>Optional boat movement and capacity stats.</summary>
 public sealed record ModKitBoatStats(double MaxSpeed, int Capacity, double MaxDistance, double MoveBonus);
 
+/// <summary>Optional lifecycle event bodies for a ModKit vehicle.</summary>
+public sealed record ModKitBoatHooks(string? Create, string? BeginStep, string? Step, string? EndStep, string? DrawGui, string? Destroy);
+
 /// <summary>A boat definition in a ModKit package.</summary>
 public sealed record ModKitBoat(
     string Key,
@@ -66,7 +76,17 @@ public sealed record ModKitBoat(
     string Description,
     bool Unlocked,
     ModKitBoatStats Stats,
-    int[]? Origin);
+    int[]? Origin)
+{
+    /// <summary>Optional world sprite recipe key.</summary>
+    public string? SpriteKey { get; init; }
+
+    /// <summary>Optional shop card sprite recipe key.</summary>
+    public string? CardKey { get; init; }
+
+    /// <summary>Optional event hooks on the registered Boat child.</summary>
+    public ModKitBoatHooks? Hooks { get; init; }
+}
 
 /// <summary>A fishing rod definition in a ModKit package.</summary>
 public sealed record ModKitRod(
@@ -144,6 +164,9 @@ public sealed record ModKitManifest(
     /// <summary>Custom room objects available to area placements.</summary>
     public IReadOnlyList<ModKitObject> Objects { get; init; } = [];
 
+    /// <summary>Shared GML scripts defined by this package.</summary>
+    public IReadOnlyList<ModKitScript> Scripts { get; init; } = [];
+
     /// <summary>Fishing rods registered with the JAMM item API.</summary>
     public IReadOnlyList<ModKitRod> Rods { get; init; } = [];
 
@@ -208,6 +231,7 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(sprites.Select(s => ModKitBuilder.SanitizeIdent(s.Key)), "$.sprites");
             var spritesByKey = sprites.ToDictionary(s => s.Key, StringComparer.Ordinal);
             var objects = ParseArray(rootObj, "objects", "$.objects", (el, path) => ParseObject(root, el, path, spritesByKey));
+            var scripts = ParseArray(rootObj, "scripts", "$.scripts", (el, path) => ParseScript(root, el, path));
             var fish = ParseArray(rootObj, "fish", "$.fish", (el, path) => ParseFish(root, el, path, spritesByKey));
             foreach (var entry in fish.Where(f => f.Spawn.Area is not null))
             {
@@ -216,7 +240,7 @@ public static partial class ModKitPackage
                 if (entry.Spawn.Within is { } region && (region.Right > area.Bounds.W || region.Bottom > area.Bounds.H))
                     throw Error("$.fish", $"Fish '{entry.Key}' has a 'within' rectangle outside area '{area.Id}'.");
             }
-            var boats = ParseArray(rootObj, "boats", "$.boats", (el, path) => ParseBoat(root, el, path));
+            var boats = ParseArray(rootObj, "boats", "$.boats", (el, path) => ParseBoat(root, el, path, spritesByKey));
             var rods = ParseArray(rootObj, "rods", "$.rods", (el, path) => ParseRod(root, el, path));
             var hats = ParseArray(rootObj, "hats", "$.hats", (el, path) => ParseHat(root, el, path));
             var upgrades = ParseArray(rootObj, "upgrades", "$.upgrades", (el, path) => ParseUpgrade(root, el, path));
@@ -227,14 +251,21 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(hats.Select(h => h.Key), "$.hats");
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
             EnsureUniqueKeys(objects.Select(o => ModKitBuilder.SanitizeIdent(o.Key)), "$.objects");
+            EnsureUniqueKeys(scripts.Select(s => ModKitBuilder.SanitizeIdent(s.Key)), "$.scripts");
 
             var (_, _, role) = Management.ModRole.ReadManifest(rootObj, manifestPath, readIdentity: false);
             var weathers = ParseArray(rootObj, "weathers", "$.weathers", (el, path) => ParseWeather(root, el, path, spritesByKey, fish));
             EnsureUniqueKeys(weathers.Select(w => ModKitBuilder.SanitizeIdent(w.Id)), "$.weathers");
 
             return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
-                { Areas = areas, Sprites = sprites, Objects = objects, Weathers = weathers, Rods = rods, Role = role };
+                { Areas = areas, Sprites = sprites, Objects = objects, Scripts = scripts, Weathers = weathers, Rods = rods, Role = role };
         }
+    }
+
+    private static ModKitScript ParseScript(string root, JsonElement element, string path)
+    {
+        var obj = ExpectObject(element, path);
+        return new(RequireKey(obj, "key", $"{path}.key"), RequireAssetFile(root, obj, "file", $"{path}.file", [".gml"]));
     }
 
     private static ModKitObject ParseObject(string root, JsonElement element, string path, IReadOnlyDictionary<string, ModKitSprite> sprites)
@@ -248,7 +279,7 @@ public static partial class ModKitPackage
         JsonElement hooks = TryGetNonNull(obj, "hooks", out var value) ? ExpectObject(value, $"{path}.hooks") : default;
         string? Hook(string name) => hooks.ValueKind == JsonValueKind.Object
             ? OptionalAssetFile(root, hooks, name, $"{path}.hooks.{name}", [".gml"]) : null;
-        return new(key, sprite, depth, Hook("create"), Hook("step"), Hook("draw"));
+        return new(key, sprite, depth, Hook("create"), Hook("step"), Hook("draw")) { DrawGui = Hook("drawGui") };
     }
 
     /// <summary>Creates a starter ModKit package folder for the requested template (<c>fish</c>, <c>upgrade</c>, <c>boat</c>, or <c>hat</c>).</summary>
@@ -501,17 +532,31 @@ public static partial class ModKitPackage
         return new ModKitSpawnBox(Math.Min(x1, x2), Math.Max(x1, x2), Math.Min(y1, y2), Math.Max(y1, y2), count);
     }
 
-    private static ModKitBoat ParseBoat(string root, JsonElement element, string path)
+    private static ModKitBoat ParseBoat(string root, JsonElement element, string path, IReadOnlyDictionary<string, ModKitSprite> sprites)
     {
         var obj = ExpectObject(element, path);
         string key = RequireKey(obj, "key", $"{path}.key");
         string name = RequireNonEmptyString(obj, "name", $"{path}.name");
         double cost = OptionalDouble(obj, "cost", $"{path}.cost", 15000.0, min: 0.0);
-        string cardPath = RequireAssetFile(root, obj, "card", $"{path}.card", [".png"], expectedFrames: 1);
-        string spritePath = RequireAssetFile(root, obj, "sprite", $"{path}.sprite", [".png"], expectedFrames: 1);
+        var (cardPath, cardKey) = ReadArt("card");
+        var (spritePath, spriteKey) = ReadArt("sprite");
         string description = OptionalString(obj, "description", $"{path}.description", $"{name}.");
         bool unlocked = OptionalBool(obj, "unlocked", $"{path}.unlocked", false);
         int[]? origin = OptionalOrigin(obj, "origin", $"{path}.origin");
+        if (origin is not null && spriteKey is not null)
+            throw Error($"{path}.origin", "Set the origin on the world sprite recipe.");
+
+        ModKitBoatHooks? hooks = null;
+        if (TryGetNonNull(obj, "hooks", out var hooksElement))
+        {
+            var hookObject = ExpectObject(hooksElement, $"{path}.hooks");
+            foreach (var hook in hookObject.EnumerateObject())
+                if (hook.Name is not ("create" or "beginStep" or "step" or "endStep" or "drawGui" or "destroy"))
+                    throw Error($"{path}.hooks.{hook.Name}", "Use create, beginStep, step, endStep, drawGui or destroy.");
+
+            hooks = new(Hook("create"), Hook("beginStep"), Hook("step"), Hook("endStep"), Hook("drawGui"), Hook("destroy"));
+            string? Hook(string name) => OptionalAssetFile(root, hookObject, name, $"{path}.hooks.{name}", [".gml"]);
+        }
 
         ModKitBoatStats stats = new(4.0, 4, 4500.0, 0.0);
         if (TryGetNonNull(obj, "stats", out var statsEl))
@@ -524,7 +569,23 @@ public static partial class ModKitPackage
                 OptionalDouble(statsObj, "moveBonus", $"{path}.stats.moveBonus", 0.0, min: 0.0));
         }
 
-        return new ModKitBoat(key, name, cost, cardPath, spritePath, description, unlocked, stats, origin);
+        return new ModKitBoat(key, name, cost, cardPath, spritePath, description, unlocked, stats, origin)
+            { CardKey = cardKey, SpriteKey = spriteKey, Hooks = hooks };
+
+        (string Path, string? Key) ReadArt(string field)
+        {
+            string fieldPath = $"{path}.{field}";
+            string value = RequireNonEmptyString(obj, field, fieldPath);
+            if (sprites.TryGetValue(value, out var recipe))
+            {
+                if (field == "card" && recipe.Frames.Count != 1)
+                    throw Error(fieldPath, "The shop card needs a single-frame recipe.");
+                return ("", value);
+            }
+            if (Path.GetExtension(value).Equals(".png", StringComparison.OrdinalIgnoreCase))
+                return (ValidateAssetPath(root, value, fieldPath, [".png"], 1), null);
+            throw Error(fieldPath, $"Sprite '{value}' was not found. Use a key from sprites[] or a relative PNG path.");
+        }
     }
 
     private static ModKitRod ParseRod(string root, JsonElement element, string path)

@@ -217,7 +217,7 @@ public sealed partial class MainViewModel : ObservableObject
                     RemovedHudCount = info.Report?.RemovedHudCount ?? 0,
                     RemovedGameplayCount = info.Report?.RemovedGameplayCount ?? 0,
                     SanitizedDetails = info.Report?.FormatDetails() ?? "",
-                    KeepAuthorPerformanceChanges = m.Mod.KeepAuthorPerformanceChanges,
+                    KeepAuthorPerformanceChanges = m.Mod.EffectiveKeepAuthorPerformanceChanges,
                     KeepAuthorHudDesign = m.Mod.KeepAuthorHudDesign,
                     KeepAuthorGameplayChanges = m.Mod.KeepAuthorGameplayChanges,
                     IsModKit = isModKit,
@@ -375,7 +375,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (!IsBusy && Mods.FirstOrDefault(m => m.Id == id) is { } row) row.Enabled = !row.Enabled;
         return Task.CompletedTask;
     }
-    /// <summary>Persists the Advanced per-mod opt-out to keep or strip the author's performance changes.</summary>
+    /// <summary>Persists whether this mod keeps or sanitizes its author's performance changes.</summary>
     public Task SetKeepAuthorPerformanceChangesAsync(ModRow row) => RunAsync("Updating performance changes setting", async (_, _) =>
     {
         await Task.Run(() => new ModLibrary(store).SetKeepAuthorPerformanceChanges(row.Id, row.KeepAuthorPerformanceChanges));

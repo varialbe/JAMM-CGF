@@ -348,6 +348,80 @@ public sealed class DecorSleepTests
             var updated = profiles.SetPerf("p1", decorSleep: false);
             Assert.False(updated.Perf.DecorSleep);
             Assert.False(profiles.Get("p1").Perf.DecorSleep);
+
+            // Older profile JSON lacking "decorSleep" defaults DecorSleep to true.
+            string p2Path = Path.Combine(temp, "profiles", "p2.json");
+            File.WriteAllText(p2Path, """
+                {
+                  "name": "p2",
+                  "mods": [],
+                  "resolutions": {},
+                  "perf": { "startEnabled": false, "fishGrid": false, "interval": 4 }
+                }
+                """);
+            Assert.True(profiles.Get("p2").Perf.DecorSleep);
+        }
+        finally
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ArchiveBuilderInstallsDecorSleepOnlyWhenPerfDecorSleepIsTrue()
+    {
+        string temp = Path.Combine(Path.GetTempPath(), $"jamm-ds-build-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temp);
+        try
+        {
+            string basePath = Path.Combine(temp, "base.win");
+            using (var baseData = CreateSyntheticArchive())
+            {
+                baseData.GeneralInfo.Minor = 0;
+                baseData.GeneralInfo.Build = 1773;
+                baseData.GeneralInfo.Timestamp = 1692207312;
+                var compiler = new CompileGroup(baseData);
+                var trawler = UndertaleCode.CreateEmptyEntry(baseData, "gml_Script_fish_check_trawler");
+                baseData.Scripts.Add(new UndertaleScript { Name = baseData.Strings.MakeString("fish_check_trawler"), Code = trawler });
+                compiler.QueueCodeReplace(trawler, "if (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false)) { x += 1; }");
+                var avoid = UndertaleCode.CreateEmptyEntry(baseData, "gml_Script_fish_avoid_fish");
+                baseData.Scripts.Add(new UndertaleScript { Name = baseData.Strings.MakeString("fish_avoid_fish"), Code = avoid });
+                compiler.QueueCodeReplace(avoid, "x = (argument1 * argument1) + 1; y = (100000 * argument2) + 1; z = (100000 * argument2) + 2;");
+                var fishStep = baseData.GameObjects.ByName("Fish")!.EventHandlerFor(EventType.Step, 2u, baseData);
+                compiler.QueueCodeReplace(fishStep, "x += 1;");
+                var magmer = ModObjects.Create(baseData, "Magmer", persistent: false);
+                compiler.QueueCodeReplace(magmer.EventHandlerFor(EventType.Draw, 0u, baseData), "light.image_alpha = 1 - power(1 - heat_level, 2);");
+                var volteen = ModObjects.Create(baseData, "Volteen", persistent: false);
+                compiler.QueueCodeReplace(volteen.EventHandlerFor(EventType.Other, 13u, baseData), "light.add_blend = 4210752; light.sub_blend = 4210752;");
+                compiler.QueueCodeReplace(volteen.EventHandlerFor(EventType.Other, 10u, baseData), "if (charge > 0) { light.add_blend = 0; light.sub_blend = 0; } else { light.add_blend = 4210752; light.sub_blend = 4210752; }");
+                ModObjects.Compile(compiler);
+                using var fs = File.Create(basePath);
+                UndertaleIO.Write(fs, baseData);
+            }
+
+            var store = new Jamm.Core.Management.ManagerStore(Path.Combine(temp, "store"));
+            store.Set("base", basePath);
+            var perfMod = new Jamm.Core.Management.BuiltinMods(store).Add("perf").Mod;
+            var library = new Jamm.Core.Management.ModLibrary(store);
+            var input = new Jamm.Core.Building.BuildInput(library.Patch(perfMod), library.Archive(perfMod));
+
+            // 1. Plain Perf build with no perfSettings (or DecorSleep: false): byte-identical, no DecorSleep.
+            string outPlain = Path.Combine(temp, "plain.win");
+            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outPlain, noRepack: true, perfSettings: null);
+            Assert.Equal(Jamm.Core.Building.BuildFiles.Hash(basePath), Jamm.Core.Building.BuildFiles.Hash(outPlain));
+
+            string outOff = Path.Combine(temp, "off.win");
+            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outOff, noRepack: true, perfSettings: new PerfSettings(DecorSleep: false));
+            Assert.Equal(Jamm.Core.Building.BuildFiles.Hash(basePath), Jamm.Core.Building.BuildFiles.Hash(outOff));
+
+            // 2. Profile default PerfSettings (DecorSleep: true, StartEnabled: false, FishGrid: false): installs DecorSleep only.
+            string outOn = Path.Combine(temp, "on.win");
+            var res = Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outOn, noRepack: true, perfSettings: new PerfSettings());
+            Assert.Contains(res.Plan.Decisions, d => d.StartsWith("[CGF-PERF-DECOR] enabled", StringComparison.Ordinal));
+            using var loaded = Jamm.Core.GameFileLoader.Load(outOn);
+            Assert.NotNull(loaded.Data.GameObjects.ByName(DecorSleep.Controller));
+            Assert.Null(loaded.Data.GameObjects.ByName(PerfMode.ControllerName));
+            Assert.Null(loaded.Data.GameObjects.ByName(FishGrid.Controller));
         }
         finally
         {

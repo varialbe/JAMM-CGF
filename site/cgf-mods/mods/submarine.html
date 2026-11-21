@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
+  <title>Submarine — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>Submarine</span></nav>
+    <header class="mod-header">
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/submarine.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Submarine</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div><p>Version 0.1.0</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/submarine.zip" download>Download source ZIP</a><span>Source-only ZIP · 6,718 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>6,718 bytes</dd></div><div><dt>SHA-256</dt><dd><code>d5814f3dbeba4eb86a4c65a3997ad3a9a922ad0f1a9d64cac0a3317ecf67ab1d</code></dd></div></dl>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>Submarine adds an optional boat to the Boat shop for $125M. Take it east of the dock, press V to dive and steer through open water with the arrow keys or WASD. A bow headlight lights the way, a depth readout and an oxygen meter (110 seconds, refilled at the surface) sit in the corner, and you can cast and reel from the bow. Version 0.1.0 is a first playable preview.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF with a configured August 2023 legacy VM base.</li>
+        <li>Build into a separate game copy; do not use the current Steam YYC archive as the base.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, check the profile, then build or install to a separate game copy.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>In-game controls</h2>
+<ul class="controls">
+        <li>V (gamepad Y / Triangle): dive or surface.</li>
+        <li>Arrow keys or WASD (D-pad or left stick): steer underwater.</li>
+        <li>L (X / Square): toggle the headlight.</li>
+        <li>Hold and release Space or the left mouse button (RB / R1): cast from the bow; hold to reel.</li>
+        <li>Q at the surface: vanilla swimming.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>When the submarine is equipped and below the sea line, a controller takes over movement from the boat, applies buoyancy and a hull depth limit of 4,800 units, and counts down oxygen. Running out of oxygen starts an emergency ascent.</p>
+      <p>The bow cast reuses the vanilla rod and lure, so bait, bites, catches, selling and Fishalog progress work as usual. Reel in before moving or surfacing.</p><figure class="diagram"><svg viewBox="0 0 880 160" role="img" aria-labelledby="diag-title diag-desc"><title id="diag-title">Dive loop</title><desc id="diag-desc">The equipped submarine dives, steers and fishes while oxygen counts down, then surfaces to refill.</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"/></marker></defs><path d="M 212 81 H 230" marker-end="url(#arrow)"/><path d="M 430 81 H 448" marker-end="url(#arrow)"/><path d="M 648 81 H 666" marker-end="url(#arrow)"/><g><rect x="19" y="35" width="188" height="92" rx="14"/><text x="113" y="81" text-anchor="middle">Buy + equip</text></g><g><rect x="237" y="35" width="188" height="92" rx="14"/><text x="331" y="81" text-anchor="middle">Dive (V)</text></g><g><rect x="455" y="35" width="188" height="92" rx="14"/><text x="549" y="81" text-anchor="middle">Steer, light, cast</text></g><g><rect x="673" y="35" width="188" height="92" rx="14"/><text x="767" y="81" text-anchor="middle">Surface + refill O2</text></g></svg><ol class="diagram-mobile" aria-label="Dive loop"><li>Buy + equip</li><li>Dive (V)</li><li>Steer, light, cast</li><li>Surface + refill O2</li></ol><figcaption>Upgrades, hull pressure and a shared dive query are planned for later versions.</figcaption></figure>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>ModKit</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
+<tr><th scope="row">Version</th><td>0.1.0</td></tr>
+<tr><th scope="row">APIs used</th><td>JAMM ModKit boat shop registration, lifecycle hooks on the player and boat, GameMaker instance, collision and drawing APIs, and the vanilla catch flow.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>Hull and shop card are generated at build time from locally sourced Tech Boat parts plus original SVG details. The package ships no extracted game art.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>The game&#x27;s own save stores ownership and the equipped boat. A new session starts at the surface.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive or a compatible merged archive. Tested solo with the JAMM Console and in a profile with Perf, HD Lite, Console, Smooth, Silo, Weather Pack and Endless Ocean.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>0.1.0: First playable preview: dive, headlight, oxygen, depth readout and bow fishing.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">No measured performance entry is available for this package yet.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>Where is the submarine in the shop?</summary><p>In the Boat shop for $125M. Scroll the shop if the card is on a later page.</p></details>
+<details><summary>Why can&#x27;t I dive at the dock?</summary><p>Dive in open water east of the dock and steer around rock before casting.</p></details>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+<ul class="package-files">
+        <li><code>README.md</code></li>
+        <li><code>hooks/begin-step.gml</code></li>
+        <li><code>hooks/create.gml</code></li>
+        <li><code>hooks/destroy.gml</code></li>
+        <li><code>hooks/draw-gui.gml</code></li>
+        <li><code>hooks/end-step.gml</code></li>
+        <li><code>hooks/step.gml</code></li>
+        <li><code>jamm-mod.json</code></li>
+        <li><code>parts/bow.svg</code></li>
+        <li><code>parts/canopy.svg</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

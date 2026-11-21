@@ -55,5 +55,6 @@ API and ModKit mods avoid shared assets completely:
 * [`examples/modkit/harbor-pack/`](../../examples/modkit/harbor-pack/) — two boats (**Paddle Raft** and **Comet Cruiser**, triggering page 2 of the Boat shop alongside the 8 vanilla boats) and two hats (**Fisher's Beanie** and **Lucky Captain Hat**, with an `effect` hook boosting fish sale value).
 * [`examples/modkit/make-art.py`](../../examples/modkit/make-art.py) — Python standard-library script used to generate the example pixel art PNGs.
 * [Endless Ocean](../../examples/modkit/endless-ocean/) adds a seeded ocean floor and vanilla fish east of NewWorld.
+* [Harbor Town](../../examples/modkit/harbor-town/README.md) composes a lighthouse, aquarium, statue and dock menu from the player's vanilla sprites.
 
 See [Building an area](areas.md) and [The Silo tutorial](../../examples/modkit/silo/README.md) for a deep-water ModKit example.
