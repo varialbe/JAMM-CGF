@@ -1,6 +1,6 @@
 if (view_current != 0 || abs(x - Camera.x) > 850) exit;
 
-for (var i = 0; i < 3; i += 1)
+for (var i = 0; i < 4; i += 1)
 {
     var level = harbor_level[i];
     var stage = jmk_harbor_town_script_stage(level);
@@ -47,6 +47,20 @@ for (var i = 0; i < 3; i += 1)
                 size * flip, size, 0, c_white, 0.92);
         }
     }
+}
+
+// Each patron tier adds small, non-solid dock decorations made from local recipe art.
+if (harbor_donated >= 1000000)
+    draw_sprite(jmk_harbor_town_recipe_flag, 0, x - 238, y - 1);
+if (harbor_donated >= 1000000000)
+{
+    draw_sprite(jmk_harbor_town_recipe_flag, 0, x + 257, y - 2);
+    draw_sprite(jmk_harbor_town_recipe_flag, 0, x - 265, y - 1);
+}
+if (harbor_donated >= 1000000000000)
+{
+    draw_sprite(jmk_harbor_town_recipe_lantern, 0, x - 250, y - 6);
+    draw_sprite(jmk_harbor_town_recipe_lantern, 0, x + 255, y - 6);
 }
 
 var sign_x = x + 53;

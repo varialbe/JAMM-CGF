@@ -9,22 +9,53 @@ public sealed class HarborTownTests
         AppContext.BaseDirectory, "../../../../../examples/modkit/harbor-town"));
 
     [Fact]
-    public void PackageHasThreeDockBuildingsAndOnlyUsesRecipeAssets()
+    public void PackageHasFourDockBuildingsAndOnlyUsesRecipeAssets()
     {
         var package = ModKitPackage.Load(Package);
 
         Assert.Equal("harbor-town", package.Id);
-        Assert.Equal("0.1.0", package.Version);
-        Assert.Collection(package.Sprites, _ => { }, _ => { }, _ => { }, _ => { });
+        Assert.Equal("0.2.0", package.Version);
+        Assert.Collection(package.Sprites, _ => { }, _ => { }, _ => { }, _ => { }, _ => { }, _ => { }, _ => { });
         Assert.NotNull(Assert.Single(package.Objects).DrawGui);
         Assert.Contains(package.Areas, area => area.Anchor.Target?.Object == "Cliff");
         string manifest = File.ReadAllText(Path.Combine(Package, "jamm-mod.json"));
         Assert.Contains("\"#3b6f58\"", manifest);
         Assert.Contains("\"#4e7e6a\"", manifest);
         Assert.Contains("\"tint\": \"#6e4a1e\"", manifest);
-        Assert.Equal(new[] { "bonus", "buy", "command", "cost", "fish", "format", "save", "stage" },
+        Assert.Equal(new[] { "bonus", "buy", "command", "cost", "donate", "fish", "format", "research", "save", "stage", "title" },
             package.Scripts.Select(script => script.Key).Order().ToArray());
         Assert.Empty(Directory.EnumerateFiles(Package, "*.png", SearchOption.AllDirectories));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 0)]
+    [InlineData(1, 0.013862943611198906, 0.01039720770839918, 0.006931471805599453)]
+    [InlineData(100, 0.0923024103368252, 0.06922680775261891, 0.0461512051684126)]
+    [InlineData(1000000, 0.10, 0.08, 0.05)]
+    public void ResearchBonusScriptUsesTheThreeCappedLogarithmicBonuses(int level, double sell, double bite, double luck)
+    {
+        string source = File.ReadAllText(Path.Combine(Package, "scripts/research.gml"));
+        Assert.Contains("2 * ln(1 + level) / 100", source);
+        Assert.Contains("1.5 * ln(1 + level) / 100", source);
+        Assert.Contains("ln(1 + level) / 100", source);
+        Assert.Equal(sell, Research(level, 0), 8);
+        Assert.Equal(bite, Research(level, 1), 8);
+        Assert.Equal(luck, Research(level, 2), 8);
+    }
+
+    [Fact]
+    public void DonationsPersistAndTitlesUnlockAtTheDocumentedMilestones()
+    {
+        string save = File.ReadAllText(Path.Combine(Package, "scripts/save.gml"));
+        string donate = File.ReadAllText(Path.Combine(Package, "scripts/donate.gml"));
+        string title = File.ReadAllText(Path.Combine(Package, "scripts/title.gml"));
+        Assert.Contains("ini_read_real(\"JAMM_Harbor\", \"donated\", 0)", save);
+        Assert.Contains("ini_write_string(\"JAMM_Harbor\", \"donated\"", save);
+        Assert.Contains("harbor_donated += paid", donate);
+        Assert.Contains("Harbor Patron", title);
+        Assert.Contains("Harbor Baron", title);
+        Assert.Contains("Harbor Tycoon", title);
+        Assert.Contains("Harbor Legend", title);
     }
 
     [Theory]
@@ -77,4 +108,11 @@ public sealed class HarborTownTests
     }
 
     private static double Bonus(double level) => Math.Min(0.40, 0.03 * Math.Log(1 + Math.Max(0, level)));
+
+    private static double Research(double level, int kind) => kind switch
+    {
+        0 => Math.Min(0.10, 2 * Math.Log(1 + level) / 100),
+        1 => Math.Min(0.08, 1.5 * Math.Log(1 + level) / 100),
+        _ => Math.Min(0.05, Math.Log(1 + level) / 100)
+    };
 }

@@ -1,9 +1,9 @@
 {
   "id": "harbor-town",
   "name": "Harbor Town",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "JAMM",
-  "description": "Build up the dock with a lighthouse, an aquarium, and a golden statue.",
+  "description": "Build up the dock with a lighthouse, an aquarium, a golden statue, and research station; donate to unlock titles and decorations.",
   "scripts": [
     {
       "key": "cost",
@@ -36,6 +36,18 @@
     {
       "key": "command",
       "file": "scripts/command.gml"
+    },
+    {
+      "key": "research",
+      "file": "scripts/research.gml"
+    },
+    {
+      "key": "donate",
+      "file": "scripts/donate.gml"
+    },
+    {
+      "key": "title",
+      "file": "scripts/title.gml"
     }
   ],
   "sprites": [
@@ -159,6 +171,203 @@
         {"file": "parts/sign.svg", "x": 0, "y": 0, "scaleX": 1, "scaleY": 1}
       ]
     }
+,
+{
+  "key": "research",
+  "width": 144,
+  "height": 124,
+  "origin": [
+    72,
+    123
+  ],
+  "compose": [
+    [
+      {
+        "file": "parts/stake.svg",
+        "x": 59,
+        "y": 110,
+        "scaleX": 1,
+        "scaleY": 1
+      }
+    ],
+    [
+      {
+        "from": "spr_landscape4",
+        "crop": {
+          "x": 0,
+          "y": 137,
+          "w": 192,
+          "h": 206
+        },
+        "x": 47,
+        "y": 68,
+        "scaleX": 0.26,
+        "scaleY": 0.3,
+        "paletteMap": {
+          "#3b6f58": "#728b80",
+          "#4e7e6a": "#a6c0a4"
+        },
+        "edgeSoftness": 0.42
+      },
+      {
+        "file": "parts/lantern.svg",
+        "x": 62,
+        "y": 59,
+        "scaleX": 0.75,
+        "scaleY": 0.75
+      },
+      {
+        "file": "parts/dish.svg",
+        "x": 72,
+        "y": 38,
+        "scaleX": 0.73,
+        "scaleY": 0.73
+      }
+    ],
+    [
+      {
+        "from": "spr_landscape4",
+        "crop": {
+          "x": 0,
+          "y": 137,
+          "w": 192,
+          "h": 206
+        },
+        "x": 39,
+        "y": 59,
+        "scaleX": 0.34,
+        "scaleY": 0.34,
+        "paletteMap": {
+          "#3b6f58": "#728b80",
+          "#4e7e6a": "#a6c0a4"
+        },
+        "edgeSoftness": 0.42
+      },
+      {
+        "file": "parts/lantern.svg",
+        "x": 58,
+        "y": 46,
+        "scaleX": 0.9,
+        "scaleY": 0.9
+      },
+      {
+        "file": "parts/dish.svg",
+        "x": 70,
+        "y": 35,
+        "scaleX": 0.81,
+        "scaleY": 0.81
+      }
+    ],
+    [
+      {
+        "from": "spr_landscape4",
+        "crop": {
+          "x": 0,
+          "y": 137,
+          "w": 192,
+          "h": 206
+        },
+        "x": 31,
+        "y": 50,
+        "scaleX": 0.42,
+        "scaleY": 0.38,
+        "paletteMap": {
+          "#3b6f58": "#728b80",
+          "#4e7e6a": "#a6c0a4"
+        },
+        "edgeSoftness": 0.42
+      },
+      {
+        "file": "parts/lantern.svg",
+        "x": 54,
+        "y": 34,
+        "scaleX": 1.05,
+        "scaleY": 1.05
+      },
+      {
+        "file": "parts/dish.svg",
+        "x": 68,
+        "y": 32,
+        "scaleX": 0.89,
+        "scaleY": 0.89
+      }
+    ],
+    [
+      {
+        "from": "spr_landscape4",
+        "crop": {
+          "x": 0,
+          "y": 137,
+          "w": 192,
+          "h": 206
+        },
+        "x": 23,
+        "y": 41,
+        "scaleX": 0.5,
+        "scaleY": 0.43,
+        "paletteMap": {
+          "#3b6f58": "#728b80",
+          "#4e7e6a": "#a6c0a4"
+        },
+        "edgeSoftness": 0.42
+      },
+      {
+        "file": "parts/lantern.svg",
+        "x": 50,
+        "y": 22,
+        "scaleX": 1.2,
+        "scaleY": 1.2
+      },
+      {
+        "file": "parts/dish.svg",
+        "x": 66,
+        "y": 29,
+        "scaleX": 0.97,
+        "scaleY": 0.97
+      }
+    ]
+  ]
+},
+{
+  "key": "flag",
+  "width": 28,
+  "height": 34,
+  "origin": [
+    5,
+    32
+  ],
+  "compose": [
+    [
+      {
+        "file": "parts/flag.svg",
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      }
+    ]
+  ]
+},
+{
+  "key": "lantern",
+  "width": 20,
+  "height": 24,
+  "origin": [
+    10,
+    23
+  ],
+  "compose": [
+    [
+      {
+        "file": "parts/lantern.svg",
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      }
+    ]
+  ]
+}
   ],
   "objects": [
     {
