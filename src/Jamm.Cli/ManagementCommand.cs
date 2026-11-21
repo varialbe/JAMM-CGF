@@ -94,7 +94,8 @@ internal static class ManagementCommand
             case "add":
                 Count(1);
                 var added = library.Add(positional[0], options.GetValueOrDefault("--name"), Progress);
-                Console.WriteLine($"{(added.AlreadyAdded ? "Already added" : "Added")} {added.Mod.Name} ({added.Mod.Id}). Patch cached.");
+                Console.WriteLine($"{(added.AlreadyAdded ? "Already added" : "Added")} {added.Mod.Name} ({added.Mod.Id})."
+                    + (added.Mod.Role is { Role: "addon" } ? $" {added.Mod.Role.Label}." : " Patch cached."));
                 foreach (string warning in added.Warnings) Console.Error.WriteLine($"WARNING: {warning}");
                 break;
             case "list":
@@ -103,7 +104,8 @@ internal static class ManagementCommand
                 if (json) Json(list);
                 else if (list.Count == 0) Console.WriteLine("No mods yet. Use 'cgfmm add <file.win or file.zip>'.");
                 else foreach (var entry in list)
-                    Console.WriteLine($"{entry.Mod.Id}  {entry.Mod.Name}: {entry.Compatibility}; patch {(entry.PatchCached ? "cached" : "missing or stale")}.");
+                    Console.WriteLine($"{entry.Mod.Id}  {entry.Mod.Name} [{entry.Mod.Role?.Label ?? "Vanilla"}]: {entry.Compatibility}; patch {(entry.PatchCached ? "cached" : "missing or stale")}."
+                        + (entry.Mod.SuggestBase && entry.Mod.Role is null ? " Possible base mod." : ""));
                 break;
             case "remove":
                 Count(1); library.Remove(positional[0]); Console.WriteLine($"Removed '{positional[0]}' from the library. Backups retained."); break;
@@ -132,10 +134,9 @@ internal static class ManagementCommand
                         if (json) Json(profile);
                         else
                         {
-                            Console.WriteLine($"Profile {profile.Name} (later participating mods win overlaps):");
+                            Console.WriteLine($"Profile {profile.Name} (later mods win within each group):");
                             Console.WriteLine($"  Preset: {profile.Preset}");
-                            foreach (string id in profile.Mods)
-                                Console.WriteLine($"  {library.Find(id).Name} ({id}): {(profile.DisabledMods.Contains(id) ? "off" : "on")}");
+                            PrintGroup(profiles.Group(profile), includeDisabled: true);
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
                             Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for modded builds")}");
                             Console.WriteLine($"  Perf defaults: F8 mode {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid {(profile.Perf.FishGrid ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence).");
@@ -183,6 +184,15 @@ internal static class ManagementCommand
                         Console.WriteLine($"Legacy shop unlock repair for '{positional[2]}' in '{positional[1]}': {positional[3]}.");
                         break;
                     case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3], Console.WriteLine); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
+                    case "base":
+                    case "addon":
+                    case "role":
+                        Count(action == "base" ? 3 : 4);
+                        if (action == "role" && positional[3] != "none") throw new ArgumentException("Use profile role <name> <mod> none.");
+                        var updatedRole = profiles.SetRole(positional[1], positional[2], action == "role" ? "none" : action,
+                            action == "addon" ? positional[3] : null);
+                        PrintGroup(profiles.Group(updatedRole), includeDisabled: true);
+                        break;
                     default: throw new ArgumentException($"Unknown profile action '{action}'. See 'cgfmm --help'.");
                 }
                 break;
@@ -204,6 +214,7 @@ internal static class ManagementCommand
                     var prepared = installer.Prepare(selected, Progress);
                     try
                     {
+                        PrintGroup(profiles.Group(prepared.Profile));
                         foreach (string decision in prepared.Build.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
                         foreach (string warning in prepared.Build.Verification!.Warnings) Console.Error.WriteLine($"WARNING: {warning}");
                         if (prepared.Build.Acceptance is { } acceptance)
@@ -237,6 +248,13 @@ internal static class ManagementCommand
                 break;
         }
         return 0;
+    }
+
+    internal static void PrintGroup(IEnumerable<ProfileMod> rows, bool includeDisabled = false)
+    {
+        Console.WriteLine("Profile mods");
+        foreach (var row in rows.Where(r => includeDisabled || r.Enabled))
+            Console.WriteLine($"{(row.Role.Role == "addon" ? "    " : "  ")}{row.Mod.Name} ({row.Mod.Id}) [{row.RoleLabel}]{(row.Enabled ? "" : " (disabled)")}");
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };

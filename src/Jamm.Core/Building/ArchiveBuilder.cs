@@ -28,13 +28,20 @@ public static class ArchiveBuilder
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
         CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false,
+        PerfSettings? perfSettings = null) =>
+        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack, perfSettings: perfSettings);
+
+    internal static BuildResult BuildLayer(string basePath, IReadOnlyList<BuildInput> inputs, string output,
+        IReadOnlyDictionary<string, string>? resolutions, bool dryRun, Action<string>? progress,
+        CancellationToken cancellationToken, AnalysisOptions? options, bool noRepack,
+        bool intermediate = false, IReadOnlyList<string>? additionalProtectedPaths = null, bool hasMergedBase = false,
         PerfSettings? perfSettings = null)
     {
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
         cancellationToken.ThrowIfCancellationRequested();
-        string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath)];
+        string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath), .. additionalProtectedPaths ?? []];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
         using var original = GameFileLoader.Load(basePath, progress, cancellationToken, options);
         if (inputs.Count == 0)
@@ -75,29 +82,32 @@ public static class ArchiveBuilder
                 .Select(x => x.index).ToHashSet();
             // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
             // jamm_api_init when no items runtime was injected.
-            var plan = CatalogRuntime.PreparePlan(
-                FishRuntime.PreparePlan(
-                    ItemsRuntime.PreparePlan(
-                        HudRuntime.PreparePlan(
-                            MenuRuntime.PreparePlan(
-                                BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, unlockFixMods),
-                                semantics.Base, original.Data),
-                            semantics.Base),
-                        semantics.Base,
-                        semantics.BaseNames),
-                    semantics.Base, original.Data),
-                semantics.Base);
+            var plan = BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, unlockFixMods, hasMergedBase);
+            if (!intermediate)
+                plan = CatalogRuntime.PreparePlan(
+                    FishRuntime.PreparePlan(
+                        ItemsRuntime.PreparePlan(
+                            HudRuntime.PreparePlan(
+                                MenuRuntime.PreparePlan(plan, semantics.Base, original.Data),
+                                semantics.Base),
+                            semantics.Base, semantics.BaseNames),
+                        semantics.Base, original.Data),
+                    semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
             ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
-            // This fresh base model is the disposable working copy; no input stream is ever writable.
-            using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
-            if (working.Inspection.Sha256 != original.Inspection.Sha256) throw new IOException("The base changed during loading. Retry with stable input copies.");
+            // In the addon pass the first source is the already merged base. Start with its
+            // asset indices and room IDs while planning edits in the raw ancestor's coordinates.
+            var workingAncestor = hasMergedBase ? sources[0] : original;
+            string workingPath = hasMergedBase ? inputs[0].ArchivePath : basePath;
+            using var working = GameFileLoader.Load(workingPath, cancellationToken: cancellationToken, options: options);
+            if (working.Inspection.Sha256 != workingAncestor.Inspection.Sha256)
+                throw new IOException("The working base changed during loading. Retry with stable input copies.");
             var data = working.Data;
             IReadOnlyDictionary<string, string> generatedCode;
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                generatedCode = Apply(data, original.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions);
+                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -112,8 +122,8 @@ public static class ArchiveBuilder
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
-            var acceptance = AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
-            if (data.GameObjects.ByName(PerfMode.ControllerName) is not null)
+            var acceptance = intermediate ? null : AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
+            if (!intermediate && data.GameObjects.ByName(PerfMode.ControllerName) is not null)
             {
                 // Verify selected source references and acceptance before profiling-independent
                 // runtime edits. The read-back verifier then checks the generated bytecode too.
@@ -190,7 +200,7 @@ public static class ArchiveBuilder
 
     private static IReadOnlyDictionary<string, string> Apply(UndertaleData data, UndertaleData ancestor,
         IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan,
-        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions)
+        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -341,13 +351,19 @@ public static class ArchiveBuilder
         foreach (var room in data.Rooms)
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
-        var generatedCode = AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
-        CatalogRuntime.Inject(data, recompile);
-        HudRuntime.Inject(data, recompile);
-        MenuRuntime.Inject(data, recompile);
-        ItemsRuntime.Inject(data, recompile);
-        FishRuntime.Inject(data, recompile);
-        WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+        // Intermediate base-mod layers keep area and weather declarations as plain code; the final
+        // pass places them once, together with the shared runtimes.
+        var generatedCode = intermediate ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
+        if (!intermediate)
+        {
+            CatalogRuntime.Inject(data, recompile);
+            HudRuntime.Inject(data, recompile);
+            MenuRuntime.Inject(data, recompile);
+            ItemsRuntime.Inject(data, recompile);
+            FishRuntime.Inject(data, recompile);
+            WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+        }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);

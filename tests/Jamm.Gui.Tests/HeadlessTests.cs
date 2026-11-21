@@ -203,6 +203,7 @@ public sealed class HeadlessTests
         {
             settings.Show();
             Dispatcher.UIThread.RunJobs();
+            while (vm.IsBusy) await Task.Delay(10);
 
             var boxes = settings.GetVisualDescendants().OfType<TextBox>().ToArray();
             var texts = settings.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();

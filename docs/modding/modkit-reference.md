@@ -10,8 +10,8 @@ ModKit compiles a folder package (`jamm-mod.json` + PNGs + optional `.gml` hooks
 | :--- | :--- |
 | `cgfmm modkit new <dir> [--template fish\|upgrade\|boat\|hat]` | Scaffold a starter package with a placeholder PNG and hook file. Default template: `fish`. |
 | `cgfmm modkit check <dir>` | Parse and validate `jamm-mod.json`, PNG headers/dimensions, and hook paths without building. |
-| `cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>]` | Compile onto the read-only base archive and verify the output `.win`. `--base` defaults to `config.base`; `--out` defaults to `<dir>/<id>.win`. |
-| `cgfmm add <dir> [--name <name>]` | Validate, build against the configured base, and import the package folder directly into your JAMM mod library. |
+| `cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>]` | Compile onto a read-only archive and verify the output. The default input is the declared library base for addons or `config.base` for other packages. `--out` defaults to `<dir>/<id>.win`. |
+| `cgfmm add <dir> [--name <name>]` | Validate, build and import the package folder directly into your JAMM mod library. |
 
 ---
 
@@ -49,6 +49,10 @@ my-mod/
 | `version` | string | No | `"1.0.0"` | Version string. |
 | `author` | string | No | `""` | Author name. |
 | `description` | string | No | `""` | Package summary. |
+| `role` | string | No | — | Use `"base"` to declare an overhaul that other packages can target. |
+| `base` | string | No | — | Addon target. Use the base mod's package ID or exact JAMM library ID. |
+| `baseVersion` | string | No | — | Optional exact version of the base mod. |
+| `baseSha256` | string | No | — | Optional 64-digit SHA-256 of the base mod's original archive. |
 | `fish` | array | No | `[]` | Custom fish definitions. |
 | `boats` | array | No | `[]` | Custom boat definitions. |
 | `rods` | array | No | `[]` | Custom fishing rod definitions. |
@@ -66,6 +70,40 @@ my-mod/
 Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step` and `hooks.draw` accept package-relative `.gml` files and run as the object's Create, normal Step and Draw events. A Draw hook can call `draw_self()` to include the object's assigned sprite.
 
 Place the object by referring to `jmk_<id>_object_<key>` in an area's `pieces` or `lights`. Room objects have no parent and are recreated with the room. An area can use a colocated controller for an animation or trigger in [the Silo tutorial](../../examples/modkit/silo/README.md).
+
+### Overhauls and addons
+
+An overhaul can declare its identity in a ModKit manifest. Raw archives can
+ship a `jamm.json` inside their zip, or a sidecar named
+`<archive-stem>.jamm.json` beside a loose `.win` or zip.
+
+```json
+{
+  "id": "reef-overhaul",
+  "name": "Reef Overhaul",
+  "version": "2.0.0",
+  "role": "base"
+}
+```
+
+An addon names its base and can pin the release it was made from.
+
+```json
+{
+  "id": "night-reef",
+  "name": "Night Reef",
+  "base": "reef-overhaul",
+  "baseVersion": "2.0.0"
+}
+```
+
+Develop and test an addon against the overhaul author's original `data.win`.
+Import the base before building a ModKit addon. When building a profile, JAMM
+diffs the addon against that library archive and applies its changes on top
+of the merged base. Use `baseSha256` to pin exact bytes even when the version
+label stays the same. Version and hash mismatches warn by default and fail
+`cgfmm check --profile <name> --strict` or
+`cgfmm build --profile <name> --strict`.
 
 ---
 

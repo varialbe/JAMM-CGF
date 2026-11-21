@@ -55,7 +55,9 @@ int Run(string[] arguments)
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
             cgfmm check <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
+            cgfmm check --profile <name> [--strict] [--json <file>] [--details <asset>]
             cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--dry-run] [--verbose]
+            cgfmm build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
             cgfmm add <file.win|file.zip|modkit dir> [--name <name>]
@@ -66,6 +68,7 @@ int Run(string[] arguments)
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
             cgfmm profile resolve <name> <asset> <mod|keep-both>
             cgfmm profile repack <name> on|off
+            cgfmm profile base <name> <mod> | addon <name> <mod> <base> | role <name> <mod> none
             cgfmm profile preset <name> weak-pc|default
             cgfmm profile builtin <name> <id> on|off
             cgfmm profile perf <name> mode|grid on|off
@@ -92,8 +95,8 @@ int Run(string[] arguments)
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory, verbose);
-    if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..], verbose);
-    if (command == "check") return CheckCommand.Run(arguments[1..]);
+    if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..], verbose, dataDirectory);
+    if (command == "check") return CheckCommand.Run(arguments[1..], dataDirectory);
     if (command == "diff") return DiffCommand.Run(arguments[1..]);
     if (command == "lineage") return LineageCommand.Run(arguments[1..]);
     List<string> positional = [];
