@@ -145,6 +145,7 @@ public class BenchmarkTests
         using var data = CreateSyntheticGame(includeOptionalObjects: true);
         SmoothMod.Apply(data, debug: false);
         PerfMod.Apply(data, debug: false);
+        Assert.Null(data.GameObjects.ByName(FishGrid.Controller));
         HdMod.Apply(data, upscaledPages: null, debug: false);
 
         int countBeforeBench = data.Code.Count;
@@ -161,6 +162,26 @@ public class BenchmarkTests
 
         // Double instrumentation is cleanly rejected.
         Assert.Throws<InvalidDataException>(() => BenchmarkMod.Apply(data));
+    }
+
+    [Fact]
+    public void PerfSchedulerIsOmittedByDefaultAndAddedForEnabledProfiles()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        PerfMod.Apply(data, applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false);
+
+        Assert.Null(data.GameObjects.ByName(FishGrid.Controller));
+        Assert.Null(data.GameObjects.ByName(PerfMode.ControllerName));
+        var fishStep = data.Code.ByName("gml_Object_Fish_Step_2")!;
+        Assert.DoesNotContain(fishStep.Instructions, instruction => instruction.ValueVariable?.Name.Content == "jamm_perf_mode");
+        var simpleStep = new CompileGroup(data);
+        simpleStep.QueueCodeReplace(fishStep, "x += 1;");
+        ModObjects.Compile(simpleStep);
+        var edits = new List<UndertaleCode>();
+        PerfMode.ApplyScheduling(data, edits);
+
+        Assert.Contains(fishStep.Instructions, instruction => instruction.ValueVariable?.Name.Content == "jamm_perf_mode");
+        Assert.Contains(fishStep, edits);
     }
 
     [Fact]
