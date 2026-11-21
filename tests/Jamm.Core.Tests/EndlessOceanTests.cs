@@ -78,10 +78,12 @@ public sealed class EndlessOceanTests
     {
         using var data = UndertaleData.CreateNew();
         const string settings = "gml_Script_jmk_endless_ocean_setup";
+        const string step = "gml_Object_obj_jmk_endless_ocean_Step_1";
         var world = new UndertaleRoom { Name = data.Strings.MakeString("NewWorld"), Width = 100000, Height = 13000 };
         data.Rooms.Add(world);
         ModObjects.Create(data, EndlessOceanMod.Controller, persistent: false);
         UndertaleCode.CreateEmptyEntry(data, settings);
+        UndertaleCode.CreateEmptyEntry(data, step);
         Dictionary<string, string> recompile = new() { [settings] = "ocean_end = 1100000;" };
         Dictionary<string, string> generated = new();
         List<string> decisions = [];
@@ -92,6 +94,8 @@ public sealed class EndlessOceanTests
         Assert.Contains("ocean_start = 100000;", source);
         Assert.Contains($"ocean_end = {width};", source);
         Assert.Equal(source, recompile[settings]);
+        Assert.Contains("jamm_chunk_stream(ocean_chunks, first, last, jmk_endless_ocean_load, jmk_endless_ocean_release)", generated[step]);
+        Assert.Equal(generated[step], recompile[step]);
         Assert.Single(decisions);
         EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
         Assert.Equal(width, world.Width);

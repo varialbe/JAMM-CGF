@@ -133,6 +133,13 @@ public static class EndlessOceanMod
         var edge = EndlessOceanEdge.Find(world, sourceWidth);
         world.Width = edge.End;
         generated[SetupCode] = recompile[SetupCode] = Settings(edge, sourceWidth);
+        // `script_execute` receives script table indexes for the chunk callbacks. Those
+        // indexes can shift when the recipe is merged after other mods, so rebuild the
+        // controller step from symbols in the final archive instead of retaining the
+        // indexes compiled when the recipe was first applied.
+        const string stepCode = "gml_Object_" + Controller + "_Step_1";
+        if (data.Code.ByName(stepCode) is not null)
+            generated[stepCode] = recompile[stepCode] = Source("step");
         decisions.Add(Describe(edge));
     }
 
