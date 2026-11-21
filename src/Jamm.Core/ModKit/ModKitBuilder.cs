@@ -230,8 +230,8 @@ public static partial class ModKitBuilder
             cancellationToken.ThrowIfCancellationRequested();
             string keyIdent = SanitizeIdent(boat.Key);
             string assetPrefix = $"jmk_{modIdent}_{keyIdent}";
-            string spriteName = $"{assetPrefix}_spr";
-            string cardName = $"{assetPrefix}_card";
+            string spriteName = boat.SpriteKey is { } spriteKey ? CompositionName(modIdent, spriteKey) : $"{assetPrefix}_spr";
+            string cardName = boat.CardKey is { } cardKey ? CompositionName(modIdent, cardKey) : $"{assetPrefix}_card";
             string objName = assetPrefix;
 
             var obj = CreateModObject(data, objName, data.GameObjects.ByName("Boat")!, sprites[spriteName], depth: -20);
@@ -252,11 +252,25 @@ public static partial class ModKitBuilder
                 deposit_depth = 60;
                 boat_index = 0;
                 """;
+            var hooks = boat.Hooks;
+            if (hooks?.Create is { } create)
+                createGml += "\n" + File.ReadAllText(create, Encoding.UTF8);
             compiler.QueueCodeReplace(obj.EventHandlerFor(EventType.Create, 0u, data), createGml);
+            QueueVehicleEvent(hooks?.BeginStep, EventType.Step, (uint)EventSubtypeStep.BeginStep);
+            QueueVehicleEvent(hooks?.Step, EventType.Step, (uint)EventSubtypeStep.Step);
+            QueueVehicleEvent(hooks?.EndStep, EventType.Step, (uint)EventSubtypeStep.EndStep);
+            QueueVehicleEvent(hooks?.DrawGui, EventType.Draw, (uint)EventSubtypeDraw.DrawGUI);
+            QueueVehicleEvent(hooks?.Destroy, EventType.Destroy, 0, "\nevent_inherited();");
 
             initBody.AppendLine(
                 $"jamm_boat_register({GmlString($"{package.Id}:{boat.Key}")}, {GmlString(boat.Name)}, {Num(boat.Cost)}, " +
                 $"{cardName}, {objName}, {GmlString(boat.Description)}, {(boat.Unlocked ? 1 : 0)});");
+
+            void QueueVehicleEvent(string? path, EventType type, uint subtype, string suffix = "")
+            {
+                if (path is not null)
+                    compiler.QueueCodeReplace(obj.EventHandlerFor(type, subtype, data), File.ReadAllText(path, Encoding.UTF8) + suffix);
+            }
         }
 
         foreach (var rod in package.Rods)
@@ -371,8 +385,10 @@ public static partial class ModKitBuilder
         foreach (var boat in package.Boats)
         {
             string keyIdent = SanitizeIdent(boat.Key);
-            specs.Add(new($"jmk_{modIdent}_{keyIdent}_spr", boat.SpritePath, 1, boat.Origin, CenterOrigin: true, GenerateMask: false));
-            specs.Add(new($"jmk_{modIdent}_{keyIdent}_card", boat.CardPath, 1, null, CenterOrigin: true, GenerateMask: false));
+            if (boat.SpriteKey is null)
+                specs.Add(new($"jmk_{modIdent}_{keyIdent}_spr", boat.SpritePath, 1, boat.Origin, CenterOrigin: true, GenerateMask: false));
+            if (boat.CardKey is null)
+                specs.Add(new($"jmk_{modIdent}_{keyIdent}_card", boat.CardPath, 1, null, CenterOrigin: true, GenerateMask: false));
         }
         foreach (var rod in package.Rods)
         {

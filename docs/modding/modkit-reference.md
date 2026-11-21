@@ -161,7 +161,7 @@ ModKit fish override `Other_10` (`ev_user0`) with **path-free idle swimming** so
 
 ## `boats` Entries
 
-Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. Boats do not support `hooks`.
+Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. A boat may use the optional lifecycle hooks below to add vehicle behavior while keeping JAMM's normal shop and save integration.
 
 | Field | Type | Required | Default | Constraints / Notes |
 | :--- | :--- | :---: | :--- | :--- |
@@ -174,6 +174,13 @@ Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. Boats
 | `unlocked` | bool | No | `false` | `false` (`0`, purchasable in shop) or `true` (`1`, already owned). |
 | `stats` | object | No | See right | `maxSpeed` (`4`, min `0.1`), `capacity` (`4`, int min `1`), `maxDistance` (`4500`, min `500`), `moveBonus` (`0`, min `0`). |
 | `origin` | `[x, y]` | No | center | 2-integer origin for the world `sprite` (the `card` sprite is always centered). |
+| `hooks` | object | No | `{}` | Optional package-relative `.gml` files: `create`, `beginStep`, `step`, `endStep`, `drawGui`, `destroy`. |
+
+### Vehicle hooks
+
+Hooks run on the registered child of `Boat`, so the instance keeps the normal rider, storage, shop, and save behavior. Each file contains the event body, not a script name. `create` runs after `event_inherited()` and JAMM's standard boat fields are initialized. The three Step hooks replace their matching child event; call `event_inherited()` explicitly when vanilla behavior is needed. `drawGui` replaces the Draw GUI event. `destroy` runs before `event_inherited()` cleanup automatically. No other hook calls inherited behavior automatically.
+
+Use these hooks to implement an opt-in vehicle such as a submarine. Store state on the boat instance, keep the rider's position and rod anchors in sync, and return those fields to a valid surface state when the vehicle exits. Hooks use the same path validation and GML compilation as other ModKit hooks. A shared read-only query for submerged vehicles is not available yet; mods that need to coordinate should agree on a qualified instance variable or wait for a future Vehicle API.
 
 ---
 

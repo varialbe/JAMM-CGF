@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
+  <title>Compatibility — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="index.html#packages">Packages</a>
+      <a href="how-jamm-builds.html">How builds work</a>
+      <a href="compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="index.html">Packages</a><span aria-hidden="true">/</span><span>Compatibility</span></nav>
+
+<header class="guide-header"><p class="eyebrow">Tested profiles</p><h1>Compatibility</h1><p>These combinations are supported by recorded archive builds or runtime checks in the repository reports. A reported build does not guarantee every third-party mod revision behaves the same way.</p></header>
+
+    <section class="mod-section">
+      <h2>Public five-pack</h2>
+      <p>The public five-pack used in the reports is Antiquity, PWB, The Abyss, Colour Expansion and Verdant. Silo and Weather Pack were built with that pack at zero pack-specific conflicts. Endless Ocean completed a route across the five-pack&#x27;s extended east boundary using its seeded chunk stream.</p><ul class="guide-list">
+        <li>The Silo: five-pack and all-seven archive builds passed; the Area follow anchor tracks Cave Expansion&#x27;s moved and rotated MissileSilo.</li>
+        <li>Weather Pack: five-pack and all-seven builds passed with zero Weather Pack conflicts and all 53 Weather assets accepted.</li>
+        <li>Endless Ocean: the five-pack route crossed the generated boundary, streamed terrain and returned west with generated instances released.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>First-party defaults</h2>
+      <p>JAMM Perf, Smooth, HD Lite and Console are documented together as a verified first-party combination. The site recipes are source packages that still build locally against the configured legacy base.</p><ul class="guide-list">
+        <li>Example Fish was verified alongside Harbor Pack and Showcase Upgrades.</li>
+        <li>Example Rod uses the shared Items runtime and stable item keys, so its save ownership is independent of its current numeric slot.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Know the limits</h2>
+      <p>Compatibility is tied to the August 2023 legacy VM archive and the tested package versions. The current Steam YYC build is not a supported base. Legacy whole-archive mods can edit the same code or room entries; JAMM reports those overlaps and profile choices determine the retained changes.</p>
+      <p>The reports contain some broader all-seven runs. One Silo all-seven save run hit an existing Maize patrol crash after the four catches had been deposited; the save was independently reloaded and checked. This is recorded as a limitation of that pack combination, not a Silo package failure.</p>
+      <p>Keep boat contents and live lure interactions clear when changing profiles because some legacy save sections still use numeric object IDs. Back up saves before profile changes.</p>
+    </section>
+
+<p class="guide-back"><a href="index.html#packages">← Back to all packages</a></p>
+  </main>
+</body>
+</html>

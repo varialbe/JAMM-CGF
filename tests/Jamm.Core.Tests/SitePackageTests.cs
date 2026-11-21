@@ -77,11 +77,51 @@ public sealed class SitePackageTests
 
         string html = File.ReadAllText(indexPath);
         Assert.Contains("catalog.json", html);
+        Assert.Contains("How a build works", html);
+        Assert.Contains("Install a package", html);
+        Assert.Contains("@media (prefers-color-scheme: dark)", File.ReadAllText(Path.Combine(siteDir, "style.css")));
+
+        foreach (string page in new[] { "how-jamm-builds.html", "compatibility.html" })
+            Assert.True(File.Exists(Path.Combine(siteDir, page)), $"Missing generated guide page {page}");
+
+        foreach (string page in new[]
+        {
+            "mods/builtin-console.html", "mods/builtin-hd-lite.html", "mods/builtin-perf.html",
+            "mods/builtin-smooth.html", "mods/endless-ocean.html", "mods/example-fish.html",
+            "mods/example-rod.html", "mods/jamm-silo.html", "mods/weather-pack.html"
+        })
+        {
+            string pagePath = Path.Combine(siteDir, page);
+            Assert.True(File.Exists(pagePath), $"Missing generated site page {pagePath}");
+            string pageHtml = File.ReadAllText(pagePath);
+            Assert.Contains("How it works", pageHtml);
+            Assert.Contains("Version history", pageHtml);
+            Assert.Contains("Measured performance", pageHtml);
+            Assert.Contains("Breadcrumb", pageHtml);
+        }
+
+        string siloHtml = File.ReadAllText(Path.Combine(siteDir, "mods", "jamm-silo.html"));
+        Assert.Contains("Silo 2.3.0", siloHtml);
+        Assert.Contains("spr_silomask", siloHtml);
+        Assert.Contains("shaft-mask", siloHtml);
+        Assert.Contains("rim-occluded-v3.webp", siloHtml);
+        Assert.DoesNotContain("Silo 2.2", siloHtml);
+
+        string builderHtml = File.ReadAllText(Path.Combine(siteDir, "how-jamm-builds.html"));
+        Assert.Contains("CGF-INSTANCE-004", builderHtml);
+        Assert.Contains("CGF-INSTANCE-005", builderHtml);
+        Assert.Contains("CGF-INSTANCE-007", builderHtml);
+        string compatibilityHtml = File.ReadAllText(Path.Combine(siteDir, "compatibility.html"));
+        Assert.Contains("Antiquity, PWB, The Abyss, Colour Expansion and Verdant", compatibilityHtml);
+
+        string animatedSilo = Path.Combine(siteDir, "images", "jamm-silo", "opening-v3.webp");
+        Assert.True(File.Exists(animatedSilo));
+        Assert.True(new FileInfo(animatedSilo).Length <= 3 * 1024 * 1024);
 
         using var doc = JsonDocument.Parse(File.ReadAllText(catalogPath));
         Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
         var entries = doc.RootElement.EnumerateArray().ToArray();
-        Assert.Equal(9, entries.Length);
+        Assert.Equal(10, entries.Length);
 
         var ids = entries.Select(e => e.GetProperty("id").GetString()).ToHashSet(StringComparer.Ordinal);
         Assert.Contains("builtin-perf", ids);
@@ -93,6 +133,7 @@ public sealed class SitePackageTests
         Assert.Contains("example-rod", ids);
         Assert.Contains("example-fish", ids);
         Assert.Contains("jamm-silo", ids);
+        Assert.Contains("submarine", ids);
         Assert.Contains("weather-pack", ids);
         Assert.Contains("endless-ocean", ids);
         Assert.Contains("example-rod", ids);

@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
   <title>JAMM Console — JAMM CGF Mods</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>JAMM Console</span></nav>
     <header class="mod-header">
-      <a class="back" href="../index.html#builtin-console">← All mods</a>
-      <div class="card-head">
-        <img src="../assets/console.svg" alt="" width="44" height="44">
-        <div>
-          <h1>JAMM Console</h1>
-          <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
-          <p>Version 1.0.0</p>
-        </div>
-      </div>
-      <a class="btn" href="../packages/jamm-console.zip" download>Download jamm-console.zip</a>
-      <div class="checksum">SHA-256: f8cf13a0bb30a5eda06431c086617277e002d3a504fb7681e99a0799493ccaff (369 B)</div>
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/console.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>JAMM Console</h1><div class="badges"><span class="badge b-default">First-party default</span> <span class="badge b-optional">Recipe</span></div><p>Version 1.0.0</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/jamm-console.zip" download>Download source ZIP</a><span>Source-only ZIP · 369 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>369 bytes</dd></div><div><dt>SHA-256</dt><dd><code>f8cf13a0bb30a5eda06431c086617277e002d3a504fb7681e99a0799493ccaff</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
@@ -28,8 +32,25 @@
     </section>
 
     <section class="mod-section">
-      <h2>Controls</h2>
-      <ul class="controls">
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF configured with the untouched August 2023 legacy VM <code>data.win</code> (bytecode 16).</li>
+        <li>A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, run Check, then build or install to a separate game copy.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>In-game controls</h2>
+<ul class="controls">
         <li>Press F12 or backtick to toggle the console. Enter submits, Up and Down browse history, and Escape closes it.</li>
         <li><code>help</code> lists commands, <code>clear</code> clears the log, and <code>close</code> or <code>exit</code> closes the overlay.</li>
         <li><code>unlockgear</code> unlocks equipment, upgrades, hats, HUD menus and nightfall. <code>unlockall</code> also maxes your level and fills the Fishalog.</li>
@@ -39,30 +60,47 @@
     </section>
 
     <section class="mod-section">
-      <h2>Technical datasheet</h2>
-      <table class="datasheet">
-        <tbody>
-          <tr><th scope="row">Package type</th><td>Recipe</td></tr>
-          <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
-          <tr><th scope="row">Generator</th><td><code>console</code> (recipe generator version <code>2</code>)</td></tr>
-          <tr><th scope="row">APIs used</th><td>GameMaker keyboard and Draw GUI events, legacy gear tables, <code>Girl</code> progression state and <code>CatalogData</code>.</td></tr>
-          <tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 5 controller events.</td></tr>
-          <tr><th scope="row">Save-file behaviour</th><td>The history and log live in memory. Commands that change progression, equipment or the Fishalog can be saved by the game&#x27;s normal autosave or Escape save menu.</td></tr>
-          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, HD Lite and an independent third-party mod. The Weather API extends this controller with the <code>weather</code> command.</td></tr>
-        </tbody>
-      </table>
+      <h2>How it works</h2>
+      <p>The recipe places persistent <code>obj_jamm_console</code> instances in <code>NewWorld</code> and <code>room11</code>. Begin Step reads and normalizes the command buffer, consumes gameplay keys while the overlay is open and submits commands. End Step maintains the rod-swing lock; Draw GUI renders the prompt and scrolling log. F12 or backtick toggles it; Enter submits, Up/Down browse history and Escape closes it.</p>
+      <p><code>help</code> lists <code>clear</code>, <code>close</code>/<code>exit</code>, <code>unlockgear</code>, <code>unlockall</code>, <code>level &lt;n&gt;</code>, <code>maxlevel</code>, <code>catalog all</code>/<code>unlockfish</code>, <code>money &lt;n&gt;</code> and <code>money +&lt;n&gt;</code>. Commands work on live gear/item tables and Fishalog arrays, so profile-added items are included. The controller watches the active SaveManager instance and slot to reset slot-specific bookkeeping. Changed progress is written by the game&#x27;s normal save flow; the log/history itself is in memory.</p>
+      <p>On modded builds the shared <code>number_to_dollar_string</code> formatter uses one truncated decimal with K/M/B/T/Qa at $10,000 and above: <code>$9,999</code> remains unchanged, while larger examples display as <code>$25.0K</code>, <code>$3.4M</code>, <code>$9.5B</code>, <code>$3.4T</code> or <code>$1.0Qa</code>. The wallet supports values through 1e15 and the <code>money</code> command accepts the same range. Fish sale values still have a separate 100-million cap. The Weather API extends the same Console with the <code>weather</code> command.</p>
     </section>
 
     <section class="mod-section">
-      <h2>How it works</h2>
-      <p>The generator places <code>obj_jamm_console</code> in <code>NewWorld</code> and <code>room11</code>. Its Begin Step processes the input buffer, normalizes commands and consumes gameplay keys while the overlay is open. Its End Step maintains the open overlay&#x27;s rod swing lock and Draw GUI renders the prompt and log.</p>
-      <p>Gear unlocks iterate the live item tables, so their row counts can include gear from the loaded profile. Fishalog commands update the live catalog arrays. Level and money commands clamp input and write to the player&#x27;s current state.</p>
-      <p>The controller tracks the active SaveManager instance and slot to reset its unlock bookkeeping on a slot change. Console commands that alter progress print a save warning.</p>
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>Recipe</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
+<tr><th scope="row">Version</th><td>1.0.0</td></tr>
+<tr><th scope="row">Generator</th><td><code>console</code> (recipe generator version <code>2</code>)</td></tr>
+<tr><th scope="row">APIs used</th><td>GameMaker keyboard and Draw GUI events, legacy gear tables, <code>Girl</code> progression state and <code>CatalogData</code>.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 5 controller events.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>The history and log live in memory. Commands that change progression, equipment or the Fishalog can be saved by the game&#x27;s normal autosave or Escape save menu.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, HD Lite and an independent third-party mod. The Weather API extends this controller with the <code>weather</code> command.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>1.0.0: F12/backtick command console; progression, catalog and money commands; compact K/M/B/T/Qa currency display on modded builds.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>What is the largest money value?</summary><p>The modded wallet and Console support values through 1e15. Fish sale value retains its separate 100 million cap.</p></details>
+<details><summary>How are large amounts shown?</summary><p>The display stays exact below $10,000; then uses one truncated decimal and K, M, B, T or Qa, such as <code>$25.0K</code>, <code>$3.4M</code>, <code>$9.5B</code> and <code>$3.4T</code>.</p></details>
     </section>
 
     <section class="mod-section">
       <h2>Files in the package</h2>
-      <ul class="package-files">
+<ul class="package-files">
         <li><code>jamm-recipe.json</code></li>
       </ul>
     </section>

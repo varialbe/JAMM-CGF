@@ -14,7 +14,7 @@ internal static class MoneyRuntime
 {
     internal const string Formatter = "gml_Script_number_to_dollar_string";
     internal const string Wallet = "gml_Object_Wallet_Draw_0";
-    internal const string Revision = "big-money-1";
+    internal const string Revision = "big-money-2";
     private const string Diagnostic = "[CGF-MONEY-001]";
     private const string WalletClamp = "number_to_dollar_string(min(floor(dollars), 999999999))";
 
@@ -29,13 +29,14 @@ internal static class MoneyRuntime
         if (jamm_neg) jamm_v = -jamm_v;
         if (jamm_v < 10000)
         {
-            jamm_s = string(floor(argument0));
+            jamm_s = string(jamm_v);
             jamm_i = string_length(jamm_s) - 2;
             while (jamm_i > 1)
             {
                 jamm_s = string_insert(",", jamm_s, jamm_i);
                 jamm_i -= 3;
             }
+            if (jamm_neg) jamm_s = "-" + jamm_s;
             return "$" + jamm_s;
         }
         jamm_d = 1000;
@@ -52,6 +53,7 @@ internal static class MoneyRuntime
 
     private const string WalletReplacement = """
         if (Girl.dollars > 1000000 * 1000000000) Girl.dollars = 1000000 * 1000000000;
+            if (dollars > 1000000 * 1000000000) dollars = 1000000 * 1000000000;
             dollars_string = number_to_dollar_string(floor(dollars))
         """;
 
@@ -63,9 +65,9 @@ internal static class MoneyRuntime
         if (negative) v = -v;
         if (v < 10000)
         {
-            string digits = Math.Floor(value).ToString("0", CultureInfo.InvariantCulture);
+            string digits = v.ToString("0", CultureInfo.InvariantCulture);
             for (int i = digits.Length - 2; i > 1; i -= 3) digits = digits.Insert(i - 1, ",");
-            return "$" + digits;
+            return "$" + (negative ? "-" + digits : digits);
         }
         (double divisor, string unit) = v switch
         {

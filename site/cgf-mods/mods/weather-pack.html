@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
   <title>Weather Pack — JAMM CGF Mods</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="../index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="../index.html#packages">Packages</a>
+      <a href="../how-jamm-builds.html">How builds work</a>
+      <a href="../compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>Weather Pack</span></nav>
     <header class="mod-header">
-      <a class="back" href="../index.html#weather-pack">← All mods</a>
-      <div class="card-head">
-        <img src="../assets/weather.svg" alt="" width="44" height="44">
-        <div>
-          <h1>Weather Pack</h1>
-          <div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div>
-          <p>Version 1.0.1</p>
-        </div>
-      </div>
-      <a class="btn" href="../packages/weather-pack.zip" download>Download weather-pack.zip</a>
-      <div class="checksum">SHA-256: d37f49328d697a5af420111c8b496c16e81713c15e7549b72154f9bbc53f64a7 (950,560 B)</div>
+      <a class="back" href="../index.html#packages">← All packages</a>
+      <div class="card-head"><img src="../assets/weather.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Weather Pack</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div><p>Version 1.0.1</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/weather-pack.zip" download>Download source ZIP</a><span>Source-only ZIP · 950,560 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>950,560 bytes</dd></div><div><dt>SHA-256</dt><dd><code>d37f49328d697a5af420111c8b496c16e81713c15e7549b72154f9bbc53f64a7</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
@@ -28,8 +32,27 @@
     </section>
 
     <section class="mod-section">
-      <h2>Controls</h2>
-      <ul class="controls">
+      <h2>Requirements</h2>
+<ul class="requirements">
+        <li>JAMM-CGF configured with the untouched August 2023 legacy VM <code>data.win</code> (bytecode 16).</li>
+        <li>A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.</li>
+        <li>JAMM Console is installed by the merged Weather runtime if the profile does not already include it.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Install</h2>
+<ul class="install-steps">
+        <li>Download this source ZIP.</li>
+        <li>In JAMM, choose Add mods and import the ZIP.</li>
+        <li>Enable it in a profile, run Check, then build or install to a separate game copy.</li>
+        <li>Open the in-game Console with F12 and type <code>weather</code> to list and select available weather IDs.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>In-game controls</h2>
+<ul class="controls">
         <li>Open the JAMM Console in the fishing world with F12. Type <code>weather</code> to list the installed weather IDs.</li>
         <li>Use <code>weather super-sunny</code>, <code>weather rainy</code>, <code>weather windy</code> or <code>weather fog</code> to request a weather. Qualify a shared short ID as <code>weather weather-pack:fog</code>. A daytime request made at night waits for daylight.</li>
         <li>Use <code>weather clear</code> for clear skies or <code>weather auto</code> to resume the forecast.</li>
@@ -37,48 +60,57 @@
     </section>
 
     <section class="mod-section">
-      <h2>Gallery</h2>
-      <div class="gallery">
-        <figure>
-          <a href="../images/weather-pack/art-review-gameplay.webp"><img src="../images/weather-pack/art-review-gameplay-thumb.webp" loading="lazy" alt="Dockside gameplay views in sunny, rainy, windy and foggy weather"></a>
-          <figcaption>Four weathers at the dock</figcaption>
-        </figure>
-        <figure>
-          <a href="../images/weather-pack/fog-wide.webp"><img src="../images/weather-pack/fog-wide-thumb.webp" loading="lazy" alt="Fishing boat on muted water with mist ribbons stretching across the screen"></a>
-          <figcaption>Fog across the water</figcaption>
-        </figure>
-        <figure>
-          <a href="../images/weather-pack/art-review.webp"><img src="../images/weather-pack/art-review-thumb.webp" loading="lazy" alt="Weather Pack fish and their vanilla donors shown side by side against coloured backgrounds"></a>
-          <figcaption>Fish art comparisons</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section class="mod-section">
-      <h2>Technical datasheet</h2>
-      <table class="datasheet">
-        <tbody>
-          <tr><th scope="row">Package type</th><td>ModKit</td></tr>
-          <tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
-          <tr><th scope="row">APIs used</th><td>ModKit Weather API (<code>weathers</code>), Fish and Catalog APIs, sprite composition, weather hooks and Ogg audio import.</td></tr>
-          <tr><th scope="row">Assets and scripts added</th><td>8 fish objects, 18 sprites, 8 sounds and 11 standalone scripts in the source build on a clean base. The merged profile adds 1 shared weather controller and 14 internal weather scripts, fills the 4 public weather stubs and installs the Console controller if needed.</td></tr>
-          <tr><th scope="row">Save-file behaviour</th><td>The weather controller stores <code>seed</code>, <code>day</code>, <code>id</code>, <code>start</code> and <code>end</code> under <code>[Weather]</code> in <code>jamm-weather-&lt;slot&gt;.ini</code> beside the game&#x27;s saves. The current forecast uses a qualified weather ID. Fishalog progress uses <code>[JAMM_Catalog]</code> in the native slot save.</td></tr>
-          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. Weather packs share one controller and coexist using qualified IDs. Weather Pack&#x27;s pairwise checks covered Antiquity, PWB, Abyss, Colour, Verdant, Cave and TGE. The profile build requires the weather hook anchors to remain unique in the merged game code.</td></tr>
-        </tbody>
-      </table>
+      <h2>Screenshots</h2>
+<div class="gallery">
+        <figure><a href="../images/weather-pack/art-review-gameplay.webp"><img src="../images/weather-pack/art-review-gameplay-thumb.webp" loading="lazy" alt="Dockside gameplay views in sunny, rainy, windy and foggy weather" width="480" height="288"></a><figcaption>Four weathers at the dock</figcaption></figure>
+        <figure><a href="../images/weather-pack/fog-wide.webp"><img src="../images/weather-pack/fog-wide-thumb.webp" loading="lazy" alt="Fishing boat on muted water with mist ribbons stretching across the screen" width="480" height="288"></a><figcaption>Fog across the water</figcaption></figure>
+        <figure><a href="../images/weather-pack/art-review.webp"><img src="../images/weather-pack/art-review-thumb.webp" loading="lazy" alt="Weather Pack fish and their vanilla donors shown side by side against coloured backgrounds" width="480" height="288"></a><figcaption>Fish art comparisons</figcaption></figure>
+</div>
     </section>
 
     <section class="mod-section">
       <h2>How it works</h2>
-      <p>JAMM compiles the four weather declarations into one persistent <code>obj_jamm_weather</code> registry. The controller draws a weighted forecast from the slot seed, the current local clock hour and sorted weather IDs. The same slot and hour resume the stored forecast. The next hour produces a new draw, and the legacy night predicate still controls when a daytime weather can run.</p>
-      <p>Each weather registers two species with the Fishalog and populates a school near the cat&#x27;s dock or boat position using free surface-water positions. Super Sunny brings Bask and Flaret, Rainy brings Drizzit and Lowbelly, Windy brings Kest and Tack, and Fog brings Mote and Veilmouth. While these schools are active, the controller parks eligible vanilla surface fish. At clear or night it restores the vanilla fish and retires free weather fish while allowing catches in progress to finish.</p>
-      <p>The sky and fish recipes sample the player&#x27;s legacy sprite frames during the build and add original SVG parts. The runtime draws tinted parallax sky layers behind the landscape and foreground haze and particles above it. Repeating layers wrap horizontally across the camera, with wrapped atlas padding for filtering and matching edges on the two Fog bands.</p>
-      <p>The runtime blends weather music and ambience with the native surface track and applies weather settings to the sea tint and waves. Fog&#x27;s Step hook lowers the opacity of foreground layers and particles when a native Lightbulb is near the surface.</p>
+      <p>At profile build time, JAMM reads every enabled package&#x27;s <code>weathers[]</code> declaration and creates one persistent <code>obj_jamm_weather</code> controller with a composed registry. Weather IDs are qualified by package (<code>weather-pack:fog</code>) so entries from different packages can share a short ID. The controller sorts IDs and draws a weighted forecast from the save-slot seed and local clock hour; reopening the same slot during the same hour resumes the stored start/end window. A new hour produces the next forecast. The native <code>is_it_night()</code> and <code>AmbianceController</code> phase clock gate daytime weather.</p>
+      <p>The forecast, seed and qualified weather ID are stored under <code>[Weather]</code> in <code>jamm-weather-&lt;slot&gt;.ini</code> beside the game&#x27;s save slots. When <code>replaceDayFish</code> is active, the controller parks eligible free-swimming vanilla surface fish with a home and surface-band position. Their existing room and path records are retained; on clear or nightfall they return to their previous behavior. Weather Pack&#x27;s fish are ordinary Fish children registered through the Fish and Catalog runtimes, spawned in free surface water near the current shore or boat, and retire when the weather ends. Catches in progress finish normally.</p>
+      <p>The runtime patches the legacy <code>ParallaxBackground.Draw</code> sky, <code>Sea.Step</code> and <code>x_pos_to_y_off</code> wave/tint behavior, <code>color_from_depth</code> lighting, <code>Fish.End Step</code> population gate and <code>Girl.Step</code> music gain. Weather sky layers wrap across the camera with padded repeat edges. The four Pack entries compose sky layers, water tint, waves and light. Fog additionally dims foreground haze and particles when the native Lightbulb lure is near the surface.</p>
+      <p>Each weather can provide Ogg Vorbis music and ambience. The controller fades those channels against the native surface track and honors the game&#x27;s music volume and lure-depth attenuation. Weather requests from the Console queue until the phase allowed by the manifest; <code>weather clear</code> clears the override and <code>weather auto</code> resumes the forecast. The generated profile needs exactly one surviving copy of each required hook anchor; missing or ambiguous anchors stop the build.</p><figure class="diagram"><svg viewBox="0 0 880 160" role="img" aria-labelledby="diag-title diag-desc"><title id="diag-title">Weather forecast and population</title><desc id="diag-desc">Slot and local-hour inputs choose a deterministic qualified weather, which activates presentation, sound and fish while eligible vanilla fish are parked and later restored.</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"/></marker></defs><path d="M 212 81 H 230" marker-end="url(#arrow)"/><path d="M 430 81 H 448" marker-end="url(#arrow)"/><path d="M 648 81 H 666" marker-end="url(#arrow)"/><g><rect x="19" y="35" width="188" height="92" rx="14"/><text x="113" y="81" text-anchor="middle">Slot seed + hour</text></g><g><rect x="237" y="35" width="188" height="92" rx="14"/><text x="331" y="81" text-anchor="middle">Qualified forecast</text></g><g><rect x="455" y="35" width="188" height="92" rx="14"/><text x="549" y="81" text-anchor="middle">Sky, water + audio</text></g><g><rect x="673" y="35" width="188" height="92" rx="14"/><text x="767" y="81" text-anchor="middle">Weather fish + restore</text></g></svg><ol class="diagram-mobile" aria-label="Weather forecast and population"><li>Slot seed + hour</li><li>Qualified forecast</li><li>Sky, water + audio</li><li>Weather fish + restore</li></ol><figcaption>One composed controller coordinates every enabled package&#x27;s weather declarations.</figcaption></figure>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical facts</h2>
+<div class="table-wrap"><table class="datasheet"><tbody>
+<tr><th scope="row">Package type</th><td>ModKit</td></tr>
+<tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
+<tr><th scope="row">Version</th><td>1.0.1</td></tr>
+<tr><th scope="row">APIs used</th><td>ModKit Weather API (<code>weathers</code>), Fish and Catalog APIs, sprite composition, weather hooks and Ogg audio import.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>8 fish objects, 18 sprites, 8 sounds and 11 standalone scripts in the source build on a clean base. The merged profile adds 1 shared weather controller and 14 internal weather scripts, fills the 4 public weather stubs and installs the Console controller if needed.</td></tr>
+<tr><th scope="row">Save-file behaviour</th><td>The weather controller stores <code>seed</code>, <code>day</code>, <code>id</code>, <code>start</code> and <code>end</code> under <code>[Weather]</code> in <code>jamm-weather-&lt;slot&gt;.ini</code> beside the game&#x27;s saves. The current forecast uses a qualified weather ID. Fishalog progress uses <code>[JAMM_Catalog]</code> in the native slot save.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive. Weather packs share one controller and coexist using qualified IDs. Weather Pack&#x27;s pairwise checks covered Antiquity, PWB, Abyss, Colour, Verdant, Cave and TGE. The profile build requires the weather hook anchors to remain unique in the merged game code.</td></tr>
+</tbody></table></div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Version history</h2>
+<ul class="changelog">
+        <li>1.0.1: Fog tile edges and atlas padding refined; refreshed solo gameplay and fish comparison captures.</li>
+        <li>1.0.0: Four daytime weathers, eight surface fish, forecast persistence and original Ogg tracks.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Measured performance</h2>
+<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>FAQ</h2>
+<details><summary>Why is a requested weather waiting?</summary><p>The default weathers run in daylight. A request made during the game&#x27;s night phase waits until the vanilla night predicate allows it.</p></details>
+<details><summary>Where is the forecast saved?</summary><p><code>jamm-weather-&lt;slot&gt;.ini</code> sits beside the game saves and stores forecast state by slot. Copy it with the save to retain the same forecast on another machine.</p></details>
     </section>
 
     <section class="mod-section">
       <h2>Files in the package</h2>
-      <ul class="package-files">
+<ul class="package-files">
         <li><code>README.md</code></li>
         <li><code>audio/fog-air.ogg</code></li>
         <li><code>audio/fog-music.ogg</code></li>
