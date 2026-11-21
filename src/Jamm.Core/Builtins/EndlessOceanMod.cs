@@ -78,14 +78,21 @@ public static class EndlessOceanMod
             ocean_first = 0;
             ocean_last = -1;
 
+            var atlas_uvs = sprite_get_uvs(spr_jmk_ocean_underlay_tex, 0);
+            var atlas_u0 = atlas_uvs[0];
+            var atlas_v0 = atlas_uvs[1];
+            var atlas_uw = atlas_uvs[2] - atlas_u0;
+            var atlas_vh = atlas_uvs[3] - atlas_v0;
+            var atlas_tex = sprite_get_texture(spr_jmk_ocean_underlay_tex, 0);
             for (var uv_i = 0; uv_i < {{EndlessOceanSprites.VariantCount}}; uv_i += 1)
             {
-                var uvs = sprite_get_uvs(spr_jmk_ocean_underlay_tex, uv_i);
-                ocean_u0[uv_i] = uvs[0];
-                ocean_v0[uv_i] = uvs[1];
-                ocean_u1[uv_i] = uvs[2];
-                ocean_v1[uv_i] = uvs[3];
-                ocean_tex[uv_i] = sprite_get_texture(spr_jmk_ocean_underlay_tex, uv_i);
+                var gx = uv_i mod {{EndlessOceanSprites.AtlasGrid}};
+                var gy = uv_i div {{EndlessOceanSprites.AtlasGrid}};
+                ocean_u0[uv_i] = atlas_u0 + ((gx * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_uw;
+                ocean_v0[uv_i] = atlas_v0 + ((gy * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_vh;
+                ocean_u1[uv_i] = atlas_u0 + ((gx * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad + EndlessOceanSprites.CellSize}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_uw;
+                ocean_v1[uv_i] = atlas_v0 + ((gy * {{EndlessOceanSprites.SlotSize}} + {{EndlessOceanSprites.SlotPad + EndlessOceanSprites.CellSize}}) / {{EndlessOceanSprites.AtlasSize}}) * atlas_vh;
+                ocean_tex[uv_i] = atlas_tex;
             }
 
             ini_open("jamm_endless_ocean.ini");

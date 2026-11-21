@@ -61,7 +61,7 @@
     }
   ],
   "changelog": [
-    "0.2.1: World-aligned seamless cobble underlay and slope rendering across 16 quilted Wang tile variants with uniform vanilla rock lighting.",
+    "0.2.1: Seamless cobble seafloor built from the vanilla cave rock (16 Wang tile variants on one texture page, no visible grid), matching slope caps.",
     "0.2.0: Seeded three-biome seafloor, native scenery and wrecks, and merged-layout callback recompilation."
   ]
 }

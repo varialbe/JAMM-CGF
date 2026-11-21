@@ -120,81 +120,96 @@ public sealed class EndlessOceanTests
     [Fact]
     public void WangTilesAreDeterministicPaletteSafeAndSeamlessAcrossEdgesAndPadding()
     {
-        const int patchSize = 132;
-        byte[] MakePatch(int seed)
+        var dark = new EndlessOceanSprites.Rgb(63, 65, 60);
+        var light = new EndlessOceanSprites.Rgb(88, 90, 85);
+
+        static EndlessOceanSprites.CobbleMask MakeCobble(int w, int h, int seed)
         {
-            byte[] rgba = new byte[patchSize * patchSize * 4];
-            for (int y = 0; y < patchSize; y++)
+            byte[] alpha = new byte[w * h];
+            int area = 0;
+            double rx = w * 0.42;
+            double ry = h * 0.42;
+            for (int y = 0; y < h; y++)
             {
-                for (int x = 0; x < patchSize; x++)
+                for (int x = 0; x < w; x++)
                 {
-                    bool seam = ((x + y * 2 + seed * 7) % 37) < 3 || ((x * 3 - y + seed * 5) % 41 + 41) % 41 < 3;
-                    int idx = (y * patchSize + x) * 4;
-                    rgba[idx + 0] = (byte)(seam ? 82 : 104);
-                    rgba[idx + 1] = (byte)(seam ? 94 : 117);
-                    rgba[idx + 2] = (byte)(seam ? 105 : 129);
-                    rgba[idx + 3] = 255;
+                    double dx = (x - w * 0.5) / rx;
+                    double dy = (y - h * 0.5) / ry;
+                    double wobble = 0.08 * Math.Sin((x + seed * 11) * 0.07) * Math.Cos((y + seed * 7) * 0.09);
+                    if (dx * dx + dy * dy <= 1.0 + wobble)
+                    {
+                        alpha[y * w + x] = 255;
+                        area++;
+                    }
                 }
             }
-            return rgba;
+            return new(w, h, alpha, area, (double)area / (w * h), Math.Max((double)w / h, (double)h / w));
         }
 
-        var patches = Enumerable.Range(0, 12).Select(MakePatch).ToList();
-        var first = EndlessOceanSprites.BuildWangTiles(patches, EndlessOceanMod.DefaultSeed);
-        var repeat = EndlessOceanSprites.BuildWangTiles(patches, EndlessOceanMod.DefaultSeed);
-        var varied = EndlessOceanSprites.BuildWangTiles(patches, EndlessOceanMod.DefaultSeed + 1);
+        var cobbles = new[]
+        {
+            MakeCobble(180, 140, 1),
+            MakeCobble(150, 115, 2),
+            MakeCobble(120, 100, 3),
+            MakeCobble(95, 80, 4),
+        };
+        var first = EndlessOceanSprites.BuildWangSlots(cobbles, dark, light, EndlessOceanMod.DefaultSeed);
+        var repeat = EndlessOceanSprites.BuildWangSlots(cobbles, dark, light, EndlessOceanMod.DefaultSeed);
+        var varied = EndlessOceanSprites.BuildWangSlots(cobbles, dark, light, EndlessOceanMod.DefaultSeed + 1);
 
         Assert.Equal(EndlessOceanSprites.VariantCount, first.Count);
         for (int i = 0; i < first.Count; i++)
         {
             Assert.Equal(first[i], repeat[i]);
+            Assert.Equal(EndlessOceanSprites.SlotSize * EndlessOceanSprites.SlotSize * 4, first[i].Length);
             for (int p = 0; p < first[i].Length; p += 4)
             {
-                Assert.InRange(first[i][p + 0], 82, 104);
-                Assert.InRange(first[i][p + 1], 94, 117);
-                Assert.InRange(first[i][p + 2], 105, 129);
+                Assert.InRange(first[i][p + 0], dark.R, light.R);
+                Assert.InRange(first[i][p + 1], dark.G, light.G);
+                Assert.InRange(first[i][p + 2], dark.B, light.B);
                 Assert.Equal(255, first[i][p + 3]);
             }
         }
         Assert.Contains(Enumerable.Range(0, first.Count), i => !first[i].SequenceEqual(varied[i]));
 
-        int pad = EndlessOceanSprites.WrapPad;
+        int pad = EndlessOceanSprites.SlotPad;
         int cell = EndlessOceanSprites.CellSize;
-        int stride = (cell + 2 * pad) * 4;
+        int slotStride = EndlessOceanSprites.SlotSize * 4;
+        int edgeGuard = EndlessOceanSprites.EdgeMargin;
 
-        // Verify matching Wang edges share exact 2px neighbor padding byte-for-byte.
+        // Verify matching Wang edges share exact neighbor pixels across the seam and padding guard band.
         for (int a = 0; a < first.Count; a++)
         {
             for (int b = 0; b < first.Count; b++)
             {
                 if (((a >> 2) & 1) == (b & 1))
                 {
-                    for (int y = 0; y < cell + 2 * pad; y++)
+                    for (int y = pad; y < pad + cell; y++)
                     {
-                        for (int dx = 0; dx < pad; dx++)
+                        for (int dx = 0; dx < edgeGuard; dx++)
                         {
-                            int aPad = y * stride + (pad + cell + dx) * 4;
-                            int bEdge = y * stride + (pad + dx) * 4;
+                            int aPad = y * slotStride + (pad + cell + dx) * 4;
+                            int bEdge = y * slotStride + (pad + dx) * 4;
                             Assert.Equal(first[b].AsSpan(bEdge, 4).ToArray(), first[a].AsSpan(aPad, 4).ToArray());
 
-                            int bPad = y * stride + dx * 4;
-                            int aEdge = y * stride + (pad + cell - pad + dx) * 4;
+                            int bPad = y * slotStride + (pad - edgeGuard + dx) * 4;
+                            int aEdge = y * slotStride + (pad + cell - edgeGuard + dx) * 4;
                             Assert.Equal(first[a].AsSpan(aEdge, 4).ToArray(), first[b].AsSpan(bPad, 4).ToArray());
                         }
                     }
                 }
                 if (((a >> 1) & 1) == ((b >> 3) & 1))
                 {
-                    for (int dy = 0; dy < pad; dy++)
+                    for (int dy = 0; dy < edgeGuard; dy++)
                     {
-                        for (int x = 0; x < cell + 2 * pad; x++)
+                        for (int x = pad; x < pad + cell; x++)
                         {
-                            int aPad = (pad + cell + dy) * stride + x * 4;
-                            int bEdge = (pad + dy) * stride + x * 4;
+                            int aPad = (pad + cell + dy) * slotStride + x * 4;
+                            int bEdge = (pad + dy) * slotStride + x * 4;
                             Assert.Equal(first[b].AsSpan(bEdge, 4).ToArray(), first[a].AsSpan(aPad, 4).ToArray());
 
-                            int bPad = dy * stride + x * 4;
-                            int aEdge = (pad + cell - pad + dy) * stride + x * 4;
+                            int bPad = (pad - edgeGuard + dy) * slotStride + x * 4;
+                            int aEdge = (pad + cell - edgeGuard + dy) * slotStride + x * 4;
                             Assert.Equal(first[a].AsSpan(aEdge, 4).ToArray(), first[b].AsSpan(bPad, 4).ToArray());
                         }
                     }
@@ -218,7 +233,21 @@ public sealed class EndlessOceanTests
         {
             string rockPath = Path.Combine(tempDir.FullName, "rock.png");
             string boatPath = Path.Combine(tempDir.FullName, "boat.png");
-            using (var rockImg = new MagickImage(new MagickColor(108, 120, 132), 512, 512))
+            byte[] rockRgba = new byte[512 * 512 * 4];
+            for (int y = 0; y < 512; y++)
+            {
+                for (int x = 0; x < 512; x++)
+                {
+                    bool cobble = ((x - 128) * (x - 128) + (y - 128) * (y - 128) < 4200)
+                               || ((x - 360) * (x - 360) + (y - 280) * (y - 280) < 5200);
+                    int i = (y * 512 + x) * 4;
+                    rockRgba[i + 0] = (byte)(cobble ? 88 : 63);
+                    rockRgba[i + 1] = (byte)(cobble ? 90 : 65);
+                    rockRgba[i + 2] = (byte)(cobble ? 85 : 60);
+                    rockRgba[i + 3] = 255;
+                }
+            }
+            using (var rockImg = new MagickImage(rockRgba, new PixelReadSettings(512, 512, StorageType.Char, PixelMapping.RGBA)))
                 rockImg.Write(rockPath);
             using (var boatImg = new MagickImage(new MagickColor(90, 100, 110), 840, 315))
                 boatImg.Write(boatPath);
@@ -274,20 +303,16 @@ public sealed class EndlessOceanTests
 
             var atlas = data.Sprites.ByName("spr_jmk_ocean_underlay_tex");
             Assert.NotNull(atlas);
-            Assert.Equal((uint)EndlessOceanSprites.CellSize, atlas!.Width);
-            Assert.Equal((uint)EndlessOceanSprites.CellSize, atlas.Height);
-            Assert.Equal(EndlessOceanSprites.VariantCount, atlas.Textures.Count);
-            Assert.Single(atlas.Textures.Select(t => t.Texture.TexturePage).Distinct());
-            foreach (var texEntry in atlas.Textures)
-            {
-                var item = texEntry.Texture;
-                Assert.Equal(EndlessOceanSprites.CellSize, item.SourceWidth);
-                Assert.Equal(EndlessOceanSprites.CellSize, item.SourceHeight);
-                Assert.True(item.SourceX >= EndlessOceanSprites.WrapPad);
-                Assert.True(item.SourceY >= EndlessOceanSprites.WrapPad);
-                Assert.True(item.SourceX + item.SourceWidth + EndlessOceanSprites.WrapPad <= item.TexturePage.TextureData.Width);
-                Assert.True(item.SourceY + item.SourceHeight + EndlessOceanSprites.WrapPad <= item.TexturePage.TextureData.Height);
-            }
+            Assert.Equal((uint)EndlessOceanSprites.AtlasSize, atlas!.Width);
+            Assert.Equal((uint)EndlessOceanSprites.AtlasSize, atlas.Height);
+            Assert.Single(atlas.Textures);
+            var item = atlas.Textures[0].Texture;
+            Assert.Equal(0, item.SourceX);
+            Assert.Equal(0, item.SourceY);
+            Assert.Equal(EndlessOceanSprites.AtlasSize, item.SourceWidth);
+            Assert.Equal(EndlessOceanSprites.AtlasSize, item.SourceHeight);
+            Assert.Equal(EndlessOceanSprites.AtlasSize, item.TexturePage.TextureData.Width);
+            Assert.Equal(EndlessOceanSprites.AtlasSize, item.TexturePage.TextureData.Height);
         }
         finally
         {
