@@ -28,22 +28,27 @@ public static class ArchiveBuilder
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
         CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false,
-        PerfSettings? perfSettings = null) =>
-        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack, perfSettings: perfSettings);
+        PerfSettings? perfSettings = null, bool bigMoney = true, ValueGuardOptions? valueGuard = null) =>
+        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack, perfSettings: perfSettings, bigMoney: bigMoney, valueGuard: valueGuard);
 
     internal static BuildResult BuildLayer(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions, bool dryRun, Action<string>? progress,
         CancellationToken cancellationToken, AnalysisOptions? options, bool noRepack,
         bool intermediate = false, IReadOnlyList<string>? additionalProtectedPaths = null, bool hasMergedBase = false,
-        PerfSettings? perfSettings = null)
+        PerfSettings? perfSettings = null, bool bigMoney = true, ValueGuardOptions? valueGuard = null,
+        string? vanillaPath = null)
     {
+        valueGuard ??= new();
+        if (valueGuard.FishValueCap < 0) throw new ArgumentOutOfRangeException(nameof(valueGuard), "Fish value cap must be a nonnegative whole number.");
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
         progress = message => { cancellationToken.ThrowIfCancellationRequested(); reportProgress?.Invoke(message); };
         cancellationToken.ThrowIfCancellationRequested();
-        string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath), .. additionalProtectedPaths ?? []];
+        string[] protectedPaths = [basePath, .. inputs.Select(i => i.ArchivePath), .. additionalProtectedPaths ?? [], .. vanillaPath is null ? Array.Empty<string>() : new[] { vanillaPath }];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
         using var original = GameFileLoader.Load(basePath, progress, cancellationToken, options);
+        using var vanillaArchive = vanillaPath is not null && (valueGuard.FairPlay || valueGuard.FishValueCap > 0)
+            ? GameFileLoader.Load(vanillaPath, progress, cancellationToken, options) : null;
         if (inputs.Count == 0)
         {
             if (resolutions is { Count: > 0 })
@@ -77,6 +82,8 @@ public static class ArchiveBuilder
             }
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
+            var vanillaCode = vanillaArchive is null ? semantics.Base : SemanticCode.Read(vanillaArchive.Data, "vanilla guard baseline", progress,
+                AssetSymbols.Ambiguous([SemanticReferences.Names(vanillaArchive.Data), semantics.BaseNames]), options, vanillaArchive.Inspection.Sha256);
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
             var unlockFixMods = inputs.Select((input, index) => (input, index)).Where(x => x.input.UnlockFix)
                 .Select(x => x.index).ToHashSet();
@@ -94,6 +101,7 @@ public static class ArchiveBuilder
                         semantics.Base, original.Data),
                     semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
+            if (!intermediate) plan = NavCompatibility.GuardPatrol(plan, semantics.Base);
             ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
             // In the addon pass the first source is the already merged base. Start with its
             // asset indices and room IDs while planning edits in the raw ancestor's coordinates.
@@ -107,7 +115,7 @@ public static class ArchiveBuilder
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate);
+                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate, bigMoney, valueGuard, vanillaArchive?.Data ?? original.Data, vanillaCode);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -200,7 +208,8 @@ public static class ArchiveBuilder
 
     private static IReadOnlyDictionary<string, string> Apply(UndertaleData data, UndertaleData ancestor,
         IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan,
-        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate)
+        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate,
+        bool bigMoney, ValueGuardOptions valueGuard, UndertaleData vanilla, IReadOnlyDictionary<string, CodeText> vanillaCode)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -361,9 +370,17 @@ public static class ArchiveBuilder
             HudRuntime.Inject(data, recompile);
             MenuRuntime.Inject(data, recompile);
             ItemsRuntime.Inject(data, recompile);
-            FishRuntime.Inject(data, recompile);
+            FishRuntime.Inject(data, recompile, generatedCode, valueGuard.FishValueCap);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
             HarborRuntime.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
+            NavCompatibility.RepairRoom(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
+            if (bigMoney) MoneyRuntime.Apply(baseCode, recompile, generatedCode, extraDecisions);
+            ValueGuard.Apply(data, vanilla, vanillaCode, baseCode, recompile, generatedCode, plan, patches, valueGuard, extraDecisions,
+                baseMod: vanilla != ancestor ? patches[0].Mod.Name : null);
+            ConsoleUpgradeGuard.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
+            MoneyRuntime.ConfigureConsole(bigMoney, recompile, generatedCode);
+            // Last, so the guard also covers code that the runtimes above generated or merged.
+            InstanceGuard.Apply(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");

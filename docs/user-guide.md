@@ -346,6 +346,19 @@ Shared compatibility results: before checking a mod itself, JAMM asks
 against exactly your game version (a plain HTTPS request without cookies or identifiers; the
 server sees your IP like any website). Switch it off in Settings. Details: [compat-db.md](compat-db.md).
 
+## Money above $999,999,999
+
+The original game stops the wallet at $999,999,999. Modded builds lift that limit up to
+$1,000,000,000,000,000 and show large amounts compactly: `$9,999`, `$25.0K`, `$3.4M`,
+`$9.5B`, `$3.4T`, `$1.0Qa`. The short form keeps one decimal and never rounds up, so
+$999,999 shows as `$999.9K`. Shop prices, sell dialogs, the Fishalog and quest rewards use
+the same format. Fish sale values are unchanged.
+
+Turn it off per profile with **Performance settings → Money above $999,999,999** or
+`cgfmm profile bigmoney <name> off`. A vanilla-only install is never changed. Saves keep
+the money as an INI real, so large amounts load back exactly. Opening such a save in an
+unmodded game shows the old $999,999,999 wallet cap.
+
 ## Built-in mods
 
 After choosing your untouched legacy base in Settings, the **Built-in (JAMM)** group
@@ -384,3 +397,17 @@ combine many of them in one profile with zero conflicts:
   so reordering or temporarily removing a mod won't scramble your gear. Always empty your
   boat and reel in your lure before switching profiles, and keep a backup of your save
   folder. Details: [how saves work](modding/saves.md).
+
+
+## Fish sale cap and Fair-Play
+
+JAMM limits individual fish sales to 100,000,000 by default when you build with mods.
+Change **Fish sale cap** in the active profile's **Performance settings**, or run
+`cgfmm profile valuecap <name> <n>`. Set it to `0` to disable the cap.
+
+**Fair-Play** in the same menu detects clear debug values in modded fishing gear,
+fish XP and shop prices. Values with uncertain intent appear as informational findings
+in the build log and are kept. Disable it for a profile with
+`cgfmm profile fairplay <name> off`. The fish sale cap and Big Money are independent
+settings. Player balances, console money and quest rewards are outside Fair-Play's scope.
+Both controls take effect on the next modded build. A vanilla-only build is a byte-for-byte copy.

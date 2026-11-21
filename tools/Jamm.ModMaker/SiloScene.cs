@@ -52,6 +52,7 @@ internal static class SiloScene
             silo_glow_ticks = 0;
             silo_art_show = false;
             silo_video = {{(args.Contains("--silo-video") ? 1 : 0)}};
+            silo_capture_frames = {{(args.Contains("--silo-frames") ? 1 : 0)}};
             silo_start_after = -1;
             silo_lamp = noone;
             silo_group_dx[0] = -480;
@@ -63,7 +64,7 @@ internal static class SiloScene
             silo_group_dy[2] = -190;
             silo_group_dy[3] = 175;
             var file = file_text_open_write("{{Report}}");
-            file_text_write_string(file, "stage,room,x,y,object,population,fishalog_count,fish_in_boat,blocked_samples,hatch_x,hatch_y,progress,glow,passable");
+            file_text_write_string(file, "stage,room,x,y,object,population,fishalog_count,fish_in_boat,blocked_samples,hatch_x,hatch_y,progress,glow,passable,hatch_angle,rim_depth,light_depth");
             file_text_writeln(file);
             file_text_close(file);
             """);
@@ -73,7 +74,7 @@ internal static class SiloScene
 
             // Wine's long frames can overshoot the native camera's interpolation.
             // Frame the scripted lure or boat directly while capturing the scene.
-            if (silo_stage == 1 || silo_stage == 7 || silo_stage == 8)
+            if (silo_stage == 1 || (silo_stage == 2 && silo_ticks <= 48) || silo_stage == 7 || silo_stage == 8)
             {
                 Camera.x = silo_view_x;
                 Camera.y = silo_view_y;
@@ -125,7 +126,14 @@ internal static class SiloScene
             Lure.tether_length = point_distance(Rod.x, Rod.y, Lure.x, Lure.y) + 25;
             Lure.canBite = 0;
             """);
-        compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), """
+        compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), $$"""
+            if (silo_capture_frames && silo_stage == 1)
+            {
+                var control;
+                control = instance_find({{HatchController}}, 0);
+                if (control.silo_opening || silo_shot == "opened" || silo_shot == "glow")
+                    screen_save("jamm_silo_frame_" + string(round(control.silo_elapsed * 1000)) + ".png");
+            }
             if (silo_art_show)
             {
                 // Off-screen surfaces isolate each full frame from the room and every HUD pass.
@@ -248,7 +256,7 @@ internal static class SiloScene
 
             if (silo_stage == 1)
             {
-                // Keep the closed and moving shutters in the same framing as the lure approaches.
+                // Keep the closed and moving door in the same framing as the lure approaches.
                 turn = hatch.image_angle * pi / 180;
                 dx = 56;
                 if (silo_ticks >= 16 && silo_start_after < 0 &&
@@ -272,7 +280,6 @@ internal static class SiloScene
                 }
                 else if (silo_recorded_open && control.silo_glow == 1)
                 {
-                    silo_view_y = hatch.y + 335;
                     silo_glow_ticks += 1;
                     if (silo_glow_ticks == 3) silo_row = "glow";
                     if (silo_glow_ticks == 12)
@@ -310,6 +317,13 @@ internal static class SiloScene
                 silo_x = px;
                 silo_y = py;
                 event_user(1);
+                if (silo_ticks == 15 || silo_ticks == 27 || silo_ticks == 39)
+                {
+                    silo_row = silo_ticks == 15 ? "rim-entry" : (silo_ticks == 27 ? "rim-occluded" : "rim-exit");
+                    event_user(0);
+                    silo_shot = silo_row;
+                    silo_row = "";
+                }
                 if (silo_ticks == 90)
                 {
                     silo_row = "shaft";
@@ -517,6 +531,7 @@ internal static class SiloScene
         py = hatch.y + lengthdir_y(129, angle) + lengthdir_y(220, angle - 90);
         row += "," + string(hatch.x) + "," + string(hatch.y) + "," + string(control.silo_progress) + "," + string(control.silo_glow);
         row += "," + string(collision_point(px, py, hatch, 1, 0) == noone);
+        row += "," + string(angle) + "," + string(control.depth) + "," + string(LightingSystem.depth);
         file = file_text_open_append("{{Report}}");
         file_text_write_string(file, row);
         file_text_writeln(file);

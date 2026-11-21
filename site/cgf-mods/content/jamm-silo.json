@@ -5,19 +5,19 @@
     "Bring a rod and boat that can reach the trench. Use a light to find the entrance and bring a cast lure within 250 room pixels of the hatch."
   ],
   "apis": "ModKit Area API, Fish and Catalog APIs, composed sprite recipes and custom object events.",
-  "assets": "5 objects (4 fish and 1 hatch controller), 6 composed sprites and 11 standalone scripts in the source build on a clean base. The scripts include 8 fish hooks, 1 area declaration, 1 initializer and 1 Fish API registration stub.",
+  "assets": "5 objects (4 fish and 1 hatch controller), 8 composed sprites and 11 standalone scripts in the source build on a clean base. The scripts include 8 fish hooks, 1 area declaration, 1 initializer and 1 Fish API registration stub.",
   "saves": "The open flag is written as `jamm-silo:launch-shaft=1` in `[JAMM_Areas]` in the active slot's `sdata<N>n_beta.ini`. Fishalog progress uses `[JAMM_Catalog]` in the native slot save.",
   "compatibility": "Targets the August 2023 legacy VM archive. The follow anchor supports moves of the MissileSilo, including Cave Expansion's relocation. JAMM reports overlapping room edits as `CGF-AREA-001` and follows the latest surviving move when mods compete for the landmark.",
   "how": [
     "The `launch-shaft` Area API declaration places native cave rocks, Geiger lights and a custom hatch controller in `NewWorld`. Its `follow` anchor resolves the existing MissileSilo instance and translates the shaft with it. JAMM configures the placed instance and keeps MissileSilo's native object events. The controller draws the animation using the resolved hatch's rotation and scale.",
-    "Initially the controller shows `spr_silo` and uses the closed `spr_silomask`. A nearby cast lure triggers a 1.55-second opening. Two shutter frames slide and turn apart, bubbles rise and the Geiger lights fade in. The closed mask blocks the lure through the slide. Once the movement completes, the open sprite supplies the passable mask.",
-    "JAMM composes the six sprites during the build from the player's own vanilla frames, plus original SVG details. The package ships the recipes and SVG details. The four fish use recoloured donor compositions, and the hatch and shutters use complementary crops of `spr_silo`.",
+    "A nearby cast lure triggers a 1.55-second opening. One steel plate slides into its frame while bubbles rise and the Geiger lights fade in. The static rock sits behind the lure, and a shallow rock lip at the mouth occludes the lure, line and fish as they cross. The closed mask blocks the lure through the slide. At the end, the controller switches to a separate collision mask with a passage through the shaft.",
+    "JAMM composes the sprites during the build from the player's own vanilla frames and the package's original SVG shapes. Ferrex pairs a shortened copper body with teal markings, a swept dorsal fin and a forked tail.",
     "The four species spawn in separate `within` rectangles in the shaft. The Area API finds free-water points after other profile edits and the area's solids are applied. Create hooks enable deep-water behaviour. Step hooks call wall recovery, guide fish toward their home water and cap movement to limit tunnelling through the shaft walls."
   ],
   "gallery": [
     {"image": "chamber-solo.webp", "thumbnail": "chamber-solo-thumb.webp", "alt": "Four Silo fish swimming among rocks and green lights below the open hatch", "caption": "Inside the flooded shaft"},
-    {"image": "opening-sequence-solo.webp", "thumbnail": "opening-sequence-solo-thumb.webp", "alt": "Nine panels showing the closed hatch, sliding shutters, lights and the open chamber", "caption": "Hatch opening sequence"},
-    {"image": "art-review.webp", "thumbnail": "art-review-thumb.webp", "alt": "Comparison sheet with Veyl, Radik, Ferrex and Garrusk next to vanilla fish", "caption": "Fish art comparisons"},
-    {"image": "opening-solo.gif", "thumbnail": "opening-solo-thumb.webp", "alt": "Closed Missile Silo hatch at the start of the opening animation", "caption": "Play the solo opening animation"}
+    {"image": "opening-sequence-solo.webp", "thumbnail": "opening-sequence-solo-thumb.webp", "alt": "Nine panels showing the original shutters, lights and the open chamber", "caption": "Silo 2.2 opening sequence"},
+    {"image": "art-review.webp", "thumbnail": "art-review-thumb.webp", "alt": "Silo 2.2 comparison sheet with Veyl, Radik, Ferrex and Garrusk next to vanilla fish", "caption": "Silo 2.2 fish art comparisons"},
+    {"image": "opening-solo.gif", "thumbnail": "opening-solo-thumb.webp", "alt": "Missile Silo at the start of the Silo 2.2 opening animation", "caption": "Silo 2.2 solo opening animation"}
   ]
 }

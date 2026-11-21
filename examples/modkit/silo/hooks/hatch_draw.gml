@@ -1,21 +1,21 @@
-if (!silo_opening || !instance_exists(hatch)) exit;
-var travel, opacity, angle, dx, dy, i, age, side;
+if (!instance_exists(hatch)) exit;
+var travel, angle, dx, dy;
 travel = silo_progress * silo_progress * (3 - 2 * silo_progress);
-opacity = 1 - clamp((travel - 0.78) / 0.22, 0, 1);
 angle = hatch.image_angle;
 
-// The door sprites share the original origin. Move along the relocated hatch's local axes.
-for (i = 0; i < 2; i += 1) {
-    side = 2 * i - 1;
-    dx = side * travel * 160 * hatch.image_xscale;
-    dy = -travel * 21 * hatch.image_yscale;
-    draw_sprite_ext(jmk_jamm_silo_recipe_silo_doors, i,
-        x + lengthdir_x(dx, angle) + lengthdir_x(dy, angle - 90),
-        y + lengthdir_y(dx, angle) + lengthdir_y(dy, angle - 90),
-        hatch.image_xscale, hatch.image_yscale, angle + side * travel * 8, c_white, opacity);
-}
+// The plate slides into the left recess along the hatch's local X axis.
+dx = -300 * travel * hatch.image_xscale;
+draw_sprite_ext(jmk_jamm_silo_recipe_silo_door, 0,
+    hatch.x + lengthdir_x(dx, angle), hatch.y + lengthdir_y(dx, angle),
+    hatch.image_xscale, hatch.image_yscale, angle, hatch.image_blend, hatch.image_alpha);
 
-// A short bubble puff rises from the opening as the shutters pull away.
+// Draw the lip after the fish and before LightingSystem so it shares the body's lighting.
+draw_sprite_ext(jmk_jamm_silo_recipe_silo_rim, 0, hatch.x, hatch.y,
+    hatch.image_xscale, hatch.image_yscale, angle, hatch.image_blend, hatch.image_alpha);
+
+if (!silo_opening) exit;
+var i, age;
+// A short bubble puff rises from the opening as the plate retracts.
 draw_set_color(make_color_rgb(157, 187, 163));
 for (i = 0; i < 14; i += 1) {
     age = (silo_elapsed - 0.21 - i * 0.035) / 0.86;

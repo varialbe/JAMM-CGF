@@ -44,7 +44,7 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
   - `unlockgear`: unlocks equipment, upgrades, hats, HUD icons, and nightfall only.
   - `maxlevel` / `level <n>`: sets level (clamped to `[0, max_level]`).
   - `catalog all` (alias `unlockfish`): marks every catalog fish as caught.
-  - `money <n>` / `money +<n>`: sets or adds dollars (clamped to `0..999999999`).
+  - `money <n>` / `money +<n>`: sets or adds dollars (clamped to `0..1e15`; large amounts display compactly when the profile allows big money).
   - `clear`, `close` / `exit`: clears the console log or closes the overlay.
   Commands that change game state warn that the next autosave (or opening the
   Esc save menu) persists changes to your save file. Switching save slots
