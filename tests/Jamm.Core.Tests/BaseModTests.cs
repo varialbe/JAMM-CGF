@@ -151,6 +151,17 @@ public sealed class BaseModTests : IDisposable
         Assert.False(reconfigured.FairPlay);
         Assert.Equal(75_000_000, reconfigured.FishValueCap);
         Assert.False(reconfigured.NoBigMoney);
+
+        profiles.SetFishValueCap("guarded", 0);
+        profiles.SetBigMoney("guarded", false);
+        var disabledBuild = installer.Prepare("guarded");
+        Assert.DoesNotContain(disabledBuild.Build.Plan.Decisions, d => d.Contains("CGF-VALUE") || d.Contains("CGF-FAIR") || d.Contains("CGF-MONEY"));
+        using (var disabledArchive = GameFileLoader.Load(disabledBuild.OutputPath))
+        {
+            var fish = PatchBuilder.ReadCode(disabledArchive, fishCode).Text;
+            Assert.Contains("BASE_VALUE = 5000000000;", fish);
+            Assert.Contains("XP_VALUE = 5000000000;", fish);
+        }
     }
 
     [Fact]

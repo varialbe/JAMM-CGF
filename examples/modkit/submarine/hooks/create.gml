@@ -1,0 +1,17 @@
+sub_diving = false;
+sub_ascending = false;
+sub_oxygen_max = 110;
+sub_oxygen = sub_oxygen_max;
+sub_depth_limit = 4800;
+sub_entry_y = 1338;
+sub_dive_min_x = 1550;
+sub_lamp = noone;
+sub_lamp_on = true;
+sub_facing = 1;
+sub_cast_armed = false;
+sub_drop = 0;
+sub_drop_length = 150;
+sub_blocked_time = 0;
+sub_notice = "";
+sub_notice_until = 0;
+boat_bg.visible = false;

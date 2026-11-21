@@ -15,14 +15,17 @@ public static class EndlessOceanMod
     public const int MaxSeed = 2147483646;
 
     internal const string Controller = "obj_jmk_endless_ocean";
-    internal const int KnownEastEdge = 170000;
     internal const int ChunkCount = 488;
-    internal const int ExtensionWidth = ChunkCount * 2048;
+    internal const int ExtensionWidth = ChunkCount * EndlessOceanEdge.ChunkWidth;
+    private const string Setup = "jmk_endless_ocean_setup";
+    private const string SetupCode = "gml_Script_" + Setup;
 
     private static readonly string[] Scripts =
     [
-        "jamm_chunk_unit", "jamm_chunk_stream", "jmk_endless_ocean_floor",
-        "jmk_endless_ocean_layout", "jmk_endless_ocean_load", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
+        "jamm_chunk_unit", "jamm_chunk_stream", Setup, "jmk_endless_ocean_floor", "jmk_endless_ocean_height",
+        "jmk_endless_ocean_biome", "jmk_endless_ocean_species", "jmk_endless_ocean_poi",
+        "jmk_endless_ocean_layout", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
+        "jmk_endless_ocean_load", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
     ];
 
     /// <summary>Applies the recipe to an in-memory vanilla or already merged archive.</summary>
@@ -32,8 +35,7 @@ public static class EndlessOceanMod
         ArgumentOutOfRangeException.ThrowIfGreaterThan(seed, MaxSeed);
         var world = data.Rooms.ByName("NewWorld")
             ?? throw new InvalidDataException("The NewWorld room is missing. Choose the August 2023 legacy archive or a compatible JAMM build.");
-        foreach (string name in new[] { "Camera", "Boat7", "SaveManager", "Rod", "Lure", "Collidable", "CaveRockBig",
-            "Celad", "Inno", "Mustardfish", "Elder_Mustardfish", "Dijon", "Garm" })
+        foreach (string name in new[] { "Camera", "Boat7", "SaveManager", "Rod", "Lure", "Collidable", "CaveRock", "CaveRockBig", "Light" })
         {
             if (data.GameObjects.ByName(name) is null)
                 throw new InvalidDataException($"Endless Ocean needs the '{name}' object. Choose a compatible legacy archive.");
@@ -43,17 +45,26 @@ public static class EndlessOceanMod
             Scripts.Any(name => data.Scripts.ByName(name) is not null || data.Code.ByName("gml_Script_" + name) is not null))
             throw new InvalidDataException("This archive already contains Endless Ocean or conflicting chunk scripts. Build the recipe on a compatible archive without those assets.");
 
-        uint start = ProtectedEastEdge(world);
-        uint end = checked(start + ExtensionWidth);
-        progress?.Invoke($"Endless Ocean: generating from x={start} to x={end} ({ChunkCount} chunks).");
+        if (data.GameObjects.ByName("CaveRockBig")?.Sprite is not { Width: >= 512, Height: >= 512 } rock ||
+            data.GameObjects.ByName("Boat3")?.Sprite is not { Width: >= 840, Height: >= 315 } hull)
+            throw new InvalidDataException("Endless Ocean needs the original CaveRockBig and Boat3 sprites. Choose a compatible legacy archive.");
+
+        var edge = EndlessOceanEdge.Find(world, world.Width);
+        progress?.Invoke(Describe(edge));
+        var ground = ModObjects.Create(data, "obj_jmk_ocean_ground", persistent: false);
+        ground.ParentId = data.GameObjects.ByName("CaveRock");
+        ground.Sprite = EndlessOceanSprites.Add(data, rock, hull);
+        ground.Depth = 5;
+        ModObjects.Create(data, "obj_jmk_ocean_decor", persistent: false).Depth = -3;
 
         var compiler = new CompileGroup(data);
         foreach (string script in Scripts)
         {
             var code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + script);
             data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(script), Code = code });
-            compiler.QueueCodeReplace(code, Source(script));
+            compiler.QueueCodeReplace(code, script == Setup ? Settings(edge, world.Width) : Source(script));
         }
+        compiler.QueueCodeReplace(ground.EventHandlerFor(EventType.Draw, 0u, data), Source("draw_ground"));
 
         var controller = ModObjects.Create(data, Controller, persistent: false);
         Queue(EventType.Create, 0, """
@@ -61,9 +72,7 @@ public static class EndlessOceanMod
             """);
         Queue(EventType.Other, (uint)EventSubtypeOther.RoomStart, FormattableString.Invariant($$"""
             if (ds_exists(ocean_chunks, ds_type_map)) exit;
-            ocean_start = {{start}};
-            ocean_end = {{end}};
-            ocean_chunk_count = {{ChunkCount}};
+            {{Setup}}();
             ocean_chunks = ds_map_create();
             ocean_catch = ds_list_create();
             ocean_first = 0;
@@ -89,40 +98,62 @@ public static class EndlessOceanMod
         Queue(EventType.Destroy, 0, clear);
 
         ExcludeGeneratedFishFromSaves(data, compiler);
+        var respawn = data.Code.ByName("gml_Script_fish_respawn")
+            ?? throw new InvalidDataException("Endless Ocean needs the fish_respawn script. Choose a compatible legacy archive.");
+        compiler.QueueCodeReplace(respawn, """
+            if (variable_instance_exists(id, "jmk_endless_ocean_fish")) return -4;
+
+            """ + ModObjects.Decompile(data, respawn));
         ModObjects.Compile(compiler);
-        world.Width = end;
+        world.Width = edge.End;
         ModObjects.PlaceInstance(data, "NewWorld", controller, first: true);
 
         void Queue(EventType type, uint subtype, string gml) =>
             compiler.QueueCodeReplace(controller.EventHandlerFor(type, subtype, data), gml);
     }
 
-    internal static uint ProtectedEastEdge(UndertaleRoom world)
+    internal static void RefreshMergedLayout(UndertaleData data, Dictionary<string, string> recompile,
+        Dictionary<string, string> generated, List<string> decisions)
     {
-        double east = Math.Max(world.Width, KnownEastEdge);
-        foreach (var placement in world.GameObjects)
+        if (data.GameObjects.ByName(Controller) is null || data.Code.ByName(SetupCode) is not { } code ||
+            data.Rooms.ByName("NewWorld") is not { } world)
+            return;
+
+        string previous = recompile.TryGetValue(SetupCode, out var queued) ? queued : ModObjects.Decompile(data, code);
+        var endLiteral = Regex.Match(previous, @"\bocean_end\s*=\s*([0-9]+);");
+        uint sourceWidth = world.Width;
+        if (uint.TryParse(endLiteral.Groups[1].Value, out uint previousEnd) && sourceWidth == previousEnd)
         {
-            east = Math.Max(east, placement.X);
-            if (placement.ObjectDefinition is not { } obj)
-                continue;
-
-            Include(obj.Sprite);
-            Include(obj.TextureMaskId);
-
-            void Include(UndertaleSprite? sprite)
-            {
-                if (sprite is null)
-                    return;
-                double radians = placement.Rotation * Math.PI / 180;
-                double horizontal = placement.ScaleX * Math.Cos(radians);
-                double vertical = placement.ScaleY * Math.Sin(radians);
-                double right = Math.Max(-sprite.OriginX * horizontal, (sprite.Width - (double)sprite.OriginX) * horizontal);
-                double bottom = Math.Max(-sprite.OriginY * vertical, (sprite.Height - (double)sprite.OriginY) * vertical);
-                east = Math.Max(east, placement.X + right + bottom);
-            }
+            // The setup script returns the original width for subsequent profile builds.
+            var widthLiteral = Regex.Match(previous, @"\breturn\s+([0-9]+);");
+            if (uint.TryParse(widthLiteral.Groups[1].Value, out uint previousSourceWidth))
+                sourceWidth = previousSourceWidth;
         }
-        return checked((uint)Math.Ceiling(east));
+
+        var edge = EndlessOceanEdge.Find(world, sourceWidth);
+        world.Width = edge.End;
+        generated[SetupCode] = recompile[SetupCode] = Settings(edge, sourceWidth);
+        // `script_execute` receives script table indexes for the chunk callbacks. Those
+        // indexes can shift when the recipe is merged after other mods, so rebuild the
+        // controller step from symbols in the final archive instead of retaining the
+        // indexes compiled when the recipe was first applied.
+        const string stepCode = "gml_Object_" + Controller + "_Step_1";
+        if (data.Code.ByName(stepCode) is not null)
+            generated[stepCode] = recompile[stepCode] = Source("step");
+        decisions.Add(Describe(edge));
     }
+
+    private static string Settings(EndlessOceanEdge edge, uint sourceWidth) => FormattableString.Invariant($"""
+        ocean_start = {edge.X};
+        ocean_anchor_y = {edge.Floor};
+        ocean_content_chunk = {edge.ContentChunk};
+        ocean_chunk_count = {edge.ContentChunk + ChunkCount};
+        ocean_end = {edge.End};
+        return {sourceWidth};
+        """);
+
+    private static string Describe(EndlessOceanEdge edge) =>
+        $"Endless Ocean: floor joins at ({edge.X}, {edge.Floor}), biomes start at x={edge.X + edge.ContentChunk * EndlessOceanEdge.ChunkWidth}, and travel ends at x={edge.End}.";
 
     private static void ExcludeGeneratedFishFromSaves(UndertaleData data, CompileGroup compiler)
     {

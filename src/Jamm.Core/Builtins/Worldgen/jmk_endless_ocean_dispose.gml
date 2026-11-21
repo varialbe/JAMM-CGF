@@ -8,6 +8,8 @@ with (member)
         // Preserve vanilla interactions with fish on the hook, in the net or aboard.
         if (state == 4 || state == 15) return false;
         if (instance_exists(Lure) && Lure.fish == id && Lure.hookedFishSize > 0) return false;
+        if (instance_exists(CatSwim)) if (CatSwim.holding == id) return false;
+        if (instance_exists(light)) with (light) instance_destroy();
     }
     instance_destroy();
 }

@@ -14,8 +14,30 @@
   "saves": "The history and log live in memory. Commands that change progression, equipment or the Fishalog can be saved by the game's normal autosave or Escape save menu.",
   "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, HD Lite and an independent third-party mod. The Weather API extends this controller with the `weather` command.",
   "how": [
-    "The generator places `obj_jamm_console` in `NewWorld` and `room11`. Its Begin Step processes the input buffer, normalizes commands and consumes gameplay keys while the overlay is open. Its End Step maintains the open overlay's rod swing lock and Draw GUI renders the prompt and log.",
-    "Gear unlocks iterate the live item tables, so their row counts can include gear from the loaded profile. Fishalog commands update the live catalog arrays. Level and money commands clamp input and write to the player's current state.",
-    "The controller tracks the active SaveManager instance and slot to reset its unlock bookkeeping on a slot change. Console commands that alter progress print a save warning."
+    "The recipe places persistent `obj_jamm_console` instances in `NewWorld` and `room11`. Begin Step reads and normalizes the command buffer, consumes gameplay keys while the overlay is open and submits commands. End Step maintains the rod-swing lock; Draw GUI renders the prompt and scrolling log. F12 or backtick toggles it; Enter submits, Up/Down browse history and Escape closes it.",
+    "`help` lists `clear`, `close`/`exit`, `unlockgear`, `unlockall`, `level <n>`, `maxlevel`, `catalog all`/`unlockfish`, `money <n>` and `money +<n>`. Commands work on live gear/item tables and Fishalog arrays, so profile-added items are included. The controller watches the active SaveManager instance and slot to reset slot-specific bookkeeping. Changed progress is written by the game's normal save flow; the log/history itself is in memory.",
+    "On modded builds the shared `number_to_dollar_string` formatter uses one truncated decimal with K/M/B/T/Qa at $10,000 and above: `$9,999` remains unchanged, while larger examples display as `$25.0K`, `$3.4M`, `$9.5B`, `$3.4T` or `$1.0Qa`. The wallet supports values through 1e15 and the `money` command accepts the same range. Fish sale values still have a separate 100-million cap. The Weather API extends the same Console with the `weather` command."
+  ],
+  "changelog": [
+    "1.0.0: F12/backtick command console; progression, catalog and money commands; compact K/M/B/T/Qa currency display on modded builds."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy."
+  ],
+  "faq": [
+    {
+      "q": "What is the largest money value?",
+      "a": "The modded wallet and Console support values through 1e15. Fish sale value retains its separate 100 million cap."
+    },
+    {
+      "q": "How are large amounts shown?",
+      "a": "The display stays exact below $10,000; then uses one truncated decimal and K, M, B, T or Qa, such as `$25.0K`, `$3.4M`, `$9.5B` and `$3.4T`."
+    }
   ]
 }

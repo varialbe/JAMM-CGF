@@ -171,7 +171,7 @@
     "id": "endless-ocean",
     "name": "Endless Ocean (Preview)",
     "author": "JAMM",
-    "description": "Preview: a seeded, endlessly streamed ocean floor with vanilla fish east of NewWorld.",
+    "description": "A seeded seafloor with three biomes, vanilla fish and occasional wrecks east of NewWorld.",
     "fileUrl": "https://varialbe.xyz/cgf-mods/packages/endless-ocean.zip",
     "isPreview": false,
     "categories": [
@@ -187,9 +187,33 @@
     "packageType": "recipe",
     "manifestFile": "jamm-recipe.json",
     "isDefault": false,
+    "version": "0.2.0",
+    "sha256": "bf9d70131aae9f0651f93c2280b7722671c9c215673b940f3c4540b2aa6171f0",
+    "sizeBytes": 1600
+  },
+  {
+    "id": "submarine",
+    "name": "Submarine",
+    "author": "JAMM",
+    "description": "Buy a submarine, dive with a headlight and fish from the bow.",
+    "fileUrl": "https://varialbe.xyz/cgf-mods/packages/submarine.zip",
+    "isPreview": false,
+    "categories": [
+      "Optional",
+      "Exploration"
+    ],
+    "createdUtc": "2026-11-18T00:00:00Z",
+    "rating": null,
+    "iconUrl": "https://varialbe.xyz/cgf-mods/assets/submarine.svg",
+    "verifiedCreator": true,
+    "credits": "JAMM-CGF first-party pure-source package",
+    "catalogPage": "https://varialbe.xyz/cgf-mods/#submarine",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
+    "isDefault": false,
     "version": "0.1.0",
-    "sha256": "81c9ddfdd1059ed5412406438c578a43ff8048e8b3202767c217ae3693c610ca",
-    "sizeBytes": 1660
+    "sha256": "d5814f3dbeba4eb86a4c65a3997ad3a9a922ad0f1a9d64cac0a3317ecf67ab1d",
+    "sizeBytes": 6718
   },
   {
     "id": "example-rod",

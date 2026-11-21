@@ -18,13 +18,42 @@ internal static class FishRuntime
     internal const string ApiInitCode = "gml_Script_" + ApiInitScript;
     internal const string SaveManagerStep = "gml_Object_SaveManager_Step_0";
     internal const string FishObjectToName = "gml_Script_fish_object_to_name";
+    internal const string CatalogDataDraw = "gml_Object_CatalogData_Draw_0";
+    private const string CaughtFishNameDraw = "draw_text_shadowed(Camera.x, Camera.y - 6, name);";
+    private const string CaughtFishValueDraw = "draw_text_shadowed(Camera.x, Camera.y + 26, \"Worth \" + number_to_dollar_string(value));";
 
     internal static BuildPlan PreparePlan(BuildPlan plan, IReadOnlyDictionary<string, CodeText> baseline, UndertaleData? original = null)
     {
+        var assets = plan.Assets.ToList();
+        if (baseline.ContainsKey(CatalogDataDraw) && HasCode(assets, baseline, CatalogDataDraw))
+        {
+            string current = Current(assets, baseline, CatalogDataDraw);
+            if (current.Contains(CaughtFishNameDraw, StringComparison.Ordinal))
+            {
+                string guarded = current;
+                if (!guarded.Contains("variable_instance_exists(id, \"name\")", StringComparison.Ordinal))
+                {
+                    guarded = guarded.Replace(CaughtFishNameDraw,
+                        "if (!variable_instance_exists(id, \"name\")) name = object_get_name(object_index);\n" + CaughtFishNameDraw,
+                        StringComparison.Ordinal);
+                }
+                if (guarded.Contains(CaughtFishValueDraw, StringComparison.Ordinal)
+                    && !guarded.Contains("variable_instance_exists(id, \"value\")", StringComparison.Ordinal))
+                {
+                    guarded = guarded.Replace(CaughtFishValueDraw,
+                        "if (!variable_instance_exists(id, \"value\")) value = 0;\n" + CaughtFishValueDraw,
+                        StringComparison.Ordinal);
+                }
+                if (!string.Equals(guarded, current, StringComparison.Ordinal))
+                    Put(assets, baseline, CatalogDataDraw, guarded);
+            }
+        }
+
+        plan = plan with { Assets = assets };
         if (!UsesFishApi(plan, baseline))
             return plan;
 
-        var assets = plan.Assets.ToList();
+        assets = plan.Assets.ToList();
         var decisions = plan.Decisions.ToList();
 
         bool hasCatalogData = original?.GameObjects.ByName("CatalogData") is not null

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JAMM-CGF mod packages, technical notes, installation and compatibility.">
+  <title>How JAMM builds a modded game — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="index.html">JAMM <span>CGF Mods</span></a>
+    <div class="nav-links">
+      <a href="index.html#packages">Packages</a>
+      <a href="how-jamm-builds.html">How builds work</a>
+      <a href="compatibility.html">Compatibility</a>
+    </div>
+  </nav>
+  <main id="main-content">
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="index.html">Packages</a><span aria-hidden="true">/</span><span>How JAMM builds a modded game</span></nav>
+
+<header class="guide-header"><p class="eyebrow">Under the hood</p><h1>How JAMM builds a modded game</h1><p>A build starts with a read-only legacy archive, resolves selected mods against their common ancestors, applies compatibility rules, and verifies a new game archive.</p></header>
+
+    <section class="mod-section">
+      <h2>From original game to a new archive</h2>
+      <p>The legacy August 2023 <code>data.win</code> is the merge ancestor and is opened read-only. A recipe or ModKit source package is compiled locally against that base into a patch; JAMM never downloads a replacement game archive.</p>
+      <p>Profile order is explicit. JAMM combines each package&#x27;s added assets and semantic changes, then runs the selected compatibility and runtime installers against the merged result. The output is written to a new path and verified before it can be installed.</p><figure class="diagram"><svg viewBox="0 0 880 160" role="img" aria-labelledby="diag-title diag-desc"><title id="diag-title">JAMM build pipeline</title><desc id="diag-desc">Original game becomes package patches, merged in profile order, compatibility rules run, then a verified output archive is written.</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"/></marker></defs><path d="M 103 81 H 121" marker-end="url(#arrow)"/><path d="M 321 81 H 339" marker-end="url(#arrow)"/><path d="M 539 81 H 557" marker-end="url(#arrow)"/><path d="M 757 81 H 775" marker-end="url(#arrow)"/><g><rect x="-90" y="35" width="188" height="92" rx="14"/><text x="4" y="81" text-anchor="middle">Read-only base</text></g><g><rect x="128" y="35" width="188" height="92" rx="14"/><text x="222" y="81" text-anchor="middle">Per-mod patches</text></g><g><rect x="346" y="35" width="188" height="92" rx="14"/><text x="440" y="81" text-anchor="middle">Resolve conflicts</text></g><g><rect x="564" y="35" width="188" height="92" rx="14"/><text x="658" y="81" text-anchor="middle">Guards and APIs</text></g><g><rect x="782" y="35" width="188" height="92" rx="14"/><text x="876" y="81" text-anchor="middle">Verify new file</text></g></svg><ol class="diagram-mobile" aria-label="JAMM build pipeline"><li>Read-only base</li><li>Per-mod patches</li><li>Resolve conflicts</li><li>Guards and APIs</li><li>Verify new file</li></ol><figcaption>The original data.win remains the ancestor; JAMM writes a separate verified output.</figcaption></figure>
+    </section>
+
+    <section class="mod-section">
+      <h2>How conflict decisions work</h2>
+      <p>Each patch records changes relative to its declared ancestor. Disjoint edits can be combined. Overlapping changes to the same code or resource are reported with the affected asset and require the profile&#x27;s resolution choice; the selected winner supplies the conflicting hunk while other compatible edits remain.</p>
+      <p>Identical API placeholders and independent insertions can be retained when their meaning is known. A keep-both decision is limited to compatible code insertions. Area placement resolves <code>follow</code> anchors against the final room, uses the latest selected placement of that same landmark, and reports competing room edits as <code>CGF-AREA-001</code>.</p>
+      <p>Final compatibility passes include object-index and instance guards such as <code>CGF-INSTANCE-004</code> (use a typed object constant when checking an object type), <code>CGF-INSTANCE-005</code> (guard eligible instance member reads/writes), and <code>CGF-INSTANCE-007</code> (guard eligible lookup-result reads). These are targeted repairs, not a proof that arbitrary dynamic IDs are always valid.</p><ul class="guide-list">
+        <li>Review <code>cgfmm check</code> findings and resolve named conflicts before building.</li>
+        <li>JAMM applies shared Fish, Catalog, Items, Weather and Area runtimes only when the selected package types need them.</li>
+        <li>The verifier compiles and reads back the output archive; the original archive remains untouched.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Anchors and shared APIs</h2>
+      <p>ModKit packages add namespaced assets and initializers instead of replacing shared item tables. During the profile build, JAMM generates deterministic initializer calls in profile load order, replaces API placeholder scripts with the real runtime, and injects the required controller and save hooks.</p>
+      <p>A recipe can patch known legacy code only when its expected unique anchors are present. If an anchor is missing or ambiguous, the build stops with the entry to inspect rather than silently patching a different location.</p>
+    </section>
+
+<p class="guide-back"><a href="index.html#packages">← Back to all packages</a></p>
+  </main>
+</body>
+</html>
