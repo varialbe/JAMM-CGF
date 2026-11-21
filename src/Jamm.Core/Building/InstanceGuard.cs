@@ -110,6 +110,8 @@ public static class InstanceGuard
         var byKind = guarded.GroupBy(f => f.Kind).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
         if (byKind.TryGetValue("object-index", out var constants))
             decisions.Add($"[CGF-INSTANCE-004] Replaced {constants.Length} '<Object>.object_index' read(s) with the object constant so they no longer need an active instance: {Summary(constants)}.");
+        if (byKind.TryGetValue("unchecked-lookup", out var lookups))
+            decisions.Add($"[CGF-INSTANCE-007] Guarded {lookups.Length} read(s) of instance_nearest/find/place results that were used without a noone check: {Summary(lookups)}.");
         if (byKind.TryGetValue("fish-read", out var reads))
             decisions.Add($"[CGF-INSTANCE-005] Guarded {reads.Length} fish/mod-object variable read(s) that crash when no instance is active: {Summary(reads)}.");
         var reported = found.Where(f => !f.Guarded).ToArray();
@@ -145,9 +147,14 @@ public static class InstanceGuard
             bool array = after.StartsWith('[');
             int line = LineOf(lineStarts, match.Index);
             string snippet = Line(text, lineStarts, line);
-            if (member == "object_index" && !write && !facts.WithChildren.Contains(obj))
+            // Only in comparisons: there the compiler and decompiler type the constant as an object.
+            // In untyped positions (ind = Bulbfish.object_index) a bare name could resolve to a
+            // same-named sprite, so those use the accessor below when the object is risky.
+            bool comparison = Regex.IsMatch(masked[Math.Max(0, match.Index - 4)..match.Index], @"(==|!=)\s*$")
+                || Regex.IsMatch(after, @"^(==|!=)");
+            if (member == "object_index" && !write && comparison && !facts.WithChildren.Contains(obj))
             {
-                edits.Add((match.Index, match.Length, obj));
+                edits.Add((match.Index, match.Length, Symbol(obj)));
                 found.Add(new(code, line, "object-index", obj, snippet, true));
                 continue;
             }
@@ -158,7 +165,7 @@ public static class InstanceGuard
                 {
                     // Two insertions, so reads inside the statement can still be rewritten independently.
                     edits.Add((statement.Start + statement.Length, 0, " }"));
-                    edits.Add((statement.Start, 0, $"if (instance_exists({obj})) {{ "));
+                    edits.Add((statement.Start, 0, $"if (instance_exists({Symbol(obj)})) {{ "));
                 }
                 found.Add(new(code, line, "fish-write", obj, snippet, true));
                 continue;
@@ -169,21 +176,39 @@ public static class InstanceGuard
                 continue;
             }
             accessors.Add(member);
-            edits.Add((match.Index, match.Length, $"{AccessorPrefix}{member}({obj})"));
+            edits.Add((match.Index, match.Length, $"{AccessorPrefix}{member}({Symbol(obj)})"));
             found.Add(new(code, line, "fish-read", obj, snippet, true));
         }
         foreach (Match match in Lookup.Matches(masked))
         {
             string variable = match.Groups[1].Value;
+            if (facts.Names.Contains(variable)) continue;
             int from = match.Index + match.Length;
-            var deref = new Regex($@"(?<![\w.]){Regex.Escape(variable)}\s*\.\s*[A-Za-z_]");
-            var use = deref.Match(masked, from);
-            if (!use.Success) continue;
-            string between = masked[from..use.Index];
-            if (Regex.IsMatch(between, $@"instance_exists\s*\(\s*{Regex.Escape(variable)}\s*\)|{Regex.Escape(variable)}\s*(!=|==|>=|<=|>|<)|noone"))
-                continue;
-            int line = LineOf(lineStarts, use.Index);
-            found.Add(new(code, line, "unchecked-lookup", variable, Line(text, lineStarts, line), false));
+            // Guard dereferences until the variable is checked or assigned again.
+            var reassigned = new Regex($@"(?<![\w.]){Regex.Escape(variable)}\s*=(?!=)");
+            var stop = reassigned.Match(masked, from);
+            int limit = stop.Success ? stop.Index : masked.Length;
+            var check = new Regex($@"instance_exists\s*\(\s*{Regex.Escape(variable)}\s*\)|(?<![\w.]){Regex.Escape(variable)}\s*(!=|==|>=|<=|>|<)|(?<![\w.])(?:!\s*)?{Regex.Escape(variable)}\s*(\)|&&|\|\|)");
+            var checkedAt = check.Match(masked, from);
+            if (checkedAt.Success && checkedAt.Index < limit) limit = checkedAt.Index;
+            var deref = new Regex($@"(?<![\w.]){Regex.Escape(variable)}\s*\.\s*([A-Za-z_]\w*)");
+            for (var use = deref.Match(masked, from); use.Success && use.Index < limit; use = use.NextMatch())
+            {
+                int end = use.Index + use.Length;
+                string tail = masked[end..Math.Min(masked.Length, end + 4)].TrimStart();
+                string head = masked[Math.Max(0, use.Index - 2)..use.Index];
+                bool write = Regex.IsMatch(tail, @"^(=(?!=)|\+=|-=|\*=|/=|\+\+|--)") || head.EndsWith("++", StringComparison.Ordinal) || head.EndsWith("--", StringComparison.Ordinal);
+                int line = LineOf(lineStarts, use.Index);
+                if (write || tail.StartsWith('['))
+                {
+                    found.Add(new(code, line, "unchecked-lookup", variable, Line(text, lineStarts, line), false));
+                    continue;
+                }
+                string member = use.Groups[1].Value;
+                accessors.Add(member);
+                edits.Add((use.Index, use.Length, $"{AccessorPrefix}{member}({variable})"));
+                found.Add(new(code, line, "unchecked-lookup", variable, Line(text, lineStarts, line), true));
+            }
         }
         if (edits.Count == 0) return text;
         var builder = new StringBuilder(text);
@@ -216,6 +241,9 @@ public static class InstanceGuard
         }
         return (start + statement.Groups[2].Index, statement.Groups[2].Length);
     }
+
+    /// <summary>Typed object symbol; linking turns it into the object index even when a sprite has the same name.</summary>
+    internal static string Symbol(string obj) => AssetSymbols.Symbol("objects", obj);
 
     private static string Summary(IEnumerable<InstanceReference> refs)
     {

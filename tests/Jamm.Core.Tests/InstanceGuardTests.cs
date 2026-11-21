@@ -8,6 +8,8 @@ namespace Jamm.Core.Tests;
 
 public sealed class InstanceGuardTests
 {
+    private static string S(string obj) => InstanceGuard.Symbol(obj);
+
     private static InstanceGuard.ObjectFacts Facts()
     {
         var facts = new InstanceGuard.ObjectFacts();
@@ -24,7 +26,7 @@ public sealed class InstanceGuardTests
         List<InstanceReference> found = [];
         string text = "if (Lure.fish.object_index == Bo.object_index)\n{\n    delirius = 1;\n}";
         string result = InstanceGuard.Rewrite("gml_Object_Fish_Other_17", text, Facts(), found, out var accessors);
-        Assert.Contains("Lure.fish.object_index == Bo)", result);
+        Assert.Contains($"Lure.fish.object_index == {S("Bo")})", result);
         Assert.Empty(accessors);
         Assert.Equal("object-index", Assert.Single(found).Kind);
     }
@@ -34,7 +36,7 @@ public sealed class InstanceGuardTests
     {
         List<InstanceReference> found = [];
         string result = InstanceGuard.Rewrite("x", "if (inhale.object_index == Sizzer.object_index) a = 1;", Facts(), found, out var accessors);
-        Assert.Contains("== jamm_iv_object_index(Sizzer)", result);
+        Assert.Contains($"== jamm_iv_object_index({S("Sizzer")})", result);
         Assert.Contains("object_index", accessors);
         Assert.Contains("return noone;", InstanceGuard.AccessorGml("object_index"));
         Assert.Contains("return 0;", InstanceGuard.AccessorGml("state"));
@@ -46,11 +48,11 @@ public sealed class InstanceGuardTests
         List<InstanceReference> found = [];
         string text = "if (Worm.state == 3 || Girl.level > 2) s = \"Worm.state\"; // Bo.x\nd = point_distance(x, y, Bo.x, Bo.y);";
         string result = InstanceGuard.Rewrite("x", text, Facts(), found, out var accessors);
-        Assert.Contains("jamm_iv_state(Worm) == 3", result);
+        Assert.Contains($"jamm_iv_state({S("Worm")}) == 3", result);
         Assert.Contains("Girl.level", result);
         Assert.Contains("\"Worm.state\"", result);
         Assert.Contains("// Bo.x", result);
-        Assert.Contains("point_distance(x, y, jamm_iv_x(Bo), jamm_iv_y(Bo))", result);
+        Assert.Contains($"point_distance(x, y, jamm_iv_x({S("Bo")}), jamm_iv_y({S("Bo")}))", result);
         Assert.Equal(new[] { "state", "x", "y" }, accessors.Order(StringComparer.Ordinal));
     }
 
@@ -60,22 +62,27 @@ public sealed class InstanceGuardTests
         List<InstanceReference> found = [];
         string text = "if (a)\n{\n    Worm.state = Bo.size + 1;\n}\nBo.life--;\nif (b)\n    Bo.x = 4;\nelse\n    y = 1;\nBo.arr[1] = 2;";
         string result = InstanceGuard.Rewrite("x", text, Facts(), found, out _);
-        Assert.Contains("if (instance_exists(Worm)) { Worm.state = jamm_iv_size(Bo) + 1; }", result);
-        Assert.Contains("if (instance_exists(Bo)) { Bo.life--; }", result);
+        Assert.Contains($"if (instance_exists({S("Worm")})) {{ Worm.state = jamm_iv_size({S("Bo")}) + 1; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.life--; }}", result);
         Assert.Contains("    Bo.x = 4;\nelse", result);
         Assert.Contains(found, f => f.Kind == "fish-write" && !f.Guarded && f.Snippet == "Bo.x = 4;");
         Assert.Contains(found, f => f.Kind == "fish-array" && !f.Guarded);
     }
 
     [Fact]
-    public void ReportsUncheckedLookupsAndSkipsCheckedOnes()
+    public void GuardsUncheckedLookupReadsAndSkipsCheckedOnes()
     {
         List<InstanceReference> found = [];
-        string text = "near = instance_nearest(x, y, Bo);\ndirection = point_direction(x, y, near.x, near.y);\n"
-            + "safe = instance_nearest(x, y, Bo);\nif (safe != noone) a = safe.x;";
-        InstanceGuard.Rewrite("x", text, Facts(), found, out _);
-        var lookup = Assert.Single(found, f => f.Kind == "unchecked-lookup");
-        Assert.Equal("near", lookup.Object);
+        string text = "near = instance_nearest(x, y, Bo);\ndirection = point_direction(x, y, near.x, near.y);\nnear.speed = 2;\n"
+            + "safe = instance_nearest(x, y, Bo);\nif (safe != noone) a = safe.x;\n"
+            + "other_one = instance_nearest(x, y, Bo);\nif (other_one) b = other_one.y;";
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out var accessors);
+        Assert.Contains("point_direction(x, y, jamm_iv_x(near), jamm_iv_y(near))", result);
+        Assert.Contains("near.speed = 2;", result);
+        Assert.Contains("a = safe.x", result);
+        Assert.Contains("b = other_one.y", result);
+        Assert.Equal(2, found.Count(f => f.Kind == "unchecked-lookup" && f.Guarded));
+        Assert.Contains(found, f => f.Kind == "unchecked-lookup" && !f.Guarded && f.Snippet == "near.speed = 2;");
     }
 }
 
