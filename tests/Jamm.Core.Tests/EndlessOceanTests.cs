@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ImageMagick;
 using Jamm.Core.ModKit;
 using Jamm.ModMaker;
@@ -115,6 +116,116 @@ public sealed class EndlessOceanTests
         width = world.Width;
         EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
         Assert.Equal(width, world.Width);
+    }
+
+    [Fact]
+    public void GeneratedFishInitializeSonarStateBeforeTheyCanBeDrawn()
+    {
+        using var data = UndertaleData.CreateNew();
+        // Shift object and sprite indices past vanilla ranges to ensure no bare vanilla indices are emitted.
+        for (int i = 0; i < 500; i++)
+        {
+            ModObjects.Create(data, $"dummy_obj_{i}", persistent: false);
+            data.Sprites.Add(new UndertaleSprite { Name = data.Strings.MakeString($"dummy_spr_{i}") });
+        }
+        foreach (string name in new[] { "Fish", "Abyssal", "Dragon", "Problematicus", "SonarPanel", "SonarPanelAdvanced" })
+            ModObjects.Create(data, name, persistent: false);
+        foreach (string sprite in new[] { "spr_abyssal_head", "spr_dragon_head", "spr_problem_head", "spr_sonarblip" })
+            data.Sprites.Add(new UndertaleSprite { Name = data.Strings.MakeString(sprite) });
+
+        var sonar = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jmk_endless_ocean_sonar");
+        data.Scripts.Add(new UndertaleScript
+        {
+            Name = data.Strings.MakeString("jmk_endless_ocean_sonar"),
+            Code = sonar
+        });
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(sonar, EndlessOceanMod.Source("jmk_endless_ocean_sonar"));
+        ModObjects.Compile(compiler);
+
+        string compiled = ModObjects.Decompile(data, sonar);
+        Assert.Contains("instance_exists", compiled);
+        Assert.Contains("asset_get_index(\"SonarPanelAdvanced\")", compiled);
+        Assert.Contains("asset_get_index(\"SonarPanel\")", compiled);
+        Assert.Contains("asset_get_index(\"Abyssal\")", compiled);
+        Assert.Contains("asset_get_index(\"spr_abyssal_head\")", compiled);
+        Assert.Contains("asset_get_index(\"Dragon\")", compiled);
+        Assert.Contains("asset_get_index(\"spr_dragon_head\")", compiled);
+        Assert.Contains("asset_get_index(\"Problematicus\")", compiled);
+        Assert.Contains("asset_get_index(\"spr_problem_head\")", compiled);
+        Assert.Contains("asset_get_index(\"spr_sonarblip\")", compiled);
+        Assert.Contains("s1 = sprite_index", compiled);
+        Assert.Contains("s2 = image_index", compiled);
+        Assert.Contains("s3 = image_xscale", compiled);
+        Assert.Contains("s4 = image_yscale", compiled);
+        Assert.Contains("s5 = 1", compiled);
+        Assert.Contains("s5 = (size + 0.5) / 3.5", compiled);
+        Assert.DoesNotMatch(@"\b(132|135|225|238|242|334|424|429|430)\b", compiled);
+        int[] bareVanillaIndices = [132, 135, 225, 238, 242, 334, 424, 429, 430];
+        foreach (var instr in sonar.Instructions)
+        {
+            if (instr.Type1 == UndertaleInstruction.DataType.Int16)
+                Assert.DoesNotContain((int)instr.ValueShort, bareVanillaIndices);
+            if (instr.Type1 == UndertaleInstruction.DataType.Int32)
+                Assert.DoesNotContain(instr.ValueInt, bareVanillaIndices);
+        }
+        Assert.Contains("jmk_endless_ocean_sonar(swimmer)", EndlessOceanMod.Source("jmk_endless_ocean_load"));
+    }
+
+    [Fact]
+    public void GeneratorInitializesLungeModifiersExcludesSingletonFishAndClearsDeactivatedFlag()
+    {
+        using var data = UndertaleData.CreateNew();
+        foreach (string name in new[] { "Collidable", "Fish", "Rod", "Girl", "Lure", "CatSwim", "Light" })
+            ModObjects.Create(data, name, persistent: false);
+        foreach (string scriptName in new[]
+        {
+            "jmk_endless_ocean_layout", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
+            "jmk_endless_ocean_sonar", "fish_object_to_name", "get_index_for_name",
+            "jamm_chunk_unit", "jmk_endless_ocean_species"
+        })
+        {
+            var code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + scriptName);
+            data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(scriptName), Code = code });
+        }
+        foreach (string species in new[]
+        {
+            "Swooper", "Roundfin", "Garump", "Spinefish", "Yellowjack", "Puff", "Celad", "Inno",
+            "Garder", "Pink_Kisser", "Pennyfin", "Lionfish", "Mustardfish", "Elder_Mustardfish",
+            "Felish", "Purdy", "Leofish", "Sassy", "Boom_Puff", "Dijon", "Stankfin", "Cavin",
+            "Twohead", "Garm", "Jackfish", "Primal_Turgeon", "Mudback", "Cuddlecanth", "Buffalofish",
+            "Geiger", "Underfin"
+        })
+            ModObjects.Create(data, species, persistent: false);
+
+        var loadCode = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jmk_endless_ocean_load");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("jmk_endless_ocean_load"), Code = loadCode });
+        var disposeCode = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jmk_endless_ocean_dispose");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("jmk_endless_ocean_dispose"), Code = disposeCode });
+
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(data.Code.ByName("gml_Script_jmk_endless_ocean_species")!, EndlessOceanMod.Source("jmk_endless_ocean_species"));
+        compiler.QueueCodeReplace(loadCode, EndlessOceanMod.Source("jmk_endless_ocean_load"));
+        compiler.QueueCodeReplace(disposeCode, EndlessOceanMod.Source("jmk_endless_ocean_dispose"));
+        ModObjects.Compile(compiler);
+
+        string compiledSpecies = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jmk_endless_ocean_species")!);
+        Assert.DoesNotContain("Torby", compiledSpecies);
+        Assert.DoesNotContain("Ancient_Kingfish", compiledSpecies);
+        Assert.DoesNotContain("Torby", EndlessOceanMod.Source("jmk_endless_ocean_species"));
+        Assert.DoesNotContain("Ancient_Kingfish", EndlessOceanMod.Source("jmk_endless_ocean_species"));
+
+        string compiledLoad = ModObjects.Decompile(data, loadCode);
+        Assert.Contains("base_lunge_mod = 1", compiledLoad);
+        Assert.Contains("base_lunge_offset = 0", compiledLoad);
+        Assert.Contains("gear_attract_scalar", compiledLoad);
+        Assert.Contains("gear_repel_scalar", compiledLoad);
+        Assert.Contains("gear_lunge_scalar", compiledLoad);
+        Assert.Contains("gear_target_lunge_scalar", compiledLoad);
+
+        string compiledDispose = ModObjects.Decompile(data, disposeCode);
+        Assert.Contains("deactivated = 0", compiledDispose);
+        Assert.Matches(@"deactivated = 0;\s*return (0|false);", compiledDispose);
     }
 
     [Fact]
@@ -300,6 +411,9 @@ public sealed class EndlessOceanTests
             }
 
             EndlessOceanMod.Apply(data);
+
+            string compiledSonar = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jmk_endless_ocean_sonar")!);
+            Assert.DoesNotMatch(@"\b(132|135|225|238|242|334|424|429|430)\b", compiledSonar);
 
             var atlas = data.Sprites.ByName("spr_jmk_ocean_underlay_tex");
             Assert.NotNull(atlas);

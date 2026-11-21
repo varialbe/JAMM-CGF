@@ -25,7 +25,7 @@ public static class EndlessOceanMod
         "jamm_chunk_unit", "jamm_chunk_stream", Setup, "jmk_endless_ocean_floor", "jmk_endless_ocean_height",
         "jmk_endless_ocean_biome", "jmk_endless_ocean_species", "jmk_endless_ocean_poi",
         "jmk_endless_ocean_layout", "jmk_endless_ocean_underlay_cell", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
-        "jmk_endless_ocean_load", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
+        "jmk_endless_ocean_load", "jmk_endless_ocean_sonar", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
     ];
 
     /// <summary>Applies the recipe to an in-memory vanilla or already merged archive.</summary>
@@ -194,7 +194,7 @@ public static class EndlessOceanMod
         }
     }
 
-    private static string Source(string name)
+    internal static string Source(string name)
     {
         using var stream = typeof(EndlessOceanMod).Assembly.GetManifestResourceStream($"Jamm.Worldgen.{name}")
             ?? throw new InvalidOperationException($"Missing embedded Endless Ocean script '{name}'. Rebuild JAMM.");
