@@ -66,6 +66,9 @@ for id in $(wmctrl -l | awk '/Cat Goes Fishing$|Code Error$/{print $1}'); do wmc
 for k in $(seq 1 15); do pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' >/dev/null || break; sleep 1; done
 if pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' >/dev/null; then pkill -f '^[A-Z]:.*Cat Goes Fishing.exe'; sleep 2; touch $N/.steam-dirty; fi
 cp "$save/jamm_autoplay.csv" "$out/" 2>/dev/null
-if [[ $outcome == EXITED ]] && grep -q 'SteamInit failed' "$out/game.log"; then touch $N/.steam-dirty; outcome=STEAM; fi
+if [[ $outcome == EXITED ]] && grep -q 'SteamInit failed' "$out/game.log"; then
+  touch $N/.steam-dirty; outcome=STEAM
+  if [[ -z "${AP_RETRIED:-}" ]]; then rm -rf "$out/game"; exec 9>&-; AP_RETRIED=1 exec "$0" "$@"; fi
+fi
 rm -rf "$out/game"
 echo -e "$label\t$seed\t$minutes\t$outcome\t$step\t$first" | tee -a $N/autoplay/status.tsv
