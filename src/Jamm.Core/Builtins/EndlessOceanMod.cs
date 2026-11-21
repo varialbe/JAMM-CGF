@@ -24,7 +24,7 @@ public static class EndlessOceanMod
     [
         "jamm_chunk_unit", "jamm_chunk_stream", Setup, "jmk_endless_ocean_floor", "jmk_endless_ocean_height",
         "jmk_endless_ocean_biome", "jmk_endless_ocean_species", "jmk_endless_ocean_poi",
-        "jmk_endless_ocean_layout", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
+        "jmk_endless_ocean_layout", "jmk_endless_ocean_underlay_cell", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
         "jmk_endless_ocean_load", "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
     ];
 
@@ -77,6 +77,16 @@ public static class EndlessOceanMod
             ocean_catch = ds_list_create();
             ocean_first = 0;
             ocean_last = -1;
+
+            for (var uv_i = 0; uv_i < {{EndlessOceanSprites.VariantCount}}; uv_i += 1)
+            {
+                var uvs = sprite_get_uvs(spr_jmk_ocean_underlay_tex, uv_i);
+                ocean_u0[uv_i] = uvs[0];
+                ocean_v0[uv_i] = uvs[1];
+                ocean_u1[uv_i] = uvs[2];
+                ocean_v1[uv_i] = uvs[3];
+                ocean_tex[uv_i] = sprite_get_texture(spr_jmk_ocean_underlay_tex, uv_i);
+            }
 
             ini_open("jamm_endless_ocean.ini");
             ocean_seed = clamp(floor(ini_read_real("World", "seed", {{seed}})), 0, {{MaxSeed}});

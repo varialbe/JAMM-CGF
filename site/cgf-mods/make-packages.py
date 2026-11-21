@@ -147,7 +147,7 @@ def main() -> None:
             "id": "endless-ocean",
             "name": "Endless Ocean (Preview)",
             "author": "JAMM",
-            "version": "0.2.0",
+            "version": "0.2.1",
             "description": "A seeded seafloor with three biomes, vanilla fish and occasional wrecks east of NewWorld.",
             "source_dir": REPO_ROOT / "examples" / "modkit" / "endless-ocean",
             "zip_name": "endless-ocean.zip",
