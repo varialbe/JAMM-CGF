@@ -330,6 +330,7 @@ Set a fish's `sprite` to `"scute-fish"` or reference the key from an area's `ope
 | `from`, `frame` | Exact base sprite name and zero-based source frame. Frame defaults to 0. |
 | `file` | Relative path to an original PNG or self-contained SVG, in place of `from`. SVG parts can use plain shapes and paths with inline drawing attributes. |
 | `crop` | Optional integer rectangle `{x,y,w,h}` in the padded source frame. It must fit the source. |
+| `alphaMask` | Optional package-relative PNG or self-contained SVG with the same dimensions as the cropped layer (or the full source when there is no crop). JAMM multiplies the source alpha by the mask alpha and preserves the source RGB. The clip follows the layer through flip, scale and rotation. |
 | `x`, `y` | Position of the transformed layer's upper-left corner on the canvas. Defaults to 0. Pixels outside the canvas are clipped. |
 | `scaleX`, `scaleY` | Positive multipliers for width and height. Defaults to 1. |
 | `rotation`, `flip` | Image rotation in clockwise degrees and flip direction (`none`, `x`, `y`, `both`). Flipping comes before scaling and rotation. |
