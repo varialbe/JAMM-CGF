@@ -40,7 +40,7 @@ Several other fish traversals are driven by a player action, a controller or a s
 
 ## Runtime design
 
-`[Perf] FishGrid=1` in `jamm_perf.ini` enables the grid independently of F8. Missing settings default to on when Perf is present. JAMM applies the rewrite after merging and verifying the selected GML. An altered avoidance pattern logs a `[CGF-PERF-GRID]` decision and keeps the merged script. The check accepted all three benchmark inputs and also accepts the existing Perf version with its two arithmetic invariants hoisted.
+`[Perf] FishGrid=1` in `jamm_perf.ini` enables the grid when the selected profile has installed its runtime hooks. Missing settings default to off. The grid is opt-in because its broad movement and lifecycle hooks have a measurable fixed cost even when the runtime switch disables grid maintenance. JAMM applies the rewrite after merging and verifying the selected GML. An altered avoidance pattern logs a `[CGF-PERF-GRID]` decision and keeps the merged script. The check accepted all three benchmark inputs and also accepts the existing Perf version with its two arithmetic invariants hoisted.
 
 The controller resets validity in Begin Step. It builds lazily during the first eligible Fish End Step query, after engine movement. One `with (FishLarge)` walk captures each active instance's traversal ordinal. The query unions the relevant cells, sorts those ordinals, and executes the original impulse math against current positions. It also preserves the final `sdist` write.
 
