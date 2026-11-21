@@ -10,8 +10,31 @@
   "saves": "Remembers the selected target in `jamm_smooth.ini` under `[Smooth]`, key `TargetFPS`, shared by all slots.",
   "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, HD Lite, Console and an independent third-party mod. The generator expects the original QuestEngine Begin Step reset and the legacy `Girl.Step` timing anchors.",
   "how": [
-    "The `obj_jamm_smooth` controller schedules logic ticks from elapsed time. Between ticks it deactivates active instances, wakes them for drawing, and temporarily interpolates selected positions, angles and camera coordinates from the last two simulation states.",
-    "Keyboard or mouse edges on a render-only frame can promote it to a logic tick. The controller replays Begin Step for the woken instances before input handlers run. At the end of drawing it restores the simulation poses.",
-    "The generator replaces `delta_time` reads in `Girl.Step` with the elapsed time between logic ticks. It also verifies the QuestEngine counter reset so the controller can replay that reset before drawing render-only frames."
+    "The persistent `obj_jamm_smooth` controller accumulates elapsed real time and runs the original game simulation on its preserved 30 ticks/second logic cadence. At a 60 or 120 FPS target, display frames between logic updates are render-only; they do not run an additional full game tick.",
+    "On a render-only frame, Smooth freezes the active instances and wakes them for drawing, then temporarily interpolates selected positions, angles and camera coordinates between the last two simulation states. It restores each simulation pose after drawing. A keyboard or mouse edge received on a render-only frame can promote that frame to a full logic tick; the controller replays Begin Step for the woken instances before input handlers run.",
+    "The recipe replaces `delta_time` reads in `Girl.Step` with elapsed time since the previous logic tick and verifies the legacy QuestEngine Begin Step reset anchor, which it replays before render-only frames. The F7 key cycles 60 FPS, 120 FPS and off; `[Smooth] TargetFPS` in `jamm_smooth.ini` persists the setting. Compatibility depends on the expected legacy timing anchors surviving other profile edits."
+  ],
+  "changelog": [
+    "1.0.0: Interpolated 60/120 FPS rendering while retaining the legacy 30-tick simulation cadence; F7 selector."
+  ],
+  "requirements": [
+    "JAMM-CGF configured with the untouched August 2023 legacy VM `data.win` (bytecode 16).",
+    "A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.",
+    "The legacy QuestEngine Begin Step reset and `Girl.Step` timing anchors must remain available to the recipe."
+  ],
+  "install": [
+    "Download this source ZIP.",
+    "In JAMM, choose Add mods and import the ZIP.",
+    "Enable it in a profile, run Check, then build or install to a separate game copy."
+  ],
+  "faq": [
+    {
+      "q": "Does Smooth raise simulation speed?",
+      "a": "No. Simulation remains on its legacy 30 ticks per second cadence; Smooth adds render-only frames between those ticks."
+    },
+    {
+      "q": "Can I turn it off?",
+      "a": "Press F7 to cycle through 60 FPS, 120 FPS and off. The selected target is saved in `jamm_smooth.ini`."
+    }
   ]
 }
