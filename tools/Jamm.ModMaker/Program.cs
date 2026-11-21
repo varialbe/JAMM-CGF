@@ -36,7 +36,7 @@ public static class Program
                   bench   <modded.win> <out.win> --scene money
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -144,6 +144,8 @@ public static class Program
         bool profileScripts = false;
         int traceFish = 0;
         bool fishGrid = false;
+        bool decorSleep = false;
+        bool screenshot = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -161,6 +163,8 @@ public static class Program
                     if (traceFish < 1) throw new ArgumentException("--trace-fish requires at least one tick.");
                     break;
                 case "--fish-grid": fishGrid = true; break;
+                case "--decor-sleep": decorSleep = true; break;
+                case "--screenshot": screenshot = true; break;
                 case "--profile-scripts": profile = true; profileScripts = true; break;
                 case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
                 case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
@@ -176,7 +180,7 @@ public static class Program
             }
         }
 
-        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid);
+        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot);
     }
 
     private static string RequireValue(string[] args, ref int i, string option)

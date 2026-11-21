@@ -7,7 +7,7 @@ namespace Jamm.ModMaker;
 public static class PerfMod
 {
     /// <summary>Applies guarded source edits to an original legacy game.</summary>
-    public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = true)
+    public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = true, bool applyDecorSleep = true)
     {
         var compiler = new CompileGroup(data);
         // FishThinner destroys owned lights before deactivation/death; reactivation and
@@ -64,6 +64,7 @@ public static class PerfMod
         PerfMode.Queue(data, compiler, debug);
         ModObjects.Compile(compiler);
         if (applyFishGrid) FishGrid.Apply(data);
+        if (applyDecorSleep) DecorSleep.Apply(data);
 
         void Patch(string name, string before, string after, string? secondBefore = null, string? secondAfter = null)
         {

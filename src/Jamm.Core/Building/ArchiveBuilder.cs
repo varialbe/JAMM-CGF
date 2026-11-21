@@ -138,7 +138,8 @@ public static class ArchiveBuilder
                 List<UndertaleCode> perfEdits = [];
                 if (perfSettings is not null) PerfMode.ApplyDefaults(data, perfSettings, perfEdits);
                 string decision = FishGrid.Apply(data, perfEdits, perfSettings?.FishGrid ?? true);
-                plan = plan with { Decisions = [.. plan.Decisions, decision] };
+                var decorDecisions = DecorSleep.Apply(data, perfEdits, perfSettings?.DecorSleep ?? true);
+                plan = plan with { Decisions = [.. plan.Decisions, decision, .. decorDecisions] };
                 if (perfEdits.Count > 0)
                 {
                     var names = SemanticReferences.Names(data);

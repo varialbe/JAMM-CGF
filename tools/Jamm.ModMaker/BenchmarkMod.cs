@@ -35,7 +35,9 @@ public sealed record BenchmarkOptions(
     bool Profile = false,
     bool ProfileScripts = false,
     int TraceFish = 0,
-    bool FishGrid = false);
+    bool FishGrid = false,
+    bool DecorSleep = false,
+    bool Screenshot = false);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -88,6 +90,11 @@ public static partial class BenchmarkMod
         {
             string result = FishGrid.Apply(data);
             decision?.Invoke(result);
+        }
+        if (options.DecorSleep)
+        {
+            foreach (string line in DecorSleep.Apply(data))
+                decision?.Invoke(line);
         }
 
         if (options.TraceFish > 0) FishTrace.Instrument(data, options.Seed);
@@ -184,6 +191,7 @@ public static partial class BenchmarkMod
             jamm_b_boat_slot = {{o.BoatSlot}};
             jamm_b_deep_sonar = {{(o.DeepSonar ? 1 : 0)}};
             jamm_b_show_hud = {{(o.ShowHud ? 1 : 0)}};
+            jamm_b_screenshot = {{(o.Screenshot ? 1 : 0)}};
             {{(o.Profile ? "jamm_b_profile = 1;" : "")}}
 
             if (file_exists("jamm_bench.ini"))
@@ -207,6 +215,7 @@ public static partial class BenchmarkMod
                 jamm_b_boat_slot = max(1, round(ini_read_real("Bench", "BoatSlot", jamm_b_boat_slot)));
                 jamm_b_deep_sonar = ini_read_real("Bench", "DeepSonar", jamm_b_deep_sonar) != 0;
                 jamm_b_show_hud = ini_read_real("Bench", "ShowHud", jamm_b_show_hud) != 0;
+                jamm_b_screenshot = ini_read_real("Bench", "Screenshot", jamm_b_screenshot) != 0;
                 ini_close();
             }
 
@@ -711,6 +720,15 @@ public static partial class BenchmarkMod
                         file_text_write_string(jamm_b_f, "# fish_grid=" + string(global.jamm_fg_enabled));
                         file_text_writeln(jamm_b_f);
                     }
+                    if (variable_global_exists("jamm_ds_enabled"))
+                    {
+                        var ds_deact_n = 0;
+                        if (variable_global_exists("jamm_ds_deact_n")) ds_deact_n = global.jamm_ds_deact_n;
+                        var ds_n = 0;
+                        if (variable_global_exists("jamm_ds_count")) ds_n = global.jamm_ds_count;
+                        file_text_write_string(jamm_b_f, "# decor_sleep=" + string(global.jamm_ds_enabled) + " tracked=" + string(ds_n) + " sleeping_deact=" + string(ds_deact_n));
+                        file_text_writeln(jamm_b_f);
+                    }
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# samples=" + string(jamm_b_n) + " wall_us=" + string(round(jamm_b_wall_us)) + " avg_fps=" + string(jamm_b_avg_fps) + " room_speed=" + string(room_speed) + " step_samples=" + string(jamm_b_step_samples) + " draw_samples=" + string(jamm_b_n) + " draws_per_step=" + string(jamm_b_n / max(1, jamm_b_step_samples)) + " instances=" + string(instance_count) + " window=" + string(jamm_b_window_w) + "x" + string(jamm_b_window_h) + " application_surface=" + string(jamm_b_app_w) + "x" + string(jamm_b_app_h) + " fullscreen=" + string(jamm_b_fullscreen) + " render_size_normalized=" + string(jamm_b_size_ok));
@@ -754,6 +772,8 @@ public static partial class BenchmarkMod
                     }
                     file_text_close(jamm_b_f);
                 }
+                if (jamm_b_screenshot)
+                    screen_save("jamm_bench_shot_" + jamm_b_scene + ".png");
 
                 {{(profile ? ProfileWriterGml() : "")}}
 
