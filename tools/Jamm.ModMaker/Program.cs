@@ -31,6 +31,7 @@ public static class Program
                   console <original.win> <out.win>
                   bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video]
                   bench   <weather.win> <out.win> --scene weather
+                  bench   <any.win> <out.win> --scene autoplay
                   bench   <legacy.win> <out.win> --scene maize
                   bench   <modded.win> <out.win> --scene money
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
@@ -94,6 +95,7 @@ public static class Program
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
             case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when AutoplayScene.Requested(args): AutoplayScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
             case "bench" when OptionValue(args, "--scene") == "maize": MaizeScene.Apply(data); Save(data, output!); return 0;
             case "bench" when SiloScene.Requested(args): SiloScene.Apply(data, args); Save(data, output!); return 0;
