@@ -26,6 +26,7 @@ var max_money = 1000000 * 1000000000;
 if (target == "money")
 {
     Girl.dollars = min(max_money, Girl.dollars + amount);
+    with (SaveManager) event_user(1);
     return "Wallet: " + jmk_harbor_town_script_format(Girl.dollars) + ". Native saves keep this change.";
 }
 if (amount >= 9007199254740992) return "Enter a level below 9,007,199,254,740,992.";
@@ -36,6 +37,7 @@ with (harbor)
         if (harbor_key[i] != target) continue;
         harbor_level[i] = amount;
         harbor_fish_refresh = 0;
+        with (SaveManager) event_user(1);
         return harbor_name[i] + " level " + string_format(amount, 0, 0) + ". Native saves keep this change.";
     }
 }
