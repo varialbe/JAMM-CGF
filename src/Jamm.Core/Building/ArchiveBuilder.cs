@@ -363,6 +363,7 @@ public static class ArchiveBuilder
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+            HarborRuntime.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");

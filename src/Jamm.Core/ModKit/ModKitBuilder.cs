@@ -112,6 +112,12 @@ public static partial class ModKitBuilder
         bool hasFleeLarge = data.Scripts.ByName("fish_fleelarge") is not null;
         bool hasFleeHuge = data.Scripts.ByName("fish_fleehuge") is not null;
 
+        foreach (var script in package.Scripts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AddHookScript(data, compiler, $"jmk_{modIdent}_script_{SanitizeIdent(script.Key)}", script.Path, ref scriptsAdded);
+        }
+
         foreach (var entry in package.Objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -121,12 +127,13 @@ public static partial class ModKitBuilder
             QueueHook(EventType.Create, entry.Create);
             QueueHook(EventType.Step, entry.Step);
             QueueHook(EventType.Draw, entry.Draw);
+            QueueHook(EventType.Draw, entry.DrawGui, (uint)EventSubtypeDraw.DrawGUI);
             objectsAdded++;
 
-            void QueueHook(EventType type, string? path)
+            void QueueHook(EventType type, string? path, uint subtype = 0)
             {
                 if (path is not null)
-                    compiler.QueueCodeReplace(obj.EventHandlerFor(type, 0u, data), File.ReadAllText(path, Encoding.UTF8));
+                    compiler.QueueCodeReplace(obj.EventHandlerFor(type, subtype, data), File.ReadAllText(path, Encoding.UTF8));
             }
         }
 
