@@ -25,7 +25,9 @@ rm -rf "$save"; cp -r "$save.orig" "$save"
 ( cd "$out/game" && exec $HOME/opt/wine/bin/wine "Cat Goes Fishing.exe" ) > "$out/game.log" 2>&1 &
 job=$!
 RNG=$seed
-rnd(){ RNG=$(( (RNG * 1103515245 + 12345) % 2147483648 )); echo $(( RNG % $1 )); }
+# rnd N -> R in [0,N). Not called in a subshell, so the generator state persists.
+rnd(){ RNG=$(( (RNG * 1103515245 + 12345) % 2147483648 )); R=$(( (RNG / 65536) % $1 )); }
+pick(){ rnd $#; shift $R; echo "$1"; }
 act(){ echo -e "$(date +%s)\t$step\t$*" >> "$out/actions.tsv"; }
 win(){ wmctrl -l | awk '/Cat Goes Fishing$/{print $1; exit}'; }
 key(){ xdotool key --delay 60 "$@"; }
@@ -41,17 +43,19 @@ while [[ $(date +%s) -lt $end ]]; do
   if wmctrl -l | grep -q 'Code Error'; then outcome=CRASH; break; fi
   if ! kill -0 $job 2>/dev/null; then outcome=EXITED; break; fi
   w=$(win); [[ -n $w ]] && xdotool windowactivate --sync "$w" 2>/dev/null
-  r=$(rnd 100)
-  if   (( r < 30 )); then t=$(( 3 + $(rnd 15) )); act "cast hold=0.$((3+$(rnd 7)))"; hold space 0.$((3+$(rnd 7))); act "wait $t"; sleep $t; act "reel"; hold space $(( 4 + $(rnd 18) ))
-  elif (( r < 42 )); then k=$([[ $(rnd 2) == 0 ]] && echo a || echo d); s=$(( 1 + $(rnd 6) )); act "boat $k $s"; hold $k $s
-  elif (( r < 50 )); then act "dive"; key q; sleep 1; for j in 1 2 3; do k=$(echo Up Down Left Right | cut -d' ' -f$(( 1 + $(rnd 4) ))); hold $k $(( 1 + $(rnd 3) )); done
-  elif (( r < 56 )); then k=$(echo b h l r | cut -d' ' -f$(( 1 + $(rnd 4) ))); act "buy-lure $k"; key $k
-  elif (( r < 61 )); then k=$([[ $(rnd 2) == 0 ]] && echo z || echo x); act "rod $k"; key $k
-  elif (( r < 66 )); then act "save-menu"; key Escape; sleep 2; key Escape
-  elif (( r < 92 )); then
-    c=$(echo "money $(( 1 + $(rnd 900) ))000000|money +$(( 1 + $(rnd 90) ))000000000|unlockgear|unlockall|level $(( 10 + $(rnd 40) ))|catalog all|weather rainy|weather fog|weather clear|weather windy|weather super-sunny|help" | tr '|' '\n' | sed -n "$(( 1 + $(rnd 12) ))p")
+  rnd 100; r=$R
+  if   (( r < 28 )); then rnd 7; h=0.$((3+R)); rnd 15; t=$((3+R)); rnd 18; rl=$((4+R)); act "cast hold=$h wait=$t reel=$rl"; hold space $h; sleep $t; hold space $rl; key s
+  elif (( r < 36 )); then act "sell"; key s
+  elif (( r < 46 )); then k=$(pick a d); rnd 6; t=$((1+R)); act "boat $k $t"; hold $k $t
+  elif (( r < 52 )); then act "dive"; key q; sleep 1; for j in 1 2 3; do k=$(pick Up Down Left Right); rnd 3; hold $k $((1+R)); done
+  elif (( r < 57 )); then k=$(pick b h l r); act "buy-lure $k"; key $k
+  elif (( r < 61 )); then k=$(pick z x); act "rod $k"; key $k
+  elif (( r < 65 )); then act "save-menu"; key Escape; sleep 2; key Escape
+  elif (( r < 90 )); then
+    rnd 900; m=$((1+R)); rnd 90; g=$((1+R)); rnd 40; lv=$((10+R))
+    c=$(pick "money ${m}000000" "money +${g}000000000" "unlockgear" "unlockall" "level $lv" "catalog all" "weather rainy" "weather fog" "weather clear" "weather windy" "weather super-sunny" "help")
     act "console $c"; type_console "$c"
-  else act "idle"; sleep $(( 2 + $(rnd 8) )); fi
+  else rnd 8; t=$((2+R)); act "idle $t"; sleep $t; fi
   (( step % 10 == 0 )) && ffmpeg -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/shots/step$(printf %04d $step).png"
 done
 first=""
