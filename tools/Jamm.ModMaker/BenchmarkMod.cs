@@ -17,6 +17,19 @@ public enum BenchmarkScene
     Deepwater
 }
 
+/// <summary>Fish simulation/rendering mode applied after warmup in benchmark mode.</summary>
+public enum BenchmarkFishMode
+{
+    /// <summary>Normal fish simulation and rendering (default).</summary>
+    Full,
+    /// <summary>Skip fish BeginStep/Step/EndStep logic while keeping drawing enabled.</summary>
+    NoStep,
+    /// <summary>Simulate fish normally while skipping all fish Draw events.</summary>
+    NoDraw,
+    /// <summary>Deactivate all Fish instances after warmup.</summary>
+    Deactivate
+}
+
 /// <summary>Configuration baked into the benchmark instrumentation controller (overridable at runtime via <c>jamm_bench.ini</c>).</summary>
 public sealed record BenchmarkOptions(
     BenchmarkScene Scene = BenchmarkScene.Dock,
@@ -35,7 +48,10 @@ public sealed record BenchmarkOptions(
     bool Profile = false,
     bool ProfileScripts = false,
     int TraceFish = 0,
-    bool FishGrid = false);
+    bool FishGrid = false,
+    BenchmarkFishMode FishMode = BenchmarkFishMode.Full,
+    int FishCap = -1,
+    double FishScale = 1.0);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -77,12 +93,45 @@ public static partial class BenchmarkMod
         _ => throw new ArgumentOutOfRangeException(nameof(scene), scene, "Unsupported benchmark scene.")
     };
 
+    /// <summary>Parses a fish experiment mode (<c>full</c>, <c>nostep</c>, <c>nodraw</c>, or <c>deactivate</c>).</summary>
+    public static BenchmarkFishMode ParseFishMode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("Fish mode must be 'full', 'nostep', 'nodraw', or 'deactivate'.");
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "full" => BenchmarkFishMode.Full,
+            "nostep" => BenchmarkFishMode.NoStep,
+            "nodraw" => BenchmarkFishMode.NoDraw,
+            "deactivate" => BenchmarkFishMode.Deactivate,
+            _ => throw new ArgumentException($"Unknown fish mode '{value}'. Choose 'full', 'nostep', 'nodraw', or 'deactivate'.")
+        };
+    }
+
+    /// <summary>Formats a <see cref="BenchmarkFishMode"/> as its canonical lowercase identifier.</summary>
+    public static string FishModeName(BenchmarkFishMode mode) => mode switch
+    {
+        BenchmarkFishMode.Full => "full",
+        BenchmarkFishMode.NoStep => "nostep",
+        BenchmarkFishMode.NoDraw => "nodraw",
+        BenchmarkFishMode.Deactivate => "deactivate",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported benchmark fish mode.")
+    };
+
     /// <summary>Applies the benchmark controller pass to an original or already-modded in-memory archive.</summary>
     public static void Apply(UndertaleData data, BenchmarkOptions? options = null, Action<string>? decision = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         options ??= new BenchmarkOptions();
         ValidateOptions(options);
+
+        if (data.Rooms.ByName("NewWorld") is null)
+            throw new InvalidDataException("Required room 'NewWorld' was not found: use a Cat Goes Fishing legacy archive (original or modded).");
+        if (data.GameObjects.ByName(ObjectName) is not null)
+            throw new InvalidDataException($"Object '{ObjectName}' already exists: build the mod from the ORIGINAL data.win, not from a modded one.");
+
+        BenchmarkFishExperiments.GuardFishReferences(data);
 
         if (options.FishGrid)
         {
@@ -91,24 +140,26 @@ public static partial class BenchmarkMod
         }
 
         if (options.TraceFish > 0) FishTrace.Instrument(data, options.Seed);
+        BenchmarkFishExperiments.InstrumentFishAndSpawners(data);
         if (options.Profile)
             GmlCpuProfiler.Instrument(data, options.ProfileScripts);
-
-        if (data.Rooms.ByName("NewWorld") is null)
-            throw new InvalidDataException("Required room 'NewWorld' was not found: use a Cat Goes Fishing legacy archive (original or modded).");
 
         var bench = ModObjects.Create(data, ObjectName, persistent: true);
         // Run DrawGUIEnd after normal draws/GUI and just before SmoothMod's Depth=-1000000 freeze.
         bench.Depth = -999999;
 
         var compiler = new CompileGroup(data);
+        AddBenchScript(data, compiler, "jamm_b_stats_line", StatsLineScriptGml());
+        if (data.GameObjects.ByName("Fish") is not null)
+            AddBenchScript(data, compiler, "jamm_b_apply_fish_cap", ApplyFishCapScriptGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Create, 0u, data), CreateGml(options));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Destroy, 0u, data), DestroyGml(options.TraceFish > 0));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.RoomStart, data), RoomStartGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStepGml(data, options.TraceFish > 0));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), EndStepGml(data));
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.PreDraw, data), PreDrawGml());
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), DrawGuiGml(data));
-        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), DrawGuiEndGml(options));
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), DrawGuiEndGml(data, options));
         ModObjects.Compile(compiler);
 
         ModObjects.PlaceInstance(data, "NewWorld", bench, first: true);
@@ -116,9 +167,19 @@ public static partial class BenchmarkMod
             ModObjects.PlaceInstance(data, "room11", bench, first: true);
     }
 
-    private static void ValidateOptions(BenchmarkOptions options)
+    private static void AddBenchScript(UndertaleData data, CompileGroup compiler, string name, string body)
+    {
+        if (data.Scripts.ByName(name) is not null)
+            throw new InvalidDataException($"'{name}' already exists: use an uninstrumented input archive.");
+        var code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + name);
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(name), Code = code });
+        compiler.QueueCodeReplace(code, body);
+    }
+
+    internal static void ValidateOptions(BenchmarkOptions options)
     {
         _ = SceneName(options.Scene);
+        _ = FishModeName(options.FishMode);
         if (double.IsNaN(options.WarmupSeconds) || double.IsInfinity(options.WarmupSeconds) || options.WarmupSeconds < 0 || options.WarmupSeconds > 3600)
             throw new ArgumentOutOfRangeException(nameof(options), "WarmupSeconds must be between 0 and 3600.");
         if (double.IsNaN(options.CaptureSeconds) || double.IsInfinity(options.CaptureSeconds) || options.CaptureSeconds <= 0 || options.CaptureSeconds > 3600)
@@ -127,6 +188,10 @@ public static partial class BenchmarkMod
             throw new ArgumentOutOfRangeException(nameof(options), "MaxSamples must be between 1 and 200000.");
         if (options.TraceFish is < 0 or > 200000)
             throw new ArgumentOutOfRangeException(nameof(options), "TraceFish must be between 0 (disabled) and 200000.");
+        if (options.FishCap is < -1 or > 200000)
+            throw new ArgumentOutOfRangeException(nameof(options), "FishCap must be -1 (disabled) or between 0 and 200000.");
+        if (double.IsNaN(options.FishScale) || double.IsInfinity(options.FishScale) || options.FishScale < 1.0 || options.FishScale > 20.0)
+            throw new ArgumentOutOfRangeException(nameof(options), "FishScale must be between 1 and 20.");
         if (options.BoatSlot < 1)
             throw new ArgumentOutOfRangeException(nameof(options), "BoatSlot must be >= 1.");
         if (double.IsNaN(options.DockX) || double.IsInfinity(options.DockX)
@@ -156,6 +221,7 @@ public static partial class BenchmarkMod
     private static string CreateGml(BenchmarkOptions o)
     {
         string scene = SceneName(o.Scene);
+        string fishMode = FishModeName(o.FishMode);
         string defaultOutput = o.OutputFile ?? $"jamm_bench_{scene}.csv";
         int customOutput = o.OutputFile is null ? 0 : 1;
 
@@ -167,6 +233,14 @@ public static partial class BenchmarkMod
             }
             persistent = true;
             jamm_b_owner = true;
+
+            global.jamm_b_fish_nostep = 0;
+            global.jamm_b_fish_nodraw = 0;
+            global.jamm_b_freeze_spawners = 0;
+            global.jamm_b_no_thin = 0;
+            global.jamm_b_fish_depth = 0;
+            global.jamm_b_fish_t0 = 0;
+            global.jamm_b_fish_step_us = 0;
 
             jamm_b_scene = "{{scene}}";
             jamm_b_scene_req = jamm_b_scene;
@@ -184,6 +258,10 @@ public static partial class BenchmarkMod
             jamm_b_boat_slot = {{o.BoatSlot}};
             jamm_b_deep_sonar = {{(o.DeepSonar ? 1 : 0)}};
             jamm_b_show_hud = {{(o.ShowHud ? 1 : 0)}};
+            jamm_b_fish_mode = "{{fishMode}}";
+            jamm_b_fish_mode_req = jamm_b_fish_mode;
+            jamm_b_fish_cap = {{o.FishCap}};
+            jamm_b_fish_scale = {{Num(o.FishScale)}};
             {{(o.Profile ? "jamm_b_profile = 1;" : "")}}
 
             if (file_exists("jamm_bench.ini"))
@@ -207,6 +285,14 @@ public static partial class BenchmarkMod
                 jamm_b_boat_slot = max(1, round(ini_read_real("Bench", "BoatSlot", jamm_b_boat_slot)));
                 jamm_b_deep_sonar = ini_read_real("Bench", "DeepSonar", jamm_b_deep_sonar) != 0;
                 jamm_b_show_hud = ini_read_real("Bench", "ShowHud", jamm_b_show_hud) != 0;
+                jamm_b_fish_mode = string_lower(ini_read_string("Bench", "FishMode", jamm_b_fish_mode));
+                jamm_b_fish_mode_req = jamm_b_fish_mode;
+                jamm_b_fish_cap = round(ini_read_real("Bench", "FishCap", jamm_b_fish_cap));
+                if (jamm_b_fish_cap < 0)
+                    jamm_b_fish_cap = -1;
+                else
+                    jamm_b_fish_cap = clamp(jamm_b_fish_cap, 0, 200000);
+                jamm_b_fish_scale = clamp(ini_read_real("Bench", "FishScale", jamm_b_fish_scale), 1, 20);
                 ini_close();
             }
 
@@ -215,6 +301,14 @@ public static partial class BenchmarkMod
                 jamm_b_warn = "unknown_scene_" + jamm_b_scene + "_fallback_dock";
                 jamm_b_scene = "dock";
             }
+            if (jamm_b_fish_mode != "full" && jamm_b_fish_mode != "nostep" && jamm_b_fish_mode != "nodraw" && jamm_b_fish_mode != "deactivate")
+            {
+                if (jamm_b_warn != "") jamm_b_warn += ";";
+                jamm_b_warn += "unknown_fish_mode_" + jamm_b_fish_mode + "_fallback_full";
+                jamm_b_fish_mode = "full";
+            }
+            if (jamm_b_fish_scale > 1)
+                global.jamm_b_no_thin = 1;
             if (!jamm_b_output_custom)
                 jamm_b_output_file = "jamm_bench_" + jamm_b_scene + ".csv";
             if (jamm_b_output_file == "" || jamm_b_output_file == "meta.ini" || string_pos("sdata", string_lower(jamm_b_output_file)) == 1 || string_pos(".win", string_lower(jamm_b_output_file)) > 0 || string_pos("..", jamm_b_output_file) > 0 || string_pos("/", jamm_b_output_file) > 0 || string_pos(chr(92), jamm_b_output_file) > 0 || string_pos(":", jamm_b_output_file) > 0)
@@ -223,13 +317,19 @@ public static partial class BenchmarkMod
             {{(o.TraceFish > 0 ? FishTrace.Create : "")}}
             jamm_b_frame_list = ds_list_create();
             jamm_b_loop_list = ds_list_create();
+            jamm_b_step_list = ds_list_create();
+            jamm_b_draw_list = ds_list_create();
+            jamm_b_fish_step_list = ds_list_create();
+            jamm_b_fish_count_list = ds_list_create();
             jamm_b_state = 0;
             jamm_b_init_ticks = 0;
             jamm_b_scene_applied = 0;
             jamm_b_deep_light = -1;
             jamm_b_room_jump_done = 0;
             jamm_b_step_t = 0;
+            jamm_b_draw_start_t = 0;
             jamm_b_has_step = 0;
+            jamm_b_has_draw = 0;
             jamm_b_prev_gui_t = get_timer();
             jamm_b_phase_start = jamm_b_prev_gui_t;
             jamm_b_capture_start = jamm_b_prev_gui_t;
@@ -247,6 +347,10 @@ public static partial class BenchmarkMod
             {{(trace ? "buffer_delete(jamm_trace_buffer);" : "")}}
             ds_list_destroy(jamm_b_frame_list);
             ds_list_destroy(jamm_b_loop_list);
+            ds_list_destroy(jamm_b_step_list);
+            ds_list_destroy(jamm_b_draw_list);
+            ds_list_destroy(jamm_b_fish_step_list);
+            ds_list_destroy(jamm_b_fish_count_list);
         }
         """;
 
@@ -310,6 +414,9 @@ public static partial class BenchmarkMod
             {{(trace ? "global.jamm_trace_tick += 1;" : "")}}
             jamm_b_step_t = get_timer();
             jamm_b_has_step = 1;
+            jamm_b_has_draw = 0;
+            global.jamm_b_fish_step_us = 0;
+            global.jamm_b_fish_depth = 0;
             if (jamm_b_state == 2) jamm_b_step_samples += 1;
             {{saveLock}}
             if (room != NewWorld)
@@ -329,10 +436,81 @@ public static partial class BenchmarkMod
                 {{DismissMenusGml(data)}}
                 {{ApplySceneGml(data)}}
                 {{NormalizeRenderSizeGml()}}
+                {{ApplyFishScaleGml(data)}}
                 jamm_b_scene_applied = 1;
                 jamm_b_state = 1;
                 jamm_b_phase_start = get_timer();
                 jamm_b_warmup_frames = 0;
+            }
+            """;
+    }
+
+    private static string ApplyFishScaleGml(UndertaleData data)
+    {
+        if (data.GameObjects.ByName("Fish") is null) return "";
+
+        bool hasSmall = data.GameObjects.ByName("FishSmall") is not null;
+        bool hasMedium = data.GameObjects.ByName("FishMedium") is not null;
+        string sizeCheck = (hasSmall || hasMedium)
+            ? "(" + string.Join(" || ", new[]
+            {
+                hasSmall ? "object_is_ancestor(object_index, FishSmall)" : "",
+                hasMedium ? "object_is_ancestor(object_index, FishMedium)" : ""
+            }.Where(s => s.Length > 0)) + ")"
+            : "true";
+
+        var excluded = new[]
+        {
+            "Kingfish", "Torby", "Curby", "Goldfish", "Thermo",
+            "Bishop", "Caval", "Volteen", "Flash", "Maskfish"
+        }.Where(n => data.GameObjects.ByName(n) is not null).ToArray();
+        string specialExclusion = excluded.Length > 0
+            ? string.Join(" && ", excluded.Select(n => $"object_index != {n} && !object_is_ancestor(object_index, {n})"))
+            : "true";
+
+        bool hasPathInit = data.Scripts.ByName("path_init") is not null;
+
+        return $$"""
+            if (jamm_b_fish_scale > 1)
+            {
+                var jamm_scale_src = ds_list_create();
+                with (Fish)
+                {
+                    if (variable_instance_exists(id, "hollow") && hollow) continue;
+                    if (variable_instance_exists(id, "state") && (state == 3 || state == 4 || state == 6)) continue;
+                    if (!{{sizeCheck}}) continue;
+                    if (!({{specialExclusion}})) continue;
+                    if (variable_instance_exists(id, "neck") || variable_instance_exists(id, "tail") || variable_instance_exists(id, "eye") || variable_instance_exists(id, "hasGuard")) continue;
+                    if (variable_instance_exists(id, "light") && light > 0) continue;
+                    ds_list_add(jamm_scale_src, id);
+                }
+                var jamm_src_n = ds_list_size(jamm_scale_src);
+                var jamm_total_copies = max(0, round((jamm_b_fish_scale - 1) * jamm_src_n));
+                for (var jamm_ci = 0; jamm_ci < jamm_total_copies && jamm_src_n > 0; jamm_ci += 1)
+                {
+                    var jamm_orig = ds_list_find_value(jamm_scale_src, jamm_ci mod jamm_src_n);
+                    var jamm_layer = (jamm_ci div jamm_src_n) + 1;
+                    with (jamm_orig)
+                    {
+                        var jamm_copy = instance_copy(false);
+                        with (jamm_copy)
+                        {
+                            hollow = 0;
+                            if (variable_instance_exists(id, "light")) light = -1;
+                            if (variable_instance_exists(id, "light2")) light2 = -1;
+                            var jamm_ox = ((jamm_ci mod 5) - 2) * 24;
+                            var jamm_oy = (((jamm_ci div 5) mod 3) - 1) * 16 + (jamm_layer * 8);
+                            x = clamp(x + jamm_ox, 740, room_width - 100);
+                            y = clamp(y + jamm_oy, 1320, room_height - 100);
+                            start_x = x;
+                            start_y = y;
+                            TRUE_START_X = x;
+                            TRUE_START_Y = y;
+                            {{(hasPathInit ? "if (variable_instance_exists(id, \"hasPath\") && hasPath) path_init();" : "")}}
+                        }
+                    }
+                }
+                ds_list_destroy(jamm_scale_src);
             }
             """;
     }
@@ -515,6 +693,7 @@ public static partial class BenchmarkMod
         bool hasSonar = data.GameObjects.ByName("SonarPanel") is not null;
         bool hasDeepSonar = data.GameObjects.ByName("SonarPanelAdvanced") is not null;
         bool hasDeepLight = FindBaseDeepwaterLight(data) is not null;
+        bool hasFish = data.GameObjects.ByName("Fish") is not null;
 
         string deepPin = string.Join("\n        ", new[]
         {
@@ -540,6 +719,18 @@ public static partial class BenchmarkMod
             hasDeepSonar ? "if (instance_exists(SonarPanelAdvanced)) SonarPanelAdvanced.active = 0;" : ""
         }.Where(s => s.Length > 0));
 
+        string captureEnforce = hasFish
+            ? """
+              if (jamm_b_state == 2)
+              {
+                  if (jamm_b_fish_mode == "deactivate" && instance_number(Fish) > 0)
+                      instance_deactivate_object(Fish);
+                  else if (jamm_b_fish_cap >= 0 && instance_number(Fish) > jamm_b_fish_cap)
+                      jamm_b_apply_fish_cap(jamm_b_fish_cap);
+              }
+              """
+            : "";
+
         return $$"""
             {{LockSaveManagerGml(data, clearSlotFlags: false)}}
             if (room != NewWorld) exit;
@@ -563,6 +754,108 @@ public static partial class BenchmarkMod
                     {{dockPin}}
                 }
             }
+            {{captureEnforce}}
+            """;
+    }
+
+    private static string PreDrawGml() => """
+        jamm_b_draw_start_t = get_timer();
+        jamm_b_has_draw = 1;
+        """;
+
+    private static string StatsLineScriptGml() => """
+        var jamm_s_list = argument0;
+        var jamm_s_label = argument1;
+        var jamm_s_total = ds_list_size(jamm_s_list);
+        var jamm_s_valid = ds_list_create();
+        var jamm_s_sum = 0;
+        var jamm_s_i, jamm_s_val;
+        for (jamm_s_i = 0; jamm_s_i < jamm_s_total; jamm_s_i += 1)
+        {
+            jamm_s_val = ds_list_find_value(jamm_s_list, jamm_s_i);
+            if (jamm_s_val >= 0)
+            {
+                ds_list_add(jamm_s_valid, jamm_s_val);
+                jamm_s_sum += jamm_s_val;
+            }
+        }
+        var jamm_s_cnt = ds_list_size(jamm_s_valid);
+        if (jamm_s_cnt <= 0)
+        {
+            ds_list_destroy(jamm_s_valid);
+            return "# " + jamm_s_label + " samples=0 min=-1 p50=-1 p95=-1 p99=-1 max=-1 mean=-1";
+        }
+        ds_list_sort(jamm_s_valid, true);
+        var jamm_s_min = ds_list_find_value(jamm_s_valid, 0);
+        var jamm_s_p50 = ds_list_find_value(jamm_s_valid, clamp(floor((jamm_s_cnt - 1) * 0.50), 0, jamm_s_cnt - 1));
+        var jamm_s_p95 = ds_list_find_value(jamm_s_valid, clamp(floor((jamm_s_cnt - 1) * 0.95), 0, jamm_s_cnt - 1));
+        var jamm_s_p99 = ds_list_find_value(jamm_s_valid, clamp(floor((jamm_s_cnt - 1) * 0.99), 0, jamm_s_cnt - 1));
+        var jamm_s_max = ds_list_find_value(jamm_s_valid, jamm_s_cnt - 1);
+        var jamm_s_mean = round(jamm_s_sum / jamm_s_cnt);
+        ds_list_destroy(jamm_s_valid);
+        return "# " + jamm_s_label + " samples=" + string(jamm_s_cnt) + " min=" + string(round(jamm_s_min)) + " p50=" + string(round(jamm_s_p50)) + " p95=" + string(round(jamm_s_p95)) + " p99=" + string(round(jamm_s_p99)) + " max=" + string(round(jamm_s_max)) + " mean=" + string(round(jamm_s_mean));
+        """;
+
+    private static string ApplyFishCapScriptGml(UndertaleData data)
+    {
+        bool hasLure = data.GameObjects.ByName("Lure") is not null;
+        bool hasCatSwim = data.GameObjects.ByName("CatSwim") is not null;
+        string hookedCheck = string.Join("\n    ", new[]
+        {
+            hasLure ? "if (instance_exists(Lure) && Lure.fish > 0 && id == Lure.fish) jamm_hooked = true;" : "",
+            hasCatSwim ? "if (instance_exists(CatSwim) && CatSwim.holding > 0 && id == CatSwim.holding) jamm_hooked = true;" : ""
+        }.Where(s => s.Length > 0));
+
+        return $$"""
+            var jamm_cap = argument0;
+            if (jamm_cap < 0) exit;
+            var jamm_cur = instance_number(Fish);
+            if (jamm_cur <= jamm_cap) exit;
+            var jamm_need = jamm_cur - jamm_cap;
+            var jamm_out_list = ds_list_create();
+            var jamm_view_list = ds_list_create();
+            with (Fish)
+            {
+                var jamm_hooked = false;
+                {{hookedCheck}}
+                if (jamm_hooked) continue;
+                var jamm_in_view = false;
+                for (var jamm_v = 0; jamm_v < 8 && !jamm_in_view; jamm_v += 1)
+                {
+                    if (view_visible[jamm_v])
+                    {
+                        if (x >= view_xview[jamm_v] && x <= view_xview[jamm_v] + view_wview[jamm_v] && y >= view_yview[jamm_v] && y <= view_yview[jamm_v] + view_hview[jamm_v])
+                            jamm_in_view = true;
+                    }
+                }
+                if (jamm_in_view)
+                    ds_list_add(jamm_view_list, id);
+                else
+                    ds_list_add(jamm_out_list, id);
+            }
+            var jamm_di;
+            for (jamm_di = 0; jamm_di < ds_list_size(jamm_out_list) && jamm_need > 0; jamm_di += 1)
+            {
+                with (ds_list_find_value(jamm_out_list, jamm_di))
+                {
+                    if (variable_instance_exists(id, "light") && light > 0 && instance_exists(light)) instance_destroy(light);
+                    if (variable_instance_exists(id, "light2") && light2 > 0 && instance_exists(light2)) instance_destroy(light2);
+                    instance_destroy();
+                }
+                jamm_need -= 1;
+            }
+            for (jamm_di = 0; jamm_di < ds_list_size(jamm_view_list) && jamm_need > 0; jamm_di += 1)
+            {
+                with (ds_list_find_value(jamm_view_list, jamm_di))
+                {
+                    if (variable_instance_exists(id, "light") && light > 0 && instance_exists(light)) instance_destroy(light);
+                    if (variable_instance_exists(id, "light2") && light2 > 0 && instance_exists(light2)) instance_destroy(light2);
+                    instance_destroy();
+                }
+                jamm_need -= 1;
+            }
+            ds_list_destroy(jamm_out_list);
+            ds_list_destroy(jamm_view_list);
             """;
     }
 
@@ -592,16 +885,30 @@ public static partial class BenchmarkMod
             """;
     }
 
-    private static string DrawGuiEndGml(BenchmarkOptions options)
+    private static string DrawGuiEndGml(UndertaleData data, BenchmarkOptions options)
     {
         bool profile = options.Profile;
         bool trace = options.TraceFish > 0;
+        bool hasFish = data.GameObjects.ByName("Fish") is not null;
+        bool hasLure = data.GameObjects.ByName("Lure") is not null;
+        bool hasCatSwim = data.GameObjects.ByName("CatSwim") is not null;
         string warmedUp = trace
             ? "true"
             : "(jamm_b_now - jamm_b_phase_start) >= (jamm_b_warmup_sec * 1000000) && jamm_b_warmup_frames >= 10";
         string finished = trace
             ? $"jamm_trace_n >= {options.TraceFish}"
             : "(jamm_b_now - jamm_b_capture_start) >= (jamm_b_capture_sec * 1000000) || ds_list_size(jamm_b_frame_list) >= jamm_b_max_samples";
+
+        string applyFishCap = hasFish
+            ? "if (jamm_b_fish_cap >= 0) jamm_b_apply_fish_cap(jamm_b_fish_cap);"
+            : "";
+        string deactivateHookClear = string.Join("\n                    ", new[]
+        {
+            hasLure ? "if (instance_exists(Lure) && Lure.fish > 0) { Lure.fish = -1; Lure.hookedFishSize = 0; }" : "",
+            hasCatSwim ? "if (instance_exists(CatSwim) && CatSwim.holding > 0) CatSwim.holding = -1;" : "",
+            hasFish ? "instance_deactivate_object(Fish);" : ""
+        }.Where(s => s.Length > 0));
+        string fishCountExpr = hasFish ? "instance_number(Fish)" : "0";
 
         return $$"""
         var jamm_b_now = get_timer();
@@ -612,11 +919,44 @@ public static partial class BenchmarkMod
             {
                 ds_list_clear(jamm_b_frame_list);
                 ds_list_clear(jamm_b_loop_list);
+                ds_list_clear(jamm_b_step_list);
+                ds_list_clear(jamm_b_draw_list);
+                ds_list_clear(jamm_b_fish_step_list);
+                ds_list_clear(jamm_b_fish_count_list);
                 jamm_b_step_samples = 0;
                 jamm_b_fish_total = 0;
+
+                if (jamm_b_fish_cap >= 0 || jamm_b_fish_mode == "deactivate")
+                    global.jamm_b_freeze_spawners = 1;
+                {{applyFishCap}}
+                if (jamm_b_fish_mode == "nostep")
+                {
+                    global.jamm_b_fish_nostep = 1;
+                    global.jamm_b_fish_nodraw = 0;
+                }
+                else if (jamm_b_fish_mode == "nodraw")
+                {
+                    global.jamm_b_fish_nostep = 0;
+                    global.jamm_b_fish_nodraw = 1;
+                }
+                else if (jamm_b_fish_mode == "deactivate")
+                {
+                    global.jamm_b_fish_nostep = 0;
+                    global.jamm_b_fish_nodraw = 0;
+                    {{deactivateHookClear}}
+                }
+                else
+                {
+                    global.jamm_b_fish_nostep = 0;
+                    global.jamm_b_fish_nodraw = 0;
+                }
+
+                global.jamm_b_fish_step_us = 0;
+                global.jamm_b_fish_depth = 0;
                 jamm_b_capture_start = jamm_b_now;
                 jamm_b_prev_gui_t = jamm_b_now;
                 jamm_b_has_step = 0;
+                jamm_b_has_draw = 0;
                 {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_n);\nglobal.__jamm_prof_on = 1;" : "")}}
                 {{(trace ? FishTrace.Start : "")}}
                 jamm_b_state = 2;
@@ -627,15 +967,31 @@ public static partial class BenchmarkMod
             var jamm_b_frame_us = max(0, jamm_b_now - jamm_b_prev_gui_t);
             jamm_b_prev_gui_t = jamm_b_now;
             var jamm_b_loop_us = -1;
+            var jamm_b_step_us = -1;
+            var jamm_b_draw_us = -1;
+            var jamm_b_fstep_us = -1;
+            var jamm_b_fcount = {{fishCountExpr}};
+            if (jamm_b_has_draw)
+            {
+                jamm_b_draw_us = max(0, jamm_b_now - jamm_b_draw_start_t);
+            }
             if (jamm_b_has_step)
             {
                 jamm_b_loop_us = max(0, jamm_b_now - jamm_b_step_t);
+                if (jamm_b_has_draw)
+                    jamm_b_step_us = max(0, jamm_b_draw_start_t - jamm_b_step_t);
+                jamm_b_fstep_us = max(0, global.jamm_b_fish_step_us);
                 jamm_b_has_step = 0;
-                jamm_b_fish_total += instance_number(Fish);
+                jamm_b_fish_total += jamm_b_fcount;
                 {{(trace ? FishTrace.Sample() : "")}}
             }
+            jamm_b_has_draw = 0;
             ds_list_add(jamm_b_frame_list, jamm_b_frame_us);
             ds_list_add(jamm_b_loop_list, jamm_b_loop_us);
+            ds_list_add(jamm_b_step_list, jamm_b_step_us);
+            ds_list_add(jamm_b_draw_list, jamm_b_draw_us);
+            ds_list_add(jamm_b_fish_step_list, jamm_b_fstep_us);
+            ds_list_add(jamm_b_fish_count_list, jamm_b_fcount);
 
             if ({{finished}})
             {
@@ -652,7 +1008,8 @@ public static partial class BenchmarkMod
                 var jamm_b_loop_n = 0;
                 var jamm_b_pres_sum = 0;
                 var jamm_b_loop_sorted = ds_list_create();
-                var jamm_b_i, jamm_b_fu, jamm_b_lu, jamm_b_pu;
+                var jamm_b_pres_list = ds_list_create();
+                var jamm_b_i, jamm_b_fu, jamm_b_lu, jamm_b_pu, jamm_b_su, jamm_b_du, jamm_b_fsu, jamm_b_fc;
                 for (jamm_b_i = 0; jamm_b_i < jamm_b_n; jamm_b_i += 1)
                 {
                     jamm_b_fu = ds_list_find_value(jamm_b_frame_list, jamm_b_i);
@@ -660,10 +1017,16 @@ public static partial class BenchmarkMod
                     jamm_b_sum += jamm_b_fu;
                     if (jamm_b_lu >= 0)
                     {
+                        jamm_b_pu = max(0, jamm_b_fu - jamm_b_lu);
                         jamm_b_loop_sum += jamm_b_lu;
                         jamm_b_loop_n += 1;
-                        jamm_b_pres_sum += max(0, jamm_b_fu - jamm_b_lu);
+                        jamm_b_pres_sum += jamm_b_pu;
                         ds_list_add(jamm_b_loop_sorted, jamm_b_lu);
+                        ds_list_add(jamm_b_pres_list, jamm_b_pu);
+                    }
+                    else
+                    {
+                        ds_list_add(jamm_b_pres_list, -1);
                     }
                 }
                 ds_list_sort(jamm_b_loop_sorted, true);
@@ -706,22 +1069,32 @@ public static partial class BenchmarkMod
                 {
                     file_text_write_string(jamm_b_f, "# jamm_bench v1");
                     file_text_writeln(jamm_b_f);
+                    var jamm_b_fish_grid = 0;
                     if (variable_global_exists("jamm_fg_enabled"))
-                    {
-                        file_text_write_string(jamm_b_f, "# fish_grid=" + string(global.jamm_fg_enabled));
-                        file_text_writeln(jamm_b_f);
-                    }
+                        jamm_b_fish_grid = global.jamm_fg_enabled;
+                    file_text_write_string(jamm_b_f, "# fish_grid=" + string(jamm_b_fish_grid));
+                    file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));
+                    file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, "# fish_mode=" + jamm_b_fish_mode + " fish_mode_requested=" + jamm_b_fish_mode_req + " fish_cap=" + string(jamm_b_fish_cap) + " fish_scale=" + string(jamm_b_fish_scale));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# samples=" + string(jamm_b_n) + " wall_us=" + string(round(jamm_b_wall_us)) + " avg_fps=" + string(jamm_b_avg_fps) + " room_speed=" + string(room_speed) + " step_samples=" + string(jamm_b_step_samples) + " draw_samples=" + string(jamm_b_n) + " draws_per_step=" + string(jamm_b_n / max(1, jamm_b_step_samples)) + " instances=" + string(instance_count) + " window=" + string(jamm_b_window_w) + "x" + string(jamm_b_window_h) + " application_surface=" + string(jamm_b_app_w) + "x" + string(jamm_b_app_h) + " fullscreen=" + string(jamm_b_fullscreen) + " render_size_normalized=" + string(jamm_b_size_ok));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# active_fish_mean=" + string(jamm_b_fish_total / max(1, jamm_b_loop_n)));
                     file_text_writeln(jamm_b_f);
+                    var jamm_b_perf_mode = 0;
+                    var jamm_b_perf_interval = 4;
+                    var jamm_b_perf_eligible = 0;
+                    var jamm_b_perf_skipped = 0;
                     if (variable_global_exists("jamm_perf_mode"))
                     {
-                        file_text_write_string(jamm_b_f, "# perf_mode=" + string(global.jamm_perf_mode) + " interval=" + string(global.jamm_perf_interval) + " eligible_events=" + string(global.jamm_perf_eligible) + " skipped_events=" + string(global.jamm_perf_skipped));
-                        file_text_writeln(jamm_b_f);
+                        jamm_b_perf_mode = global.jamm_perf_mode;
+                        jamm_b_perf_interval = global.jamm_perf_interval;
+                        jamm_b_perf_eligible = global.jamm_perf_eligible;
+                        jamm_b_perf_skipped = global.jamm_perf_skipped;
                     }
+                    file_text_write_string(jamm_b_f, "# perf_mode=" + string(jamm_b_perf_mode) + " interval=" + string(jamm_b_perf_interval) + " eligible_events=" + string(jamm_b_perf_eligible) + " skipped_events=" + string(jamm_b_perf_skipped));
+                    file_text_writeln(jamm_b_f);
                     if (!jamm_b_size_ok)
                     {
                         file_text_write_string(jamm_b_f, "# warning=render_size_normalization_not_applied_or_overridden_requested_window=1200x720_application_surface=1200x720_fullscreen=0");
@@ -736,20 +1109,33 @@ public static partial class BenchmarkMod
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# loop_us samples=" + string(jamm_b_loop_n) + " mean=" + string(round(jamm_b_l_mean)) + " p50=" + string(round(jamm_b_l_p50)) + " p95=" + string(round(jamm_b_l_p95)) + " max=" + string(round(jamm_b_l_max)) + " present_sleep_us_mean=" + string(round(jamm_b_p_mean)));
                     file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, jamm_b_stats_line(jamm_b_pres_list, "present_sleep_us"));
+                    file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, jamm_b_stats_line(jamm_b_step_list, "step_us"));
+                    file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, jamm_b_stats_line(jamm_b_draw_list, "draw_us"));
+                    file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, jamm_b_stats_line(jamm_b_fish_step_list, "fish_step_us"));
+                    file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, jamm_b_stats_line(jamm_b_fish_count_list, "fish_count"));
+                    file_text_writeln(jamm_b_f);
                     if (jamm_b_warn != "")
                     {
                         file_text_write_string(jamm_b_f, "# warning=" + jamm_b_warn);
                         file_text_writeln(jamm_b_f);
                     }
-                    file_text_write_string(jamm_b_f, "frame_index,frame_us,loop_us,present_sleep_us");
+                    file_text_write_string(jamm_b_f, "frame_index,frame_us,loop_us,present_sleep_us,step_us,draw_us,fish_step_us,fish_count");
                     file_text_writeln(jamm_b_f);
                     for (jamm_b_i = 0; jamm_b_i < jamm_b_n; jamm_b_i += 1)
                     {
                         jamm_b_fu = ds_list_find_value(jamm_b_frame_list, jamm_b_i);
                         jamm_b_lu = ds_list_find_value(jamm_b_loop_list, jamm_b_i);
-                        jamm_b_pu = -1;
-                        if (jamm_b_lu >= 0) jamm_b_pu = max(0, jamm_b_fu - jamm_b_lu);
-                        file_text_write_string(jamm_b_f, string(jamm_b_i) + "," + string(round(jamm_b_fu)) + "," + string(round(jamm_b_lu)) + "," + string(round(jamm_b_pu)));
+                        jamm_b_pu = ds_list_find_value(jamm_b_pres_list, jamm_b_i);
+                        jamm_b_su = ds_list_find_value(jamm_b_step_list, jamm_b_i);
+                        jamm_b_du = ds_list_find_value(jamm_b_draw_list, jamm_b_i);
+                        jamm_b_fsu = ds_list_find_value(jamm_b_fish_step_list, jamm_b_i);
+                        jamm_b_fc = ds_list_find_value(jamm_b_fish_count_list, jamm_b_i);
+                        file_text_write_string(jamm_b_f, string(jamm_b_i) + "," + string(round(jamm_b_fu)) + "," + string(round(jamm_b_lu)) + "," + string(round(jamm_b_pu)) + "," + string(round(jamm_b_su)) + "," + string(round(jamm_b_du)) + "," + string(round(jamm_b_fsu)) + "," + string(round(jamm_b_fc)));
                         file_text_writeln(jamm_b_f);
                     }
                     file_text_close(jamm_b_f);
@@ -759,6 +1145,7 @@ public static partial class BenchmarkMod
 
                 ds_list_destroy(jamm_b_sorted);
                 ds_list_destroy(jamm_b_loop_sorted);
+                ds_list_destroy(jamm_b_pres_list);
                 jamm_b_summary_line = "Bench " + jamm_b_scene + ": n=" + string(jamm_b_n) + " fps=" + string(jamm_b_avg_fps) + " p50_us=" + string(round(jamm_b_f_p50)) + " p95_us=" + string(round(jamm_b_f_p95)) + " file=" + jamm_b_output_file;
                 show_debug_message(jamm_b_summary_line);
                 jamm_b_state = 3;
@@ -769,6 +1156,9 @@ public static partial class BenchmarkMod
         {
             if (!jamm_b_auto_exit && keyboard_check_pressed(vk_f9))
             {
+                global.jamm_b_fish_nostep = 0;
+                global.jamm_b_fish_nodraw = 0;
+                global.jamm_b_freeze_spawners = 0;
                 jamm_b_state = 1;
                 jamm_b_phase_start = jamm_b_now;
                 jamm_b_warmup_frames = 0;

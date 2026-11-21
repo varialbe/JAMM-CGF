@@ -57,14 +57,15 @@ public class BenchmarkTests
         Assert.Same(bench, data.Rooms.ByName("NewWorld")!.GameObjects[0].ObjectDefinition);
         Assert.Same(bench, data.Rooms.ByName("room11")!.GameObjects[0].ObjectDefinition);
 
-        // Minimal intrusion: only the 7 events of obj_jamm_bench are added; existing code is untouched.
-        Assert.Equal(originalCodeCount + 7, data.Code.Count);
+        // Adds 8 obj_jamm_bench events (incl. PreDraw) + jamm_b_stats_line + jamm_b_apply_fish_cap + 2 fish timing scripts.
+        Assert.Equal(originalCodeCount + 12, data.Code.Count);
 
         string create = Code(data, "Create_0");
         string destroy = Code(data, "Destroy_0");
         string roomStart = Code(data, "Other_4");
         string beginStep = Code(data, "Step_1");
         string endStep = Code(data, "Step_2");
+        string preDraw = Code(data, "Draw_76");
         string drawGui = Code(data, "Draw_64");
         string drawGuiEnd = Code(data, "Draw_75");
 
@@ -73,6 +74,10 @@ public class BenchmarkTests
         Assert.Contains("jamm_b_seed = 4242", create);
         Assert.Contains("jamm_b_frame_list = ds_list_create()", create);
         Assert.Contains("jamm_b_loop_list = ds_list_create()", create);
+        Assert.Contains("jamm_b_step_list = ds_list_create()", create);
+        Assert.Contains("jamm_b_draw_list = ds_list_create()", create);
+        Assert.Contains("jamm_b_fish_step_list = ds_list_create()", create);
+        Assert.Contains("jamm_b_fish_count_list = ds_list_create()", create);
         Assert.Contains("ds_list_destroy(jamm_b_frame_list)", destroy);
 
         // SaveManager is locked and slot flags cleared so no real user saves are loaded or written.
@@ -95,6 +100,8 @@ public class BenchmarkTests
         Assert.Contains("view_xview[0]", endStep);
         Assert.Contains("view_yview[0]", endStep);
 
+        Assert.Contains("jamm_b_draw_start_t = get_timer()", preDraw);
+
         // Active capture suppresses DrawGUI HUD drawing.
         Assert.Contains("jamm_b_state == 2", drawGui);
 
@@ -104,7 +111,7 @@ public class BenchmarkTests
         Assert.Contains("ds_list_add(jamm_b_loop_list", drawGuiEnd);
         Assert.Contains("ds_list_sort", drawGuiEnd);
         Assert.Contains("file_text_open_write(jamm_b_output_file)", drawGuiEnd);
-        Assert.Contains("frame_index,frame_us,loop_us,present_sleep_us", drawGuiEnd);
+        Assert.Contains("frame_index,frame_us,loop_us,present_sleep_us,step_us,draw_us,fish_step_us,fish_count", drawGuiEnd);
         Assert.Contains("present_sleep_us_mean=", drawGuiEnd);
         Assert.Contains("step_samples=", drawGuiEnd);
         Assert.Contains("draw_samples=", drawGuiEnd);
@@ -138,17 +145,43 @@ public class BenchmarkTests
         using var data = CreateSyntheticGame(includeOptionalObjects: true);
         SmoothMod.Apply(data, debug: false);
         PerfMod.Apply(data, debug: false);
+        Assert.Null(data.GameObjects.ByName(FishGrid.Controller));
         HdMod.Apply(data, upscaledPages: null, debug: false);
 
         int countBeforeBench = data.Code.Count;
         BenchmarkMod.Apply(data, new BenchmarkOptions(Scene: BenchmarkScene.Sonar));
 
-        Assert.Equal(countBeforeBench + 7, data.Code.Count);
+        Assert.Equal(countBeforeBench + 12, data.Code.Count);
         Assert.Equal(-999999, data.GameObjects.ByName(BenchmarkMod.ObjectName)!.Depth);
         Assert.Equal(-1000000, data.GameObjects.ByName(SmoothMod.ObjectName)!.Depth);
+        string summary = Code(data, $"Draw_{(uint)EventSubtypeDraw.DrawGUIEnd}");
+        Assert.Contains("# fish_grid=", summary);
+        Assert.Contains("# perf_mode=", summary);
+        Assert.Contains("var jamm_b_fish_grid = 0", summary);
+        Assert.Contains("var jamm_b_perf_mode = 0", summary);
 
         // Double instrumentation is cleanly rejected.
         Assert.Throws<InvalidDataException>(() => BenchmarkMod.Apply(data));
+    }
+
+    [Fact]
+    public void PerfSchedulerIsOmittedByDefaultAndAddedForEnabledProfiles()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        PerfMod.Apply(data, applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false);
+
+        Assert.Null(data.GameObjects.ByName(FishGrid.Controller));
+        Assert.Null(data.GameObjects.ByName(PerfMode.ControllerName));
+        var fishStep = data.Code.ByName("gml_Object_Fish_Step_2")!;
+        Assert.DoesNotContain(fishStep.Instructions, instruction => instruction.ValueVariable?.Name.Content == "jamm_perf_mode");
+        var simpleStep = new CompileGroup(data);
+        simpleStep.QueueCodeReplace(fishStep, "x += 1;");
+        ModObjects.Compile(simpleStep);
+        var edits = new List<UndertaleCode>();
+        PerfMode.ApplyScheduling(data, edits);
+
+        Assert.Contains(fishStep.Instructions, instruction => instruction.ValueVariable?.Name.Content == "jamm_perf_mode");
+        Assert.Contains(fishStep, edits);
     }
 
     [Fact]
@@ -215,15 +248,15 @@ public class BenchmarkTests
     }
 
     [Fact]
-    public void UnprofiledBenchLeavesExistingCodeUnchanged()
+    public void UnprofiledBenchLeavesNonFishCodeUnchangedAndOmitsProfilerWrappers()
     {
         using var data = CreateSyntheticGame(includeOptionalObjects: true);
-        var fishStep = data.GameObjects.ByName("Fish")!.EventHandlerFor(EventType.Step, 2u, data);
-        string before = ModObjects.Decompile(data, fishStep);
+        var sceneStep = data.GameObjects.ByName("SceneItem")!.EventHandlerFor(EventType.Step, 2u, data);
+        string sceneBefore = ModObjects.Decompile(data, sceneStep);
 
         BenchmarkMod.Apply(data, new BenchmarkOptions(Profile: false));
 
-        Assert.Equal(before, ModObjects.Decompile(data, fishStep));
+        Assert.Equal(sceneBefore, ModObjects.Decompile(data, sceneStep));
         Assert.Null(data.Code.ByName("gml_Script___jamm_prof_original_0"));
         Assert.DoesNotContain("global.__jamm_prof_on", Code(data, "Draw_75"));
     }
@@ -334,61 +367,181 @@ public class BenchmarkTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void AutoplaySceneCompilesWithAndWithoutOptionalModObjects(bool includeOptionalObjects)
+    [InlineData("full", BenchmarkFishMode.Full)]
+    [InlineData("nostep", BenchmarkFishMode.NoStep)]
+    [InlineData("NoDraw", BenchmarkFishMode.NoDraw)]
+    [InlineData("DEACTIVATE", BenchmarkFishMode.Deactivate)]
+    public void FishExperimentsCliOptionParsingHandlesModesCapAndScale(string modeText, BenchmarkFishMode expectedMode)
     {
-        string tempDir = Path.Combine(Path.GetTempPath(), "jamm-autoplay-test-" + Guid.NewGuid().ToString("N"));
+        var opts = Jamm.ModMaker.Program.ParseBenchOptions([
+            "--scene", "deepwater",
+            "--fish-mode", modeText,
+            "--fish-cap", "500",
+            "--fish-scale", "2.5"
+        ]);
+        Assert.Equal(BenchmarkScene.Deepwater, opts.Scene);
+        Assert.Equal(expectedMode, opts.FishMode);
+        Assert.Equal(500, opts.FishCap);
+        Assert.Equal(2.5, opts.FishScale);
+    }
+
+    [Theory]
+    [InlineData("--fish-mode", "bogus")]
+    [InlineData("--fish-cap", "-1")]
+    [InlineData("--fish-cap", "abc")]
+    [InlineData("--fish-scale", "0.5")]
+    [InlineData("--fish-scale", "25")]
+    [InlineData("--fish-scale", "nan")]
+    public void FishExperimentsCliOptionParsingRejectsInvalidValues(string flag, string value)
+    {
+        Assert.ThrowsAny<ArgumentException>(() => Jamm.ModMaker.Program.ParseBenchOptions([flag, value]));
+    }
+
+    [Fact]
+    public void FishExperimentsEmitIniOverridesCsvColumnsAndSummaryLines()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        BenchmarkMod.Apply(data, new BenchmarkOptions(
+            Scene: BenchmarkScene.Deepwater,
+            FishMode: BenchmarkFishMode.NoStep,
+            FishCap: 1000,
+            FishScale: 2));
+
+        string create = Code(data, "Create_0");
+        string beginStep = Code(data, "Step_1");
+        string endStep = Code(data, "Step_2");
+        string preDraw = Code(data, "Draw_76");
+        string drawEnd = Code(data, "Draw_75");
+        string capScript = ModObjects.Decompile(data, data.Scripts.Single(s => s.Name.Content == "jamm_b_apply_fish_cap").Code);
+
+        Assert.Contains("jamm_b_fish_mode = \"nostep\"", create);
+        Assert.Contains("jamm_b_fish_cap = 1000", create);
+        Assert.Contains("jamm_b_fish_scale = 2", create);
+        Assert.Contains("ini_read_string(\"Bench\", \"FishMode\"", create);
+        Assert.Contains("ini_read_real(\"Bench\", \"FishCap\"", create);
+        Assert.Contains("ini_read_real(\"Bench\", \"FishScale\"", create);
+        Assert.Contains("global.jamm_b_no_thin = 1", create);
+
+        Assert.Contains("global.jamm_b_fish_step_us = 0", beginStep);
+        Assert.Contains("instance_copy(false)", beginStep);
+        Assert.Contains("instance_deactivate_object(Fish)", endStep);
+        Assert.Contains("jamm_b_apply_fish_cap", endStep);
+        Assert.Contains("jamm_b_draw_start_t = get_timer()", preDraw);
+
+        Assert.Contains("global.jamm_b_freeze_spawners = 1", drawEnd);
+        Assert.Contains("jamm_b_stats_line(jamm_b_pres_list, \"present_sleep_us\")", drawEnd);
+        Assert.Contains("jamm_b_stats_line(jamm_b_step_list, \"step_us\")", drawEnd);
+        Assert.Contains("jamm_b_stats_line(jamm_b_draw_list, \"draw_us\")", drawEnd);
+        Assert.Contains("jamm_b_stats_line(jamm_b_fish_step_list, \"fish_step_us\")", drawEnd);
+        Assert.Contains("jamm_b_stats_line(jamm_b_fish_count_list, \"fish_count\")", drawEnd);
+        Assert.Contains("frame_index,frame_us,loop_us,present_sleep_us,step_us,draw_us,fish_step_us,fish_count", drawEnd);
+
+        Assert.Contains("Lure.fish", capScript);
+        Assert.Contains("view_xview", capScript);
+        Assert.Contains("instance_destroy()", capScript);
+    }
+
+    [Fact]
+    public void FishExperimentsInstrumentGenericHierarchyGuardsSpawnersAndExternalRefs()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var fish = data.GameObjects.ByName("Fish")!;
+        var fishSmall = ModObjects.Create(data, "FishSmall", persistent: false);
+        fishSmall.ParentId = fish;
+        var modFish = ModObjects.Create(data, "ModFish", persistent: false);
+        modFish.ParentId = fishSmall;
+        var modSpawner = ModObjects.Create(data, "ModSpawner", persistent: false);
+        var fishThinner = ModObjects.Create(data, "FishThinner", persistent: false);
+        var weatherCtrl = ModObjects.Create(data, "obj_jamm_weather", persistent: true);
+        var npc = ModObjects.Create(data, "SomeNpc", persistent: false);
+
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(fish.EventHandlerFor(EventType.Draw, 0u, data), "draw_self();");
+        compiler.QueueCodeReplace(modFish.EventHandlerFor(EventType.Step, 0u, data), "x += 1;");
+        compiler.QueueCodeReplace(modFish.EventHandlerFor(EventType.Step, 2u, data), "action_inherited();");
+        compiler.QueueCodeReplace(modFish.EventHandlerFor(EventType.Draw, 72u, data), "y += 0;");
+        compiler.QueueCodeReplace(modFish.EventHandlerFor(EventType.Draw, 0u, data), "draw_self();");
+        compiler.QueueCodeReplace(modSpawner.EventHandlerFor(EventType.Step, 0u, data), "instance_create(0, 0, ModFish);");
+        compiler.QueueCodeReplace(modSpawner.EventHandlerFor(EventType.Other, 10u, data), "instance_create(0, 0, ModFish);");
+        compiler.QueueCodeReplace(fishThinner.EventHandlerFor(EventType.Step, 0u, data), "cull_trigger += 1;");
+        compiler.QueueCodeReplace(fishThinner.EventHandlerFor(EventType.Other, 10u, data), "n_culled = 0;");
+        compiler.QueueCodeReplace(npc.EventHandlerFor(EventType.Step, 0u, data), "target_x = ModFish.x;");
+
+        var respawn = UndertaleCode.CreateEmptyEntry(data, "gml_Script_fish_respawn");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("fish_respawn"), Code = respawn });
+        compiler.QueueCodeReplace(respawn, "state = 2; return 1;");
+
+        var weatherPop = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jamm_weather_population");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("jamm_weather_population"), Code = weatherPop });
+        compiler.QueueCodeReplace(weatherPop, "return 1;");
+        ModObjects.Compile(compiler);
+
+        BenchmarkMod.Apply(data, new BenchmarkOptions(FishMode: BenchmarkFishMode.NoStep));
+
+        // Round-trip serialize/deserialize to prove bytecode + variable chains are valid.
+        using var ms = new MemoryStream();
+        UndertaleIO.Write(ms, data);
+        ms.Position = 0;
+        using var reloaded = UndertaleIO.Read(ms);
+
+        string fishStep2 = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_Fish_Step_2")!);
+        string modFishStep0 = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_ModFish_Step_0")!);
+        string modFishStep2 = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_ModFish_Step_2")!);
+        string fishDraw0 = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_Fish_Draw_0")!);
+        string modFishDraw72 = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_ModFish_Draw_72")!);
+        string modFishDraw0 = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_ModFish_Draw_0")!);
+        string respawnOut = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Script_fish_respawn")!);
+        string weatherPopOut = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Script_jamm_weather_population")!);
+        string thinnerStepOut = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_FishThinner_Step_0")!);
+        string thinnerUser0Out = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_FishThinner_Other_10")!);
+        string spawnerStepOut = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_ModSpawner_Step_0")!);
+        string spawnerUser0Out = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_ModSpawner_Other_10")!);
+        string npcStepOut = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_SomeNpc_Step_0")!);
+
+        Assert.Contains("if (global.jamm_b_fish_nostep)", fishStep2);
+        Assert.Contains("jamm_b_fish_step_enter()", fishStep2);
+        Assert.Contains("jamm_b_fish_step_leave()", fishStep2);
+        Assert.Contains("if (global.jamm_b_fish_nostep)", modFishStep0);
+        Assert.Contains("if (global.jamm_b_fish_nostep)", modFishStep2);
+
+        Assert.Contains("if (global.jamm_b_fish_nodraw)", fishDraw0);
+        Assert.Contains("if (global.jamm_b_fish_nodraw)", modFishDraw72);
+        Assert.Contains("if (global.jamm_b_fish_nodraw)", modFishDraw0);
+
+        Assert.Contains("if (global.jamm_b_freeze_spawners)", respawnOut);
+        Assert.Contains("return -4;", respawnOut);
+        Assert.Contains("if (global.jamm_b_freeze_spawners)", weatherPopOut);
+        Assert.Contains("if (global.jamm_b_freeze_spawners)", thinnerStepOut);
+        Assert.Contains("if (global.jamm_b_freeze_spawners || global.jamm_b_no_thin)", thinnerUser0Out);
+        Assert.Contains("if (global.jamm_b_freeze_spawners)", spawnerStepOut);
+        Assert.Contains("if (global.jamm_b_freeze_spawners)", spawnerUser0Out);
+
+        Assert.Contains("jamm_iv_x(", npcStepOut);
+    }
+
+    [RealFilesFact]
+    public void FishExperimentsCompileOnRealLegacyAndModdedArchives()
+    {
+        string vanillaPath = Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!;
+        string modsDir = Environment.GetEnvironmentVariable("JAMM_MODS_DIR")!;
+        string tempDir = Path.Combine(Path.GetTempPath(), "jamm-bench-real-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
-            string inputPath = Path.Combine(tempDir, "input.win");
-            string outputPath = Path.Combine(tempDir, "autoplay-out.win");
-            using (var data = CreateSyntheticGame(includeOptionalObjects))
-            {
-                if (!includeOptionalObjects)
-                    ModObjects.Create(data, "Girl", persistent: false);
-                if (includeOptionalObjects)
-                {
-                    foreach (string extra in new[]
-                    {
-                        "Boat7", "BoatMenu", "BoatCard", "Handler", "icon_Boats", "icon_Cancel",
-                        "obj_jmk_endless_ocean", "obj_jamm_weather", "jmk_submarine_submarine",
-                        "jmk_jamm_silo_object_hatch", "obj_jamm_console"
-                    })
-                    {
-                        ModObjects.Create(data, extra, persistent: false);
-                    }
-                }
-                using var fs = File.Create(inputPath);
-                UndertaleIO.Write(fs, data);
-            }
+            string vanillaOut = Path.Combine(tempDir, "vanilla-bench.win");
+            Assert.Equal(0, Jamm.ModMaker.Program.Main([
+                "bench", vanillaPath, vanillaOut,
+                "--scene", "dock", "--fish-mode", "nostep", "--fish-cap", "500", "--fish-scale", "2"
+            ]));
+            Assert.True(File.Exists(vanillaOut));
 
-            byte[] beforeHash = SHA256.HashData(File.ReadAllBytes(inputPath));
-            int rc = Jamm.ModMaker.Program.Main(["bench", inputPath, outputPath, "--scene", "autoplay"]);
-            Assert.Equal(0, rc);
-            Assert.True(File.Exists(outputPath));
-            Assert.Equal(beforeHash, SHA256.HashData(File.ReadAllBytes(inputPath)));
-
-            using var readStream = File.OpenRead(outputPath);
-            using var reloaded = UndertaleIO.Read(readStream);
-            var probe = reloaded.GameObjects.ByName("obj_jamm_autoplay");
-            Assert.NotNull(probe);
-            Assert.True(probe.Persistent);
-
-            string create = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_obj_jamm_autoplay_Create_0")!);
-            string endStep = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_obj_jamm_autoplay_Step_2")!);
-            Assert.Contains("ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub", create);
-            Assert.Contains("ocean_start", create);
-            Assert.Contains("ocean_start", endStep);
-            Assert.Contains("asset_get_index", endStep);
-            Assert.Contains("object_exists", endStep);
-            Assert.Contains("instance_exists", endStep);
-            Assert.Contains("variable_instance_exists", endStep);
-            Assert.Contains("jmk_submarine_submarine", endStep);
-            Assert.Contains("obj_jmk_endless_ocean", endStep);
-            Assert.Contains("obj_jamm_weather", endStep);
-            Assert.Contains("jmk_jamm_silo_object_hatch", endStep);
+            string modPath = Directory.GetFiles(modsDir, "*.win").OrderBy(p => p, StringComparer.Ordinal).First();
+            string modOut = Path.Combine(tempDir, "mod-bench.win");
+            Assert.Equal(0, Jamm.ModMaker.Program.Main([
+                "bench", modPath, modOut,
+                "--scene", "deepwater", "--fish-mode", "deactivate", "--fish-cap", "200"
+            ]));
+            Assert.True(File.Exists(modOut));
         }
         finally
         {
@@ -463,4 +616,69 @@ public class BenchmarkTests
         ModObjects.Compile(compiler);
         return data;
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AutoplaySceneCompilesWithAndWithoutOptionalModObjects(bool includeOptionalObjects)
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "jamm-autoplay-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string inputPath = Path.Combine(tempDir, "input.win");
+            string outputPath = Path.Combine(tempDir, "autoplay-out.win");
+            using (var data = CreateSyntheticGame(includeOptionalObjects))
+            {
+                if (!includeOptionalObjects)
+                    ModObjects.Create(data, "Girl", persistent: false);
+                if (includeOptionalObjects)
+                {
+                    foreach (string extra in new[]
+                    {
+                        "Boat7", "BoatMenu", "BoatCard", "Handler", "icon_Boats", "icon_Cancel",
+                        "obj_jmk_endless_ocean", "obj_jamm_weather", "jmk_submarine_submarine",
+                        "jmk_jamm_silo_object_hatch", "obj_jamm_console"
+                    })
+                    {
+                        ModObjects.Create(data, extra, persistent: false);
+                    }
+                }
+                using var fs = File.Create(inputPath);
+                UndertaleIO.Write(fs, data);
+            }
+
+            byte[] beforeHash = SHA256.HashData(File.ReadAllBytes(inputPath));
+            int rc = Jamm.ModMaker.Program.Main(["bench", inputPath, outputPath, "--scene", "autoplay"]);
+            Assert.Equal(0, rc);
+            Assert.True(File.Exists(outputPath));
+            Assert.Equal(beforeHash, SHA256.HashData(File.ReadAllBytes(inputPath)));
+
+            using var readStream = File.OpenRead(outputPath);
+            using var reloaded = UndertaleIO.Read(readStream);
+            var probe = reloaded.GameObjects.ByName("obj_jamm_autoplay");
+            Assert.NotNull(probe);
+            Assert.True(probe.Persistent);
+
+            string create = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_obj_jamm_autoplay_Create_0")!);
+            string endStep = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_obj_jamm_autoplay_Step_2")!);
+            Assert.Contains("ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub", create);
+            Assert.Contains("ocean_start", create);
+            Assert.Contains("ocean_start", endStep);
+            Assert.Contains("asset_get_index", endStep);
+            Assert.Contains("object_exists", endStep);
+            Assert.Contains("instance_exists", endStep);
+            Assert.Contains("variable_instance_exists", endStep);
+            Assert.Contains("jmk_submarine_submarine", endStep);
+            Assert.Contains("obj_jmk_endless_ocean", endStep);
+            Assert.Contains("obj_jamm_weather", endStep);
+            Assert.Contains("jmk_jamm_silo_object_hatch", endStep);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
 }
