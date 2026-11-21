@@ -86,7 +86,8 @@
 
     <section class="mod-section">
       <h2>Measured performance</h2>
-<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+      <p>Seven-pack build, dock: 48.4 ms without Smooth vs 51.4 ms with Smooth (mean of 2 runs) — loop cost is neutral within noise. Smooth&#x27;s benefit is frame pacing and off-screen culling, not raw loop time.</p>
+      <p>With JAMM Perf generator ≤ 6, Smooth masked the Perf regression (Perf + Smooth = 48.4 ms vs Perf alone = 98 ms). Generator 7 removes the need for that pairing.</p>
     </section>
 
     <section class="mod-section">
