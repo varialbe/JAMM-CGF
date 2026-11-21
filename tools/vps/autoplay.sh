@@ -32,8 +32,9 @@ act(){ echo -e "$(date +%s)\t$step\t$*" >> "$out/actions.tsv"; }
 win(){ wmctrl -l | awk '/Cat Goes Fishing$/{print $1; exit}'; }
 key(){ xdotool key --delay 60 "$@"; }
 hold(){ xdotool keydown "$1"; sleep "$2"; xdotool keyup "$1"; }
-# The save menu has no Esc close; click its Back button (fullscreen 1280x800 layout), then fall back to Esc.
-back_button(){ xdotool mousemove 1180 646 click 1; sleep 1; xdotool mousemove 900 300; }
+# The save menu has no Esc close; click its Back button (relative to the game window).
+back_button(){ local w; w=$(win); [[ -n $w ]] || return; eval $(xdotool getwindowgeometry --shell "$w")
+  xdotool mousemove $((X + WIDTH * 92 / 100)) $((Y + HEIGHT * 81 / 100)) click 1; sleep 1; xdotool mousemove $((X + WIDTH * 70 / 100)) $((Y + HEIGHT * 35 / 100)); }
 type_console(){ key F12; sleep 1.5; xdotool type --delay 90 "$1"; sleep 0.3; key Return; sleep 1.5; key F12; }
 outcome=PLAYED; step=0
 # wait for the window and the probe's first state line
