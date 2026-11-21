@@ -59,14 +59,19 @@ internal static class StressScene
                 stress_skip_start = global.jamm_perf_skipped;
                 stress_initial_bo = instance_number(Bo);
                 // Keep a control Bo outside the weather's surface band for repeated deactivate/activate checks.
-                instance_create(1600, 2300, Bo);
+                with (instance_create(1600, 2300, Bo)) base_lunge_mod = 1;
                 // Keep the legacy bite handler's other type references available in the unguarded control.
-                if (!instance_exists(Gallina)) instance_create(1600, 2300, Gallina);
-                if (!instance_exists(Skrimp)) instance_create(1600, 2300, Skrimp);
+                if (!instance_exists(Gallina))
+                    with (instance_create(1600, 2300, Gallina)) base_lunge_mod = 1;
+                if (!instance_exists(Skrimp))
+                    with (instance_create(1600, 2300, Skrimp)) base_lunge_mod = 1;
+                // Rod seeds the lunge multiplier for existing fish. These fish can step before Rod sees them.
                 stress_attacker = instance_create(1650, 1380, Cowfish);
+                with (stress_attacker) base_lunge_mod = 1;
                 for (var school = 0; school < 24; school += 1)
-                    instance_create(1460 + (school * 22), 1500 + ((school mod 4) * 38), Grumper);
+                    with (instance_create(1460 + (school * 22), 1500 + ((school mod 4) * 38), Grumper)) base_lunge_mod = 1;
                 stress_offscreen = instance_create(24000, 1500, Grumper);
+                with (stress_offscreen) base_lunge_mod = 1;
                 global.jamm_weather_bench_night = false;
                 jamm_weather_command("super-sunny");
                 show_debug_message("JAMM stress started; initial active Bo: " + string(stress_initial_bo));
