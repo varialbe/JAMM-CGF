@@ -20,7 +20,7 @@ building has **unlimited levels** with exponentially rising cost (e.g. base × 1
 * Levels saved per save slot; console command `harbor` for testing (set levels / give money).
 * Balancing target: a player with 1T $ has meaningful goals but nothing game-breaking.
 
-## Phase 1 – design doc (commit first)
+## Phase 1 – design doc (DONE by the orchestrator: docs/design/harbor-town.md – review and refine it, keep the numbers unless you find a real problem)
 `docs/design/harbor-town.md`: vision, buildings, cost curves + balancing tables up to 1Qa, bonus formulas with caps,
 required JAMM APIs (Building/Upgrade API, aquarium display, expedition API – what exists already in Items/Area/Weather
 APIs and what must be added), save format, UI (how the player interacts: walk the cat to a building sign at the dock,
