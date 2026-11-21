@@ -378,6 +378,8 @@ public static class ArchiveBuilder
                 baseMod: vanilla != ancestor ? patches[0].Mod.Name : null);
             ConsoleUpgradeGuard.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
             MoneyRuntime.ConfigureConsole(bigMoney, recompile, generatedCode);
+            // Last, so the guard also covers code that the runtimes above generated or merged.
+            InstanceGuard.Apply(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         }
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");

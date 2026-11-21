@@ -87,7 +87,7 @@ public sealed class InstanceCompatibilityTests
         using var merged = GameFileLoader.Load(temp.PathFor("merged.win"));
 
         Assert.Contains("&& !(light > 0)", PatchBuilder.ReadCode(merged, FishThinnerEvent).Text);
-        Assert.Contains("CGF-INSTANCE-003", build.Plan.Decisions);
+        Assert.Contains(build.Plan.Decisions, decision => decision.StartsWith("[CGF-INSTANCE-003]", StringComparison.Ordinal));
     }
 
     [Fact]
