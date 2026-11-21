@@ -1,0 +1,21 @@
+{
+  "cardPackageType": "Recipe",
+  "cardSummary": "In-game command console (F12 or backtick). Type `help` for `unlockall`, `unlockgear`, `level`, `catalog all`, and `money`.",
+  "summary": "JAMM Console adds a keyboard-operated overlay for testing progression and equipment in the legacy game. You can grant gear, set money and level, or fill the Fishalog from the command prompt.",
+  "controls": [
+    "Press F12 or backtick to toggle the console. Enter submits, Up and Down browse history, and Escape closes it.",
+    "`help` lists commands, `clear` clears the log, and `close` or `exit` closes the overlay.",
+    "`unlockgear` unlocks equipment, upgrades, hats, HUD menus and nightfall. `unlockall` also maxes your level and fills the Fishalog.",
+    "`level <n>` sets your level and `maxlevel` uses the game's maximum. `catalog all` or `unlockfish` marks the fish caught.",
+    "`money <n>` sets your dollars and `money +<n>` adds dollars."
+  ],
+  "apis": "GameMaker keyboard and Draw GUI events, legacy gear tables, `Girl` progression state and `CatalogData`.",
+  "assets": "1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 5 controller events.",
+  "saves": "The history and log live in memory. Commands that change progression, equipment or the Fishalog can be saved by the game's normal autosave or Escape save menu.",
+  "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, HD Lite and an independent third-party mod. The Weather API extends this controller with the `weather` command.",
+  "how": [
+    "The generator places `obj_jamm_console` in `NewWorld` and `room11`. Its Begin Step processes the input buffer, normalizes commands and consumes gameplay keys while the overlay is open. Its End Step maintains the open overlay's rod swing lock and Draw GUI renders the prompt and log.",
+    "Gear unlocks iterate the live item tables, so their row counts can include gear from the loaded profile. Fishalog commands update the live catalog arrays. Level and money commands clamp input and write to the player's current state.",
+    "The controller tracks the active SaveManager instance and slot to reset its unlock bookkeeping on a slot change. Console commands that alter progress print a save warning."
+  ]
+}
