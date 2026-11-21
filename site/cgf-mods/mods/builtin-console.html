@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JAMM Console — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="mod-header">
+      <a class="back" href="../index.html#builtin-console">← All mods</a>
+      <div class="card-head">
+        <img src="../assets/console.svg" alt="" width="44" height="44">
+        <div>
+          <h1>JAMM Console</h1>
+          <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
+          <p>Version 1.0.0</p>
+        </div>
+      </div>
+      <a class="btn" href="../packages/jamm-console.zip" download>Download jamm-console.zip</a>
+      <div class="checksum">SHA-256: f8cf13a0bb30a5eda06431c086617277e002d3a504fb7681e99a0799493ccaff (369 B)</div>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>JAMM Console adds a keyboard-operated overlay for testing progression and equipment in the legacy game. You can grant gear, set money and level, or fill the Fishalog from the command prompt.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Controls</h2>
+      <ul class="controls">
+        <li>Press F12 or backtick to toggle the console. Enter submits, Up and Down browse history, and Escape closes it.</li>
+        <li><code>help</code> lists commands, <code>clear</code> clears the log, and <code>close</code> or <code>exit</code> closes the overlay.</li>
+        <li><code>unlockgear</code> unlocks equipment, upgrades, hats, HUD menus and nightfall. <code>unlockall</code> also maxes your level and fills the Fishalog.</li>
+        <li><code>level &lt;n&gt;</code> sets your level and <code>maxlevel</code> uses the game&#x27;s maximum. <code>catalog all</code> or <code>unlockfish</code> marks the fish caught.</li>
+        <li><code>money &lt;n&gt;</code> sets your dollars and <code>money +&lt;n&gt;</code> adds dollars.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical datasheet</h2>
+      <table class="datasheet">
+        <tbody>
+          <tr><th scope="row">Package type</th><td>Recipe</td></tr>
+          <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
+          <tr><th scope="row">Generator</th><td><code>console</code> (recipe generator version <code>2</code>)</td></tr>
+          <tr><th scope="row">APIs used</th><td>GameMaker keyboard and Draw GUI events, legacy gear tables, <code>Girl</code> progression state and <code>CatalogData</code>.</td></tr>
+          <tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 5 controller events.</td></tr>
+          <tr><th scope="row">Save-file behaviour</th><td>The history and log live in memory. Commands that change progression, equipment or the Fishalog can be saved by the game&#x27;s normal autosave or Escape save menu.</td></tr>
+          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, HD Lite and an independent third-party mod. The Weather API extends this controller with the <code>weather</code> command.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>The generator places <code>obj_jamm_console</code> in <code>NewWorld</code> and <code>room11</code>. Its Begin Step processes the input buffer, normalizes commands and consumes gameplay keys while the overlay is open. Its End Step maintains the open overlay&#x27;s rod swing lock and Draw GUI renders the prompt and log.</p>
+      <p>Gear unlocks iterate the live item tables, so their row counts can include gear from the loaded profile. Fishalog commands update the live catalog arrays. Level and money commands clamp input and write to the player&#x27;s current state.</p>
+      <p>The controller tracks the active SaveManager instance and slot to reset its unlock bookkeeping on a slot change. Console commands that alter progress print a save warning.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+      <ul class="package-files">
+        <li><code>jamm-recipe.json</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

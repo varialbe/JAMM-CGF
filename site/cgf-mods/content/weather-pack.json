@@ -1,0 +1,25 @@
+{
+  "cardPackageType": "ModKit Weather + Fish",
+  "cardSummary": "Four daylight weathers with animated skies, original music and ambience, and eight new surface fish. Use the `weather` console command to switch.",
+  "summary": "Weather Pack brings Super Sunny, Rainy, Windy and Fog to the legacy daylight cycle. Each weather has its own sky, sound and two surface fish. A Lightbulb lure near the surface thins the fog.",
+  "controls": [
+    "Open the JAMM Console in the fishing world with F12. Type `weather` to list the installed weather IDs.",
+    "Use `weather super-sunny`, `weather rainy`, `weather windy` or `weather fog` to request a weather. Qualify a shared short ID as `weather weather-pack:fog`. A daytime request made at night waits for daylight.",
+    "Use `weather clear` for clear skies or `weather auto` to resume the forecast."
+  ],
+  "apis": "ModKit Weather API (`weathers`), Fish and Catalog APIs, sprite composition, weather hooks and Ogg audio import.",
+  "assets": "8 fish objects, 18 sprites, 8 sounds and 11 standalone scripts in the source build on a clean base. The merged profile adds 1 shared weather controller and 14 internal weather scripts, fills the 4 public weather stubs and installs the Console controller if needed.",
+  "saves": "The weather controller stores `seed`, `day`, `id`, `start` and `end` under `[Weather]` in `jamm-weather-<slot>.ini` beside the game's saves. The current forecast uses a qualified weather ID. Fishalog progress uses `[JAMM_Catalog]` in the native slot save.",
+  "compatibility": "Targets the August 2023 legacy VM archive. Weather packs share one controller and coexist using qualified IDs. Weather Pack's pairwise checks covered Antiquity, PWB, Abyss, Colour, Verdant, Cave and TGE. The profile build requires the weather hook anchors to remain unique in the merged game code.",
+  "how": [
+    "JAMM compiles the four weather declarations into one persistent `obj_jamm_weather` registry. The controller draws a weighted forecast from the slot seed, the current local clock hour and sorted weather IDs. The same slot and hour resume the stored forecast. The next hour produces a new draw, and the legacy night predicate still controls when a daytime weather can run.",
+    "Each weather registers two species with the Fishalog and populates a school near the cat's dock or boat position using free surface-water positions. Super Sunny brings Bask and Flaret, Rainy brings Drizzit and Lowbelly, Windy brings Kest and Tack, and Fog brings Mote and Veilmouth. While these schools are active, the controller parks eligible vanilla surface fish. At clear or night it restores the vanilla fish and retires free weather fish while allowing catches in progress to finish.",
+    "The sky and fish recipes sample the player's legacy sprite frames during the build and add original SVG parts. The runtime draws tinted parallax sky layers behind the landscape and foreground haze and particles above it. Repeating layers wrap horizontally across the camera, with wrapped atlas padding for filtering and matching edges on the two Fog bands.",
+    "The runtime blends weather music and ambience with the native surface track and applies weather settings to the sea tint and waves. Fog's Step hook lowers the opacity of foreground layers and particles when a native Lightbulb is near the surface."
+  ],
+  "gallery": [
+    {"image": "art-review-gameplay.webp", "thumbnail": "art-review-gameplay-thumb.webp", "alt": "Dockside gameplay views in sunny, rainy, windy and foggy weather", "caption": "Four weathers at the dock"},
+    {"image": "fog-wide.webp", "thumbnail": "fog-wide-thumb.webp", "alt": "Fishing boat on muted water with mist ribbons stretching across the screen", "caption": "Fog across the water"},
+    {"image": "art-review.webp", "thumbnail": "art-review-thumb.webp", "alt": "Weather Pack fish and their vanilla donors shown side by side against coloured backgrounds", "caption": "Fish art comparisons"}
+  ]
+}

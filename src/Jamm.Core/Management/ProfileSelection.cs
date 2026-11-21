@@ -52,7 +52,8 @@ internal sealed record ProfileSelection(string VanillaPath, string VanillaHash, 
             string archive = library.Archive(mod);
             if (row.Role.Role == "addon")
             {
-                addons.Add(new(library.PatchAgainst(mod, library.Archive(ancestor!), ancestor!.Sha256, progress, cancellationToken), archive));
+                addons.Add(new(library.PatchAgainst(mod, library.Archive(ancestor!), ancestor!.Sha256, progress, cancellationToken), archive)
+                    { UnlockFix = UnlockFix(profile, mod) });
                 continue;
             }
             if (mod.BaseSha256 != vanillaHash)
@@ -60,10 +61,13 @@ internal sealed record ProfileSelection(string VanillaPath, string VanillaHash, 
             var patch = mod.Role is { Role: "addon" } || !File.Exists(library.PatchPath(mod))
                 ? library.PatchAgainst(mod, vanillaPath, vanillaHash, progress, cancellationToken)
                 : library.Patch(mod, progress, cancellationToken);
-            vanilla.Add(new(patch, archive));
+            vanilla.Add(new(patch, archive) { UnlockFix = UnlockFix(profile, mod) });
         }
         return new(vanillaPath, vanillaHash, group, [.. vanilla], [.. addons], warnings);
     }
+
+    private static bool UnlockFix(ModProfile profile, ManagedMod mod) =>
+        profile.UnlockFixMods?.Contains(mod.Id, StringComparer.Ordinal) == true;
 
     internal ConflictReport Analyze(CancellationToken cancellationToken)
     {

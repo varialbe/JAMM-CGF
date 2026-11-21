@@ -4,116 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>JAMM CGF Mods — Official Pure-Source Packages</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #0b1620;
-      --panel: #112230;
-      --border: #243b4d;
-      --text: #e6f1f8;
-      --muted: #9bb3c4;
-      --accent: #38bdf8;
-      --default-bg: #123c36;
-      --default-fg: #6ee7b7;
-      --test-bg: #3b2d12;
-      --test-fg: #fcd34d;
-      --opt-bg: #1e293b;
-      --opt-fg: #93c5fd;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-    }
-    main {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 3.5rem;
-    }
-    header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 1.25rem;
-      margin-bottom: 1.75rem;
-    }
-    h1 { margin: 0 0 0.4rem; font-size: 1.9rem; }
-    p { margin: 0.4rem 0; color: var(--muted); }
-    a { color: var(--accent); }
-    .meta-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem 1.5rem;
-      margin-top: 0.9rem;
-      font-size: 0.92rem;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
-    }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-    }
-    .card-head {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-    .card-head img {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      flex-shrink: 0;
-    }
-    .card-title { font-size: 1.12rem; font-weight: 650; margin: 0; }
-    .badges { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-    .badge {
-      font-size: 0.76rem;
-      font-weight: 600;
-      padding: 0.16rem 0.52rem;
-      border-radius: 999px;
-    }
-    .b-default { background: var(--default-bg); color: var(--default-fg); }
-    .b-test { background: var(--test-bg); color: var(--test-fg); }
-    .b-optional { background: var(--opt-bg); color: var(--opt-fg); }
-    .card-desc { color: var(--muted); font-size: 0.94rem; margin: 0; flex: 1; }
-    .checksum {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.74rem;
-      color: var(--muted);
-      word-break: break-all;
-      background: #0b1620;
-      padding: 0.45rem 0.55rem;
-      border-radius: 6px;
-      border: 1px solid #1b3040;
-    }
-    .btn {
-      display: inline-block;
-      text-align: center;
-      text-decoration: none;
-      font-weight: 600;
-      padding: 0.55rem 0.85rem;
-      border-radius: 8px;
-      background: #0284c7;
-      color: #ffffff;
-    }
-    .btn:hover { background: #0369a1; }
-    footer {
-      margin-top: 2.25rem;
-      padding-top: 1.1rem;
-      border-top: 1px solid var(--border);
-      font-size: 0.88rem;
-      color: var(--muted);
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main>
@@ -133,116 +24,125 @@
     <section aria-label="Available packages" class="grid">
       <article class="card" id="builtin-perf">
         <div class="card-head">
-          <img src="assets/perf.svg" alt="JAMM Perf icon" width="44" height="44">
+          <img src="assets/perf.svg" alt="" width="44" height="44">
           <div>
-            <h2 class="card-title">JAMM Perf</h2>
-            <div class="badges">
-              <span class="badge b-default">First-Party Default</span>
-              <span class="badge b-optional">Recipe</span>
-            </div>
+            <h2 class="card-title"><a class="card-link" href="mods/builtin-perf.html">JAMM Perf</a></h2>
+            <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
           </div>
         </div>
-        <p class="card-desc">
-          Targeted code optimizations and optional fish scheduling for the legacy 2023 build. Press <strong>F8</strong> in-game to toggle modes.
-        </p>
+        <p class="card-desc">Targeted code optimizations and optional fish scheduling for the legacy 2023 build. Press F8 in-game to toggle modes.</p>
         <div class="checksum">SHA-256: 00c97eed9562b6efd007752654cfdb3cceb62d1b6951b05e1f3611909b777da9 (359 B)</div>
         <a class="btn" href="packages/jamm-perf.zip" download>Download jamm-perf.zip</a>
       </article>
 
       <article class="card" id="builtin-smooth">
         <div class="card-head">
-          <img src="assets/smooth.svg" alt="JAMM Smooth icon" width="44" height="44">
+          <img src="assets/smooth.svg" alt="" width="44" height="44">
           <div>
-            <h2 class="card-title">JAMM Smooth</h2>
-            <div class="badges">
-              <span class="badge b-default">First-Party Default</span>
-              <span class="badge b-optional">Recipe</span>
-            </div>
+            <h2 class="card-title"><a class="card-link" href="mods/builtin-smooth.html">JAMM Smooth</a></h2>
+            <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
           </div>
         </div>
-        <p class="card-desc">
-          Separates 60/120 FPS interpolated rendering from the original 30 ticks/s simulation. Press <strong>F7</strong> in-game to cycle 60 / 120 / off.
-        </p>
+        <p class="card-desc">Separates 60/120 FPS interpolated rendering from the original 30 ticks/s simulation. Press F7 in-game to cycle 60 / 120 / off.</p>
         <div class="checksum">SHA-256: e0d233f9441638b02f7b3f0304909c73b0daec09f0ec5366ce60a8062608ddf6 (367 B)</div>
         <a class="btn" href="packages/jamm-smooth.zip" download>Download jamm-smooth.zip</a>
       </article>
 
       <article class="card" id="builtin-hd-lite">
         <div class="card-head">
-          <img src="assets/hd-lite.svg" alt="JAMM HD Lite icon" width="44" height="44">
+          <img src="assets/hd-lite.svg" alt="" width="44" height="44">
           <div>
-            <h2 class="card-title">JAMM HD Lite</h2>
-            <div class="badges">
-              <span class="badge b-default">First-Party Default</span>
-              <span class="badge b-optional">Recipe</span>
-            </div>
+            <h2 class="card-title"><a class="card-link" href="mods/builtin-hd-lite.html">JAMM HD Lite</a></h2>
+            <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
           </div>
         </div>
-        <p class="card-desc">
-          Aspect-correct fullscreen rendering through the native application surface with original texture pages. Press <strong>F11</strong> to toggle fullscreen.
-        </p>
+        <p class="card-desc">Aspect-correct fullscreen rendering through the native application surface with original texture pages. Press F11 to toggle fullscreen.</p>
         <div class="checksum">SHA-256: 6cb930915d8bee92bdf99d18dcf0e951f95a6cc259540637f12f927bec1b1195 (374 B)</div>
         <a class="btn" href="packages/jamm-hd-lite.zip" download>Download jamm-hd-lite.zip</a>
       </article>
 
       <article class="card" id="builtin-console">
         <div class="card-head">
-          <img src="assets/console.svg" alt="JAMM Console icon" width="44" height="44">
+          <img src="assets/console.svg" alt="" width="44" height="44">
           <div>
-            <h2 class="card-title">JAMM Console</h2>
-            <div class="badges">
-              <span class="badge b-default">First-Party Default</span>
-              <span class="badge b-optional">Recipe</span>
-            </div>
+            <h2 class="card-title"><a class="card-link" href="mods/builtin-console.html">JAMM Console</a></h2>
+            <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
           </div>
         </div>
-        <p class="card-desc">
-          Optional in-game command console (<strong>F12</strong> or <strong>`</strong>). Type <code>help</code> for <code>unlockall</code>, <code>unlockgear</code>, <code>level</code>, <code>catalog all</code>, and <code>money</code>.
-        </p>
+        <p class="card-desc">In-game command console (F12 or backtick). Type <code>help</code> for <code>unlockall</code>, <code>unlockgear</code>, <code>level</code>, <code>catalog all</code>, and <code>money</code>.</p>
         <div class="checksum">SHA-256: f8cf13a0bb30a5eda06431c086617277e002d3a504fb7681e99a0799493ccaff (369 B)</div>
         <a class="btn" href="packages/jamm-console.zip" download>Download jamm-console.zip</a>
       </article>
 
       <article class="card" id="example-fish">
         <div class="card-head">
-          <img src="assets/example-fish.svg" alt="Example Fish icon" width="44" height="44">
+          <img src="assets/example-fish.svg" alt="" width="44" height="44">
           <div>
-            <h2 class="card-title">Example Fish</h2>
-            <div class="badges">
-              <span class="badge b-test">Test ModKit Mod</span>
-              <span class="badge b-optional">ModKit Source</span>
-            </div>
+            <h2 class="card-title"><a class="card-link" href="mods/example-fish.html">Example Fish</a></h2>
+            <div class="badges"><span class="badge b-test">Test ModKit Mod</span> <span class="badge b-optional">ModKit Source</span></div>
           </div>
         </div>
-        <p class="card-desc">
-          Pure-source ModKit example package adding two original custom fish: <em>Goldie</em> (shallow small fish) and <em>Glowfin</em> (nocturnal pulsing medium fish).
-        </p>
+        <p class="card-desc">ModKit example adding Goldie, a shallow-water fish, and Glowfin, a nocturnal fish with pulsing fins.</p>
         <div class="checksum">SHA-256: 3608467830072fbdd1d3fd1f06bde8308898d576d6c8309e81354df2c7ecd9a9 (2,671 B)</div>
         <a class="btn" href="packages/example-fish.zip" download>Download example-fish.zip</a>
       </article>
 
       <article class="card" id="jamm-silo">
         <div class="card-head">
-          <img src="assets/silo.svg" alt="The Silo icon" width="44" height="44">
+          <img src="assets/silo.svg" alt="" width="44" height="44">
           <div>
-            <h2 class="card-title">The Silo</h2>
-            <div class="badges">
-              <span class="badge b-optional">Non-Default Optional</span>
-              <span class="badge b-optional">Recipe + Original Art</span>
-            </div>
+            <h2 class="card-title"><a class="card-link" href="mods/jamm-silo.html">The Silo</a></h2>
+            <div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit Area + Fish</span></div>
           </div>
         </div>
-        <p class="card-desc">
-          Dive through the maintenance hatch near the Missile Silo. Explore the flooded launch shaft, refill air and recover four salvage items for cash.
-        </p>
-        <div class="checksum">SHA-256: 7564a1bf1cfcc902cf4bcceaceceac0a10a223859d6c725b7e28f204b138a860 (6,411 B)</div>
+        <p class="card-desc">Open the Missile Silo in NewWorld and fish its flooded launch shaft for four deep-water species.</p>
+        <div class="checksum">SHA-256: 9bbfc6aaed00b72540b5f6ad5c174887deb8e7a80e4ef9cbcbead0fb99b11acb (7,633 B)</div>
         <a class="btn" href="packages/jamm-silo.zip" download>Download jamm-silo.zip</a>
+      </article>
+
+      <article class="card" id="weather-pack">
+        <div class="card-head">
+          <img src="assets/weather.svg" alt="" width="44" height="44">
+          <div>
+            <h2 class="card-title"><a class="card-link" href="mods/weather-pack.html">Weather Pack</a></h2>
+            <div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit Weather + Fish</span></div>
+          </div>
+        </div>
+        <p class="card-desc">Four daylight weathers with animated skies, original music and ambience, and eight new surface fish. Use the <code>weather</code> console command to switch.</p>
+        <div class="checksum">SHA-256: d37f49328d697a5af420111c8b496c16e81713c15e7549b72154f9bbc53f64a7 (950,560 B)</div>
+        <a class="btn" href="packages/weather-pack.zip" download>Download weather-pack.zip</a>
+      </article>
+
+      <article class="card" id="endless-ocean">
+        <div class="card-head">
+          <img src="assets/endless-ocean.svg" alt="" width="44" height="44">
+          <div>
+            <h2 class="card-title"><a class="card-link" href="mods/endless-ocean.html">Endless Ocean (Preview)</a></h2>
+            <div class="badges"><span class="badge b-optional">Preview</span> <span class="badge b-optional">Recipe Generator</span></div>
+          </div>
+        </div>
+        <p class="card-desc">Early preview of a seeded ocean floor streamed east of NewWorld, with vanilla fish in three depth bands. The world layout regenerates from the saved seed.</p>
+        <div class="checksum">SHA-256: 81c9ddfdd1059ed5412406438c578a43ff8048e8b3202767c217ae3693c610ca (1,660 B)</div>
+        <a class="btn" href="packages/endless-ocean.zip" download>Download endless-ocean.zip</a>
+      </article>
+
+      <article class="card" id="example-rod">
+        <div class="card-head">
+          <img src="assets/example-rod.svg" alt="" width="44" height="44">
+          <div>
+            <h2 class="card-title"><a class="card-link" href="mods/example-rod.html">Example Rod</a></h2>
+            <div class="badges"><span class="badge b-test">Test ModKit Mod</span> <span class="badge b-optional">ModKit Rod</span></div>
+          </div>
+        </div>
+        <p class="card-desc">ModKit example adding the Copper Current rod for $25,000 to the rod shop.</p>
+        <div class="checksum">SHA-256: 3b24dfb69e05e07e533ef37f42edf7696bad7744b152a02df5b663969fec8a6c (1,058 B)</div>
+        <a class="btn" href="packages/example-rod.zip" download>Download example-rod.zip</a>
       </article>
     </section>
 
     <footer>
       <p>
-        All packages contain only original manifests, recipes, pixel art, and GML hooks authored for JAMM-CGF.
+        All packages contain only original manifests, recipes, art, audio, and GML hooks authored for JAMM-CGF.
         When imported, JAMM compiles each package locally against your own read-only <code>data.win</code>.
       </p>
     </footer>

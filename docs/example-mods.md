@@ -31,6 +31,8 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
   fullscreen with the HD controller.
 - **Perf** applies targeted code optimizations and includes experimental fish
   scheduling. **F8** toggles that performance mode and saves it to `jamm_perf.ini`.
+  The FishLarge avoidance grid has its own switch. Set `FishGrid=0` under `[Perf]`
+  in the same file to disable it.
   Mode defaults to **off** for a fresh configuration; an existing saved choice
   remains in effect. The experimental mode measured slower in the tested scene.
 - **Console** adds an optional in-game command console (`obj_jamm_console`).
@@ -51,8 +53,9 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
 
 Optional `--debug` adds diagnostic logging/controllers; it is useful for local
 measurements and may affect performance. See the implementation reports for
-[Perf/Smooth](reports/phase6a.md), [HD](reports/phase6b.md) and
-[experimental performance mode](reports/phase6c.md).
+[Perf/Smooth](reports/phase6a.md), [HD](reports/phase6b.md),
+[experimental performance mode](reports/phase6c.md), and the
+[local benchmark mode guide](benchmarking.md) (`jamm-modmaker bench`).
 
 ## HD with 2x texture pages
 

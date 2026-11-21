@@ -23,8 +23,19 @@ internal static class ItemsRuntime
         IReadOnlyDictionary<string, string[]>? baseNames = null)
     {
         var initScripts = DiscoverInitScripts(plan, baseline);
-        if (initScripts.Length == 0 && !HasRegistrationCall(plan))
+        if (!HasRegistrationCall(plan) && (initScripts.Length == 0 || initScripts.All(IsFishOnlyInitializer)))
             return plan;
+
+        bool IsFishOnlyInitializer(string script)
+        {
+            var name = "gml_Script_" + script;
+            var selected = plan.Assets.FirstOrDefault(a => a.Family == "code" && a.Name == name);
+            string? text = selected?.Gml ?? baseline.GetValueOrDefault(name)?.Text;
+            if (text is null) return false;
+            string[] lines = text.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            return lines.Any(line => line.StartsWith("jamm_fish_register(", StringComparison.Ordinal))
+                && lines.All(line => line == "return 0;" || line.StartsWith("jamm_fish_register(", StringComparison.Ordinal));
+        }
 
         var assets = plan.Assets.ToList();
         var decisions = plan.Decisions.ToList();

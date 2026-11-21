@@ -1,3 +1,4 @@
+using Jamm.ModMaker;
 using System.Collections;
 using Jamm.Core.Acceptance;
 using Jamm.Core.Patching;
@@ -8,7 +9,11 @@ using UndertaleModLib.Models;
 namespace Jamm.Core.Building;
 
 /// <summary>A patch paired with the local archive whose entire-file SHA-256 must match it.</summary>
-public sealed record BuildInput(ModPatch Patch, string ArchivePath);
+public sealed record BuildInput(ModPatch Patch, string ArchivePath)
+{
+    /// <summary>Opts this input into shop repair for legacy items with no unlock path.</summary>
+    public bool UnlockFix { get; init; }
+}
 
 /// <summary>A completed build or an in-memory dry run, including decisions and archive counts.</summary>
 public sealed record BuildResult(BuildPlan Plan, GameInspection Base, VerificationResult? Verification,
@@ -22,13 +27,15 @@ public static class ArchiveBuilder
     /// <summary>Compiles a merged working copy; publishes only after the temporary output passes verification.</summary>
     public static BuildResult Build(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions = null, bool dryRun = false, Action<string>? progress = null,
-        CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false) =>
-        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack);
+        CancellationToken cancellationToken = default, AnalysisOptions? options = null, bool noRepack = false,
+        PerfSettings? perfSettings = null) =>
+        BuildLayer(basePath, inputs, output, resolutions, dryRun, progress, cancellationToken, options, noRepack, perfSettings: perfSettings);
 
     internal static BuildResult BuildLayer(string basePath, IReadOnlyList<BuildInput> inputs, string output,
         IReadOnlyDictionary<string, string>? resolutions, bool dryRun, Action<string>? progress,
         CancellationToken cancellationToken, AnalysisOptions? options, bool noRepack,
-        bool intermediate = false, IReadOnlyList<string>? additionalProtectedPaths = null, bool hasMergedBase = false)
+        bool intermediate = false, IReadOnlyList<string>? additionalProtectedPaths = null, bool hasMergedBase = false,
+        PerfSettings? perfSettings = null)
     {
         options ??= AnalysisOptions.Default;
         var reportProgress = progress;
@@ -71,9 +78,11 @@ public static class ArchiveBuilder
             var semantics = new SemanticCode(original.Data, sources.Select(s => s.Data).ToArray(), progress, options, original.Inspection.Sha256);
             var patches = semantics.Prepare(inputs.Select(i => i.Patch).ToArray());
             var baseReferences = PatchBuilder.ReferenceSnapshots(original.Data, new AssetFields(_ => { }, original.Data));
+            var unlockFixMods = inputs.Select((input, index) => (input, index)).Where(x => x.input.UnlockFix)
+                .Select(x => x.index).ToHashSet();
             // Order matters: ItemsRuntime owns jamm_api_init; FishRuntime runs last and only adds a standalone
             // jamm_api_init when no items runtime was injected.
-            var plan = BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, hasMergedBase);
+            var plan = BuildPlan.Create(patches, resolutions, baseReferences, semantics.Base, unlockFixMods, hasMergedBase);
             if (!intermediate)
                 plan = CatalogRuntime.PreparePlan(
                     FishRuntime.PreparePlan(
@@ -94,10 +103,11 @@ public static class ArchiveBuilder
             if (working.Inspection.Sha256 != workingAncestor.Inspection.Sha256)
                 throw new IOException("The working base changed during loading. Retry with stable input copies.");
             var data = working.Data;
+            IReadOnlyDictionary<string, string> generatedCode;
             using (new AnalysisPhase(options, "build/compile"))
             {
                 List<string> extraDecisions = [];
-                Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, progress, extraDecisions, intermediate);
+                generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate);
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -108,13 +118,30 @@ public static class ArchiveBuilder
                 string decision = TextureRepacker.RepackForBuild(data, output, progress, cancellationToken, options);
                 plan = plan with { Decisions = [.. plan.Decisions, decision] };
             }
-            var expectedReferences = semantics.Expected(plan, data);
+            var expectedReferences = semantics.Expected(plan, data, generatedCode);
             var mergedCode = ArchiveVerifier.ValidateSemantics(data, expectedReferences, cancellationToken, options, plan.Assets.FirstOrDefault(a => a.Name == CatalogMerge.Create)?.Gml);
             var remapped = semantics.Remapped(patches, data, plan.AssetRenames);
             progress?.Invoke($"Semantic reference verification passed: {expectedReferences.Count} code entries (selected mod hunks and unchanged base)");
+            var acceptance = intermediate ? null : AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
+            if (!intermediate && data.GameObjects.ByName(PerfMode.ControllerName) is not null)
+            {
+                // Verify selected source references and acceptance before profiling-independent
+                // runtime edits. The read-back verifier then checks the generated bytecode too.
+                List<UndertaleCode> perfEdits = [];
+                if (perfSettings is not null) PerfMode.ApplyDefaults(data, perfSettings, perfEdits);
+                string decision = FishGrid.Apply(data, perfEdits, perfSettings?.FishGrid ?? true);
+                plan = plan with { Decisions = [.. plan.Decisions, decision] };
+                if (perfEdits.Count > 0)
+                {
+                    var names = SemanticReferences.Names(data);
+                    var generated = CodeDecompiler.ReadAll(data, "JAMM Perf", _ => { },
+                        AssetSymbols.Ambiguous([names]), options, selected: perfEdits.Distinct().ToArray());
+                    foreach (var (name, code) in generated)
+                        expectedReferences[name] = SemanticReferences.Resolve(code.Text, name, names);
+                }
+            }
             ArchiveVerifier.ValidateReferences(data);
             var counts = Counts(data);
-            var acceptance = intermediate ? null : AnalyzeAcceptance(original.Data, inputs, sources, patches, plan, data, semantics, mergedCode);
             if (dryRun) return new(plan, original.Inspection, null, counts, 0, remapped, expectedReferences.Count, acceptance);
             progress?.Invoke("Writing temporary merged archive");
             var verification = Publish(output, protectedPaths, plan, original.Inspection, stream => UndertaleIO.Write(stream, data),
@@ -171,8 +198,9 @@ public static class ArchiveBuilder
         }
     }
 
-    private static void Apply(UndertaleData data, UndertaleData ancestor, IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan, Action<string>? progress, List<string> extraDecisions,
-        bool intermediate)
+    private static IReadOnlyDictionary<string, string> Apply(UndertaleData data, UndertaleData ancestor,
+        IReadOnlyList<UndertaleData> sources, IReadOnlyList<ModPatch> patches, BuildPlan plan,
+        IReadOnlyDictionary<string, CodeText> baseCode, Action<string>? progress, List<string> extraDecisions, bool intermediate)
     {
         var tables = ResourceCatalog.Tables(data);
         var sourceTables = sources.Select(ResourceCatalog.Tables).ToArray();
@@ -323,7 +351,10 @@ public static class ArchiveBuilder
         foreach (var room in data.Rooms)
             if (!data.GeneralInfo.RoomOrder.Any(e => e.Resource == room))
                 data.GeneralInfo.RoomOrder.Add(new(room, data.Rooms.IndexOf(room)));
-        ReassignRoomIds(data, ancestor);
+        // Intermediate base-mod layers keep area and weather declarations as plain code; the final
+        // pass places them once, together with the shared runtimes.
+        var generatedCode = intermediate ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
         if (!intermediate)
         {
             CatalogRuntime.Inject(data, recompile);
@@ -331,7 +362,9 @@ public static class ArchiveBuilder
             MenuRuntime.Inject(data, recompile);
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile);
+            WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
         }
+        ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
         var finalNames = SemanticReferences.Names(data);
@@ -342,6 +375,7 @@ public static class ArchiveBuilder
             compiler.QueueCodeReplace(code, AssetSymbols.Link(gml, name, finalNames));
         }
         ArchiveVerifier.Compile(compiler, "merged archive");
+        return generatedCode;
     }
 
     private static void ReassignRoomIds(UndertaleData data, UndertaleData ancestor)

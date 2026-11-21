@@ -1,0 +1,17 @@
+{
+  "cardPackageType": "Recipe",
+  "cardSummary": "Separates 60/120 FPS interpolated rendering from the original 30 ticks/s simulation. Press F7 in-game to cycle 60 / 120 / off.",
+  "summary": "JAMM Smooth interpolates the camera and motion for a 60 or 120 FPS display target. It preserves the legacy simulation cadence of 30 ticks per second and supports the game's Tab speed-up.",
+  "controls": [
+    "Press F7 to cycle 60 FPS, 120 FPS and off. The initial target is 120 FPS."
+  ],
+  "apis": "Built-in GameMaker event patching, instance activation and view interpolation.",
+  "assets": "1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 8 controller events and patches the existing `Girl.Step` event.",
+  "saves": "Remembers the selected target in `jamm_smooth.ini` under `[Smooth]`, key `TargetFPS`, shared by all slots.",
+  "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, HD Lite, Console and an independent third-party mod. The generator expects the original QuestEngine Begin Step reset and the legacy `Girl.Step` timing anchors.",
+  "how": [
+    "The `obj_jamm_smooth` controller schedules logic ticks from elapsed time. Between ticks it deactivates active instances, wakes them for drawing, and temporarily interpolates selected positions, angles and camera coordinates from the last two simulation states.",
+    "Keyboard or mouse edges on a render-only frame can promote it to a logic tick. The controller replays Begin Step for the woken instances before input handlers run. At the end of drawing it restores the simulation poses.",
+    "The generator replaces `delta_time` reads in `Girl.Step` with the elapsed time between logic ticks. It also verifies the QuestEngine counter reset so the controller can replay that reset before drawing render-only frames."
+  ]
+}

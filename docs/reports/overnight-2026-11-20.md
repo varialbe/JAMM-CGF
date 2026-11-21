@@ -2,12 +2,13 @@
 
 ## Kurzfassung (deutsch)
 
-* **Gemergt nach main:** nur `exp/texture-repack` (wie vereinbart). All-7: 417 → 119 Texturseiten, geschätzter VRAM 3,4 → 2,2 GB,
+* **Gemergt nach main:** `exp/texture-repack` und am Morgen `exp/resource-audit` (paralleles PNG-Rendering, Build 347→305 s, byte-identisch). All-7: 417 → 119 Texturseiten, geschätzter VRAM 3,4 → 2,2 GB,
   Datei 217 → 120 MB, alle Texturen pixelgleich. Läuft jetzt für **jeden** Build mit Mods (auch Einzelmods, Builtins, ModKit); Vanilla bleibt
   Byte für Byte gleich. Neue Datei: `~/jamm-night/builds/all7-repack.win`.
 * **Zum Anschauen (nicht gemergt):** Silo v2 mit Öffnungsanimation, Endless Ocean (Worldgen v0), Wetter-Mod. Bilder unter
   `~/jamm-night/review-2026-11-20/`. Meine ehrliche Einschätzung steht bei jedem Punkt – vor allem zu den Fischen.
-* **Weitere Branches:** siehe Abschnitt 6 (Fisch-Grid, Ressourcen-Audit, …) – Stand am Morgen.
+* **Weitere Branches:** Abschnitt 6 – Fisch-Grid (gleiches Verhalten, keine CPU-Ersparnis, nicht gemergt), Vels Rod/Boot-Punkte (fertig, vor Merge ingame bestätigen),
+  Base-Mod-Modus und Schwacher-PC-Preset wegen Codex-Limit um 08:08 gestoppt (Resume-Skript liegt bereit).
 * **Vorfälle:** Platte war um ~02:15 voll (behoben, Wächter läuft), RAM ist der Engpass auf dem VPS (all-7-Spiel ≈ 6 GB unter Wine).
 
 Start: `main` = `9e95bb2`. In-game tests ran on the VPS (Wine + real Steam client, Xvfb, llvmpipe – no GPU, so no FPS numbers).
@@ -35,7 +36,8 @@ Verification (own, on the final code): all-7 built through the normal profile pa
 pixel comparison against the unpacked build passed for every live texture item (pixels, fields, collision masks); full suite
 446 core + 127 GUI green, zero warnings; **dock RECORDED** with the final build. Deepwater was RECORDED by Codex on 709fb37 (same atlas:
 identical `417 -> 119` decision; later changes were lossless PNG encoding, gating and the keep-guard). My own deepwater run with the final
-build was stopped by Claude Code's low-memory reaper and not restarted – **to repeat:** `~/jamm-night/bin/run.sh ~/jamm-night/builds/all7-repack.win tex dock|deepwater 600`.
+build was stopped by Claude Code's low-memory reaper; the resource audit later ran all-7 **deepwater RECORDED** with the same 119 pages
+(identical PNG payloads). To repeat: `~/jamm-night/bin/run.sh ~/jamm-night/builds/all7-repack.win tex dock|deepwater 600`.
 On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
 
 ## 2. Silo v2 + Area API + opening animation – for review (`exp/silo-v2`, 673a0ee)
@@ -83,7 +85,7 @@ On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
   jobs only with > 2.5 GB available RAM.
 * `run.sh` used to `pkill` any running game for non-silo scenes – with several agents that killed other agents' runs. It now waits (≤ 20 min).
 * `tmux has-session -t name` prefix-matches (`jamm-silo2` matched `jamm-silo2-next`, the follow-up waited for itself) → exact `-t =name`.
-* Night queue: max 2 concurrent `codex exec` processes (counted directly), stops on a quota message. No Codex quota limit was hit tonight.
+* Night queue: max 2 concurrent `codex exec` processes (counted directly), stops on a quota message. The Codex subscription limit was hit at 08:08 (see section 6).
 
 ## 6. Other branches (state at 07:45; jobs keep running)
 
@@ -100,7 +102,7 @@ On the PC to verify: VRAM/FPS on Vel's iGPU laptop with `all7-repack.win`.
   452 → 400 ms/tick, but a single pair on a shared VPS. Conclusion so far: behaviour-identical, but the quadratic cost is not where the
   grid helps; the remaining big cost is per-fish work and the global selectors. Do not merge as Perf default. 587 tests green. The profiler/bench tooling (own merge commit in that branch) is useful on its own and could go to main separately – your call.
 
-### Resource audit (`exp/resource-audit`) – Part A done, Part B (parallel PNG rendering in the repacker) in progress
+### Resource audit (`exp/resource-audit`) – done, **merged** (`97dad4f`)
 
 Measured on the VPS (repacked builds, llvmpipe; RSS includes Wine's CPU-side texture copies):
 
@@ -114,12 +116,34 @@ Measured on the VPS (repacked builds, llvmpipe; RSS includes Wine's CPU-side tex
   one 213 s cave ambience → candidate for streaming). No byte-identical duplicates after merge.
 * GM 1.4 runner: only per-sprite/background prefetch/flush, no whole-page flush; no mod uses them. Page uploads stay flat from title to
   deepwater (all pages resident) – so the repack's page reduction is the main VRAM lever.
-* Build time all-7: 347 s, of which **texture repack 158 s** (PNG decode 412× + re-decode 723× during rendering) → Part B parallelises/caches that.
+* Build time all-7: 347 s, of which **texture repack 158 s**. Part B (merged): bounded parallel PNG decode/encode (≤ 2 workers, serial for huge pages,
+  deterministic – 1- and 2-worker archives byte-identical, PNG date chunks dropped): repack **157.5 → 101.5 s**, build **347 → 305 s**; pixel test passed,
+  all-7 dock + deepwater RECORDED, 447 core + 127 GUI green.
+* **Real VRAM is higher than the page estimate:** the D3D9 trace shows all 119 pages uploaded before the title screen, and power-of-two rounding +
+  mipmaps bring the requested texture allocation for all-7 to **3,841 MiB** (vs. 2,171 MiB RGBA8 page estimate). Next levers: unreferenced-asset
+  stripping (two dedicated background pages ≈ 24 MiB), and checking whether mipmaps can be avoided for the legacy runner (weak-PC preset).
 * In-game multithreading: GML is single-threaded; a native DLL for neighbour search is not justified by the grid result above.
 * GPU plan for the PC (draw calls, per-fish lights) is in the audit report.
 
-### Queued, not started yet
-Vel's rod/boat points (ModKit JSON rods + unlock checker), base-mod mode, weak-PC preset (specs on main, queue `jamm-queue`).
+### Vel's rod/boat points (`exp/vel-rods-boats`, 4ea5cbc) – done, ready to merge after an in-game confirmation
+
+* **ModKit JSON rods**: `rods` array with the GML API's fields, `upgrade_slots` as number or `"vanilla"`, same `cost`/`unlocked` style as boats;
+  generates the existing `jamm_rod_register` call. Example mod: rod "Copper Current" appears in the shop for $25,000 (dock RECORDED,
+  screenshot `~/jamm-night/review-2026-11-20/vel/velrod-shop.png`). GUI editor + docs updated.
+* **Unlock checker** (`CGF-UNLOCK-001/002`) over all seven mods found two items without any unlock path, with evidence:
+  Abyss **Hyper Boat** (row starts hidden, nothing ever exposes slot 8) and Cave **Mystic Rod** (row is purchasable but Cave leaves
+  `RodData.nItems` at 6, so the shop never shows it). Reachable items (Antiquity Dark Boat, Cave Mystic Boat, TGE Echo-9/Proto-Rod) were
+  checked by hand with their evidence.
+* **Opt-in repair** per profile (`cgfmm profile unlockfix <profile> <mod> on`, GUI checkbox): makes such items buyable (Hyper Boat $10,000,000,
+  Mystic Rod $680,000). Off by default. 597 tests green.
+* Before merging: ask Vel/you to confirm in game that Hyper Boat and Mystic Rod are really unobtainable in the original mods.
+
+### Stopped by the Codex usage limit (08:08)
+Codex hit the subscription usage limit ("try again at 9:12 AM"). Per your rule no API keys were used and nothing was restarted automatically.
+* Base-mod mode: unfinished; its uncommitted work is saved as WIP commit `5f6ce29` on `exp/base-mod` (pushed).
+* Weak-PC preset: had just started (only merged exp/fish-perf into its branch); spec now includes the mipmap/VRAM findings.
+* To continue both after the limit resets (same Codex sessions, subscription only):
+  `tmux new -d -s jamm-resume "bash ~/jamm-wt/resume-after-quota.sh"`.
 
 ## What I need from you
 

@@ -22,13 +22,20 @@ public sealed class ProfileInstaller(ManagerStore store)
         var profile = new ProfileLibrary(store).Get(name ?? config.ActiveProfile
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
         var loaded = ProfileSelection.Load(store, profile, false, progress, cancellationToken);
-        string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        // Existing Perf installations need a rebuild even when the bundled input archive is unchanged.
+        string builder = profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal)
+            ? "menu-layout-3-fish-grid-1" : "menu-layout-3";
+        var inputs = loaded.Inputs.ToArray();
+        string signatureText = JsonSerializer.Serialize(new
         {
-            Builder = profile.EnabledMods.Length > 0 && !profile.NoRepack ? $"menu-layout-3/{TextureRepacker.Revision}" : "menu-layout-3",
-            InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Builder = profile.EnabledMods.Length > 0 && !profile.NoRepack ? $"{builder}/{TextureRepacker.Revision}" : builder,
+            InstanceCompatibility.Revision, profile.Name, profile.Preset, profile.Perf, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Roles = loaded.Group.Select(row => new { row.Mod.Id, row.Role, Ancestor = row.Ancestor?.Id }),
-            Base = loaded.VanillaHash, Game = Path.GetFullPath(config.GameDir), Patches = loaded.Inputs.Select(i => i.Patch)
-        }, ManagerStore.JsonOptions))));
+            Base = loaded.VanillaHash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
+        }, ManagerStore.JsonOptions);
+        if (inputs.Any(i => i.UnlockFix))
+            signatureText += "\nLegacy shop repair v1: " + string.Join(",", inputs.Where(i => i.UnlockFix).Select(i => i.Patch.Mod.Sha256));
+        string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(signatureText)));
         return (profile, config, loaded, signature);
     }
 
@@ -109,6 +116,8 @@ public sealed class ProfileInstaller(ManagerStore store)
             BuildFiles.Resolve(Path.Combine(prepared.Config.GameDir!, "data.win")));
         GameInstaller.Install(prepared.OutputPath, prepared.Config.GameDir!, prepared.BaseSha256,
             selection.Loaded.Inputs.Select(i => i.ArchivePath), prepared.Config.Base, prepared.Build.Plan.Catalog);
+        if (prepared.Profile.Perf.StartEnabled && prepared.Profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal))
+            PerfIni.Seed(prepared.Config, store.Root);
         // First-run desktop setup may choose the game's own archive. Once installed,
         // keep subsequent checks bound to the verified ancestor rather than the replacement.
         if (rebase)

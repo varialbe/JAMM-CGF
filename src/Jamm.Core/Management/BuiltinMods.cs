@@ -14,7 +14,7 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 public sealed class BuiltinMods(ManagerStore store)
 {
     /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "3";
+    public const string GeneratorVersion = "4";
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {
@@ -79,7 +79,7 @@ public sealed class BuiltinMods(ManagerStore store)
                 cancellationToken.ThrowIfCancellationRequested();
                 switch (id)
                 {
-                    case "perf": PerfMod.Apply(data); break;
+                    case "perf": PerfMod.Apply(data, applyFishGrid: false); break;
                     case "smooth": SmoothMod.Apply(data); break;
                     case "hd-lite": HdMod.Apply(data, null); break;
                     case "console": ConsoleMod.Apply(data); break;

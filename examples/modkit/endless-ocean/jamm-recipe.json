@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "endless-ocean",
+  "generator": "endless-ocean",
+  "name": "Endless Ocean",
+  "version": "0.1.0",
+  "description": "A seeded ocean floor and vanilla fish beyond NewWorld.",
+  "seed": 271828
+}

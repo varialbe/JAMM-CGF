@@ -192,7 +192,7 @@ public sealed class BaseModTests : IDisposable
         var (store, _, overhaul) = MakeOverhaul();
         File.WriteAllText(Path.ChangeExtension(overhaul, ".jamm.json"), """{"id":"overhaul","role":"base"}""");
         string package = Directory.CreateDirectory(Path.Combine(root, "modkit")).FullName;
-        File.WriteAllText(Path.Combine(package, "jamm-mod.json"), """{"id":"modkit-addon","name":"ModKit addon","base":"overhaul"}""");
+        File.WriteAllText(Path.Combine(package, "jamm-mod.json"), """{"id":"modkit-addon","name":"ModKit addon","base":"overhaul","objects":[{"key":"marker","depth":0}]}""");
         var library = new ModLibrary(store);
         Assert.Contains("requires base", Assert.Throws<InvalidDataException>(() => library.Add(package)).Message);
         var foundation = library.Add(overhaul).Mod;
@@ -205,7 +205,9 @@ public sealed class BaseModTests : IDisposable
         profiles.Create("package", [addon.Id, foundation.Id]);
         var selection = ProfileSelection.Load(store, profiles.Get("package"), false, null, default);
         Assert.Equal(foundation.Sha256, Assert.Single(selection.Addons).Patch.Base.Sha256);
-        Assert.Empty(selection.Addons[0].Patch.Changes["objects"].Added);
+        // Only the package's own object is new relative to the overhaul; the overhaul's objects are inherited.
+        Assert.DoesNotContain(selection.Addons[0].Patch.Changes["objects"].Added, a => a.Name == OverhaulObject);
+        Assert.Single(selection.Addons[0].Patch.Changes["objects"].Added);
     }
 
     private (ManagerStore Store, string Original, string Overhaul) MakeOverhaul()

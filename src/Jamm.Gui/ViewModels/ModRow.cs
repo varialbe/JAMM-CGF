@@ -11,6 +11,8 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     private bool keepAuthorPerformanceChanges;
     private bool keepAuthorHudDesign;
     private bool keepAuthorGameplayChanges;
+    private bool inProfile;
+    private bool unlockFix;
     private int removedPerformanceCount;
     private int removedHudCount;
     private int removedGameplayCount;
@@ -72,6 +74,10 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     public bool KeepAuthorHudDesign { get => keepAuthorHudDesign; set => SetProperty(ref keepAuthorHudDesign, value); }
     /// <summary>Advanced per-mod opt-out that keeps the author's gameplay/sonar changes instead of enforcing vanilla progression.</summary>
     public bool KeepAuthorGameplayChanges { get => keepAuthorGameplayChanges; set { if (SetProperty(ref keepAuthorGameplayChanges, value)) OnPropertyChanged(nameof(CanKeepAuthorGameplayChanges)); } }
+    /// <summary>Whether this mod belongs to the selected saved profile.</summary>
+    public bool InProfile { get => inProfile; internal set => SetProperty(ref inProfile, value); }
+    /// <summary>Whether the selected profile repairs this mod's unreachable boat and rod shop rows.</summary>
+    public bool UnlockFix { get => unlockFix; set => SetProperty(ref unlockFix, value); }
     /// <summary>Immutable library ID.</summary>
     public string Id { get; } = id;
     /// <summary>User-facing display name.</summary>

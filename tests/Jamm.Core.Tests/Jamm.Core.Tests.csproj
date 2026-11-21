@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <EmbeddedResource Include="Gml/fish_grid.gml" />
   </ItemGroup>
 
   <ItemGroup>

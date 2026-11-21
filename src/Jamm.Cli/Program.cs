@@ -54,7 +54,7 @@ int Run(string[] arguments)
             cgfmm compat-scan --base <data.win> --db <compat.db> --export <directory>
             cgfmm diff <original.win> <mod.win> [--name <name>] [--out <file>] [--force] [--json-summary] [--show <asset>] [--verbose]
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
-            cgfmm check <mod-or-patch> <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
+            cgfmm check <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm check --profile <name> [--strict] [--json <file>] [--details <asset>]
             cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--dry-run] [--verbose]
             cgfmm build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]
@@ -69,6 +69,11 @@ int Run(string[] arguments)
             cgfmm profile resolve <name> <asset> <mod|keep-both>
             cgfmm profile repack <name> on|off
             cgfmm profile base <name> <mod> | addon <name> <mod> <base> | role <name> <mod> none
+            cgfmm profile preset <name> weak-pc|default
+            cgfmm profile builtin <name> <id> on|off
+            cgfmm profile perf <name> mode|grid on|off
+            cgfmm profile perf <name> interval <ticks>
+            cgfmm profile unlockfix <profile> <mod> on|off
             cgfmm apply [--profile <name>] [--yes]
             cgfmm play [--profile <name>] [--yes]
             cgfmm restore [--game <game dir>] [--verbose]

@@ -15,11 +15,12 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `modkit new <dir> [--template fish\|upgrade\|boat\|hat]` | Scaffold a starter ModKit folder package (`jamm-mod.json` + PNG + hook) |
 | `modkit check <dir>` | Validate `jamm-mod.json`, PNG headers/frames, and hook paths without building |
 | `modkit build <dir> [--base <data.win>] [--out <file.win>] [--no-repack]` | Compile a ModKit folder onto the legacy base (defaults to `config.base` and `<dir>/<id>.win`) |
+| `check <mod-or-patch> [...] --base <data.win>` | Check conflicts and inspect legacy boat and rod unlock paths |
 | `list [--json]` | Show IDs, names, base hash/timestamp/version compatibility and patch cache validity |
 | `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
 | `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
 | `profile list [--json]` | List profiles and mark the active selection in text output |
-| `profile show <name> [--json]` | Show order and resolution choices |
+| `profile show <name> [--json]` | Show order, enablement, performance settings, and resolution choices |
 | `profile use <name>` | Select a profile for apply/play |
 | `profile delete <name>` | Delete a profile, clearing the active selection if needed |
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
@@ -29,6 +30,11 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `profile role <name> <mod> none` | Assign the vanilla role, overriding any package declaration |
 | `check --profile <name> [--strict] [--json <file>] [--details <asset>]` | Check the profile's enabled groups against their respective ancestors |
 | `build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]` | Build the profile with saved choices and write a verified archive |
+| `profile preset <name> weak-pc\|default` | Apply Weak PC or restore the previous profile settings |
+| `profile builtin <name> <id> on\|off` | Enable or disable a bundled mod in the profile |
+| `profile perf <name> mode\|grid on\|off` | Set the startup default for F8 scheduling or the fish grid |
+| `profile perf <name> interval <ticks>` | Set the default distant-fish update interval from 1 to 60 ticks |
+| `profile unlockfix <profile> <mod> on\|off` | Opt a mod into legacy boat and rod shop repair for this profile. Defaults to off. |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
 | `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
 | `restore` | Restore the configured game directory and retain all original backups |
@@ -58,6 +64,8 @@ prefix addon choices with `addons/`, for example
 `addons/code/<entry>#<zero-based ancestor line>`. Use `apply --profile <name>`
 to install the profile with a vanilla backup. A profile dry run can use temporary
 files in the manager's builds directory and leaves the requested output path alone.
+
+`check` reports `CGF-UNLOCK-001` for boats and `CGF-UNLOCK-002` for rods when it finds no unlock path. The finding names the item, slot, and source tables or events. Use `profile unlockfix` to make eligible items buyable on the next build. The build lists each repaired item and its price.
 
 `wine.mode` accepts `wine`, `proton`, or `proton-flatpak`. For Flatpak Steam, start
 Steam first; see the [Flatpak Steam setup](user-guide.md#flatpak-steam) for defaults

@@ -44,6 +44,9 @@ API and ModKit mods avoid shared assets completely:
 6. **[Scrollable Menus](menus.md)** — how paging works in shops and upgrade menus for players and modders.
 7. **[Troubleshooting](troubleshooting.md)** — common build, GML 1.4, sprite, gameplay, and merge fixes.
 8. **[Catalog API](../catalog-api.md)** — deep dive into `jamm_catalog_register` and legacy fish-catalog relocation.
+9. **[Chunk streaming](chunks.md)** for seeded layouts and instance ownership in legacy rooms.
+
+10. **[Weather API](weather.md)** — custom sky layers, fish schools, schedules and audio.
 
 ## Examples in this repository
 
@@ -51,3 +54,6 @@ API and ModKit mods avoid shared assets completely:
 * [`examples/modkit/showcase-upgrades/`](../../examples/modkit/showcase-upgrades/) — five idempotent rod upgrades (**Turbo Reel**, **Deep Diver**, **Iron Line**, **Fish Magnet**, **Golden Touch**) demonstrating both `apply` and `step` hooks.
 * [`examples/modkit/harbor-pack/`](../../examples/modkit/harbor-pack/) — two boats (**Paddle Raft** and **Comet Cruiser**, triggering page 2 of the Boat shop alongside the 8 vanilla boats) and two hats (**Fisher's Beanie** and **Lucky Captain Hat**, with an `effect` hook boosting fish sale value).
 * [`examples/modkit/make-art.py`](../../examples/modkit/make-art.py) — Python standard-library script used to generate the example pixel art PNGs.
+* [Endless Ocean](../../examples/modkit/endless-ocean/) adds a seeded ocean floor and vanilla fish east of NewWorld.
+
+See [Building an area](areas.md) and [The Silo tutorial](../../examples/modkit/silo/README.md) for a deep-water ModKit example.

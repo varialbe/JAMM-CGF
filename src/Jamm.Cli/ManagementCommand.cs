@@ -135,23 +135,54 @@ internal static class ManagementCommand
                         else
                         {
                             Console.WriteLine($"Profile {profile.Name} (later mods win within each group):");
+                            Console.WriteLine($"  Preset: {profile.Preset}");
                             PrintGroup(profiles.Group(profile), includeDisabled: true);
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
                             Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for modded builds")}");
+                            Console.WriteLine($"  Perf defaults: F8 mode {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid {(profile.Perf.FishGrid ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence).");
+                            foreach (string id in profile.UnlockFixMods ?? [])
+                                Console.WriteLine($"  Repair legacy shop unlocks: {library.Find(id).Name}");
                         }
                         break;
                     case "use": Count(2); profiles.Use(positional[1]); Console.WriteLine($"Active profile: {positional[1]}."); break;
                     case "repack":
                         Count(3);
-                        bool enabled = positional[2] switch
-                        {
-                            "on" => true, "off" => false,
-                            _ => throw new ArgumentException("Use profile repack <name> on|off.")
-                        };
-                        profiles.SetRepack(positional[1], enabled);
+                        profiles.SetRepack(positional[1], OnOff(positional[2]));
                         Console.WriteLine($"Texture repacking for '{positional[1]}': {positional[2]}.");
                         break;
+                    case "preset":
+                        Count(3);
+                        profiles.SetPreset(positional[1], positional[2], Progress);
+                        Console.WriteLine($"Preset for '{positional[1]}': {positional[2]}. Apply the profile or press Play to rebuild.");
+                        break;
+                    case "builtin":
+                        Count(4);
+                        profiles.SetBuiltin(positional[1], positional[2], OnOff(positional[3]), Progress);
+                        Console.WriteLine($"Set {positional[2]} for '{positional[1]}' to {positional[3]}.");
+                        break;
+                    case "perf":
+                        Count(4);
+                        _ = positional[2] switch
+                        {
+                            "mode" => profiles.SetPerf(positional[1], startEnabled: OnOff(positional[3])),
+                            "grid" => profiles.SetPerf(positional[1], fishGrid: OnOff(positional[3])),
+                            "interval" when int.TryParse(positional[3], out int interval) => profiles.SetPerf(positional[1], interval: interval),
+                            _ => throw new ArgumentException("Use profile perf <name> mode|grid on|off or profile perf <name> interval <ticks>.")
+                        };
+                        Console.WriteLine($"Set Perf {positional[2]} for '{positional[1]}' to {positional[3]}.");
+                        break;
                     case "delete": Count(2); profiles.Delete(positional[1]); Console.WriteLine($"Deleted profile '{positional[1]}'."); break;
+                    case "unlockfix":
+                        Count(4);
+                        bool unlockFix = positional[3] switch
+                        {
+                            "on" => true,
+                            "off" => false,
+                            _ => throw new ArgumentException("Use profile unlockfix <profile> <mod> on|off.")
+                        };
+                        profiles.SetUnlockFix(positional[1], positional[2], unlockFix);
+                        Console.WriteLine($"Legacy shop unlock repair for '{positional[2]}' in '{positional[1]}': {positional[3]}.");
+                        break;
                     case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3], Console.WriteLine); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
                     case "base":
                     case "addon":
@@ -227,5 +258,11 @@ internal static class ManagementCommand
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
+    private static bool OnOff(string value) => value switch
+    {
+        "on" => true,
+        "off" => false,
+        _ => throw new ArgumentException("Choose 'on' or 'off'.")
+    };
     private static void Progress(string message) => Console.Error.WriteLine(message);
 }

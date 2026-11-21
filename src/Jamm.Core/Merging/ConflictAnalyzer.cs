@@ -26,11 +26,20 @@ public static class ConflictAnalyzer
         var relocation = Building.LegacySlotRelocation.Prepare(assetRelocation.Patches);
         var catalog = Building.CatalogMerge.Prepare(relocation.Patches);
         var report = AnalyzePrepared(catalog.Patches, relocation, catalog.Mapping, allowSingle, cancellationToken);
-        if (assetRelocation.Decisions.Count == 0) return report;
+        string[] labels = report.LoadOrder.Select(m => m.Name).ToArray();
+        var rooms = report.FieldMerges.Where(r => r.Family == "rooms").ToDictionary(r => r.Asset, r => r.Snapshot, StringComparer.Ordinal);
+        var areas = Building.AreaDeclarations.Diagnose(catalog.Patches, labels, rooms);
+        if (areas.Count > 0) report = report with { Findings = [.. report.Findings, .. areas] };
         string[] modNames = patches.Select(Name).ToArray();
         var renames = assetRelocation.Decisions.Select(d => new ConflictItem(d.StartsWith("WARNING", StringComparison.Ordinal) ? "WARNING" : "INFO",
             "relocation", "assets", "asset-name", modNames, d));
-        return report with { Findings = [.. renames, .. report.Findings] };
+        List<ConflictItem> unlocks = [];
+        for (int i = 0; i < relocation.Patches.Length; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            unlocks.AddRange(Building.LegacyItemUnlocks.Analyze(relocation.Patches[i]).Select(f => f.ToConflict(report.LoadOrder[i].Name)));
+        }
+        return report with { Findings = [.. renames, .. report.Findings, .. unlocks] };
     }
 
     internal static ConflictReport AnalyzePrepared(
@@ -308,8 +317,10 @@ public static class ConflictAnalyzer
             var declaredReferences = references.Select(r => r.ToHashSet()).ToArray();
             var roomChanges = patches.Select(p => p.Changes.GetValueOrDefault("rooms")?.Changed
                 .ToDictionary(r => r.Name, StringComparer.Ordinal) ?? []).ToArray();
-            // A room snapshot includes every ancestor placement. An additive patch is only
-            // responsible for its new placements when the deleting mod removed the old reference.
+            var addedRooms = patches.Select(p => p.Changes.GetValueOrDefault("rooms")?.Added
+                .Select(room => room.Name).ToHashSet(StringComparer.Ordinal) ?? []).ToArray();
+            // Full archive snapshots also include ancestor placements. Consumers with no room
+            // edits, or only unrelated additions, do not contribute this deleted placement.
             const string instancePath = "/instances/";
             var addedPlacements = roomChanges.Select(rooms => rooms.Values
                 .Where(room => room.Fields.Count > 0 && room.Fields.All(field =>
@@ -338,7 +349,7 @@ public static class ConflictAnalyzer
                             // If B also removes the target there is no cross-mod survivor.
                             if (patches[b].Changes[family].Removed.Contains(removed, StringComparer.Ordinal)) continue;
                             var relevant = references[b].Where(r => r.TargetFamily == family && r.Target == removed
-                                && !OnlyAddsUnrelatedPlacements(a, b, r)).ToArray();
+                                && !OnlyInheritsRoomPlacement(a, b, r)).ToArray();
                             var users = relevant.Select(r => $"{r.Family}/{r.Asset}")
                                 .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
                             bool dependsOnChoice = relevant.Any(r => conditional.Contains((r.Family, r.Asset)))
@@ -486,10 +497,12 @@ public static class ConflictAnalyzer
                 families.Add(family);
             }
 
-            bool OnlyAddsUnrelatedPlacements(int deletingMod, int otherMod, AssetReference reference) =>
-                reference.Family == "rooms" && addedPlacements[otherMod].TryGetValue(reference.Asset, out var added)
-                && !added.Contains(reference) && roomChanges[deletingMod].ContainsKey(reference.Asset)
-                && !declaredReferences[deletingMod].Contains(reference);
+            bool OnlyInheritsRoomPlacement(int deletingMod, int otherMod, AssetReference reference) =>
+                reference.Family == "rooms" && roomChanges[deletingMod].ContainsKey(reference.Asset)
+                && !declaredReferences[deletingMod].Contains(reference)
+                && (addedPlacements[otherMod].TryGetValue(reference.Asset, out var added)
+                    ? !added.Contains(reference)
+                    : !roomChanges[otherMod].ContainsKey(reference.Asset) && !addedRooms[otherMod].Contains(reference.Asset));
 
             IReadOnlyList<AssetReference> SurvivingReferences(string family, string asset)
             {

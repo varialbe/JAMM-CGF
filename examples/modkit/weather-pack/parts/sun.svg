@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="228" height="228" viewBox="0 0 228 228">
+  <circle cx="114" cy="114" r="94" fill="#fff3c0" fill-opacity=".34"/>
+  <circle cx="114" cy="114" r="76" fill="#ffedac" fill-opacity=".52"/>
+  <path d="M114 1l7 31h-14z M227 114l-31 7v-14z M114 227l-7-31h14z M1 114l31-7v14z M34 34l27 16-11 11z M194 34l-16 27-11-11z M194 194l-27-16 11-11z M34 194l16-27 11 11z" fill="#fff4b4"/>
+  <circle cx="114" cy="114" r="57" fill="#ffe390"/>
+  <circle cx="110" cy="109" r="47" fill="#fff0aa"/>
+</svg>

@@ -67,6 +67,11 @@ the base library ID in `base` and can retain the package's `baseVersion` and
 `baseSha256` constraints. Addon conflict keys begin with `addons/` so vanilla
 and addon conflicts on the same asset can have independent choices.
 
+`preset` defaults to `default`. `noRepack` and `perf` record the profile's
+effective build and startup settings. While `preset` is `weak-pc`,
+`beforeWeakPc` records the settings to restore when the preset is disabled.
+Change them through the Manager or the [profile CLI commands](cli.md).
+
 `config.json` uses these CLI keys (paths are stored absolute):
 
 | CLI key | JSON field | Default / purpose |
