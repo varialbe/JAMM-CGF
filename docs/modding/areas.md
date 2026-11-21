@@ -41,6 +41,12 @@ Piece and light coordinates are offsets from the bounds' top-left corner. A piec
 
 `opens.sprite` selects a base sprite by name or a [sprite recipe](modkit-reference.md#sprite-recipes) by key. JAMM sets the placed instance's `sprite_index` and `mask_index` to that sprite. Use matching coordinates and origin if replacing the appearance of an existing instance. `opens.maskFrame` selects a zero-based collision mask from the original object's mask sprite. If both fields are present, `maskFrame` supplies the collision shape and `sprite` supplies the appearance. An opening that changes a sprite's collision must leave enough room for the lure to enter and exit.
 
+## Draw a foreground piece
+
+Place a custom object from `objects[]` in `pieces` to draw a foreground lip. Give it a lower `depth` than the objects it should cover. In NewWorld, the cast lure and its line normally draw at −1.55. A hooked lure draws at the fish's depth plus 0.002, and native fish can reach −19. The Silo sets its lip depth to −19.25 through the piece's `set` assignments. That draws over the fish and before the native lighting at −19.5, so the lip shares the rear rock's lighting. The rear rock stays at the MissileSilo's native depth of 0. Set `solid: false` on the visual piece so area spawn checks skip it.
+
+Use a sprite recipe with `crop` and `alphaMask` to reuse the pixels along a lip. Subtract the crop's top-left coordinates from the source origin, and draw it at the rear sprite's position, rotation and scale. Limit the lip to the mouth so the lure comes back into view inside the shaft. A controller can read those transforms from the colocated landmark, which also handles a follow anchor that rotated.
+
 ## Fill the area with fish
 
 Add a regular [ModKit fish](modkit-reference.md#fish-entries) with `"spawn": {"area": "lower-pocket", "count": 4}`. To limit a species to part of the area, add `"within": {"x":200,"y":600,"w":450,"h":380}`, relative to the same bounds. JAMM chooses distinct initial positions inside the resolved area and inside the room. In `NewWorld` it starts at Y = 1294. It checks legacy room collision masks, scales and rotations for solid objects and descendants of `Collidable`. An area piece can override this classification with `solid: true` or `solid: false`.

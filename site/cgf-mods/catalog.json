@@ -139,9 +139,9 @@
     "packageType": "modkit",
     "manifestFile": "jamm-mod.json",
     "isDefault": false,
-    "version": "2.2.0",
-    "sha256": "9bbfc6aaed00b72540b5f6ad5c174887deb8e7a80e4ef9cbcbead0fb99b11acb",
-    "sizeBytes": 7633
+    "version": "2.3.0",
+    "sha256": "d4c942dcdeab793a5fa6a254ebf03b394420ad4fca089012bda5f5e3473ad9c9",
+    "sizeBytes": 10596
   },
   {
     "id": "weather-pack",

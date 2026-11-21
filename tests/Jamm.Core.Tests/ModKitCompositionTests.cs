@@ -52,6 +52,37 @@ public sealed class ModKitCompositionTests
     }
 
     [Fact]
+    public void AlphaMaskPreservesRgbAndClipsTheCropBeforeFlipping()
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        using var data = UndertaleData.CreateNew();
+        AddDonor(temp, data);
+        string package = temp.Package("""
+            {"id":"kit","name":"Mask Test","sprites":[{"key":"plate","width":4,"height":2,"compose":[
+              {"from":"spr_donor","crop":{"x":1,"y":0,"w":2,"h":1},"alphaMask":"plate.svg","flip":"x","x":1}
+            ]}]}
+            """);
+        string mask = Path.Combine(package, "plate.svg");
+        File.WriteAllText(mask, """
+            <svg xmlns="http://www.w3.org/2000/svg" width="2" height="1">
+              <rect width="1" height="1" fill="#0000ff" fill-opacity="0.5"/>
+            </svg>
+            """);
+        var recipe = Assert.Single(ModKitPackage.Load(package).Sprites);
+        using var compositor = new ModKitComposition(data);
+        using var frame = compositor.Render(recipe, 0);
+        using var pixels = frame.GetPixels();
+        Assert.Equal(0, pixels.GetArea(1, 0, 1, 1)![3]);
+        Assert.Equal(new byte[] { 255, 0, 0, 128 }, pixels.GetArea(2, 0, 1, 1)!);
+
+        File.WriteAllText(mask, """
+            <svg xmlns="http://www.w3.org/2000/svg" width="3" height="1"/>
+            """);
+        var error = Assert.Throws<InvalidDataException>(() => compositor.Render(recipe, 0));
+        Assert.Contains("Alpha mask 'plate.svg' must match the cropped layer's 2×1 size", error.Message);
+    }
+
+    [Fact]
     public void EdgeSoftnessAntialiasesTheSilhouetteWithoutChangingOpaqueColor()
     {
         using var temp = new ModKitAreaTests.AreaTestDirectory();

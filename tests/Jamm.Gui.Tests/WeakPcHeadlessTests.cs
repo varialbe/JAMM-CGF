@@ -55,4 +55,43 @@ public sealed class WeakPcHeadlessTests
         }
         finally { window.Close(); vm.Browse.Dispose(); }
     }
+
+    [AvaloniaFact]
+    public async Task ProfileFairPlayAndFishCapAreSavedFromPerformanceSettings()
+    {
+        using var files = new TestFiles();
+        files.Store.Set("useSharedCompatibilityResults", "false");
+        var profiles = new ProfileLibrary(files.Store);
+        profiles.CreateEmpty("test");
+        profiles.Use("test");
+        var vm = new MainViewModel(files.Store, gameSearch: (_, _) => []);
+        await vm.InitializeAsync();
+        var window = new MainWindow(false) { DataContext = vm };
+        try
+        {
+            window.Show();
+            window.UpdateLayout();
+            var button = window.FindControl<Button>("PerformanceSettingsButton")!;
+            var flyout = Assert.IsType<Flyout>(button.Flyout);
+            flyout.ShowAt(button);
+            var panel = Assert.IsType<StackPanel>(flyout.Content);
+            var checkbox = panel.Children.OfType<CheckBox>().Single(c => c.Content?.ToString()?.StartsWith("Fair-Play") == true);
+            var cap = panel.Children.OfType<NumericUpDown>().Single(n => n.Minimum == 0);
+            Assert.True(checkbox.IsChecked);
+            Assert.Equal(100_000_000m, cap.Value);
+            checkbox.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (vm.IsBusy) await Task.Delay(10, timeout.Token);
+            Assert.False(profiles.Get("test").FairPlay);
+
+            cap.Value = 0;
+            while (vm.IsBusy) await Task.Delay(10, timeout.Token);
+            var saved = profiles.Get("test");
+            Assert.Equal(0, saved.FishValueCap);
+            Assert.False(saved.FairPlay);
+            Assert.False(saved.NoBigMoney);
+        }
+        finally { window.Close(); vm.Browse.Dispose(); }
+    }
+
 }

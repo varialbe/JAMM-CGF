@@ -1,3 +1,5 @@
+using Jamm.Core.Building;
+
 namespace Jamm.Core.Management;
 
 /// <summary>Persistent paths, selected profile and Wine/Proton settings.</summary>
@@ -108,6 +110,12 @@ public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, s
     public string[]? UnlockFixMods { get; init; }
     /// <summary>Skips atlas repacking when building this profile's enabled mods.</summary>
     public bool NoRepack { get; init; }
+    /// <summary>Keeps the legacy $999,999,999 wallet clamp and full-number money display in this profile's builds.</summary>
+    public bool NoBigMoney { get; init; }
+    /// <summary>Detects and guards clear debug stat values in this profile's modded builds.</summary>
+    public bool FairPlay { get; init; } = true;
+    /// <summary>Maximum fish sale value. Zero disables the sale cap.</summary>
+    public long FishValueCap { get; init; } = ValueGuardOptions.DefaultFishValueCap;
     /// <summary>Per-profile roles override package defaults, including an explicit vanilla role.</summary>
     public Dictionary<string, ModRole> Roles { get; init; } = new(StringComparer.Ordinal);
     /// <summary>Selected profile preset, or the default configuration.</summary>

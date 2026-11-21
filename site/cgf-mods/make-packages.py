@@ -119,7 +119,7 @@ def main() -> None:
             "id": "jamm-silo",
             "name": "The Silo",
             "author": "JAMM",
-            "version": "2.2.0",
+            "version": "2.3.0",
             "description": "Open the Missile Silo in NewWorld and fish its flooded launch shaft for four deep-water species.",
             "source_dir": REPO_ROOT / "examples" / "modkit" / "silo",
             "zip_name": "jamm-silo.zip",

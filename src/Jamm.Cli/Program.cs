@@ -56,7 +56,7 @@ int Run(string[] arguments)
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
             cgfmm check <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm check --profile <name> [--strict] [--json <file>] [--details <asset>]
-            cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--dry-run] [--verbose]
+            cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--no-big-money] [--no-fair-play] [--fish-value-cap <n|0>] [--dry-run] [--verbose]
             cgfmm build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
@@ -68,6 +68,9 @@ int Run(string[] arguments)
             cgfmm profile create <name> --mods a,b,c | list [--json] | show <name> [--json] | use <name> | delete <name>
             cgfmm profile resolve <name> <asset> <mod|keep-both>
             cgfmm profile repack <name> on|off
+            cgfmm profile bigmoney <name> on|off
+            cgfmm profile fairplay <name> on|off
+            cgfmm profile valuecap <name> <n|0>
             cgfmm profile base <name> <mod> | addon <name> <mod> <base> | role <name> <mod> none
             cgfmm profile preset <name> weak-pc|default
             cgfmm profile builtin <name> <id> on|off
@@ -82,6 +85,7 @@ int Run(string[] arguments)
                          proton.compatDataPath, proton.clientInstallPath, steam.appId, useSharedCompatibilityResults.
             --verbose works with every command; --yes skips the apply/play install confirmation.
             cgfmm verify <data.win> [--verbose]
+            cgfmm audit instances <data.win> [--json <file>] [--all]
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
             cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]
@@ -92,6 +96,7 @@ int Run(string[] arguments)
     string command = arguments[0];
     if (command == "modkit") return ModKitCommand.Run(arguments[1..], dataDirectory);
     if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
+    if (command == "audit") return AuditCommand.Run(arguments[1..]);
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory, verbose);

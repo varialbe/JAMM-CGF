@@ -330,6 +330,7 @@ Set a fish's `sprite` to `"scute-fish"` or reference the key from an area's `ope
 | `from`, `frame` | Exact base sprite name and zero-based source frame. Frame defaults to 0. |
 | `file` | Relative path to an original PNG or self-contained SVG, in place of `from`. SVG parts can use plain shapes and paths with inline drawing attributes. |
 | `crop` | Optional integer rectangle `{x,y,w,h}` in the padded source frame. It must fit the source. |
+| `alphaMask` | Optional package-relative PNG or self-contained SVG with the same dimensions as the cropped layer (or the full source when there is no crop). JAMM multiplies the source alpha by the mask alpha and preserves the source RGB. The clip follows the layer through flip, scale and rotation. |
 | `x`, `y` | Position of the transformed layer's upper-left corner on the canvas. Defaults to 0. Pixels outside the canvas are clipped. |
 | `scaleX`, `scaleY` | Positive multipliers for width and height. Defaults to 1. |
 | `rotation`, `flip` | Image rotation in clockwise degrees and flip direction (`none`, `x`, `y`, `both`). Flipping comes before scaling and rotation. |
@@ -340,3 +341,23 @@ Set a fish's `sprite` to `"scute-fish"` or reference the key from an area's `ope
 | `opacity`, `z` | Alpha multiplier from 0 to 1 and integer stacking order. Higher Z is drawn later. Equal Z follows manifest order. |
 
 `modkit check` validates the recipe fields and package paths. `modkit build` also validates referenced base frames and crop sizes against the selected archive.
+
+
+## Sale values and debug stats in merged builds
+
+A standalone ModKit build keeps `fish[].value` as authored. Final profile assembly
+limits fish `BASE_VALUE` and appraised values to the profile's `fishValueCap`
+(default 100,000,000). The same cap applies to values supplied through the Fish API.
+Computed assignments are guarded at the point of assignment.
+
+With `fairPlay` enabled, JAMM checks modded rod and boat stats, lure and upgrade
+effects, shop prices and fish XP against vanilla and comparable items from the
+same mod. It uses ten times the highest positive vanilla value as headroom.
+An isolated value is beyond both that headroom and five times the highest
+comparable peer. For isolated values at or above one billion, JAMM uses the higher
+of vanilla headroom and the peer value. Known placeholder literals
+`9,999,999` and `999,999,999` above vanilla headroom, and reel or sink speeds
+above headroom and at least 10,000, are capped at vanilla headroom. A nonpositive
+price for a paid vanilla item restores that item's original price. Possible
+debug values without clear evidence
+appear as `[CGF-FAIR-002]`. Wallet balances and money grants are outside this guard.
