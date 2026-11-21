@@ -161,6 +161,72 @@ public sealed partial class BuildingTests
         }
     }
 
+    [Fact]
+    public void BorderlineAndPeerSupportedValuesStayUntouched()
+    {
+        using var temp = new TemporaryDirectory();
+        string original = temp.PathFor("base.win"), mod = temp.PathFor("mod.win"), output = temp.PathFor("merged.win");
+        WriteModel(original, d => Setup(d, false));
+        WriteModel(mod, d => Setup(d, true));
+        var res = ArchiveBuilder.Build(original, [Input(original, mod)], output);
+
+        Assert.DoesNotContain(res.Plan.Decisions, d => d.Contains("[CGF-VALUE-001]"));
+        Assert.DoesNotContain(res.Plan.Decisions, d => d.Contains("[CGF-FAIR-001]"));
+        Assert.Contains(res.Plan.Decisions, d => d.Contains("[CGF-FAIR-002]") && d.Contains("Boat7 boat.move_speed") && d.Contains("= 100"));
+        Assert.Contains(res.Plan.Decisions, d => d.Contains("[CGF-FAIR-002]") && d.Contains("CapFish XP_VALUE") && d.Contains("= 5,000,000"));
+        Assert.Contains(res.Plan.Decisions, d => d.Contains("[CGF-FAIR-002]") && d.Contains("PeerFishA XP_VALUE") && d.Contains("= 10,000,000"));
+        Assert.Contains(res.Plan.Decisions, d => d.Contains("[CGF-FAIR-002]") && d.Contains("PeerFishB XP_VALUE") && d.Contains("= 30,000,000"));
+        Assert.Contains(res.Plan.Decisions, d => d.Contains("[CGF-FAIR-002]") && d.Contains("Lure lure.sink_speed") && d.Contains("= 9,999"));
+
+        using var merged = GameFileLoader.Load(output);
+        string capFish = Read(merged, "gml_Object_CapFish_Create_0");
+        Assert.Contains("BASE_VALUE = 100000000;", capFish);
+        Assert.Contains("XP_VALUE = 5000000;", capFish);
+        Assert.Contains("XP_VALUE = 10000000;", Read(merged, "gml_Object_PeerFishA_Create_0"));
+        Assert.Contains("XP_VALUE = 30000000;", Read(merged, "gml_Object_PeerFishB_Create_0"));
+        Assert.Contains("move_speed = 100;", Read(merged, "gml_Object_Boat7_Create_0"));
+        Assert.Contains("SINK_SPEED = 9999;", Read(merged, "gml_Object_Lure_Create_0"));
+        string rod = Read(merged, "gml_Object_RodData_Create_0");
+        Assert.Contains("cost[0] = 1;", rod);
+        Assert.Contains("cost[1] = 0;", rod);
+        Assert.Contains("rod_power[0] = 30;", rod);
+        Assert.Contains("cast_speed[0] = 18;", rod);
+        Assert.Contains("reel_speed[0] = 150;", rod);
+
+        static void Setup(UndertaleData data, bool modded)
+        {
+            var fish = GuardObject(data, "Fish");
+            var baseFish = GuardObject(data, "BaseFish", fish);
+            var boat = GuardObject(data, "Boat");
+            var boat1 = GuardObject(data, "Boat1", boat);
+            var lure = GuardObject(data, "Lure");
+            var rodData = GuardObject(data, "RodData");
+            var compiler = new CompileGroup(data);
+            compiler.QueueCodeReplace(baseFish.EventHandlerFor(EventType.Create, data), "BASE_VALUE = 100; XP_VALUE = 500000;");
+            compiler.QueueCodeReplace(boat1.EventHandlerFor(EventType.Create, data), "move_speed = 10;");
+            compiler.QueueCodeReplace(lure.EventHandlerFor(EventType.Create, data), modded ? "SINK_SPEED = 9999;" : "SINK_SPEED = 5;");
+            compiler.QueueCodeReplace(rodData.EventHandlerFor(EventType.Create, data), modded ? """
+                cost[0] = 1; cost[1] = 0;
+                rod_power[0] = 30; cast_speed[0] = 18; reel_speed[0] = 150;
+                """ : """
+                cost[0] = 100; cost[1] = 0;
+                rod_power[0] = 3; cast_speed[0] = 15; reel_speed[0] = 15;
+                """);
+            if (modded)
+            {
+                var capFish = GuardObject(data, "CapFish", fish);
+                var peerFishA = GuardObject(data, "PeerFishA", fish);
+                var peerFishB = GuardObject(data, "PeerFishB", fish);
+                var boat7 = GuardObject(data, "Boat7", boat);
+                compiler.QueueCodeReplace(capFish.EventHandlerFor(EventType.Create, data), "BASE_VALUE = 100000000; XP_VALUE = 5000000;");
+                compiler.QueueCodeReplace(peerFishA.EventHandlerFor(EventType.Create, data), "BASE_VALUE = 9000000; XP_VALUE = 10000000;");
+                compiler.QueueCodeReplace(peerFishB.EventHandlerFor(EventType.Create, data), "BASE_VALUE = 3858000; XP_VALUE = 30000000;");
+                compiler.QueueCodeReplace(boat7.EventHandlerFor(EventType.Create, data), "move_speed = 100;");
+            }
+            CheckCompile(compiler);
+        }
+    }
+
     private static UndertaleGameObject GuardObject(UndertaleData data, string name, UndertaleGameObject? parent = null)
     {
         var obj = new UndertaleGameObject { Name = data.Strings.MakeString(name), ParentId = parent, Visible = true };
