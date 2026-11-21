@@ -88,6 +88,9 @@ public sealed class SitePackageTests
         Assert.Contains("builtin-smooth", ids);
         Assert.Contains("builtin-hd-lite", ids);
         Assert.Contains("builtin-console", ids);
+        Assert.Contains("weather-pack", ids);
+        Assert.Contains("endless-ocean", ids);
+        Assert.Contains("example-rod", ids);
         Assert.Contains("example-fish", ids);
         Assert.Contains("jamm-silo", ids);
         Assert.Contains("weather-pack", ids);
@@ -113,7 +116,7 @@ public sealed class SitePackageTests
             Assert.Equal(entry.GetProperty("sizeBytes").GetInt64(), bytes.LongLength);
             Assert.Equal(entry.GetProperty("sha256").GetString(), Convert.ToHexStringLower(SHA256.HashData(bytes)));
 
-            Assert.Equal(".zip", ModDownloadService.Validate(zipPath, 512L * 1048576));
+            Assert.Equal(".zip", ModDownloadService.Validate(zipPath, 16L * 1024 * 1024));
             using var zip = ZipFile.OpenRead(zipPath);
             foreach (var zipEntry in zip.Entries)
             {

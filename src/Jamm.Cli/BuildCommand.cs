@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Jamm.Core;
 using Jamm.Core.Building;
+using Jamm.Core.Management;
 using Jamm.Core.Patching;
 
 namespace Jamm.Cli;
@@ -16,14 +17,14 @@ internal static class BuildCommand
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    internal static int Run(string command, string[] arguments, bool verbose = false)
+    internal static int Run(string command, string[] arguments, bool verbose = false, string? dataDirectory = null)
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         List<string> positional = [];
-        bool dryRun = false, noRepack = false;
+        bool dryRun = false, noRepack = false, strict = false;
         string[] allowed = command switch
         {
-            "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json"],
+            "build" => ["--base", "--order", "--out", "--resolve", "--install", "--acceptance-json", "--profile"],
             "restore" => ["--game"], _ => []
         };
         for (int i = 0; i < arguments.Length; i++)
@@ -33,6 +34,8 @@ internal static class BuildCommand
             { if (dryRun) throw new ArgumentException("--dry-run was given twice."); dryRun = true; }
             else if (command == "build" && arg == "--no-repack")
             { if (noRepack) throw new ArgumentException("--no-repack was given twice."); noRepack = true; }
+            else if (command == "build" && arg == "--strict")
+            { if (strict) throw new ArgumentException("--strict was given twice."); strict = true; }
             else if (allowed.Contains(arg, StringComparer.Ordinal))
             {
                 if (++i == arguments.Length || arguments[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{arg} needs a value.");
@@ -58,11 +61,30 @@ internal static class BuildCommand
             if (!options.TryGetValue("--game", out string? game)) throw new ArgumentException("restore needs --game <game dir>.");
             Console.WriteLine($"Restored data.win (SHA-256 {GameInstaller.Restore(game)}). Original backup retained."); return 0;
         }
+        string output = options.GetValueOrDefault("--out", Path.Combine("build", "data.win"));
+        if (options.TryGetValue("--profile", out string? profile))
+        {
+            if (options.Keys.Any(key => key is not "--profile" and not "--out"))
+                throw new ArgumentException("Use --profile with --out, --no-repack, --dry-run or --strict. Use 'cgfmm apply --profile' to install, and 'profile resolve' to save choices.");
+            var store = new ManagerStore(dataDirectory);
+            var profiles = new ProfileLibrary(store);
+            ManagementCommand.PrintGroup(profiles.Group(profiles.Get(profile)));
+            var built = new ManagerOperations(store).Build(profile, output, dryRun, noRepack, strict, Progress);
+            foreach (string decision in built.Plan.Decisions) Console.WriteLine($"Decision: {decision}");
+            Counts(built.Counts);
+            if (dryRun) Console.WriteLine($"Dry run: build passed. Would write '{Path.GetFullPath(output)}'.");
+            else
+            {
+                foreach (string warning in built.Verification!.Warnings) Console.WriteLine($"WARNING: {warning}");
+                Console.WriteLine($"Built and verified '{Path.GetFullPath(output)}': {built.SizeBytes:N0} bytes.");
+            }
+            return 0;
+        }
+        if (strict) throw new ArgumentException("--strict requires --profile <name>.");
         if (!options.TryGetValue("--base", out string? basePath))
             throw new ArgumentException("build needs --base <data.win>. Pass --order <mod1>,<mod2>,... to include mods.");
         string[] paths = options.TryGetValue("--order", out string? order) ? order.Split(',', StringSplitOptions.TrimEntries) : [];
         if (paths.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("--order contains an empty mod path.");
-        string output = options.GetValueOrDefault("--out", Path.Combine("build", "data.win"));
         string[] protectedPaths = [basePath, .. paths, .. options.TryGetValue("--resolve", out string? resolvePath) ? new[] { resolvePath } : []];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
         Dictionary<string, string>? resolutions = resolvePath is null ? null

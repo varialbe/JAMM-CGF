@@ -163,7 +163,17 @@ public sealed partial class MainViewModel : ObservableObject
         IProgress<string> refreshProgress = new Progress<string>(Message);
         var pending = Mods.Where(m => m.IsPending).ToDictionary(m => m.Id, m => m.Enabled);
         string? previousProfile = SelectedProfile;
-        var data = await Task.Run(() => (Mods: new ModLibrary(store).List(refreshProgress.Report), Profiles: new ProfileLibrary(store).List(), Config: store.Config(), State: new ManagerOperations(store).Status()));
+        var data = await Task.Run(() =>
+        {
+            var mods = new ModLibrary(store).List(refreshProgress.Report);
+            var profiles = new ProfileLibrary(store);
+            var saved = profiles.List();
+            var config = store.Config();
+            var profile = saved.FirstOrDefault(p => p.Name == config.ActiveProfile) ?? new ModProfile("", [], []);
+            var otherIds = mods.Select(m => m.Mod.Id).Except(profile.Mods, StringComparer.Ordinal).ToArray();
+            var group = profiles.Group(profile with { Mods = [.. profile.Mods, .. otherIds], DisabledMods = [.. profile.DisabledMods, .. otherIds] });
+            return (Mods: mods, Profiles: saved, Config: config, Group: group, State: new ManagerOperations(store).Status());
+        });
         string? currentBaseHash = data.Config.Base is { } configuredBase && File.Exists(configuredBase)
             ? await Task.Run(() => BuildFiles.Hash(configuredBase)) : null;
         var summaries = await Task.Run(() => data.Mods.ToDictionary(m => m.Mod.Id, m =>
@@ -192,9 +202,11 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             Mods.Clear(); Profiles.Clear(); Order.Clear(); Conflicts.Clear();
+            var grouped = data.Group.ToDictionary(r => r.Mod.Id, StringComparer.Ordinal);
             foreach (var m in data.Mods)
             {
                 var info = summaries[m.Mod.Id];
+                var role = grouped[m.Mod.Id];
                 bool isModKit = m.Mod.IsModKit || m.Mod.SourceFolder is not null;
                 Mods.Add(new(m.Mod.Id, m.Mod.Name, m.Compatibility, m.PatchCached, new FileInfo(Path.Combine(store.Root, "mods", m.Mod.Id, "data.win")).Length)
                 {
@@ -212,27 +224,28 @@ public sealed partial class MainViewModel : ObservableObject
                     SourceFolder = m.Mod.SourceFolder,
                     PackageVersion = m.Mod.Version,
                     Author = m.Mod.Author,
-                    Description = m.Mod.Description
+                    Description = m.Mod.Description,
+                    ProfileRole = role.Role.Role,
+                    BaseId = role.Ancestor?.Id ?? role.Role.Base,
+                    RoleLine = role.Role.Role == "none" && m.Mod.SuggestBase ? "Vanilla · Possible base mod" : role.RoleLabel
                 });
             }
             RefreshLocalIcons();
             foreach (var p in data.Profiles) Profiles.Add(p.Name);
             SelectedProfile = data.Config.ActiveProfile;
             var profile = data.Profiles.FirstOrDefault(p => p.Name == SelectedProfile);
-            if (profile is not null)
+            ShowPresetSettings(profile);
+            var rows = Mods.ToDictionary(r => r.Id, StringComparer.Ordinal);
+            foreach (var entry in data.Group)
             {
-                foreach (string id in profile.Mods)
-                {
-                    var row = Mods.Single(m => m.Id == id);
-                    row.InProfile = true;
-                    row.Enabled = !profile.DisabledMods.Contains(id);
-                    row.UnlockFix = profile.UnlockFixMods?.Contains(id, StringComparer.Ordinal) == true;
-                    Order.Add(row);
-                }
+                var row = rows[entry.Mod.Id];
+                row.InProfile = true;
+                row.Enabled = entry.Enabled;
+                row.UnlockFix = profile?.UnlockFixMods?.Contains(entry.Mod.Id, StringComparer.Ordinal) == true;
+                Order.Add(row);
             }
             foreach (var row in Mods)
             {
-                if (!Order.Contains(row)) Order.Add(row);
                 row.AcceptChanges();
                 if (previousProfile == SelectedProfile && pending.TryGetValue(row.Id, out bool staged)) row.Enabled = staged;
                 row.PropertyChanged += async (_, e) =>
@@ -423,8 +436,24 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task MoveAsync(int from, int to)
     {
         if (IsBusy || from < 0 || to < 0 || from >= Order.Count || to >= Order.Count || from == to) return;
+        if (Order[from].ProfileRole != Order[to].ProfileRole) return;
         Order.Move(from, to); await SaveOrderAsync();
     }
+
+    /// <summary>Overrides a mod's role in the selected profile and refreshes grouping.</summary>
+    public Task SetProfileRoleAsync(string id, string role, string? baseId = null) => RunAsync("Saving profile role", async (_, progress) =>
+    {
+        string name = SelectedProfile ?? throw new ArgumentException("Create or select a profile before assigning roles.");
+        var ids = Order.Select(m => m.Id).ToArray();
+        var disabled = Order.Where(m => !m.SavedEnabled).Select(m => m.Id).ToArray();
+        await Task.Run(() =>
+        {
+            var profiles = new ProfileLibrary(store);
+            if (!profiles.Get(name).Mods.Contains(id, StringComparer.Ordinal)) profiles.Update(name, ids, disabled, progress.Report);
+            profiles.SetRole(name, id, role, baseId);
+        });
+        await ReloadAsync();
+    }, false);
     /// <summary>Validates a selected base immediately without writing settings.</summary>
     public Task ValidateBaseAsync(string path) => RunAsync("Validating legacy base", async (_, _) =>
     {
@@ -460,8 +489,7 @@ public sealed partial class MainViewModel : ObservableObject
         Dictionary<string, string> childChoices = new(StringComparer.Ordinal);
         foreach (var group in report.Findings.Where(f => f.Kind == "upgrade-group" && f.Severity == "CONFLICT"))
         {
-            string groupKey = $"{group.Family}/{group.Asset}";
-            foreach (string source in group.Sources ?? []) childChoices[source] = groupKey;
+            foreach (string source in group.Sources ?? []) childChoices[group.ResolutionPrefix + source] = group.ResolutionKey;
         }
         upgradeGroupChildChoices = childChoices;
         Conflicts.Clear();
@@ -469,8 +497,8 @@ public sealed partial class MainViewModel : ObservableObject
         {
             foreach (var finding in report.Findings.Where(f => f.Severity == severity))
             {
-                string key = $"{finding.Family}/{finding.Asset}";
-                report.CodeMerges.TryGetValue(finding.Asset, out var merge);
+                string key = finding.ResolutionKey;
+                report.CodeMerges.TryGetValue(finding.CodeMergeKey, out var merge);
                 // A code entry may have both list and replacement findings: show each hunk once.
                 if (severity == "CONFLICT" && finding.Family == "code" && merge?.HasConflicts == true && finding.Kind is "code" or "list")
                 {
@@ -491,7 +519,7 @@ public sealed partial class MainViewModel : ObservableObject
                     : severity == "CONFLICT" ? " This choice applies to all conflicts for this asset." : ""),
                     merge?.Text ?? System.Text.Json.JsonSerializer.Serialize(finding, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
                     severity == "CONFLICT" && finding.Kind != "index" ? report.Findings
-                        .Where(f => f.Severity == "CONFLICT" && f.Kind != "index" && f.Family == finding.Family && f.Asset == finding.Asset)
+                        .Where(f => f.Severity == "CONFLICT" && f.Kind != "index" && f.ResolutionKey == key)
                         .SelectMany(f => f.Mods).Distinct(StringComparer.Ordinal).ToArray() : [], null));
             }
         }
@@ -517,7 +545,9 @@ public sealed partial class MainViewModel : ObservableObject
             foreach (var row in Conflicts)
             {
                 string entry = row.Key.Split('#')[0];
-                string bare = entry[(entry.IndexOf('/') + 1)..];
+                bool addon = entry.StartsWith("addons/", StringComparison.Ordinal);
+                string familyAndAsset = addon ? entry["addons/".Length..] : entry;
+                string bare = (addon ? "addons/" : "") + familyAndAsset[(familyAndAsset.IndexOf('/') + 1)..];
                 string? groupKey = upgradeGroupChildChoices.GetValueOrDefault(row.Key);
                 string? choice = conflictResolutions.GetValueOrDefault(row.Key)
                     ?? conflictResolutions.GetValueOrDefault(entry) ?? conflictResolutions.GetValueOrDefault(bare)

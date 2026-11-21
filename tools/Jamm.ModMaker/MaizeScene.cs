@@ -14,6 +14,10 @@ internal static class MaizeScene
 
         var probe = ModObjects.Create(data, "obj_jamm_bench_maize", persistent: false);
         var compiler = new CompileGroup(data);
+        // A fresh save opens the game-mode choice; close it so the sonar can draw.
+        string dismiss = string.Join('\n', new[] { "GameModeMenu", "GM_Classic", "GM_Realism", "Message_Start" }
+            .Where(name => data.GameObjects.ByName(name) is not null)
+            .Select(name => $"with ({name}) instance_destroy();"));
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Create, 0u, data), """
             bench_fish_id = noone;
             bench_steps = 0;
@@ -24,6 +28,7 @@ internal static class MaizeScene
             if (!instance_exists(SaveManager)) exit;
             SaveManager.saving_locked = 1;
             if (!SaveManager.loaded) exit;
+            __DISMISS__
             if (!instance_exists(SonarPanel)) instance_create(0, 0, SonarPanel);
             if (!instance_exists(SonarPanelAdvanced)) instance_create(0, 0, SonarPanelAdvanced);
             SonarPanel.active = 1;
@@ -50,7 +55,7 @@ internal static class MaizeScene
             }
             instance_activate_object(bench_fish_id);
             if (instance_exists(bench_fish_id)) bench_fish_id.deactivated = 0;
-            """);
+            """.Replace("__DISMISS__", dismiss, StringComparison.Ordinal));
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), """
             if (bench_fish_id < 0 || !instance_exists(bench_fish_id)) exit;
             SonarPanel.cave_sonar = 1;

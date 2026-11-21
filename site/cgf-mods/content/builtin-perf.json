@@ -1,0 +1,17 @@
+{
+  "cardPackageType": "Recipe",
+  "cardSummary": "Targeted code optimizations and optional fish scheduling for the legacy 2023 build. Press F8 in-game to toggle modes.",
+  "summary": "JAMM Perf reduces work in fish collision, avoidance and scenery updates in the legacy game. Its experimental mode also reduces how often eligible distant fish run part of their logic.",
+  "controls": [
+    "Press F8 to switch between mode 0 (base optimizations) and mode 1 (base optimizations plus experimental scheduling)."
+  ],
+  "apis": "Built-in GameMaker event and script patches.",
+  "assets": "1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 4 controller events and patches 7 existing code entries.",
+  "saves": "Stores scheduling settings in `jamm_perf.ini`, under `[Perf]`. The default `Mode` is 0 and the default `Interval` is 4 ticks. These settings are shared across save slots.",
+  "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Smooth, HD Lite, Console and an independent third-party mod. Mode 1 can also reach custom small or medium fish through inherited End Step logic.",
+  "how": [
+    "The generator guards light updates on Magmer and Volteen against stale instance IDs. It skips the precise deep-rock collision check and trawler net collision query in fish states that cannot use their results.",
+    "Fish avoidance computes two fixed expressions once per call and retains the original neighbour traversal. Scenery caches its depth transform per instance and still updates its parallax position each tick.",
+    "The `obj_jamm_perf` controller configures an early-out in the base Fish End Step. The scheduler checks ancestry, fish state and distances to active views, lures, swimmers, boats and nets before skipping work. Eligible instances are staggered by instance ID and tick, and their engine alarms, motion and Draw events still run."
+  ]
+}
