@@ -222,6 +222,12 @@ public sealed class ModKitTests
         File.WriteAllBytes(Path.Combine(pkgB, "art", "upg.png"), SolidPng(50, 50));
         File.WriteAllText(Path.Combine(pkgB, "hooks", "hat_effect.gml"), "value_scalar[0] = 1.5;\n");
         File.WriteAllText(Path.Combine(pkgB, "hooks", "upg_apply.gml"), "Rod.upgrades[1] += 2 * argument0;\n");
+        File.WriteAllText(Path.Combine(pkgB, "hooks", "boat_create.gml"), "vehicle_ready = true;\n");
+        File.WriteAllText(Path.Combine(pkgB, "hooks", "boat_begin.gml"), "vehicle_begin = true;\n");
+        File.WriteAllText(Path.Combine(pkgB, "hooks", "boat_step.gml"), "vehicle_step = true;\n");
+        File.WriteAllText(Path.Combine(pkgB, "hooks", "boat_end.gml"), "vehicle_end = true;\n");
+        File.WriteAllText(Path.Combine(pkgB, "hooks", "boat_gui.gml"), "draw_text(0, 0, \"vehicle\");\n");
+        File.WriteAllText(Path.Combine(pkgB, "hooks", "boat_destroy.gml"), "vehicle_destroyed = true;\n");
         File.WriteAllText(Path.Combine(pkgB, "jamm-mod.json"), """
             {
               "id": "beta-pack",
@@ -243,7 +249,15 @@ public sealed class ModKitTests
                   "cost": 12000,
                   "card": "art/boat_card.png",
                   "sprite": "art/boat.png",
-                  "stats": { "maxSpeed": 5, "capacity": 5 }
+                  "stats": { "maxSpeed": 5, "capacity": 5 },
+                  "hooks": {
+                    "create": "hooks/boat_create.gml",
+                    "beginStep": "hooks/boat_begin.gml",
+                    "step": "hooks/boat_step.gml",
+                    "endStep": "hooks/boat_end.gml",
+                    "drawGui": "hooks/boat_gui.gml",
+                    "destroy": "hooks/boat_destroy.gml"
+                  }
                 }
               ],
               "hats": [
@@ -269,6 +283,8 @@ public sealed class ModKitTests
             }
             """);
 
+        Assert.EndsWith(Path.Combine("hooks", "boat_create.gml"), ModKitPackage.Load(pkgB).Boats.Single().Hooks!.Create!);
+
         string modAPath = temp.PathFor("alpha.win");
         string modBPath = temp.PathFor("beta.win");
         var resA = ModKitBuilder.Build(pkgA, basePath, modAPath);
@@ -293,6 +309,20 @@ public sealed class ModKitTests
             Assert.Equal(12, spr.OriginY);
             Assert.Contains("return -1;", PatchBuilder.ReadCode(loadedA, "gml_Script_jamm_fish_register").Text);
             Assert.Contains("jamm_fish_register(\"alpha-pack:aqua-fin\"", PatchBuilder.ReadCode(loadedA, "gml_Script_jamm_init_alpha_pack").Text);
+        }
+
+        using (var loadedB = GameFileLoader.Load(modBPath))
+        {
+            var boat = loadedB.Data.GameObjects.ByName("jmk_beta_pack_skiff")!;
+            string create = PatchBuilder.ReadCode(loadedB, boat.EventHandlerFor(EventType.Create, 0u, loadedB.Data)!.Name.Content).Text;
+            Assert.Contains("vehicle_ready = 1;", create);
+            Assert.Contains("vehicle_begin = 1;", PatchBuilder.ReadCode(loadedB, boat.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, loadedB.Data)!.Name.Content).Text);
+            Assert.Contains("vehicle_step = 1;", PatchBuilder.ReadCode(loadedB, boat.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, loadedB.Data)!.Name.Content).Text);
+            Assert.Contains("vehicle_end = 1;", PatchBuilder.ReadCode(loadedB, boat.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, loadedB.Data)!.Name.Content).Text);
+            Assert.Contains("draw_text(0, 0, \"vehicle\")", PatchBuilder.ReadCode(loadedB, boat.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, loadedB.Data)!.Name.Content).Text);
+            string destroy = PatchBuilder.ReadCode(loadedB, boat.EventHandlerFor(EventType.Destroy, 0u, loadedB.Data)!.Name.Content).Text;
+            Assert.Contains("vehicle_destroyed = 1;", destroy);
+            Assert.EndsWith("event_inherited();", destroy.Trim());
         }
 
         // Diff, check, and merge both ModKit mods together via ArchiveBuilder
