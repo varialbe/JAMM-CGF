@@ -71,11 +71,25 @@ fish IDs, and the westbound return released all generated instances. It complete
 CODE ERROR. Its CSV is `~/jamm-night/runs/worldgen-v1-personal-fixed-worldgen/`; the first
 run before the callback fix is retained at `~/jamm-night/runs/worldgen-v1-personal-worldgen/`.
 
-The first all-7 attempts did not reach the terrain checkpoints: one remained at Steam sign-in,
-and a 240-second run reached the generated edge but stopped before point 1. I rebuilt the
-seven-mod profile with the callback fix and queued a 600-second route under the shared game
-lock. Its run directory is `~/jamm-night/runs/worldgen-v1-all7-final-worldgen/`; results are
-pending that run.
+The rebuilt all-7 profile completed its 600-second-window run without a CODE ERROR. It crossed
+the stock Boat7 limit and the generated boundary, passed transition and biome collision probes,
+kept the five-chunk fish count at or below 15, exercised both saves with zero streamed fish IDs,
+and returned west with no generated instances remaining.
+
+| All-7 checkpoint | Boat x | Chunks | Owned instances | Room instances | Fish | Rock / water / bottom probes | Save IDs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stock boat limit crossed | 115,500 | 0 | 0 | 15,087 | 0 | — | — |
+| Generated edge crossed | 145,772 | 3 | 24 | 15,111 | 0 | — | — |
+| Transition | 146,349 | 3 | 24 | 15,116 | 0 | 8 / 8 / 8; seam 2 | — |
+| Sandy shelf | 181,165 | 5 | 67 | 15,160 | 15 | 8 / 8 / 8 | — |
+| Rocky slope | 195,501 | 5 | 69 | 14,781 | 13 | 8 / 8 / 8 | — |
+| Deep trench | 256,941 | 5 | 73 | 14,786 | 15 | 8 / 8 / 8 | — |
+| Wreck | 222,125 | 5 | 71 | 14,440 | 14 | 8 / 8 / 8 | — |
+| Final chunk | 1,170,349 | 3 | 45 | 14,414 | 9 | 8 / 8 / 8 | — |
+| Save check | 1,170,349 | 3 | 45 | 14,410 | 9 | — | 0 |
+| Returned west | 140,038 | 0 | 0 | 14,370 | 0 | — | — |
+
+The full route data is `~/jamm-night/runs/worldgen-v1-all7-final-worldgen/jamm_bench_worldgen.csv`.
 
 ## Showcase captures
 
