@@ -58,3 +58,15 @@ not only fish value. Extend the step into a **Fair-Play guard** (`fairPlay` conf
   and stats that make gameplay trivial (instant reel, infinite sink speed). Fish sale value cap stays 100,000,000.
 * When unsure, do NOT clamp; report it as INFO (`[CGF-FAIR-002] possible debug value kept: ...`) instead.
 * Report for the TGE build must show which values were clamped and which were kept, with the reasoning.
+
+### Addendum 2 (user via orchestrator, 2026-11-21 night)
+* The Fair-Play/anti-debug guard is **ON by default** but must be switchable **per profile**: profile JSON
+  field (e.g. `fairPlay: true|false`, next to `fishValueCap`), CLI `cgfmm profile fairplay <name> on|off` and
+  `cgfmm profile valuecap <name> <n|0>`, and a visible checkbox + number field in the GUI profile settings
+  (same place as the Weak PC / Perf defaults). Both values are part of the install signature.
+* The 100M limit is for the **fish sale value only**, never for the player's money. Money will be allowed to
+  grow beyond 999,999,999 by a separate feature (compact display 3.4M/9.5T) – do not clamp money, money
+  grants from the console (`money`) or quest rewards.
+* `main` moved a lot tonight (weak-pc preset, base-mod layers with `intermediate` passes, maize nav guard).
+  Merge `main` into your branch first; run your guard only in the final layer (`!intermediate`), like the
+  other runtimes in `ArchiveBuilder.BuildLayer`.
