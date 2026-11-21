@@ -6,5 +6,5 @@ public sealed record ValueGuardOptions(long FishValueCap = ValueGuardOptions.Def
     /// <summary>Default maximum fish sale value. A configured cap of zero disables the sale limit.</summary>
     public const long DefaultFishValueCap = 100_000_000;
 
-    internal const string Revision = "value-guard-1";
+    internal const string Revision = "value-guard-2";
 }
