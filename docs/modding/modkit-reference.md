@@ -36,6 +36,7 @@ my-mod/
   * Upgrades: icon sprite `jmk_<id>_<key>_icon`, optional hooks `jmk_<id>_<key>_{apply,step}`.
   * Room objects use `jmk_<id>_object_<key>`.
   * Init script: `jamm_init_<id>` when the package registers fish or items (with hyphens replaced by underscores).
+* Shared package scripts use `jmk_<id>_script_<key>` and can be called from any package hook.
 * **Standalone placeholders**: `ModKitBuilder` adds `return -1;` placeholder scripts only for the `jamm_*_register` functions the package actually calls, so the built `.win` verifies standalone and merges with zero conflicts when JAMM replaces them at merge time.
 
 ---
@@ -61,13 +62,16 @@ my-mod/
 | `weathers` | array | No | `[]` | [Weather schedule, visuals, audio and fish](weather.md). |
 | `areas` | array | No | `[]` | [Room areas and follow anchors](areas.md). |
 | `objects` | array | No | `[]` | Custom room objects with optional event hooks. |
+| `scripts` | array | No | `[]` | Namespaced GML scripts callable by package hooks: `{ "key": "cost", "file": "scripts/cost.gml" }`. |
 | `sprites` | array | No | `[]` | [Build-time sprite recipes](#sprite-recipes). |
 
 ---
 
 ## `objects` entries
 
-Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step` and `hooks.draw` accept package-relative `.gml` files and run as the object's Create, normal Step and Draw events. A Draw hook can call `draw_self()` to include the object's assigned sprite.
+Use `objects[]` for custom area effects and controllers. Each entry needs a unique `key`. Optional `sprite` names a recipe in `sprites[]`. Optional integer `depth` defaults to `0`. `hooks.create`, `hooks.step`, `hooks.draw` and `hooks.drawGui` accept package-relative `.gml` files and run as the object's Create, normal Step, Draw and Draw GUI events. A Draw hook can call `draw_self()` to include the object's assigned sprite. A Draw GUI hook is useful for a package-owned interface tied to that room object.
+
+Use `scripts[]` for reusable GML functions shared by a package's hooks. Each entry has a unique `key` and a package-relative `.gml` `file`; JAMM creates `jmk_<id>_script_<key>`. Call it directly by its generated name or use `script_execute` when the name is selected dynamically.
 
 Place the object by referring to `jmk_<id>_object_<key>` in an area's `pieces` or `lights`. Room objects have no parent and are recreated with the room. An area can use a colocated controller for an animation or trigger in [the Silo tutorial](../../examples/modkit/silo/README.md).
 

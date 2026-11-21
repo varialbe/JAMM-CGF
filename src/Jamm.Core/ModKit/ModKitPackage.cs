@@ -21,7 +21,14 @@ public sealed record ModKitSpawnBox(double XMin, double XMax, double YMin, doubl
 public sealed record ModKitFishHooks(string? Create, string? Step, string? Caught, string? Draw);
 
 /// <summary>A nonpersistent room object with optional event hooks.</summary>
-public sealed record ModKitObject(string Key, string? Sprite, int Depth, string? Create, string? Step, string? Draw);
+public sealed record ModKitObject(string Key, string? Sprite, int Depth, string? Create, string? Step, string? Draw)
+{
+    /// <summary>Optional Draw GUI hook for a room object's interface.</summary>
+    public string? DrawGui { get; init; }
+}
+
+/// <summary>A namespaced GML script callable by package hooks.</summary>
+public sealed record ModKitScript(string Key, string Path);
 
 /// <summary>A fish definition in a ModKit package.</summary>
 public sealed record ModKitFish(
@@ -157,6 +164,9 @@ public sealed record ModKitManifest(
     /// <summary>Custom room objects available to area placements.</summary>
     public IReadOnlyList<ModKitObject> Objects { get; init; } = [];
 
+    /// <summary>Shared GML scripts defined by this package.</summary>
+    public IReadOnlyList<ModKitScript> Scripts { get; init; } = [];
+
     /// <summary>Fishing rods registered with the JAMM item API.</summary>
     public IReadOnlyList<ModKitRod> Rods { get; init; } = [];
 
@@ -221,6 +231,7 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(sprites.Select(s => ModKitBuilder.SanitizeIdent(s.Key)), "$.sprites");
             var spritesByKey = sprites.ToDictionary(s => s.Key, StringComparer.Ordinal);
             var objects = ParseArray(rootObj, "objects", "$.objects", (el, path) => ParseObject(root, el, path, spritesByKey));
+            var scripts = ParseArray(rootObj, "scripts", "$.scripts", (el, path) => ParseScript(root, el, path));
             var fish = ParseArray(rootObj, "fish", "$.fish", (el, path) => ParseFish(root, el, path, spritesByKey));
             foreach (var entry in fish.Where(f => f.Spawn.Area is not null))
             {
@@ -240,14 +251,21 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(hats.Select(h => h.Key), "$.hats");
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
             EnsureUniqueKeys(objects.Select(o => ModKitBuilder.SanitizeIdent(o.Key)), "$.objects");
+            EnsureUniqueKeys(scripts.Select(s => ModKitBuilder.SanitizeIdent(s.Key)), "$.scripts");
 
             var (_, _, role) = Management.ModRole.ReadManifest(rootObj, manifestPath, readIdentity: false);
             var weathers = ParseArray(rootObj, "weathers", "$.weathers", (el, path) => ParseWeather(root, el, path, spritesByKey, fish));
             EnsureUniqueKeys(weathers.Select(w => ModKitBuilder.SanitizeIdent(w.Id)), "$.weathers");
 
             return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
-                { Areas = areas, Sprites = sprites, Objects = objects, Weathers = weathers, Rods = rods, Role = role };
+                { Areas = areas, Sprites = sprites, Objects = objects, Scripts = scripts, Weathers = weathers, Rods = rods, Role = role };
         }
+    }
+
+    private static ModKitScript ParseScript(string root, JsonElement element, string path)
+    {
+        var obj = ExpectObject(element, path);
+        return new(RequireKey(obj, "key", $"{path}.key"), RequireAssetFile(root, obj, "file", $"{path}.file", [".gml"]));
     }
 
     private static ModKitObject ParseObject(string root, JsonElement element, string path, IReadOnlyDictionary<string, ModKitSprite> sprites)
@@ -261,7 +279,7 @@ public static partial class ModKitPackage
         JsonElement hooks = TryGetNonNull(obj, "hooks", out var value) ? ExpectObject(value, $"{path}.hooks") : default;
         string? Hook(string name) => hooks.ValueKind == JsonValueKind.Object
             ? OptionalAssetFile(root, hooks, name, $"{path}.hooks.{name}", [".gml"]) : null;
-        return new(key, sprite, depth, Hook("create"), Hook("step"), Hook("draw"));
+        return new(key, sprite, depth, Hook("create"), Hook("step"), Hook("draw")) { DrawGui = Hook("drawGui") };
     }
 
     /// <summary>Creates a starter ModKit package folder for the requested template (<c>fish</c>, <c>upgrade</c>, <c>boat</c>, or <c>hat</c>).</summary>
