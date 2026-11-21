@@ -36,3 +36,5 @@ TGE's Rod recompute event initializes effect slots 0–21. The Rod step and came
 ## VPS playtest
 
 A disposable instrumented copy of the exact-order build ran on the authenticated VPS Steam client with an isolated test save. Cuddlefish was worth 100,000,000 at creation and appraised at 100,000,000 with a 2× gear multiplier. A Fish API registration passed 150,000,000 at runtime and assigned 100,000,000. The Console command `money 3400000000123` set the exact balance and the formatter displayed `$3.4T`.
+
+A second live probe submitted `unlockgear` and `unlockall` to the Console's command handler. Both commands ran and the game exited normally. The probe cleared the relevant catalog count and unlock flag before the commands. When `unlockall` marked the fish caught, TGE's Rod step completed the unlock. The missing effect slot 22 read as zero. The playtest also reproduced the fish sale and `$3.4T` wallet results.
