@@ -84,6 +84,12 @@ public sealed record ManagedMod(string Id, string Name, string SourceFileName, s
     public string? Version { get; init; }
     /// <summary>Whether this mod was built or imported from a ModKit package.</summary>
     public bool IsModKit { get; init; }
+    /// <summary>Stable identity declared by the package, independent of the library archive ID.</summary>
+    public string? PackageId { get; init; }
+    /// <summary>Author-declared profile role, if supplied.</summary>
+    public ModRole? Role { get; init; }
+    /// <summary>Whether the vanilla code diff suggests this mod could be an overhaul.</summary>
+    public bool SuggestBase { get; init; }
 }
 
 /// <summary>Public source identity recorded only after successful local import/hash deduplication.</summary>
@@ -102,10 +108,23 @@ public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, s
     public string[]? UnlockFixMods { get; init; }
     /// <summary>Skips atlas repacking when building this profile's enabled mods.</summary>
     public bool NoRepack { get; init; }
+    /// <summary>Keeps the legacy $999,999,999 wallet clamp and full-number money display in this profile's builds.</summary>
+    public bool NoBigMoney { get; init; }
+    /// <summary>Per-profile roles override package defaults, including an explicit vanilla role.</summary>
+    public Dictionary<string, ModRole> Roles { get; init; } = new(StringComparer.Ordinal);
+    /// <summary>Selected profile preset, or the default configuration.</summary>
+    public string Preset { get; init; } = ProfileLibrary.DefaultPreset;
+    /// <summary>Defaults for the bundled Perf controller.</summary>
+    public Jamm.ModMaker.PerfSettings Perf { get; init; } = new();
+    /// <summary>Settings to restore when Weak PC is turned off.</summary>
+    public WeakPcPreviousSettings? BeforeWeakPc { get; init; }
     /// <summary>Active library IDs in load order.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string[] EnabledMods => Mods.Except(DisabledMods, StringComparer.Ordinal).ToArray();
 }
+
+/// <summary>Settings the preset temporarily changes, including whether each built-in belonged to the profile.</summary>
+public sealed record WeakPcPreviousSettings(bool? PerfEnabled, bool? HdEnabled, bool NoRepack, Jamm.ModMaker.PerfSettings Perf);
 
 /// <summary>Library entry with compatibility and cache validity for the currently configured base.</summary>
 public sealed record ModListEntry(ManagedMod Mod, bool BaseHashMatches, bool TimestampMatches,
@@ -113,3 +132,10 @@ public sealed record ModListEntry(ManagedMod Mod, bool BaseHashMatches, bool Tim
 
 /// <summary>Completed import and notices about source compatibility.</summary>
 public sealed record AddModResult(ManagedMod Mod, IReadOnlyList<string> Warnings, bool AlreadyAdded);
+
+/// <summary>A library mod as configured in a profile, with its resolved addon ancestor where available.</summary>
+public sealed record ProfileMod(ManagedMod Mod, ModRole Role, bool Enabled, ManagedMod? Ancestor = null)
+{
+    /// <summary>Role label using the base mod's display name when available.</summary>
+    public string RoleLabel => Role.Role == "addon" && Ancestor is not null ? $"Addon of {Ancestor.Name}" : Role.Label;
+}

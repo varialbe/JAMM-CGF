@@ -31,6 +31,8 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
   fullscreen with the HD controller.
 - **Perf** applies targeted code optimizations and includes experimental fish
   scheduling. **F8** toggles that performance mode and saves it to `jamm_perf.ini`.
+  The FishLarge avoidance grid has its own switch. Set `FishGrid=0` under `[Perf]`
+  in the same file to disable it.
   Mode defaults to **off** for a fresh configuration; an existing saved choice
   remains in effect. The experimental mode measured slower in the tested scene.
 - **Console** adds an optional in-game command console (`obj_jamm_console`).
@@ -42,7 +44,7 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
   - `unlockgear`: unlocks equipment, upgrades, hats, HUD icons, and nightfall only.
   - `maxlevel` / `level <n>`: sets level (clamped to `[0, max_level]`).
   - `catalog all` (alias `unlockfish`): marks every catalog fish as caught.
-  - `money <n>` / `money +<n>`: sets or adds dollars (clamped to `0..999999999`).
+  - `money <n>` / `money +<n>`: sets or adds dollars (clamped to `0..1e15`; large amounts display compactly when the profile allows big money).
   - `clear`, `close` / `exit`: clears the console log or closes the overlay.
   Commands that change game state warn that the next autosave (or opening the
   Esc save menu) persists changes to your save file. Switching save slots
@@ -51,8 +53,9 @@ dotnet run --project tools/Jamm.ModMaker -c Release -- console /path/to/original
 
 Optional `--debug` adds diagnostic logging/controllers; it is useful for local
 measurements and may affect performance. See the implementation reports for
-[Perf/Smooth](reports/phase6a.md), [HD](reports/phase6b.md) and
-[experimental performance mode](reports/phase6c.md).
+[Perf/Smooth](reports/phase6a.md), [HD](reports/phase6b.md),
+[experimental performance mode](reports/phase6c.md), and the
+[local benchmark mode guide](benchmarking.md) (`jamm-modmaker bench`).
 
 ## HD with 2x texture pages
 

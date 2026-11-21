@@ -1,0 +1,17 @@
+{
+  "cardPackageType": "Recipe",
+  "cardSummary": "Aspect-correct fullscreen rendering through the native application surface with original texture pages. Press F11 to toggle fullscreen.",
+  "summary": "JAMM HD Lite fits the game to your window or monitor while preserving its aspect ratio. It uses the original textures and defaults to fullscreen on first launch.",
+  "controls": [
+    "Press F11 to toggle between fullscreen and windowed mode."
+  ],
+  "apis": "GameMaker application surface, window, view ports and GUI sizing.",
+  "assets": "1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe keeps the existing texture pages.",
+  "saves": "Stores the fullscreen toggle in `jamm_hd.ini` under `[HD]`, key `Fullscreen`, shared by all slots.",
+  "compatibility": "Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, Smooth, Console and an independent third-party mod.",
+  "how": [
+    "The recipe calls the HD generator with original texture pages. The generator enables the runner's Scale and Interpolate flags and sets the window background to black.",
+    "At Room Start, `obj_jamm_hd` records the original view ports, including the hidden views. On resize it takes the smaller of the window width divided by 1,200 and the window height divided by 720. It resizes the native application surface and scales the stored view ports by that factor.",
+    "The runner letterboxes the application surface and maps room mouse coordinates. The controller keeps the GUI at 1,200 × 720 logical pixels and polls for window or surface changes to handle fullscreen switches and recreated surfaces."
+  ]
+}

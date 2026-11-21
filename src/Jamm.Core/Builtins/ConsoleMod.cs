@@ -172,7 +172,7 @@ public static class ConsoleMod
                     ds_list_add(jamm_console_log, "  maxlevel    : set level to max");
                     ds_list_add(jamm_console_log, "  level <n>   : set level to n (0..max)");
                     ds_list_add(jamm_console_log, "  catalog all : mark all fish caught (alias: unlockfish)");
-                    ds_list_add(jamm_console_log, "  money <n>   : set dollars (0..999999999); money +<n> adds");
+                    ds_list_add(jamm_console_log, "  money <n>   : set dollars (up to 1e15); money +<n> adds");
                     ds_list_add(jamm_console_log, "  clear       : clear console log");
                     ds_list_add(jamm_console_log, "  close/exit  : close console");
                 }
@@ -231,7 +231,7 @@ public static class ConsoleMod
                 }
                 else if (string_pos("money ", jamm_cmd) == 1)
                 {
-                    {{MoneyGml()}}
+                    {{MoneyGml(data.Scripts.ByName("number_to_dollar_string") is not null)}}
                 }
                 else
                 {
@@ -443,7 +443,7 @@ public static class ConsoleMod
             """;
     }
 
-    private static string MoneyGml() => $$"""
+    private static string MoneyGml(bool hasFormatter) => $$"""
         var jamm_m_arg = string_delete(jamm_cmd, 1, 6);
         var jamm_m_add = false;
         if (string_length(jamm_m_arg) > 0)
@@ -465,10 +465,10 @@ public static class ConsoleMod
             if (instance_exists(Girl))
             {
                 if (jamm_m_add)
-                    Girl.dollars = clamp(Girl.dollars + jamm_m_val, 0, 999999999);
+                    Girl.dollars = clamp(Girl.dollars + jamm_m_val, 0, 1000000 * 1000000000);
                 else
-                    Girl.dollars = clamp(jamm_m_val, 0, 999999999);
-                ds_list_add(jamm_console_log, "Money set to $" + string(Girl.dollars) + ".");
+                    Girl.dollars = clamp(jamm_m_val, 0, 1000000 * 1000000000);
+                ds_list_add(jamm_console_log, "Money set to " + {{(hasFormatter ? "number_to_dollar_string(Girl.dollars)" : "\"$\" + string(Girl.dollars)")}} + ".");
                 ds_list_add(jamm_console_log, "{{SaveWarning}}");
             }
             else

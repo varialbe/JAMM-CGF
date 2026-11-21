@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Silo — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="mod-header">
+      <a class="back" href="../index.html#jamm-silo">← All mods</a>
+      <div class="card-head">
+        <img src="../assets/silo.svg" alt="" width="44" height="44">
+        <div>
+          <h1>The Silo</h1>
+          <div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">ModKit</span></div>
+          <p>Version 2.2.0</p>
+        </div>
+      </div>
+      <a class="btn" href="../packages/jamm-silo.zip" download>Download jamm-silo.zip</a>
+      <div class="checksum">SHA-256: 9bbfc6aaed00b72540b5f6ad5c174887deb8e7a80e4ef9cbcbead0fb99b11acb (7,633 B)</div>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>Lower a cast lure to the Missile Silo in the deep trench to open its hatch. Inside the flooded shaft, you can catch Veyl, Radik, Ferrex and Garrusk using the usual lure, bait and catch rules.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Controls</h2>
+      <ul class="controls">
+        <li>Bring a rod and boat that can reach the trench. Use a light to find the entrance and bring a cast lure within 250 room pixels of the hatch.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Gallery</h2>
+      <div class="gallery">
+        <figure>
+          <a href="../images/jamm-silo/chamber-solo.webp"><img src="../images/jamm-silo/chamber-solo-thumb.webp" loading="lazy" alt="Four Silo fish swimming among rocks and green lights below the open hatch"></a>
+          <figcaption>Inside the flooded shaft</figcaption>
+        </figure>
+        <figure>
+          <a href="../images/jamm-silo/opening-sequence-solo.webp"><img src="../images/jamm-silo/opening-sequence-solo-thumb.webp" loading="lazy" alt="Nine panels showing the closed hatch, sliding shutters, lights and the open chamber"></a>
+          <figcaption>Hatch opening sequence</figcaption>
+        </figure>
+        <figure>
+          <a href="../images/jamm-silo/art-review.webp"><img src="../images/jamm-silo/art-review-thumb.webp" loading="lazy" alt="Comparison sheet with Veyl, Radik, Ferrex and Garrusk next to vanilla fish"></a>
+          <figcaption>Fish art comparisons</figcaption>
+        </figure>
+        <figure>
+          <a href="../images/jamm-silo/opening-solo.gif"><img src="../images/jamm-silo/opening-solo-thumb.webp" loading="lazy" alt="Closed Missile Silo hatch at the start of the opening animation"></a>
+          <figcaption>Play the solo opening animation</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical datasheet</h2>
+      <table class="datasheet">
+        <tbody>
+          <tr><th scope="row">Package type</th><td>ModKit</td></tr>
+          <tr><th scope="row">Manifest file</th><td><code>jamm-mod.json</code></td></tr>
+          <tr><th scope="row">APIs used</th><td>ModKit Area API, Fish and Catalog APIs, composed sprite recipes and custom object events.</td></tr>
+          <tr><th scope="row">Assets and scripts added</th><td>5 objects (4 fish and 1 hatch controller), 6 composed sprites and 11 standalone scripts in the source build on a clean base. The scripts include 8 fish hooks, 1 area declaration, 1 initializer and 1 Fish API registration stub.</td></tr>
+          <tr><th scope="row">Save-file behaviour</th><td>The open flag is written as <code>jamm-silo:launch-shaft=1</code> in <code>[JAMM_Areas]</code> in the active slot&#x27;s <code>sdata&lt;N&gt;n_beta.ini</code>. Fishalog progress uses <code>[JAMM_Catalog]</code> in the native slot save.</td></tr>
+          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The follow anchor supports moves of the MissileSilo, including Cave Expansion&#x27;s relocation. JAMM reports overlapping room edits as <code>CGF-AREA-001</code> and follows the latest surviving move when mods compete for the landmark.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>The <code>launch-shaft</code> Area API declaration places native cave rocks, Geiger lights and a custom hatch controller in <code>NewWorld</code>. Its <code>follow</code> anchor resolves the existing MissileSilo instance and translates the shaft with it. JAMM configures the placed instance and keeps MissileSilo&#x27;s native object events. The controller draws the animation using the resolved hatch&#x27;s rotation and scale.</p>
+      <p>Initially the controller shows <code>spr_silo</code> and uses the closed <code>spr_silomask</code>. A nearby cast lure triggers a 1.55-second opening. Two shutter frames slide and turn apart, bubbles rise and the Geiger lights fade in. The closed mask blocks the lure through the slide. Once the movement completes, the open sprite supplies the passable mask.</p>
+      <p>JAMM composes the six sprites during the build from the player&#x27;s own vanilla frames, plus original SVG details. The package ships the recipes and SVG details. The four fish use recoloured donor compositions, and the hatch and shutters use complementary crops of <code>spr_silo</code>.</p>
+      <p>The four species spawn in separate <code>within</code> rectangles in the shaft. The Area API finds free-water points after other profile edits and the area&#x27;s solids are applied. Create hooks enable deep-water behaviour. Step hooks call wall recovery, guide fish toward their home water and cap movement to limit tunnelling through the shaft walls.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+      <ul class="package-files">
+        <li><code>README.md</code></li>
+        <li><code>hooks/deep_water.gml</code></li>
+        <li><code>hooks/hatch_create.gml</code></li>
+        <li><code>hooks/hatch_draw.gml</code></li>
+        <li><code>hooks/hatch_step.gml</code></li>
+        <li><code>hooks/shaft_step.gml</code></li>
+        <li><code>jamm-mod.json</code></li>
+        <li><code>parts/bands.svg</code></li>
+        <li><code>parts/gills.svg</code></li>
+        <li><code>parts/pits.svg</code></li>
+        <li><code>parts/scutes.svg</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

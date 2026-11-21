@@ -14,32 +14,30 @@ public sealed class ProfileInstaller(ManagerStore store)
 {
     private sealed record InstalledProfile(string Signature, string GameDirectory, string BuildSha256, string? Profile = null);
 
-    private (ModProfile Profile, ManagerConfig Config, IReadOnlyList<BuildInput> Inputs, string Signature) Selection(string? name, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    private (ModProfile Profile, ManagerConfig Config, ProfileSelection Loaded, string Signature) Selection(string? name, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var config = store.Config();
         if (config.Base is null || config.GameDir is null)
             throw new ArgumentException("Set 'base' and 'gameDir' with cgfmm config set before applying a profile.");
         var profile = new ProfileLibrary(store).Get(name ?? config.ActiveProfile
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
-        new BuiltinMods(store).RefreshStale(profile.EnabledMods, progress, cancellationToken);
-        var library = new ModLibrary(store);
-        var inputs = profile.EnabledMods.Select(library.Find).Select(m => new BuildInput(library.Patch(m, progress, cancellationToken), library.Archive(m))
-        {
-            UnlockFix = profile.UnlockFixMods?.Contains(m.Id, StringComparer.Ordinal) == true
-        }).ToArray();
-        string hash = BuildFiles.Hash(config.Base);
-        if (inputs.Any(i => i.Patch.Base.Sha256 != hash))
-            throw new InvalidDataException("This profile's patches target a different base. Restore its base configuration or remove and re-add its mods against the selected base.");
+        var loaded = ProfileSelection.Load(store, profile, false, progress, cancellationToken);
+        // Existing Perf installations need a rebuild even when the bundled input archive is unchanged.
+        string builder = profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal)
+            ? "menu-layout-3-fish-grid-1" : "menu-layout-3";
+        var inputs = loaded.Inputs.ToArray();
+        if (!profile.NoBigMoney) builder += "/" + MoneyRuntime.Revision;
         string signatureText = JsonSerializer.Serialize(new
         {
-            Builder = inputs.Length > 0 && !profile.NoRepack ? $"menu-layout-3/{TextureRepacker.Revision}" : "menu-layout-3",
-            InstanceCompatibility.Revision, profile.Name, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
-            Base = hash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
+            Builder = profile.EnabledMods.Length > 0 && !profile.NoRepack ? $"{builder}/{TextureRepacker.Revision}" : builder,
+            InstanceCompatibility.Revision, profile.Name, profile.Preset, profile.Perf, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            Roles = loaded.Group.Select(row => new { row.Mod.Id, row.Role, Ancestor = row.Ancestor?.Id }),
+            Base = loaded.VanillaHash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions);
         if (inputs.Any(i => i.UnlockFix))
             signatureText += "\nLegacy shop repair v1: " + string.Join(",", inputs.Where(i => i.UnlockFix).Select(i => i.Patch.Mod.Sha256));
         string signature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(signatureText)));
-        return (profile, config, inputs, signature);
+        return (profile, config, loaded, signature);
     }
 
     /// <summary>Checks installation identities without modifying the game, refreshing outdated patch caches as needed. Stale installation state returns false;
@@ -58,7 +56,7 @@ public sealed class ProfileInstaller(ManagerStore store)
             string current = Path.Combine(selection.Config.GameDir!, "data.win");
             if (!File.Exists(current) || BuildFiles.Hash(current) != installed.BuildSha256) return false;
             GameInstaller.Validate(selection.Config.GameDir!, BuildFiles.Hash(selection.Config.Base!),
-                selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
+                selection.Loaded.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
             return File.Exists(Path.Combine(selection.Config.GameDir!, "data.win.cgfmm-build.json"));
         }
         catch (IOException) { return false; }
@@ -85,12 +83,11 @@ public sealed class ProfileInstaller(ManagerStore store)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var selection = Selection(name, progress, cancellationToken);
-        string hash = BuildFiles.Hash(selection.Config.Base!);
+        string hash = selection.Loaded.VanillaHash;
         string output = store.Path("builds", $"{Guid.NewGuid():N}.win");
-        GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
-        var result = ArchiveBuilder.Build(selection.Config.Base!, selection.Inputs, output, new ProfileLibrary(store).ActiveResolutions(selection.Profile),
-            progress: progress, cancellationToken: cancellationToken, options: AnalysisOptions.Default with { DataDirectory = store.Root },
-            noRepack: selection.Profile.NoRepack);
+        GameInstaller.Validate(selection.Config.GameDir!, hash, selection.Loaded.Inputs.Select(i => i.ArchivePath), selection.Config.Base);
+        var result = ProfileArchiveBuilder.Build(store, selection.Profile, selection.Loaded, output, false, selection.Profile.NoRepack,
+            progress, cancellationToken);
         return new(selection.Profile, selection.Config, selection.Signature, output, hash, result);
     }
 
@@ -119,7 +116,9 @@ public sealed class ProfileInstaller(ManagerStore store)
         bool rebase = retainIndependentBase && BuildFiles.SamePath(BuildFiles.Resolve(prepared.Config.Base!),
             BuildFiles.Resolve(Path.Combine(prepared.Config.GameDir!, "data.win")));
         GameInstaller.Install(prepared.OutputPath, prepared.Config.GameDir!, prepared.BaseSha256,
-            selection.Inputs.Select(i => i.ArchivePath), prepared.Config.Base, prepared.Build.Plan.Catalog);
+            selection.Loaded.Inputs.Select(i => i.ArchivePath), prepared.Config.Base, prepared.Build.Plan.Catalog);
+        if (prepared.Profile.Perf.StartEnabled && prepared.Profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal))
+            PerfIni.Seed(prepared.Config, store.Root);
         // First-run desktop setup may choose the game's own archive. Once installed,
         // keep subsequent checks bound to the verified ancestor rather than the replacement.
         if (rebase)

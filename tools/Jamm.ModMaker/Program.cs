@@ -1,3 +1,4 @@
+using System.Globalization;
 using UndertaleModLib;
 
 namespace Jamm.ModMaker;
@@ -28,9 +29,12 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
-                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload] [--silo-video]
+                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video]
                   bench   <weather.win> <out.win> --scene weather
+                  bench   <legacy.win> <out.win> --scene maize
+                  bench   <modded.win> <out.win> --scene money
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -52,7 +56,17 @@ public static class Program
             case "perf-census": foreach (string line in PerfMode.Census(data)) Console.WriteLine(line); return 0;
             case "inspect": Inspector.Run(data); return 0;
             case "dump": Dump.Run(data, args.Skip(2)); return 0;
-            case "names": foreach (var c in data.Code) Console.WriteLine(c.Name.Content); return 0;
+            case "names":
+                if (args.Contains("--objects"))
+                {
+                    for (int i = 0; i < data.GameObjects.Count; i++)
+                    {
+                        var obj = data.GameObjects[i];
+                        Console.WriteLine($"{i}\t{obj.Name.Content}\t{obj.ParentId?.Name.Content}");
+                    }
+                }
+                else foreach (var c in data.Code) Console.WriteLine(c.Name.Content);
+                return 0;
             case "census":
                 {
                     var room = data.Rooms.ByName(args.Length > 2 ? args[2] : "NewWorld")!;
@@ -79,9 +93,16 @@ public static class Program
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
+            case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when OptionValue(args, "--scene") == "maize": MaizeScene.Apply(data); Save(data, output!); return 0;
             case "bench" when SiloScene.Requested(args): SiloScene.Apply(data, args); Save(data, output!); return 0;
             case "bench" when WorldgenScene.Requested(args): WorldgenScene.Apply(data, args.Contains("--showcase")); Save(data, output!); return 0;
+            case "bench":
+                var benchOpts = ParseBenchOptions(args.Skip(3).ToArray());
+                BenchmarkMod.Apply(data, benchOpts, Console.WriteLine);
+                Save(data, output!, saved => VerifyBench(saved, benchOpts));
+                return 0;
             case "profile":
                 // Profiles a (possibly modded) data.win: instruments all object events.
                 Profiler.Apply(data); Save(data, output!); return 0;
@@ -95,6 +116,90 @@ public static class Program
                 return 0;
             default: Console.Error.WriteLine($"Unknown command '{command}'."); return 1;
         }
+    }
+
+    private static BenchmarkOptions ParseBenchOptions(string[] args)
+    {
+        var scene = BenchmarkScene.Dock;
+        double warmup = 5.0;
+        double duration = 15.0;
+        int maxSamples = 50000;
+        string? outFile = null;
+        bool autoExit = true;
+        int seed = 1337;
+        double dockX = 815.0;
+        double deepX = 21000.0;
+        double deepY = 7200.0;
+        int boatSlot = 7;
+        bool deepSonar = false;
+        bool showHud = false;
+        bool profile = false;
+        bool profileScripts = false;
+        int traceFish = 0;
+        bool fishGrid = false;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            switch (arg)
+            {
+                case "--verbose": break;
+                case "--auto-exit": autoExit = true; break;
+                case "--no-exit": autoExit = false; break;
+                case "--deep-sonar": deepSonar = true; break;
+                case "--show-hud": showHud = true; break;
+                case "--profile": profile = true; break;
+                case "--trace-fish":
+                    traceFish = ParseInt(RequireValue(args, ref i, arg), arg);
+                    if (traceFish < 1) throw new ArgumentException("--trace-fish requires at least one tick.");
+                    break;
+                case "--fish-grid": fishGrid = true; break;
+                case "--profile-scripts": profile = true; profileScripts = true; break;
+                case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
+                case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--duration": duration = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--max-samples": maxSamples = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                case "--out-file": outFile = RequireValue(args, ref i, arg); break;
+                case "--seed": seed = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                case "--dock-x": dockX = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--deep-x": deepX = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--deep-y": deepY = ParseDouble(RequireValue(args, ref i, arg), arg); break;
+                case "--boat-slot": boatSlot = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                default: throw new ArgumentException($"Unknown bench option '{arg}'.");
+            }
+        }
+
+        return new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid);
+    }
+
+    private static string RequireValue(string[] args, ref int i, string option)
+    {
+        if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+            throw new ArgumentException($"{option} requires a value.");
+        return args[++i];
+    }
+
+    private static double ParseDouble(string text, string option)
+        => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
+            ? value
+            : throw new ArgumentException($"Invalid number '{text}' for {option}.");
+
+    private static int ParseInt(string text, string option)
+        => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+            ? value
+            : throw new ArgumentException($"Invalid integer '{text}' for {option}.");
+
+    private static void VerifyBench(UndertaleData saved, BenchmarkOptions opts)
+    {
+        var ctrl = saved.GameObjects.ByName(BenchmarkMod.ObjectName)
+            ?? throw new InvalidDataException($"Saved archive missing '{BenchmarkMod.ObjectName}'.");
+        if (!ctrl.Persistent)
+            throw new InvalidDataException($"Saved '{BenchmarkMod.ObjectName}' is not persistent.");
+        var newWorld = saved.Rooms.ByName("NewWorld")
+            ?? throw new InvalidDataException("Saved archive missing 'NewWorld'.");
+        if (!newWorld.GameObjects.Any(g => g.ObjectDefinition == ctrl))
+            throw new InvalidDataException($"Saved 'NewWorld' does not contain '{BenchmarkMod.ObjectName}'.");
+        Console.WriteLine($"bench: scene={BenchmarkMod.SceneName(opts.Scene)}, warmup={opts.WarmupSeconds}s, duration={opts.CaptureSeconds}s, max_samples={opts.MaxSamples}, auto_exit={opts.AutoExit}");
     }
 
     private static string? OptionValue(string[] args, string name)

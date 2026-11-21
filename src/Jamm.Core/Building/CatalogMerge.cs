@@ -23,7 +23,7 @@ public static class CatalogMerge
         [(0, 23), (0, 25), (1, 39), (1, 43), (2, 46)];
     private sealed record Cell(string Field, int Area, int Slot, string Value, int Start, int End);
 
-    internal static (ModPatch[] Patches, CatalogMapping[] Mapping) Prepare(IReadOnlyList<ModPatch> patches)
+    internal static (ModPatch[] Patches, CatalogMapping[] Mapping) Prepare(IReadOnlyList<ModPatch> patches, bool hasMergedBase = false)
     {
         var creates = patches.Select(p => p.Changes.GetValueOrDefault("code")?.Changed.FirstOrDefault(a => a.Name == Create)).ToArray();
         string? ancestor = creates.FirstOrDefault(c => c?.BaseCode is not null)?.BaseCode?.Text;
@@ -31,19 +31,34 @@ public static class CatalogMerge
         var baseCells = Cells(ancestor);
         var baseObjects = Objects(baseCells);
         if (baseObjects.Count == 0) return (patches.ToArray(), []);
-        var occupied = new Dictionary<(int Area, int Slot), string>(baseObjects);
-        var identity = baseObjects.ToDictionary(c => c.Value, c => c.Key, StringComparer.Ordinal);
-        var maxima = baseObjects.Keys.GroupBy(k => k.Area).ToDictionary(g => g.Key, g => g.Max(k => k.Slot));
+        // The first patch of a layered build already carries the merged catalog.
+        // Inherited entries in the addon archives still use the raw base's slots.
+        string seed = hasMergedBase ? creates[0]?.ModCode?.Text ?? ancestor : ancestor;
+        var seedObjects = hasMergedBase ? Objects(Cells(seed)) : baseObjects;
+        var occupied = new Dictionary<(int Area, int Slot), string>(seedObjects);
+        var identity = seedObjects.ToDictionary(c => c.Value, c => c.Key, StringComparer.Ordinal);
+        var maxima = seedObjects.Keys.GroupBy(k => k.Area).ToDictionary(g => g.Key, g => g.Max(k => k.Slot));
         List<CatalogMapping> mapping = [];
+        List<CatalogMapping> inheritedMoves = [];
         var relocations = new Dictionary<(int Area, int Slot), int>[patches.Count];
         var additions = new List<(Cell[] Cells, int Area, int Slot)>();
         for (int m = 0; m < patches.Count; m++)
         {
             relocations[m] = [];
+            if (hasMergedBase && m == 0) continue;
+            string modName = patches[m].Mod.Name ?? patches[m].Mod.FileName;
             var cells = Cells(creates[m]?.ModCode?.Text ?? ancestor);
             foreach (var (key, obj) in Objects(cells).OrderBy(c => c.Key.Area).ThenBy(c => c.Key.Slot))
             {
-                if (baseObjects.TryGetValue(key, out string? baseObject) && baseObject == obj) continue;
+                if (baseObjects.TryGetValue(key, out string? baseObject) && baseObject == obj)
+                {
+                    if (hasMergedBase && identity.TryGetValue(obj, out var inherited) && inherited.Area == key.Area && inherited.Slot != key.Slot)
+                    {
+                        relocations[m][key] = inherited.Slot;
+                        inheritedMoves.Add(new(modName, ObjectName(obj), key.Area, key.Slot, inherited.Slot));
+                    }
+                    continue;
+                }
                 int slot;
                 if (identity.TryGetValue(obj, out var previous))
                 {
@@ -62,7 +77,7 @@ public static class CatalogMerge
                     additions.Add((cells.Where(c => c.Area == key.Area && c.Slot == key.Slot && c.Field != "map").ToArray(), key.Area, slot));
                 }
                 relocations[m][key] = slot;
-                mapping.Add(new(patches[m].Mod.Name ?? patches[m].Mod.FileName, ObjectName(obj), key.Area, key.Slot, slot));
+                mapping.Add(new(modName, ObjectName(obj), key.Area, key.Slot, slot));
             }
             // Some legacy mods overwrite their own additions. Recover earlier named objects
             // too; literal references retain the source's last-write meaning.
@@ -84,16 +99,22 @@ public static class CatalogMerge
                     // Description occurrences cannot reliably be paired after an author typo.
                     // Use the verified display label rather than another fish's description.
                     additions.Add(([version, labels[v], labels[v] with { Field = "desc" }], version.Area, slot));
-                    mapping.Add(new(patches[m].Mod.Name ?? patches[m].Mod.FileName, ObjectName(version.Value), version.Area, version.Slot, slot));
+                    mapping.Add(new(modName, ObjectName(version.Value), version.Area, version.Slot, slot));
                 }
             }
         }
         // Keep the ancestor's complete parallel-array definitions and initialization order.
         // New entries are initialized explicitly after the ancestor, including all runtime arrays.
-        StringBuilder create = new(ancestor.TrimEnd());
-        create.AppendLine().AppendLine("jamm_catalog_notice = 0;");
-        foreach (var (key, _) in baseObjects.OrderBy(c => c.Key.Area).ThenBy(c => c.Key.Slot))
-            create.AppendLine($"jamm_catalog_legacy[{key.Area}, {key.Slot}] = {(LegacyReplacements.Contains(key) || mapping.Any(m => m.Area == key.Area && m.SourceSlot == key.Slot) ? -1 : key.Slot)};");
+        StringBuilder create = new(seed.TrimEnd());
+        create.AppendLine();
+        bool seeded = hasMergedBase && seed.Contains("jamm_catalog_legacy", StringComparison.Ordinal);
+        if (!seeded) create.AppendLine("jamm_catalog_notice = 0;");
+        foreach (var (key, _) in seedObjects.OrderBy(c => c.Key.Area).ThenBy(c => c.Key.Slot))
+        {
+            bool ambiguous = mapping.Any(m => m.Area == key.Area && m.SourceSlot == key.Slot);
+            if (!seeded || ambiguous)
+                create.AppendLine($"jamm_catalog_legacy[{key.Area}, {key.Slot}] = {(ambiguous || LegacyReplacements.Contains(key) ? -1 : key.Slot)};");
+        }
         foreach (var addition in additions)
         {
             var values = addition.Cells.GroupBy(c => c.Field).ToDictionary(g => g.Key, g => g.Last().Value);
@@ -103,14 +124,18 @@ public static class CatalogMerge
             create.AppendLine($"jamm_catalog_legacy{at} = -1;");
         }
         // Preserve author calls to the new API, made after their literal definitions.
+        var inheritedCalls = hasMergedBase ? Calls(seed, "jamm_catalog_register").ToHashSet(StringComparer.Ordinal) : [];
         foreach (string call in creates.Where(c => c?.ModCode is not null).SelectMany(c => Calls(c!.ModCode!.Text, "jamm_catalog_register")).Distinct(StringComparer.Ordinal))
+        {
+            if (inheritedCalls.Contains(call)) continue;
             create.AppendLine(call + ";");
+        }
         var result = patches.Select((patch, m) =>
         {
             var changes = new SortedDictionary<string, AssetChanges>(patch.Changes, StringComparer.Ordinal);
             var code = changes["code"];
             AssetPatch Update(AssetPatch asset) => asset.ModCode is null ? asset : asset with
-            { ModCode = asset.ModCode with { Text = asset.Name == Create ? create.ToString() : RewriteInstanceReferences(RewriteReferences(asset.ModCode.Text, asset.Name, relocations[m]), asset.Name, mapping.Where(v => v.Mod == (patch.Mod.Name ?? patch.Mod.FileName))) } };
+            { ModCode = asset.ModCode with { Text = asset.Name == Create ? create.ToString() : RewriteInstanceReferences(RewriteReferences(asset.ModCode.Text, asset.Name, relocations[m]), asset.Name, mapping.Concat(inheritedMoves).Where(v => v.Mod == (patch.Mod.Name ?? patch.Mod.FileName))) } };
             changes["code"] = code with { Added = code.Added.Select(Update).ToArray(), Changed = code.Changed.Select(Update).ToArray() };
             return patch with { Changes = changes };
         }).ToArray();

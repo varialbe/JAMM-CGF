@@ -146,6 +146,9 @@ public sealed record ModKitManifest(
 
     /// <summary>Fishing rods registered with the JAMM item API.</summary>
     public IReadOnlyList<ModKitRod> Rods { get; init; } = [];
+
+    /// <summary>Optional base or addon role declared by the package.</summary>
+    public Management.ModRole? Role { get; init; }
 }
 
 /// <summary>Parses, validates, and scaffolds ModKit folder packages (<c>jamm-mod.json</c> + art + GML hooks).</summary>
@@ -225,11 +228,12 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
             EnsureUniqueKeys(objects.Select(o => ModKitBuilder.SanitizeIdent(o.Key)), "$.objects");
 
+            var (_, _, role) = Management.ModRole.ReadManifest(rootObj, manifestPath, readIdentity: false);
             var weathers = ParseArray(rootObj, "weathers", "$.weathers", (el, path) => ParseWeather(root, el, path, spritesByKey, fish));
             EnsureUniqueKeys(weathers.Select(w => ModKitBuilder.SanitizeIdent(w.Id)), "$.weathers");
 
             return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
-                { Areas = areas, Sprites = sprites, Objects = objects, Weathers = weathers, Rods = rods };
+                { Areas = areas, Sprites = sprites, Objects = objects, Weathers = weathers, Rods = rods, Role = role };
         }
     }
 

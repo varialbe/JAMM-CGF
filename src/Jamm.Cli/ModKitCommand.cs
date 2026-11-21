@@ -81,8 +81,10 @@ internal static class ModKitCommand
 
             case "build":
                 var buildRecipe = isRecipe ? RecipePackage.Load(dir) : null;
-                string packageId = buildRecipe?.Id ?? ModKitPackage.Load(dir).Id;
-                string? basePath = options.GetValueOrDefault("--base") ?? new ManagerStore(dataDirectory).Config().Base;
+                var loaded = buildRecipe is null ? ModKitPackage.Load(dir) : null;
+                string packageId = buildRecipe?.Id ?? loaded!.Id;
+                string? basePath = options.GetValueOrDefault("--base")
+                    ?? (loaded is not null ? new ModLibrary(new ManagerStore(dataDirectory)).ModKitAncestor(loaded) : new ManagerStore(dataDirectory).Config().Base);
                 if (string.IsNullOrWhiteSpace(basePath))
                     throw new ArgumentException("Set the configured legacy base first ('cgfmm config set base <data.win>') or pass --base <data.win>.");
                 string outPath = options.GetValueOrDefault("--out", Path.Combine(Path.GetFullPath(dir), $"{packageId}.win"));

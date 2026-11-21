@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Jamm.Core.Building;
 using Jamm.Core.ModKit;
 using Jamm.Core.Patching;
@@ -9,7 +10,8 @@ namespace Jamm.Core.Management;
 /// <summary>Imports immutable local mod copies, computes patches and reports exact-base compatibility.</summary>
 public sealed class ModLibrary(ManagerStore store)
 {
-    internal string Archive(ManagedMod mod) => store.Path("mods", ManagerStore.Name(mod.Id), "data.win");
+    /// <summary>Returns the path of the read-only library copy of the mod archive.</summary>
+    public string Archive(ManagedMod mod) => store.Path("mods", ManagerStore.Name(mod.Id), "data.win");
     /// <summary>Returns the path to the raw unsanitized patch file for a library mod.</summary>
     public string PatchPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".cgfmm-patch.json");
     /// <summary>Returns the path to the sanitized patch file stored alongside the raw patch.</summary>
@@ -20,7 +22,17 @@ public sealed class ModLibrary(ManagerStore store)
     /// <summary>Verifies archive identities, refreshes outdated caches, and returns the active (sanitized by default) patch.</summary>
     public ModPatch Patch(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
+        if (mod.Role is { Role: "addon" } role)
+        {
+            var ancestor = DeclaredAncestor(mod, role);
+            return PatchAgainst(mod, Archive(ancestor), ancestor.Sha256, progress, cancellationToken);
+        }
         var (raw, sanitized, _) = EnsurePatches(mod, progress, cancellationToken);
+        return SelectPatch(mod, raw, sanitized, ResolveSonarCondition);
+    }
+
+    private ModPatch SelectPatch(ManagedMod mod, ModPatch raw, ModPatch sanitized, Func<string, VanillaSonarCondition> sonar)
+    {
         bool keepPerf = mod.KeepAuthorPerformanceChanges;
         bool keepHud = mod.KeepAuthorHudDesign;
         bool keepGameplay = mod.KeepAuthorGameplayChanges;
@@ -42,7 +54,14 @@ public sealed class ModLibrary(ManagerStore store)
             keepPerformanceChanges: keepPerf,
             keepHudDesign: keepHud,
             keepGameplayChanges: keepGameplay,
-            sonarCondition: ResolveSonarCondition(mod.BaseSha256)).Patch;
+            sonarCondition: sonar(raw.Base.Sha256)).Patch;
+    }
+
+    internal ModPatch PatchAgainst(ManagedMod mod, string ancestorPath, string ancestorHash,
+        Action<string>? progress, CancellationToken cancellationToken)
+    {
+        var (raw, sanitized, _) = EnsureAncestorPatches(mod, ancestorPath, ancestorHash, progress, cancellationToken);
+        return SelectPatch(mod, raw, sanitized, _ => LoadSonarCondition(ancestorPath, cancellationToken));
     }
 
     /// <summary>Returns the verified unsanitized patch for a library mod.</summary>
@@ -85,8 +104,89 @@ public sealed class ModLibrary(ManagerStore store)
         string? basePath = store.Config().Base;
         if (string.IsNullOrWhiteSpace(basePath) || !File.Exists(basePath) || BuildFiles.Hash(basePath) != baseSha256)
             return VanillaSonarCondition.Default;
-        using var file = GameFileLoader.Load(basePath);
+        return LoadSonarCondition(basePath);
+    }
+
+    private static VanillaSonarCondition LoadSonarCondition(string path, CancellationToken cancellationToken = default)
+    {
+        using var file = GameFileLoader.Load(path, cancellationToken: cancellationToken);
         return VanillaSonarCondition.FromData(file.Data);
+    }
+
+    private (ModPatch Raw, ModPatch Sanitized, ModSanitizerReport Report) EnsureAncestorPatches(ManagedMod mod,
+        string ancestorPath, string ancestorHash, Action<string>? progress, CancellationToken cancellationToken)
+    {
+        string archive = Archive(mod);
+        if (!File.Exists(archive) || BuildFiles.Hash(archive) != mod.Sha256)
+            throw new InvalidDataException($"Stored archive '{archive}' for '{mod.Name}' is missing or changed. Re-add the original mod.");
+        if (!File.Exists(ancestorPath) || BuildFiles.Hash(ancestorPath) != ancestorHash)
+            throw new InvalidDataException($"Ancestor archive '{ancestorPath}' is missing or changed. Re-add the original base mod and retry.");
+        cancellationToken.ThrowIfCancellationRequested();
+        string cache = AncestorCachePath(mod, ancestorHash);
+        if (File.Exists(cache))
+        {
+            try
+            {
+                var cached = store.Read<AncestorPatchCache>(cache);
+                bool Matches(ModPatch patch) => patch.Base.Sha256 == ancestorHash && patch.Mod.Sha256 == mod.Sha256
+                    && patch.Mod.Name == mod.Name && patch.AssetTypesVersion == PatchJson.AssetTypesVersion
+                    && patch.FormatVersion == PatchJson.FormatVersion;
+                if (cached.Version == AncestorCacheVersion && cached.Raw is not null && cached.Sanitized is not null && cached.Report is not null
+                    && cached.Report.SanitizerVersion == ModSanitizer.Version && Matches(cached.Raw) && Matches(cached.Sanitized))
+                    return (cached.Raw, cached.Sanitized, cached.Report);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+        }
+        progress?.Invoke($"Diffing {mod.Name} against its selected ancestor…");
+        void Report(string message) { cancellationToken.ThrowIfCancellationRequested(); progress?.Invoke(message); }
+        using var original = GameFileLoader.Load(ancestorPath, Report, cancellationToken);
+        using var source = GameFileLoader.Load(archive, Report, cancellationToken);
+        var raw = PatchBuilder.Create(original, source, mod.Name, Report, AnalysisOptions.Default with { DataDirectory = store.Root });
+        if (raw.Base.Sha256 != ancestorHash || raw.Mod.Sha256 != mod.Sha256)
+            throw new IOException($"Inputs changed while diffing '{mod.Name}'. Retry with stable archive copies.");
+        raw = raw with { Mod = raw.Mod with { FileName = mod.SourceFileName } };
+        var sanitized = ModSanitizer.Sanitize(raw, sonarCondition: VanillaSonarCondition.FromData(original.Data));
+        cancellationToken.ThrowIfCancellationRequested();
+        store.WriteText(cache, JsonSerializer.Serialize(new AncestorPatchCache(AncestorCacheVersion, raw, sanitized.Patch, sanitized.Report),
+            AncestorCacheJson) + "\n");
+        return (raw, sanitized.Patch, sanitized.Report);
+    }
+
+    private const int AncestorCacheVersion = 1;
+    private static readonly JsonSerializerOptions AncestorCacheJson = new(ManagerStore.JsonOptions)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    private sealed record AncestorPatchCache(int Version, ModPatch Raw, ModPatch Sanitized, ModSanitizerReport Report);
+
+    private string AncestorCachePath(ManagedMod mod, string ancestorHash) => store.Path("patches", ManagerStore.Name(mod.Id),
+        ManagerStore.Name(ancestorHash) + "-" + ManagerStore.Name(mod.Sha256) + ".json");
+
+    internal static ManagedMod? FindAncestor(IEnumerable<ManagedMod> candidates, ModRole role)
+    {
+        var mods = candidates.ToArray();
+        return mods.FirstOrDefault(m => m.Id == role.Base) ?? (mods.Where(role.Targets).Take(2).ToArray() switch
+        {
+            [var only] => only,
+            _ => null
+        });
+    }
+
+    private ManagedMod DeclaredAncestor(ManagedMod mod, ModRole role) =>
+        FindAncestor(All().Where(m => m.Id != mod.Id), role)
+        ?? throw new InvalidDataException($"Addon '{mod.Name}' requires base '{role.Base}'. Add the matching base mod to the library.");
+
+    /// <summary>Resolves the source archive for a ModKit package using its declaration or configured vanilla.</summary>
+    public string ModKitAncestor(ModKitManifest manifest)
+    {
+        if (manifest.Role is not { Role: "addon" } role)
+            return store.Config().Base ?? throw new ArgumentException("Configure a legacy base with 'cgfmm config set base <data.win>' or pass --base.");
+        var ancestor = FindAncestor(All(), role)
+            ?? throw new InvalidDataException($"ModKit addon '{manifest.Name}' requires base '{role.Base}'. Import the matching base mod before building the addon.");
+        string path = Archive(ancestor);
+        if (!File.Exists(path) || BuildFiles.Hash(path) != ancestor.Sha256)
+            throw new InvalidDataException($"Stored base archive '{path}' for '{ancestor.Name}' is missing or changed. Re-add the original base mod.");
+        return path;
     }
 
     /// <summary>Stores or updates the ModKit source folder path in the mod's metadata.</summary>
@@ -114,6 +214,11 @@ public sealed class ModLibrary(ManagerStore store)
 
     private (ModPatch Raw, ModPatch Sanitized, ModSanitizerReport Report) EnsurePatches(ManagedMod mod, Action<string>? progress, CancellationToken cancellationToken)
     {
+        if (mod.Role is { Role: "addon" } role)
+        {
+            var ancestor = DeclaredAncestor(mod, role);
+            return EnsureAncestorPatches(mod, Archive(ancestor), ancestor.Sha256, progress, cancellationToken);
+        }
         var patch = PatchJson.Deserialize(File.ReadAllText(PatchPath(mod)));
         cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(Archive(mod)))
@@ -179,7 +284,7 @@ public sealed class ModLibrary(ManagerStore store)
     {
         ManagerStore.Name(id);
         var mod = store.Read<ManagedMod>(store.Path("mods", id, "mod.json"));
-        if (mod.Id != id || string.IsNullOrWhiteSpace(mod.Name) || string.IsNullOrWhiteSpace(mod.Sha256))
+        if (mod.Id != id || string.IsNullOrWhiteSpace(mod.Name) || string.IsNullOrWhiteSpace(mod.Sha256) || mod.Role?.IsValid() == false)
             throw new InvalidDataException($"Library metadata for '{id}' is invalid. Remove the damaged entry and add the source mod again.");
         return mod;
     }
@@ -221,6 +326,7 @@ public sealed class ModLibrary(ManagerStore store)
         {
             ModKitManifest? modKitManifest = isModKitFolder ? ModKitPackage.Load(trimmedSource) : null;
             RecipeManifest? recipeManifest = null;
+            (string? Id, string? Version, ModRole? Role) archiveManifest = default;
             string? sourceFolder = isModKitFolder ? Path.GetFullPath(trimmedSource) : null;
             if (modKitManifest is not null) ValidateDisplayName(name ?? modKitManifest.Name);
 
@@ -230,6 +336,7 @@ public sealed class ModLibrary(ManagerStore store)
                 if (zipKind == ZipPackageKind.DataWin)
                 {
                     ValidateDisplayName(name ?? Path.GetFileNameWithoutExtension(trimmedSource));
+                    archiveManifest = ReadArchiveManifest(trimmedSource, zip: true);
                     CopyZip(trimmedSource, copy, cancellationToken);
                 }
                 else
@@ -240,7 +347,7 @@ public sealed class ModLibrary(ManagerStore store)
                     {
                         modKitManifest = ModKitPackage.Load(packageRoot);
                         ValidateDisplayName(name ?? modKitManifest.Name);
-                        ModKitBuilder.Build(packageRoot, basePath, copy, progress, cancellationToken, noRepack: true);
+                        ModKitBuilder.Build(packageRoot, ModKitAncestor(modKitManifest), copy, progress, cancellationToken, noRepack: true);
                     }
                     else
                     {
@@ -252,12 +359,13 @@ public sealed class ModLibrary(ManagerStore store)
                     }
                 }
             }
-            else if (isModKitFolder)
+            else if (modKitManifest is not null)
             {
-                ModKitBuilder.Build(trimmedSource, basePath, copy, progress, cancellationToken, noRepack: true);
+                ModKitBuilder.Build(trimmedSource, ModKitAncestor(modKitManifest), copy, progress, cancellationToken, noRepack: true);
             }
             else if (trimmedSource.EndsWith(".win", StringComparison.OrdinalIgnoreCase))
             {
+                archiveManifest = ReadArchiveManifest(trimmedSource, zip: false);
                 using var input = new FileStream(trimmedSource, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var output = new FileStream(copy, FileMode.CreateNew, FileAccess.Write);
                 input.CopyTo(output);
@@ -273,7 +381,9 @@ public sealed class ModLibrary(ManagerStore store)
             string displayName = name ?? modKitManifest?.Name ?? recipeManifest?.Name ?? Path.GetFileNameWithoutExtension(trimmedSource);
             description ??= modKitManifest?.Description ?? recipeManifest?.Description;
             string? author = modKitManifest?.Author ?? recipeManifest?.Author;
-            string? version = modKitManifest?.Version ?? recipeManifest?.Version;
+            string? version = modKitManifest?.Version ?? recipeManifest?.Version ?? archiveManifest.Version;
+            string? packageId = modKitManifest?.Id ?? archiveManifest.Id;
+            ModRole? role = modKitManifest?.Role ?? archiveManifest.Role;
             bool isModKit = modKitManifest is not null;
             ValidateDisplayName(displayName);
             if (stableId is not null) ManagerStore.Name(stableId);
@@ -281,9 +391,12 @@ public sealed class ModLibrary(ManagerStore store)
             var existing = All().FirstOrDefault(m => m.Sha256 == hash && (stableId is null || m.Id == stableId));
             if (existing is not null)
             {
-                Patch(existing, progress, cancellationToken);
-                if (existing.BaseSha256 != BuildFiles.Hash(basePath))
-                    throw new InvalidDataException($"'{existing.Name}' was patched against another base. Restore that base configuration, or remove this mod from its profiles and re-add it.");
+                if (existing.Role is not { Role: "addon" } && role is not { Role: "addon" })
+                {
+                    Patch(existing, progress, cancellationToken);
+                    if (existing.BaseSha256 != BuildFiles.Hash(basePath))
+                        throw new InvalidDataException($"'{existing.Name}' was patched against another base. Restore that base configuration, or remove this mod from its profiles and re-add it.");
+                }
                 bool updatedMeta = false;
                 if (origin is not null && !existing.Origins.Contains(origin))
                 {
@@ -303,6 +416,12 @@ public sealed class ModLibrary(ManagerStore store)
                     };
                     updatedMeta = true;
                 }
+                if ((isModKit || archiveManifest != default)
+                    && (existing.PackageId != packageId || existing.Role != role || existing.Version != version))
+                {
+                    existing = existing with { PackageId = packageId, Role = role, Version = version };
+                    updatedMeta = true;
+                }
                 if (updatedMeta)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -311,27 +430,34 @@ public sealed class ModLibrary(ManagerStore store)
                 return new(existing, ["This exact archive is already in the library; its existing name is retained."], true);
             }
             if (All().Any(m => m.Name == displayName && m.Id != stableId)) throw new ArgumentException($"Mod name '{displayName}' already exists. Use --name with a unique name.");
-            using var original = GameFileLoader.Load(basePath, progress);
-            using var mod = GameFileLoader.Load(copy, progress);
+            using var original = GameFileLoader.Load(basePath, progress, cancellationToken);
+            using var mod = GameFileLoader.Load(copy, progress, cancellationToken);
             List<string> notices = CompatibilityWarnings(original.Inspection, mod.Inspection).ToList();
-            ModPatch patch;
-            try { patch = PatchBuilder.Create(original, mod, displayName, progress, AnalysisOptions.Default with { DataDirectory = store.Root }); }
+            ModPatch? patch = null;
+            try
+            {
+                if (role is { Role: "addon" }) PatchBuilder.Validate(original.Inspection, mod.Inspection);
+                else patch = PatchBuilder.Create(original, mod, displayName, progress, AnalysisOptions.Default with { DataDirectory = store.Root });
+            }
             catch (Exception ex) when (ex is ArgumentException or NotComparableException or InvalidDataException)
             { throw new InvalidDataException($"Cannot add '{sourceName}': {string.Join(" ", notices)} {ex.Message} Choose a compatible legacy VM mod and base.", ex); }
             // Patch identity describes the .win bytes; metadata separately retains the supplied zip filename.
-            patch = patch with { Mod = patch.Mod with { FileName = isZip && recipeManifest is null && modKitManifest is null ? "data.win" : sourceName } };
-            if (BuildFiles.Hash(basePath) != patch.Base.Sha256 || hash != patch.Mod.Sha256)
+            if (patch is not null)
+                patch = patch with { Mod = patch.Mod with { FileName = isZip && recipeManifest is null && modKitManifest is null ? "data.win" : sourceName } };
+            if (BuildFiles.Hash(basePath) != original.Inspection.Sha256 || hash != mod.Inspection.Sha256)
                 throw new IOException("An input changed during import. Retry with stable copies.");
-            var sanitized = ModSanitizer.Sanitize(patch, sonarCondition: VanillaSonarCondition.FromData(original.Data));
-            var entry = new ManagedMod(stableId ?? hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, patch.Base.Sha256,
-                patch.Mod.Gen8Timestamp, patch.Mod.GmVersion, patch.Mod.Bytecode)
+            var entry = new ManagedMod(stableId ?? hash, displayName, sourceName, hash, DateTimeOffset.UtcNow, original.Inspection.Sha256,
+                mod.Inspection.Timestamp, mod.Inspection.GameMakerVersion, mod.Inspection.BytecodeVersion)
             {
                 Origins = origin is null ? [] : [origin],
                 Description = description,
                 SourceFolder = sourceFolder,
                 Author = author,
                 Version = version,
-                IsModKit = isModKit
+                IsModKit = isModKit,
+                PackageId = packageId,
+                Role = role,
+                SuggestBase = patch is not null && SuggestsBase(patch, original.Inspection)
             };
             store.Write(store.Path("mods", Path.GetFileName(stage), "mod.json"), entry);
             string patchPath = PatchPath(entry);
@@ -344,16 +470,24 @@ public sealed class ModLibrary(ManagerStore store)
                 Directory.Move(store.Path("mods", stableId), backupDirectory);
                 previousDirectory = backupDirectory;
             }
-            publishedPatch = patchPath;
-            publishedSanitized = SanitizedPatchPath(entry);
-            publishedReport = SanitizerReportPath(entry);
-            store.WriteText(publishedPatch, PatchJson.Serialize(patch));
-            store.WriteText(publishedSanitized, PatchJson.Serialize(sanitized.Patch));
-            store.Write(publishedReport, sanitized.Report);
+            if (patch is not null)
+            {
+                var sanitized = ModSanitizer.Sanitize(patch, sonarCondition: VanillaSonarCondition.FromData(original.Data));
+                publishedPatch = patchPath;
+                publishedSanitized = SanitizedPatchPath(entry);
+                publishedReport = SanitizerReportPath(entry);
+                store.WriteText(publishedPatch, PatchJson.Serialize(patch));
+                store.WriteText(publishedSanitized, PatchJson.Serialize(sanitized.Patch));
+                store.Write(publishedReport, sanitized.Report);
+            }
             cancellationToken.ThrowIfCancellationRequested();
             Directory.Move(stage, store.Path("mods", entry.Id));
             published = true;
-            return new(entry, notices.Concat(patch.Warnings).Distinct(StringComparer.Ordinal).ToArray(), false);
+            if (role is { Role: "addon" })
+                notices.Add($"'{displayName}' declares addon base '{role.Base}'. Enable that base in the profile to generate its addon patch.");
+            else if (entry.SuggestBase && role is null)
+                notices.Add($"'{displayName}' changes over 25% of vanilla code and may be a base mod. Assign its role in the profile if needed.");
+            return new(entry, notices.Concat(patch?.Warnings ?? []).Distinct(StringComparer.Ordinal).ToArray(), false);
         }
         catch
         {
@@ -384,6 +518,17 @@ public sealed class ModLibrary(ManagerStore store)
         using var original = basePath is null ? null : GameFileLoader.Load(basePath);
         return all.Select(m =>
         {
+            if (m.Role is { Role: "addon" } role)
+            {
+                var ancestor = FindAncestor(all.Where(other => other.Id != m.Id), role);
+                if (ancestor is null)
+                    return new ModListEntry(m, false, false, false, false, $"requires base '{role.Base}'; add it to the library");
+                bool matches = role.Mismatch(ancestor) is null;
+                bool sameVersion = m.GmVersion == ancestor.GmVersion && m.Bytecode == ancestor.Bytecode;
+                return new ModListEntry(m, matches, m.Gen8Timestamp == ancestor.Gen8Timestamp, sameVersion,
+                    File.Exists(AncestorCachePath(m, ancestor.Sha256)),
+                    matches ? $"targets {ancestor.Name}" : $"targets {ancestor.Name}; declared base version or hash differs");
+            }
             bool hash = m.BaseSha256 == original?.Inspection.Sha256;
             bool timestamp = m.Gen8Timestamp == original?.Inspection.Timestamp;
             bool version = m.GmVersion == original?.Inspection.GameMakerVersion && m.Bytecode == original?.Inspection.BytecodeVersion;
@@ -413,6 +558,16 @@ public sealed class ModLibrary(ManagerStore store)
         File.Delete(PatchPath(mod));
         if (File.Exists(SanitizedPatchPath(mod))) File.Delete(SanitizedPatchPath(mod));
         if (File.Exists(SanitizerReportPath(mod))) File.Delete(SanitizerReportPath(mod));
+        string ancestorCache = store.Path("patches", mod.Id);
+        if (Directory.Exists(ancestorCache))
+        {
+            foreach (string path in Directory.EnumerateFiles(ancestorCache, "*.json"))
+            {
+                BuildFiles.RefuseStorageLink(path);
+                File.Delete(path);
+            }
+            Directory.Delete(ancestorCache);
+        }
         Directory.Delete(directory, true);
     }
 
@@ -421,6 +576,36 @@ public sealed class ModLibrary(ManagerStore store)
         if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("The mod needs a nonempty name.");
         if (displayName.Contains(',') || displayName.Any(char.IsControl))
             throw new ArgumentException("Mod names cannot contain commas or control characters. Use --name with a readable name so it can be selected with --mods.");
+    }
+
+    private static bool SuggestsBase(ModPatch patch, GameInspection original)
+    {
+        var code = patch.Changes["code"];
+        return (code.Changed.Count + code.Removed.Count) * 4L > original.Counts.GetValueOrDefault(AssetKind.Code);
+    }
+
+    private static (string? Id, string? Version, ModRole? Role) ReadArchiveManifest(string source, bool zip)
+    {
+        string sidecar = Path.ChangeExtension(source, ".jamm.json");
+        using var archive = zip ? ZipFile.OpenRead(source) : null;
+        var entries = archive?.Entries.Where(e => e.Name.Equals("jamm.json", StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+        if (entries?.Length > 1)
+            throw new InvalidDataException($"'{source}' contains multiple jamm.json manifests. Keep only one.");
+        var entry = entries?.SingleOrDefault();
+        if (entry?.Length > 64 * 1024 || File.Exists(sidecar) && new FileInfo(sidecar).Length > 64 * 1024)
+            throw new InvalidDataException($"The manifest for '{source}' exceeds 64 KiB. Use a small JSON metadata file.");
+        using var stream = entry?.Open() ?? (File.Exists(sidecar) ? File.OpenRead(sidecar) : null);
+        if (stream is null) return default;
+        string label = entry is null ? sidecar : $"{source}/{entry.FullName}";
+        try
+        {
+            using var document = JsonDocument.Parse(stream);
+            return ModRole.ReadManifest(document.RootElement, label);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Cannot read manifest '{label}'. Fix its JSON syntax and retry.", ex);
+        }
     }
 
     private enum ZipPackageKind { DataWin, ModKit, Recipe }

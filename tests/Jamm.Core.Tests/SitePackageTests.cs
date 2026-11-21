@@ -81,15 +81,21 @@ public sealed class SitePackageTests
         using var doc = JsonDocument.Parse(File.ReadAllText(catalogPath));
         Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
         var entries = doc.RootElement.EnumerateArray().ToArray();
-        Assert.Equal(6, entries.Length);
+        Assert.Equal(9, entries.Length);
 
         var ids = entries.Select(e => e.GetProperty("id").GetString()).ToHashSet(StringComparer.Ordinal);
         Assert.Contains("builtin-perf", ids);
         Assert.Contains("builtin-smooth", ids);
         Assert.Contains("builtin-hd-lite", ids);
         Assert.Contains("builtin-console", ids);
+        Assert.Contains("weather-pack", ids);
+        Assert.Contains("endless-ocean", ids);
+        Assert.Contains("example-rod", ids);
         Assert.Contains("example-fish", ids);
         Assert.Contains("jamm-silo", ids);
+        Assert.Contains("weather-pack", ids);
+        Assert.Contains("endless-ocean", ids);
+        Assert.Contains("example-rod", ids);
 
         foreach (var entry in entries)
         {
@@ -110,7 +116,7 @@ public sealed class SitePackageTests
             Assert.Equal(entry.GetProperty("sizeBytes").GetInt64(), bytes.LongLength);
             Assert.Equal(entry.GetProperty("sha256").GetString(), Convert.ToHexStringLower(SHA256.HashData(bytes)));
 
-            Assert.Equal(".zip", ModDownloadService.Validate(zipPath, 1024 * 1024));
+            Assert.Equal(".zip", ModDownloadService.Validate(zipPath, 16L * 1024 * 1024));
             using var zip = ZipFile.OpenRead(zipPath);
             foreach (var zipEntry in zip.Entries)
             {

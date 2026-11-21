@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JAMM Smooth — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="mod-header">
+      <a class="back" href="../index.html#builtin-smooth">← All mods</a>
+      <div class="card-head">
+        <img src="../assets/smooth.svg" alt="" width="44" height="44">
+        <div>
+          <h1>JAMM Smooth</h1>
+          <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
+          <p>Version 1.0.0</p>
+        </div>
+      </div>
+      <a class="btn" href="../packages/jamm-smooth.zip" download>Download jamm-smooth.zip</a>
+      <div class="checksum">SHA-256: e0d233f9441638b02f7b3f0304909c73b0daec09f0ec5366ce60a8062608ddf6 (367 B)</div>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>JAMM Smooth interpolates the camera and motion for a 60 or 120 FPS display target. It preserves the legacy simulation cadence of 30 ticks per second and supports the game&#x27;s Tab speed-up.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Controls</h2>
+      <ul class="controls">
+        <li>Press F7 to cycle 60 FPS, 120 FPS and off. The initial target is 120 FPS.</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical datasheet</h2>
+      <table class="datasheet">
+        <tbody>
+          <tr><th scope="row">Package type</th><td>Recipe</td></tr>
+          <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
+          <tr><th scope="row">Generator</th><td><code>smooth</code> (recipe generator version <code>2</code>)</td></tr>
+          <tr><th scope="row">APIs used</th><td>Built-in GameMaker event patching, instance activation and view interpolation.</td></tr>
+          <tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 8 controller events and patches the existing <code>Girl.Step</code> event.</td></tr>
+          <tr><th scope="row">Save-file behaviour</th><td>Remembers the selected target in <code>jamm_smooth.ini</code> under <code>[Smooth]</code>, key <code>TargetFPS</code>, shared by all slots.</td></tr>
+          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Perf, HD Lite, Console and an independent third-party mod. The generator expects the original QuestEngine Begin Step reset and the legacy <code>Girl.Step</code> timing anchors.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>The <code>obj_jamm_smooth</code> controller schedules logic ticks from elapsed time. Between ticks it deactivates active instances, wakes them for drawing, and temporarily interpolates selected positions, angles and camera coordinates from the last two simulation states.</p>
+      <p>Keyboard or mouse edges on a render-only frame can promote it to a logic tick. The controller replays Begin Step for the woken instances before input handlers run. At the end of drawing it restores the simulation poses.</p>
+      <p>The generator replaces <code>delta_time</code> reads in <code>Girl.Step</code> with the elapsed time between logic ticks. It also verifies the QuestEngine counter reset so the controller can replay that reset before drawing render-only frames.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+      <ul class="package-files">
+        <li><code>jamm-recipe.json</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
