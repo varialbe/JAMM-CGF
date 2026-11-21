@@ -10,10 +10,10 @@ main (see `docs/reports/fish-value-cap.md`). Fair-Play must only touch obvious d
    Legacy base: `~/cgf-files/legacy/2023-08-16_manifest-9039707068725406600/data.win`.
    Public mods: `~/cgf-files/mods/*.win` and `~/cgf-files/mods/pack-inputs/*.win`.
    Private mods (results must NOT go into the repo): `~/cgf-files/private-vel/*.win`.
-   Write outputs only under `~/jamm-night/n21/fair-play-audit/`.
+   Write outputs only under `.audit/` in this worktree (not committed; delete the .win files when done).
 2. For each decision judge: obvious debug value (correct) or intended balancing (false positive). Public results go
    into `docs/reports/fair-play-audit.md` (table: mod, value, decision, verdict). Private-mod results go into
-   `~/jamm-night/n21/fair-play-audit/private.md` only.
+   `.audit/private.md` only.
 3. For every false positive: add a failing unit test in `tests/Jamm.Core.Tests/ValueGuardTests.cs` (synthetic data,
    no game files), then the smallest fix in ValueGuard so it passes. Also add tests for borderline values that must
    stay untouched (e.g. 10x vanilla headroom boundary, boat speed 100).
