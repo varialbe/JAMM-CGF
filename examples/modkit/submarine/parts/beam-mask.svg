@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="500" viewBox="0 0 250 500">
+  <!-- Smooth nested translucent cone for soft angular falloff -->
+  <circle cx="12" cy="250" r="26" fill="#ffffff" fill-opacity="0.35"/>
+  <circle cx="12" cy="250" r="14" fill="#ffffff" fill-opacity="0.65"/>
+  <polygon points="4,244 248,40 248,460 4,256" fill="#ffffff" fill-opacity="0.10"/>
+  <polygon points="4,245 248,70 248,430 4,255" fill="#ffffff" fill-opacity="0.12"/>
+  <polygon points="4,246 248,100 248,400 4,254" fill="#ffffff" fill-opacity="0.14"/>
+  <polygon points="4,246 248,130 248,370 4,254" fill="#ffffff" fill-opacity="0.18"/>
+  <polygon points="6,247 248,160 248,340 6,253" fill="#ffffff" fill-opacity="0.22"/>
+  <polygon points="6,248 248,188 248,312 6,252" fill="#ffffff" fill-opacity="0.28"/>
+  <polygon points="8,248 248,212 248,288 8,252" fill="#ffffff" fill-opacity="0.35"/>
+  <polygon points="8,249 248,232 248,268 8,251" fill="#ffffff" fill-opacity="0.45"/>
+</svg>

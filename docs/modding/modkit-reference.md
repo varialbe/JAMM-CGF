@@ -57,6 +57,7 @@ my-mod/
 | `fish` | array | No | `[]` | Custom fish definitions. |
 | `boats` | array | No | `[]` | Custom boat definitions. |
 | `rods` | array | No | `[]` | Custom fishing rod definitions. |
+| `tools` | array | No | `[]` | Custom gear/tool shop definitions. |
 | `hats` | array | No | `[]` | Custom hat (`Gear`) definitions. |
 | `upgrades` | array | No | `[]` | Custom rod upgrade definitions. |
 | `weathers` | array | No | `[]` | [Weather schedule, visuals, audio and fish](weather.md). |
@@ -204,6 +205,23 @@ ModKit calls `jamm_rod_register` from the package's generated init script. The m
 | `unlocked` | bool | No | `false` | `false` makes the rod purchasable. `true` starts it owned, as with boats. |
 
 Use `cost` and `unlocked` for shop availability and ownership. See [the rod cookbook example](cookbook.md#9-a-custom-rod-in-the-shop) and [the registration API](api-reference.md#2-jamm_rod_register).
+
+---
+
+## `tools` Entries
+
+ModKit calls `jamm_tool_register` from the package's generated init script, adding a card to `ToolMenu` (`ToolData`) with automatic save persistence under `[JAMM_Items]`.
+
+| Field | Type | Required | Default | Constraints / Notes |
+| :--- | :--- | :---: | :--- | :--- |
+| `key` | string | Yes | — | Unique within `tools` (`^[a-z0-9_-]+$`). |
+| `name` | string | Yes | — | Non-empty shop display name. |
+| `cost` | number | No | `5000` | `>= 0`. Purchase price in dollars. |
+| `quests` | int | No | `0` | `>= 0`. Minimum completed quests (`Girl.counter[5]`) required to purchase. |
+| `icon` | string | Yes | — | Relative `.png` path or a key from `sprites[]` (1 frame, `76x76` recommended). |
+| `description` | string | No | `"<name>."` | Shop description (`#` for line breaks). |
+| `unlocked` | bool | No | `false` | `false` (`0`, purchasable) or `true` (`1`, owned at start). |
+| `hooks` | object | No | `{}` | Optional `{ "create", "step" }` `.gml` event bodies on `jmk_<id>_<key>_tool` (which starts with `active = 0`). |
 
 ---
 

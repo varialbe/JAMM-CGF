@@ -313,7 +313,11 @@ while [[ $(date +%s) -lt $end ]]; do
         done
         act "submarine light-toggle"
         key l
-        sleep 0.5
+        sleep 0.4
+        act "submarine light-rotate-peek"
+        pick i k; hold "$P" 0.6
+        key f
+        sleep 0.6
         if (( sub_cast == 1 )); then
           act "submarine cast-reel"
           hold space 0.4; sleep 3; hold space 5

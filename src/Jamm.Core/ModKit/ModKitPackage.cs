@@ -138,6 +138,24 @@ public sealed record ModKitUpgrade(
     int MaxStacks,
     ModKitUpgradeHooks Hooks);
 
+/// <summary>Optional GML hook files attached to a ModKit tool.</summary>
+public sealed record ModKitToolHooks(string? Create, string? Step);
+
+/// <summary>A purchasable gear/tool definition in a ModKit package.</summary>
+public sealed record ModKitTool(
+    string Key,
+    string Name,
+    double Cost,
+    int Quests,
+    string IconPath,
+    string Description,
+    bool Unlocked,
+    ModKitToolHooks Hooks)
+{
+    /// <summary>Optional icon sprite recipe key.</summary>
+    public string? IconKey { get; init; }
+}
+
 /// <summary>Validated ModKit package manifest loaded from a package directory.</summary>
 public sealed record ModKitManifest(
     string RootDirectory,
@@ -169,6 +187,9 @@ public sealed record ModKitManifest(
 
     /// <summary>Fishing rods registered with the JAMM item API.</summary>
     public IReadOnlyList<ModKitRod> Rods { get; init; } = [];
+
+    /// <summary>Purchasable tools registered with the JAMM item API.</summary>
+    public IReadOnlyList<ModKitTool> Tools { get; init; } = [];
 
     /// <summary>Optional base or addon role declared by the package.</summary>
     public Management.ModRole? Role { get; init; }
@@ -242,12 +263,14 @@ public static partial class ModKitPackage
             }
             var boats = ParseArray(rootObj, "boats", "$.boats", (el, path) => ParseBoat(root, el, path, spritesByKey));
             var rods = ParseArray(rootObj, "rods", "$.rods", (el, path) => ParseRod(root, el, path));
+            var tools = ParseArray(rootObj, "tools", "$.tools", (el, path) => ParseTool(root, el, path, spritesByKey));
             var hats = ParseArray(rootObj, "hats", "$.hats", (el, path) => ParseHat(root, el, path));
             var upgrades = ParseArray(rootObj, "upgrades", "$.upgrades", (el, path) => ParseUpgrade(root, el, path));
 
             EnsureUniqueKeys(fish.Select(f => f.Key), "$.fish");
             EnsureUniqueKeys(boats.Select(b => b.Key), "$.boats");
             EnsureUniqueKeys(rods.Select(r => ModKitBuilder.SanitizeIdent(r.Key)), "$.rods");
+            EnsureUniqueKeys(tools.Select(t => t.Key), "$.tools");
             EnsureUniqueKeys(hats.Select(h => h.Key), "$.hats");
             EnsureUniqueKeys(upgrades.Select(u => u.Key), "$.upgrades");
             EnsureUniqueKeys(objects.Select(o => ModKitBuilder.SanitizeIdent(o.Key)), "$.objects");
@@ -258,7 +281,7 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(weathers.Select(w => ModKitBuilder.SanitizeIdent(w.Id)), "$.weathers");
 
             return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
-                { Areas = areas, Sprites = sprites, Objects = objects, Scripts = scripts, Weathers = weathers, Rods = rods, Role = role };
+                { Areas = areas, Sprites = sprites, Objects = objects, Scripts = scripts, Weathers = weathers, Rods = rods, Tools = tools, Role = role };
         }
     }
 
@@ -658,6 +681,45 @@ public static partial class ModKitPackage
         }
 
         return new ModKitHat(key, name, spritePath, value, weight, rangeMin, rangeMax, offsetX, offsetY, hatalogOffsetX, hatalogOffsetY, mythic, description, origin, hooks);
+    }
+
+    private static ModKitTool ParseTool(string root, JsonElement element, string path, IReadOnlyDictionary<string, ModKitSprite> sprites)
+    {
+        var obj = ExpectObject(element, path);
+        string key = RequireKey(obj, "key", $"{path}.key");
+        string name = RequireNonEmptyString(obj, "name", $"{path}.name");
+        double cost = OptionalDouble(obj, "cost", $"{path}.cost", 5000.0, min: 0.0);
+        int quests = OptionalInt(obj, "quests", $"{path}.quests", 0, min: 0);
+        string iconField = RequireNonEmptyString(obj, "icon", $"{path}.icon");
+        string iconPath = "";
+        string? iconKey = null;
+        if (sprites.TryGetValue(iconField, out var recipe))
+        {
+            if (recipe.Frames.Count != 1)
+                throw Error($"{path}.icon", "A tool icon needs a single-frame recipe.");
+            iconKey = iconField;
+        }
+        else if (Path.GetExtension(iconField).Equals(".png", StringComparison.OrdinalIgnoreCase))
+            iconPath = ValidateAssetPath(root, iconField, $"{path}.icon", [".png"], expectedFrames: 1);
+        else
+            throw Error($"{path}.icon", $"Sprite '{iconField}' was not found. Use a key from sprites[] or a relative PNG path.");
+
+        string description = OptionalString(obj, "description", $"{path}.description", $"{name}.");
+        bool unlocked = OptionalBool(obj, "unlocked", $"{path}.unlocked", false);
+
+        ModKitToolHooks hooks = new(null, null);
+        if (TryGetNonNull(obj, "hooks", out var hooksEl))
+        {
+            var hooksObj = ExpectObject(hooksEl, $"{path}.hooks");
+            foreach (var hook in hooksObj.EnumerateObject())
+                if (hook.Name is not ("create" or "step"))
+                    throw Error($"{path}.hooks.{hook.Name}", "Use create or step.");
+            hooks = new(
+                OptionalAssetFile(root, hooksObj, "create", $"{path}.hooks.create", [".gml"]),
+                OptionalAssetFile(root, hooksObj, "step", $"{path}.hooks.step", [".gml"]));
+        }
+
+        return new ModKitTool(key, name, cost, quests, iconPath, description, unlocked, hooks) { IconKey = iconKey };
     }
 
     private static ModKitUpgrade ParseUpgrade(string root, JsonElement element, string path)

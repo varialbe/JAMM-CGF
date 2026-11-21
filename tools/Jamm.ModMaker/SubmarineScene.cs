@@ -27,13 +27,18 @@ internal static class SubmarineScene
             stage_at = current_time;
             capture = "";
             slot = -1;
+            winch_slot = -1;
+            shop_card = noone;
+            winch_card = noone;
             launch_x = -1;
+            pre_peek_cam_x = 0;
+            pre_peek_cam_y = 0;
             depths[0] = 450;
             depths[1] = 1800;
             depths[2] = 4000;
             depth_index = 0;
             file = file_text_open_write("jamm_bench_submarine.csv");
-            file_text_write_string(file, "stage,ms,boat_x,boat_y,depth,oxygen,lamp,lure_state,rod_state,lure_x,lure_y,tether_x,tether_y,port_x,port_y,drop,camera_x,camera_y,cash,owned,deep");
+            file_text_write_string(file, "stage,ms,boat_x,boat_y,depth,oxygen,lamp,lure_state,rod_state,lure_x,lure_y,tether_x,tether_y,port_x,port_y,drop,camera_x,camera_y,cash,owned,deep,view_w,view_h,light_angle,peek_timer,has_winch");
             file_text_writeln(file);
             file_text_close(file);
             """);
@@ -56,7 +61,8 @@ internal static class SubmarineScene
             case 0:
                 if (current_time - stage_at < 2500) exit;
                 slot = jamm_item_find("boat", "submarine:submarine");
-                if (slot < 0) exit;
+                winch_slot = jamm_item_find("tool", "submarine:bow-winch");
+                if (slot < 0 || winch_slot < 0) exit;
                 // Start from a clean shop state even when the runner uses a seeded save.
                 with (Handler) instance_destroy();
                 with (Message) instance_destroy();
@@ -73,16 +79,18 @@ internal static class SubmarineScene
                 Girl.nightfallUnlocked = 1;
                 Girl.level = max(Girl.level, 30);
                 BoatData.unlocked[slot] = 0;
+                ToolData.unlocked[winch_slot] = 0;
+                if (instance_exists(ToolData.item[winch_slot])) ToolData.item[winch_slot].active = 0;
                 keyboard_key_press(vk_f12);
                 break;
             case 1:
                 if (!{{ConsoleMod.ObjectName}}.jamm_console_open) exit;
                 keyboard_key_release(vk_f12);
-                keyboard_string = "money 150000000";
+                keyboard_string = "money 450000000";
                 keyboard_key_press(vk_enter);
                 break;
             case 2:
-                if (Girl.dollars != 150000000) exit;
+                if (Girl.dollars != 450000000) exit;
                 keyboard_key_release(vk_enter);
                 capture = "console";
                 break;
@@ -116,7 +124,7 @@ internal static class SubmarineScene
                 with (shop_card) event_user(0);
                 break;
             case 7:
-                if (!instance_exists({{Sub}}) || BoatData.unlocked[slot] != 1 || Girl.dollars != 25000000) exit;
+                if (!instance_exists({{Sub}}) || BoatData.unlocked[slot] != 1 || Girl.dollars != 325000000) exit;
                 capture = "purchased";
                 break;
             case 8:
@@ -142,7 +150,7 @@ internal static class SubmarineScene
                 keyboard_key_press(ord("V"));
                 break;
             case 10:
-                if (!{{Sub}}.sub_diving) exit;
+                if (!{{Sub}}.sub_diving || view_wview[0] < 1100) exit;
                 keyboard_key_release(ord("V"));
                 keyboard_key_press(vk_down);
                 break;
@@ -161,62 +169,164 @@ internal static class SubmarineScene
                     stage_at = current_time;
                     exit;
                 }
-                keyboard_key_press(ord("L"));
+                // Before buying Bow Winch, casting must stay blocked (exploration only).
+                keyboard_key_press(vk_space);
                 break;
             case 13:
+                if (current_time - stage_at < 250) exit;
+                keyboard_key_release(vk_space);
+                break;
+            case 14:
+                if (current_time - stage_at < 450) exit;
+                if ({{Sub}}.sub_drop != 0 || Lure.state != 0)
+                {
+                    capture = "winch_bypassed";
+                    stage = 99;
+                    exit;
+                }
+                capture = "explore_only";
+                keyboard_key_press(ord("I"));
+                break;
+            case 15:
+                if ({{Sub}}.sub_light_pitch < 35) exit;
+                keyboard_key_release(ord("I"));
+                capture = "light_up";
+                break;
+            case 16:
+                if (current_time - stage_at < 400) exit;
+                keyboard_key_press(ord("K"));
+                break;
+            case 17:
+                if ({{Sub}}.sub_light_pitch > -30) exit;
+                keyboard_key_release(ord("K"));
+                capture = "light_down";
+                break;
+            case 18:
+                if (current_time - stage_at < 400) exit;
+                pre_peek_cam_x = Camera.x;
+                pre_peek_cam_y = Camera.y;
+                keyboard_key_press(ord("F"));
+                break;
+            case 19:
+                if ({{Sub}}.sub_peek_timer <= 0 || {{Sub}}.sub_peek_amount < 0.7) exit;
+                keyboard_key_release(ord("F"));
+                break;
+            case 20:
+                if (current_time - stage_at < 450) exit;
+                if (point_distance(pre_peek_cam_x, pre_peek_cam_y, Camera.x, Camera.y) < 120) exit;
+                capture = "peek";
+                break;
+            case 21:
+                if ({{Sub}}.sub_peek_amount > 0.15) exit;
+                keyboard_key_press(ord("L"));
+                break;
+            case 22:
                 if ({{Sub}}.sub_lamp_on) exit;
                 keyboard_key_release(ord("L"));
                 capture = "light_off";
                 break;
-            case 14:
-                if (current_time - stage_at < 900) exit;
+            case 23:
+                if (current_time - stage_at < 700) exit;
                 keyboard_key_press(ord("L"));
                 break;
-            case 15:
+            case 24:
                 if (!{{Sub}}.sub_lamp_on) exit;
                 keyboard_key_release(ord("L"));
                 capture = "light_on";
                 break;
-            case 16:
+            case 25:
+                if (current_time - stage_at < 400) exit;
+                keyboard_key_press(ord("V"));
+                break;
+            case 26:
+                if ({{Sub}}.sub_diving || {{Sub}}.sub_oxygen != {{Sub}}.sub_oxygen_max
+                    || instance_exists({{Sub}}.sub_lamp)
+                    || view_wview[0] != 800 || view_hview[0] != 480) exit;
+                keyboard_key_release(ord("V"));
+                capture = "surfaced";
+                break;
+            case 27:
+                if (current_time - stage_at < 500) exit;
+                with (icon_Tools) event_user(0);
+                break;
+            case 28:
+                if (!instance_exists(ToolMenu) || !ToolMenu.done_spawning) exit;
+                var tcard = noone;
+                with (ToolCard)
+                    if (item_id == other.winch_slot) tcard = id;
+                if (tcard == noone)
+                {
+                    if (current_time - stage_at < 400) exit;
+                    keyboard_key_release(vk_down);
+                    keyboard_key_press(vk_down);
+                    exit;
+                }
+                keyboard_key_release(vk_down);
+                winch_card = tcard;
+                capture = "tool_shop";
+                break;
+            case 29:
+                if (current_time - stage_at < 800) exit;
+                with (winch_card) event_user(0);
+                break;
+            case 30:
+                if (ToolData.unlocked[winch_slot] != 1 || Girl.dollars != 75000000 || !{{Sub}}.sub_has_winch) exit;
+                capture = "winch_purchased";
+                break;
+            case 31:
+                if (current_time - stage_at < 500) exit;
+                keyboard_key_press(ord("V"));
+                break;
+            case 32:
+                if (!{{Sub}}.sub_diving || view_wview[0] < 1100) exit;
+                keyboard_key_release(ord("V"));
+                keyboard_key_press(vk_down);
+                break;
+            case 33:
+                if ({{Sub}}.sub_y - 1294 < 1200) exit;
+                keyboard_key_release(vk_down);
+                break;
+            case 34:
                 if (current_time - stage_at < 500) exit;
                 keyboard_key_press(vk_space);
                 break;
-            case 17:
+            case 35:
                 if (current_time - stage_at < 250) exit;
                 keyboard_key_release(vk_space);
                 break;
-            case 18:
+            case 36:
                 if ({{Sub}}.sub_drop <= 0) exit;
                 capture = "cast_start";
                 break;
-            case 19:
+            case 37:
                 if (Lure.state != 2) exit;
                 capture = "cast";
                 break;
-            case 20:
+            case 38:
                 if (current_time - stage_at < 700) exit;
                 keyboard_key_press(ord("V"));
                 break;
-            case 21:
+            case 39:
                 if (!{{Sub}}.sub_ascending) exit;
                 keyboard_key_release(ord("V"));
                 capture = "reel_to_surface";
                 break;
-            case 22:
+            case 40:
                 if (current_time - stage_at < 450) exit;
                 keyboard_key_press(vk_space);
                 break;
-            case 23:
+            case 41:
                 if (Lure.state != 0) exit;
                 keyboard_key_release(vk_space);
                 capture = "reeled";
                 break;
-            case 24:
+            case 42:
                 if ({{Sub}}.sub_diving || {{Sub}}.sub_oxygen != {{Sub}}.sub_oxygen_max
-                    || instance_exists({{Sub}}.sub_lamp)) exit;
-                capture = "surfaced";
+                    || instance_exists({{Sub}}.sub_lamp)
+                    || view_wview[0] != 800 || view_hview[0] != 480) exit;
+                capture = "surfaced_2";
                 break;
-            case 25:
+            case 43:
                 if (current_time - stage_at < 850) exit;
                 capture = "passed";
                 stage = 99;
@@ -244,9 +354,17 @@ internal static class SubmarineScene
                 + "," + string(Lure.tether_x) + "," + string(Lure.tether_y) + "," + string(port_x)
                 + "," + string(port_y) + "," + string(sub.sub_drop);
         }
-        else telemetry += ",,,,,,,,,,,,,,";
+        else telemetry += ",,,,,,,,,,,,,,,";
         telemetry += "," + string(Camera.x) + "," + string(Camera.y) + "," + string(Girl.dollars)
-            + "," + string(slot >= 0 && BoatData.unlocked[slot]) + "," + string(Lure.deep);
+            + "," + string(slot >= 0 && BoatData.unlocked[slot]) + "," + string(Lure.deep)
+            + "," + string(view_wview[0]) + "," + string(view_hview[0]);
+        if (instance_exists({{Sub}}))
+        {
+            var sub2 = instance_find({{Sub}}, 0);
+            telemetry += "," + string(sub2.sub_light_angle) + "," + string(sub2.sub_peek_timer)
+                + "," + string(sub2.sub_has_winch);
+        }
+        else telemetry += ",,,";
         file = file_text_open_append("jamm_bench_submarine.csv");
         file_text_write_string(file, telemetry);
         file_text_writeln(file);

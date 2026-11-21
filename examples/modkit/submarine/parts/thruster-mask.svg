@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="295" height="190" viewBox="0 0 295 190">
+  <!-- Keeps the entire thruster pod, fin, and dark mounting pylon while clipping out Boat7's upper-right hull wedge -->
+  <path d="M 0,72 H 158 L 210,12 L 265,60 L 295,78 V 190 H 0 Z" fill="#ffffff"/>
+</svg>

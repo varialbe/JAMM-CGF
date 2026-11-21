@@ -1,147 +1,306 @@
 {
   "id": "submarine",
   "name": "Submarine",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "JAMM",
-  "description": "Buy a submarine, dive with a headlight, and fish underwater.",
+  "description": "Pilot a yellow submersible with rotating headlights, camera peek, and an unlockable Bow Winch.",
   "sprites": [
     {
       "key": "hull",
-      "width": 470,
-      "height": 174,
+      "width": 520,
+      "height": 340,
       "origin": [
-        235,
-        87
+        260,
+        130
       ],
       "compose": [
         {
-          "file": "parts/canopy.svg",
+          "file": "parts/hull.svg",
           "x": 0,
           "y": 0,
           "scaleX": 1,
-          "scaleY": 1
-        },
-        {
-          "from": "spr_boat_7",
-          "frame": 1,
-          "x": 175,
-          "y": 39,
-          "crop": {
-            "x": 230,
-            "y": 619,
-            "w": 230,
-            "h": 142
-          },
-          "scaleX": 0.49,
-          "scaleY": 0.34,
-          "paletteMap": {
-            "#434c7f": "#41497a"
-          }
+          "scaleY": 1,
+          "z": 0
         },
         {
           "from": "spr_boat_7",
           "frame": 0,
-          "x": 9,
-          "y": 81,
+          "x": 80,
+          "y": 90,
           "crop": {
-            "x": 48,
-            "y": 771,
-            "w": 1683,
-            "h": 409
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
           },
-          "scaleX": 0.234,
-          "scaleY": 0.219
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.24,
+          "scaleY": 0.24,
+          "flip": "both",
+          "rotation": -14,
+          "z": -1
         },
         {
           "from": "spr_boat_7",
           "frame": 0,
-          "x": 401,
-          "y": 86,
+          "x": 146,
+          "y": 72,
           "crop": {
-            "x": 1730,
-            "y": 795,
-            "w": 219,
-            "h": 385
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
           },
-          "scaleX": 0.234,
-          "scaleY": 0.219
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.24,
+          "scaleY": 0.24,
+          "flip": "both",
+          "rotation": -6,
+          "z": -1
         },
         {
-          "file": "parts/bow.svg",
-          "x": 0,
-          "y": 0,
-          "scaleX": 1,
-          "scaleY": 1
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 344,
+          "y": 84,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.24,
+          "scaleY": 0.24,
+          "flip": "both",
+          "rotation": 14,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 84,
+          "y": 236,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.24,
+          "scaleY": 0.24,
+          "flip": "x",
+          "rotation": 14,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 220,
+          "y": 254,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.24,
+          "scaleY": 0.24,
+          "flip": "x",
+          "rotation": 0,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 344,
+          "y": 236,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.24,
+          "scaleY": 0.24,
+          "flip": "x",
+          "rotation": -14,
+          "z": -1
         }
       ]
     },
     {
       "key": "card",
-      "width": 120,
-      "height": 44,
+      "width": 130,
+      "height": 85,
       "origin": [
-        60,
-        22
+        65,
+        42
       ],
       "compose": [
         {
-          "file": "parts/canopy.svg",
+          "file": "parts/hull.svg",
           "x": 0,
           "y": 0,
-          "scaleX": 0.255,
-          "scaleY": 0.255
-        },
-        {
-          "from": "spr_boat_7",
-          "frame": 1,
-          "x": 45,
-          "y": 10,
-          "crop": {
-            "x": 230,
-            "y": 619,
-            "w": 230,
-            "h": 142
-          },
-          "scaleX": 0.12495,
-          "scaleY": 0.08670000000000001,
-          "paletteMap": {
-            "#434c7f": "#41497a"
-          }
+          "scaleX": 0.25,
+          "scaleY": 0.25,
+          "z": 0
         },
         {
           "from": "spr_boat_7",
           "frame": 0,
-          "x": 2,
-          "y": 21,
-          "crop": {
-            "x": 48,
-            "y": 771,
-            "w": 1683,
-            "h": 409
-          },
-          "scaleX": 0.05967000000000001,
-          "scaleY": 0.055845
-        },
-        {
-          "from": "spr_boat_7",
-          "frame": 0,
-          "x": 102,
+          "x": 20,
           "y": 22,
           "crop": {
-            "x": 1730,
-            "y": 795,
-            "w": 219,
-            "h": 385
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
           },
-          "scaleX": 0.05967000000000001,
-          "scaleY": 0.055845
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.06,
+          "scaleY": 0.06,
+          "flip": "both",
+          "rotation": -14,
+          "z": -1
         },
         {
-          "file": "parts/bow.svg",
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 36,
+          "y": 18,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.06,
+          "scaleY": 0.06,
+          "flip": "both",
+          "rotation": -6,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 86,
+          "y": 21,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.06,
+          "scaleY": 0.06,
+          "flip": "both",
+          "rotation": 14,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 21,
+          "y": 59,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.06,
+          "scaleY": 0.06,
+          "flip": "x",
+          "rotation": 14,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 55,
+          "y": 63,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.06,
+          "scaleY": 0.06,
+          "flip": "x",
+          "rotation": 0,
+          "z": -1
+        },
+        {
+          "from": "spr_boat_7",
+          "frame": 0,
+          "x": 86,
+          "y": 59,
+          "crop": {
+            "x": 84,
+            "y": 990,
+            "w": 295,
+            "h": 190
+          },
+          "alphaMask": "parts/thruster-mask.svg",
+          "scaleX": 0.06,
+          "scaleY": 0.06,
+          "flip": "x",
+          "rotation": -14,
+          "z": -1
+        }
+      ]
+    },
+    {
+      "key": "beam",
+      "width": 500,
+      "height": 320,
+      "origin": [
+        16,
+        160
+      ],
+      "compose": [
+        {
+          "from": "spr_light_radgrad",
+          "frame": 0,
+          "crop": {
+            "x": 250,
+            "y": 0,
+            "w": 250,
+            "h": 500
+          },
+          "alphaMask": "parts/beam-mask.svg",
+          "edgeSoftness": 1.5,
           "x": 0,
           "y": 0,
-          "scaleX": 0.255,
-          "scaleY": 0.255
+          "scaleX": 2.0,
+          "scaleY": 0.64
+        }
+      ]
+    },
+    {
+      "key": "winch-icon",
+      "width": 76,
+      "height": 76,
+      "origin": [
+        38,
+        38
+      ],
+      "compose": [
+        {
+          "file": "parts/winch-icon.svg",
+          "x": 0,
+          "y": 0,
+          "scaleX": 1,
+          "scaleY": 1
         }
       ]
     }
@@ -153,7 +312,7 @@
       "cost": 125000000,
       "card": "card",
       "sprite": "hull",
-      "description": "Dive with V or Y.#110 s of oxygen.#Holds 12 fish.",
+      "description": "Dive with V or Y.#Rotate light: I/K or E/C.#Peek: F or LB. 110 s O2.",
       "stats": {
         "maxSpeed": 10,
         "capacity": 12,
@@ -167,6 +326,20 @@
         "endStep": "hooks/end-step.gml",
         "drawGui": "hooks/draw-gui.gml",
         "destroy": "hooks/destroy.gml"
+      }
+    }
+  ],
+  "tools": [
+    {
+      "key": "bow-winch",
+      "name": "Bow Winch",
+      "cost": 250000000,
+      "quests": 0,
+      "icon": "winch-icon",
+      "description": "Heavy bow winch.#Unlocks casting from#the Submarine.",
+      "unlocked": false,
+      "hooks": {
+        "step": "hooks/winch-step.gml"
       }
     }
   ]

@@ -607,6 +607,122 @@ public sealed class ModKitTests
         }
     }
 
+    [Fact]
+    public void Load_ParsesAndValidatesToolsManifest()
+    {
+        using var temp = new TemporaryDirectory();
+        string dir = temp.PathFor("tool-mod");
+        Directory.CreateDirectory(Path.Combine(dir, "art"));
+        Directory.CreateDirectory(Path.Combine(dir, "hooks"));
+        File.WriteAllBytes(Path.Combine(dir, "art", "winch.png"), SolidPng(76, 76));
+        File.WriteAllText(Path.Combine(dir, "hooks", "step.gml"), "active = 1;\n");
+        File.WriteAllText(Path.Combine(dir, "jamm-mod.json"), """
+            {
+              "id": "tool-mod",
+              "name": "Tool Mod",
+              "tools": [
+                {
+                  "key": "bow-winch",
+                  "name": "Bow Winch",
+                  "cost": 250000000,
+                  "quests": 0,
+                  "icon": "art/winch.png",
+                  "description": "Unlocks casting.",
+                  "unlocked": false,
+                  "hooks": { "step": "hooks/step.gml" }
+                }
+              ]
+            }
+            """);
+
+        var manifest = ModKitPackage.Load(dir);
+        var tool = Assert.Single(manifest.Tools);
+        Assert.Equal("bow-winch", tool.Key);
+        Assert.Equal("Bow Winch", tool.Name);
+        Assert.Equal(250_000_000, tool.Cost);
+        Assert.Equal(0, tool.Quests);
+        Assert.False(tool.Unlocked);
+        Assert.NotNull(tool.Hooks.Step);
+
+        string dupDir = temp.PathFor("dup-tool");
+        Directory.CreateDirectory(Path.Combine(dupDir, "art"));
+        File.WriteAllBytes(Path.Combine(dupDir, "art", "winch.png"), SolidPng(76, 76));
+        File.WriteAllText(Path.Combine(dupDir, "jamm-mod.json"), """
+            {
+              "id": "dup-tool",
+              "name": "Dup Tool",
+              "tools": [
+                { "key": "winch", "name": "W1", "icon": "art/winch.png" },
+                { "key": "winch", "name": "W2", "icon": "art/winch.png" }
+              ]
+            }
+            """);
+        var ex = Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(dupDir));
+        Assert.Contains("$.tools", ex.Message);
+    }
+
+    [Fact]
+    public void Build_CompilesToolWithHooksAndItemFindPlaceholder()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        WriteSyntheticBase(basePath);
+
+        string dir = temp.PathFor("winch-pack");
+        Directory.CreateDirectory(Path.Combine(dir, "art"));
+        Directory.CreateDirectory(Path.Combine(dir, "hooks"));
+        File.WriteAllBytes(Path.Combine(dir, "art", "winch.png"), SolidPng(76, 76));
+        File.WriteAllText(Path.Combine(dir, "hooks", "winch_step.gml"), "var s = jamm_item_find(\"tool\", \"winch-pack:bow-winch\");\nif (s >= 0) active = 1;\n");
+        File.WriteAllText(Path.Combine(dir, "jamm-mod.json"), """
+            {
+              "id": "winch-pack",
+              "name": "Winch Pack",
+              "tools": [
+                {
+                  "key": "bow-winch",
+                  "name": "Bow Winch",
+                  "cost": 250000000,
+                  "quests": 0,
+                  "icon": "art/winch.png",
+                  "description": "Unlocks casting.",
+                  "hooks": { "step": "hooks/winch_step.gml" }
+                }
+              ]
+            }
+            """);
+
+        string outPath = temp.PathFor("winch-pack.win");
+        var res = ModKitBuilder.Build(dir, basePath, outPath);
+        Assert.Equal(1, res.ObjectsAdded);
+        Assert.Equal(3, res.ScriptsAdded); // jamm_tool_register, jamm_init_winch_pack, jamm_item_find
+
+        using var loaded = GameFileLoader.Load(outPath);
+        Assert.NotNull(loaded.Data.GameObjects.ByName("jmk_winch_pack_bow_winch_tool"));
+        Assert.NotNull(loaded.Data.Sprites.ByName("jmk_winch_pack_bow_winch_icon"));
+        Assert.Contains("jamm_tool_register(\"winch-pack:bow-winch\", \"Bow Winch\", 250000000, 0, jmk_winch_pack_bow_winch_tool, -1, jmk_winch_pack_bow_winch_icon, \"Unlocks casting.\", 0);",
+            PatchBuilder.ReadCode(loaded, "gml_Script_jamm_init_winch_pack").Text);
+        Assert.Contains("return -1;", PatchBuilder.ReadCode(loaded, "gml_Script_jamm_item_find").Text);
+    }
+
+    [Fact]
+    public void SubmarineExampleManifest_LoadsV2WithBoatAndBowWinchTool()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        string submarineDir = Path.Combine(repoRoot, "examples", "modkit", "submarine");
+
+        var manifest = ModKitPackage.Load(submarineDir);
+        Assert.Equal("submarine", manifest.Id);
+        Assert.Equal("0.2.0", manifest.Version);
+        Assert.Equal(4, manifest.Sprites.Count);
+        var boat = Assert.Single(manifest.Boats);
+        Assert.Equal("submarine", boat.Key);
+        Assert.Equal(125_000_000, boat.Cost);
+        var tool = Assert.Single(manifest.Tools);
+        Assert.Equal("bow-winch", tool.Key);
+        Assert.True(tool.Cost >= 250_000_000);
+        Assert.False(tool.Unlocked);
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         private readonly string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "cgfmm-modkit-tests-" + Guid.NewGuid().ToString("N"));

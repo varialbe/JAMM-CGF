@@ -104,6 +104,7 @@ public static partial class ModKitBuilder
         if (package.Fish.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_fish_register")) scriptsAdded++;
         if (package.Boats.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_boat_register")) scriptsAdded++;
         if (package.Rods.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_rod_register")) scriptsAdded++;
+        if (package.Tools.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_tool_register")) scriptsAdded++;
         if (package.Hats.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_hat_register")) scriptsAdded++;
         if (package.Upgrades.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_upgrade_register")) scriptsAdded++;
 
@@ -279,6 +280,29 @@ public static partial class ModKitBuilder
             initBody.AppendLine(RodRegistration(package.Id, rod));
         }
 
+        foreach (var tool in package.Tools)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string keyIdent = SanitizeIdent(tool.Key);
+            string assetPrefix = $"jmk_{modIdent}_{keyIdent}";
+            string iconName = tool.IconKey is { } iconKey ? CompositionName(modIdent, iconKey) : $"{assetPrefix}_icon";
+            string objName = $"{assetPrefix}_tool";
+
+            var obj = CreateModObject(data, objName, null, null, depth: 0);
+            objectsAdded++;
+
+            string createGml = "active = 0;";
+            if (tool.Hooks.Create is { } createPath)
+                createGml += "\n" + File.ReadAllText(createPath, Encoding.UTF8);
+            compiler.QueueCodeReplace(obj.EventHandlerFor(EventType.Create, 0u, data), createGml);
+            if (tool.Hooks.Step is { } stepPath)
+                compiler.QueueCodeReplace(obj.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data), File.ReadAllText(stepPath, Encoding.UTF8));
+
+            initBody.AppendLine(
+                $"jamm_tool_register({GmlString($"{package.Id}:{tool.Key}")}, {GmlString(tool.Name)}, {Num(tool.Cost)}, " +
+                $"{tool.Quests}, {objName}, -1, {iconName}, {GmlString(tool.Description)}, {(tool.Unlocked ? 1 : 0)});");
+        }
+
         foreach (var hat in package.Hats)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -346,10 +370,46 @@ public static partial class ModKitBuilder
             scriptsAdded++;
         }
 
+        EnsureReferencedHelperPlaceholders(data, compiler, package, ref scriptsAdded);
+
         progress?.Invoke($"Compiling {scriptsAdded} script(s) and {objectsAdded} object(s)…");
         ArchiveVerifier.Compile(compiler, $"ModKit package '{package.Id}'");
 
         return (sprites.Count, objectsAdded, scriptsAdded);
+    }
+
+    private static void EnsureReferencedHelperPlaceholders(
+        UndertaleData data,
+        CompileGroup compiler,
+        ModKitManifest package,
+        ref int scriptsAdded)
+    {
+        string?[] paths =
+        [
+            .. package.Scripts.Select(s => (string?)s.Path),
+            .. package.Objects.SelectMany(o => new[] { o.Create, o.Step, o.Draw, o.DrawGui }),
+            .. package.Fish.SelectMany(f => new[] { f.Hooks.Create, f.Hooks.Step, f.Hooks.Caught, f.Hooks.Draw }),
+            .. package.Boats.SelectMany(b => b.Hooks is null ? [] : new[] { b.Hooks.Create, b.Hooks.BeginStep, b.Hooks.Step, b.Hooks.EndStep, b.Hooks.DrawGui, b.Hooks.Destroy }),
+            .. package.Tools.SelectMany(t => new[] { t.Hooks.Create, t.Hooks.Step }),
+            .. package.Hats.Select(h => h.Hooks.Effect),
+            .. package.Upgrades.SelectMany(u => new[] { u.Hooks.Apply, u.Hooks.Step })
+        ];
+        bool needsItemFind = false;
+        bool needsUpgradeStacks = false;
+        foreach (string? path in paths)
+        {
+            if (path is null) continue;
+            var tokens = Merging.GmlReferences.Tokens(File.ReadAllText(path, Encoding.UTF8));
+            for (int i = 0; i + 1 < tokens.Count; i++)
+            {
+                if (tokens[i].Kind != 'i' || tokens[i + 1].Value != "(") continue;
+                if (i > 0 && tokens[i - 1].Value == ".") continue;
+                if (tokens[i].Value == "jamm_item_find") needsItemFind = true;
+                else if (tokens[i].Value == "jamm_upgrade_stacks") needsUpgradeStacks = true;
+            }
+        }
+        if (needsItemFind && EnsurePlaceholder(data, compiler, "jamm_item_find")) scriptsAdded++;
+        if (needsUpgradeStacks && EnsurePlaceholder(data, compiler, "jamm_upgrade_stacks")) scriptsAdded++;
     }
 
     private static void ValidateRequiredParents(UndertaleData data, ModKitManifest package)
@@ -393,6 +453,11 @@ public static partial class ModKitBuilder
         foreach (var rod in package.Rods)
         {
             specs.Add(new(RodSpriteName(modIdent, rod), rod.SpritePath, 1, rod.Origin, CenterOrigin: true, GenerateMask: false));
+        }
+        foreach (var tool in package.Tools.Where(t => t.IconKey is null))
+        {
+            string keyIdent = SanitizeIdent(tool.Key);
+            specs.Add(new($"jmk_{modIdent}_{keyIdent}_icon", tool.IconPath, 1, null, CenterOrigin: true, GenerateMask: false));
         }
         foreach (var hat in package.Hats)
         {
