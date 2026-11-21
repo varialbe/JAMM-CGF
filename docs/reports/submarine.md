@@ -22,6 +22,11 @@ The first solo game passes exercised purchase, dive, light, casting, and ascent,
 
 ## In-game checks and art review
 
-In-game solo and personal profile runs use `~/jamm-night/bin/run.sh` and the shared game lock. The final runs are in progress behind other queued sessions; their outcomes, depth telemetry, and capture paths will be added when complete. Two art review rounds are stored outside the repository at `~/jamm-night/submarine/art-review/round1-world.png`, `round1-cards.png`, `round2-world.png`, and `round2-cards.png`. The second round improves the hull silhouette and card readability while keeping the flat vanilla palette and outline.
+Both in-game runs completed as `RECORDED`, with no code error:
+
+- Solo Console + Submarine: `~/jamm-night/runs/submarine-solo-retry-submarine/jamm_bench_submarine.csv`; screenshot `~/jamm-night/runs/submarine-solo-retry-submarine/t60.png`; capture `~/jamm-night/submarine/submarine-solo-final-retry.mp4`.
+- Personal profile with Perf, HD Lite, Console, Smooth, Silo, Weather Pack, Endless Ocean, and Submarine: `~/jamm-night/runs/submarine-personal-final-submarine/jamm_bench_submarine.csv`; screenshot `~/jamm-night/runs/submarine-personal-final-submarine/t60.png`; capture `~/jamm-night/submarine/submarine-personal-final.mp4`.
+
+Each telemetry run records the $125M purchase (cash drops from $150M to $25M), depths of 460, 1,812, and 4,022, lamp on and off, a bow cast with lure and rod entering fishing state, reel-in, and a safe surfaced state with oxygen restored to 110 seconds. At depth 4,022, the deep-area flag is set. Two art review rounds are stored outside the repository at `~/jamm-night/submarine/art-review/round1-world.png`, `round1-cards.png`, `round2-world.png`, and `round2-cards.png`. The second round improves the hull silhouette and card readability while keeping the flat vanilla palette and outline.
 
 Screenshots and video are stored outside the repository at `~/jamm-night/submarine/`; no game archives or extracted game assets are committed.
