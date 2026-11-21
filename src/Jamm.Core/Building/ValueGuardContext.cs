@@ -67,6 +67,8 @@ internal sealed class ValueGuardContext
     internal string? EventOwner(string entry) => events.GetValueOrDefault(entry);
     internal IEnumerable<string> Owners(string entry) => callers.GetValueOrDefault(entry) ?? [];
     internal bool IsFish(string name) => fish.Contains(name);
+    internal bool IsObject(string name) => objects.ContainsKey(name);
+    internal IEnumerable<string> FishObjects => fish.Order(StringComparer.Ordinal);
 
     internal bool Inherits(string name, string parent)
     {

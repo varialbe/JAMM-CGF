@@ -97,6 +97,63 @@ public sealed class BaseModTests : IDisposable
     }
 
     [Fact]
+    public void ProfileValueGuardUsesVanillaStatsAndFinalLayerSettings()
+    {
+        var (store, original, _) = MakeOverhaul();
+        string vanillaPath = Write("Vanilla with value stats.win", original, d =>
+        {
+            var fish = new UndertaleGameObject { Name = d.Strings.MakeString("Fish") };
+            var target = new UndertaleGameObject { Name = d.Strings.MakeString("TargetFish"), ParentId = fish };
+            d.GameObjects.Add(fish);
+            d.GameObjects.Add(target);
+            var create = target.EventHandlerFor(EventType.Create, d);
+            Compile(d, create.Name.Content, "BASE_VALUE = 50; XP_VALUE = 100;");
+        });
+        const string fishCode = "gml_Object_TargetFish_Create_0";
+        store.Set("base", vanillaPath);
+        string foundationPath = Write("Value Overhaul.win", vanillaPath,
+            d => Compile(d, fishCode,"BASE_VALUE = 5000000000; XP_VALUE = 5000000000;"));
+        string addonPath = Write("Value Addon.win", foundationPath, d => d.Rooms[0].Height += 1);
+        var library = new ModLibrary(store);
+        var foundation = library.Add(foundationPath).Mod;
+        var addon = library.Add(addonPath).Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("guarded", [foundation.Id, addon.Id]);
+        profiles.SetRole("guarded", foundation.Id, "base");
+        profiles.SetRole("guarded", addon.Id, "addon", foundation.Id);
+        Assert.True(profiles.Get("guarded").FairPlay);
+        Assert.Equal(100_000_000, profiles.Get("guarded").FishValueCap);
+        Assert.Equal(0, RunCli("--data-dir", store.Root, "profile", "valuecap", "guarded", "75000000").Exit);
+
+        string game = Directory.CreateDirectory(Path.Combine(root, "game")).FullName;
+        File.Copy(vanillaPath, Path.Combine(game, "data.win"));
+        store.Set("gameDir", game);
+        var installer = new ProfileInstaller(store);
+        var prepared = installer.Prepare("guarded");
+        Assert.Single(prepared.Build.Plan.Decisions, d => d.Contains("Capped fish sale values"));
+        Assert.Contains(prepared.Build.Plan.Decisions, d => d.Contains("TargetFish XP_VALUE (Value Overhaul")
+            && d.Contains("5,000,000,000 -> 1,000"));
+        using (var built = GameFileLoader.Load(prepared.OutputPath))
+        {
+            var fish = PatchBuilder.ReadCode(built, fishCode).Text;
+            Assert.Contains("BASE_VALUE = 75000000;", fish);
+            Assert.Contains("XP_VALUE = 1000;", fish);
+        }
+        installer.Install(prepared);
+        Assert.True(installer.IsInstalled("guarded"));
+        Assert.Equal(0, RunCli("--data-dir", store.Root, "profile", "valuecap", "guarded", "0").Exit);
+        Assert.False(installer.IsInstalled("guarded"));
+        Assert.Equal(0, RunCli("--data-dir", store.Root, "profile", "valuecap", "guarded", "75000000").Exit);
+        Assert.True(installer.IsInstalled("guarded"));
+        Assert.Equal(0, RunCli("--data-dir", store.Root, "profile", "fairplay", "guarded", "off").Exit);
+        Assert.False(installer.IsInstalled("guarded"));
+        var reconfigured = profiles.Get("guarded");
+        Assert.False(reconfigured.FairPlay);
+        Assert.Equal(75_000_000, reconfigured.FishValueCap);
+        Assert.False(reconfigured.NoBigMoney);
+    }
+
+    [Fact]
     public void AddonConflictsAreScopedAndMixedVanillaModsWarn()
     {
         var (store, original, overhaul) = MakeOverhaul();

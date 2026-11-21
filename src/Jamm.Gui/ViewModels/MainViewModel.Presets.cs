@@ -1,3 +1,4 @@
+using Jamm.Core.Building;
 using Jamm.Core.Management;
 using Jamm.ModMaker;
 
@@ -13,6 +14,10 @@ public sealed partial class MainViewModel
     public bool ProfileRepack => presetProfile?.NoRepack != true;
     /// <summary>Whether money may exceed $999,999,999 (compact display) in the current profile.</summary>
     public bool ProfileBigMoney => presetProfile?.NoBigMoney != true;
+    /// <summary>Whether this profile guards clear debug values.</summary>
+    public bool ProfileFairPlay => presetProfile?.FairPlay ?? true;
+    /// <summary>This profile's sale limit, or zero to disable the cap.</summary>
+    public long ProfileFishValueCap => presetProfile?.FishValueCap ?? ValueGuardOptions.DefaultFishValueCap;
     /// <summary>Current profile defaults. The game can override these from its INI.</summary>
     public PerfSettings ProfilePerf => presetProfile?.Perf ?? new();
 
@@ -22,6 +27,8 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(WeakPcEnabled));
         OnPropertyChanged(nameof(ProfileRepack));
         OnPropertyChanged(nameof(ProfileBigMoney));
+        OnPropertyChanged(nameof(ProfileFairPlay));
+        OnPropertyChanged(nameof(ProfileFishValueCap));
         OnPropertyChanged(nameof(ProfilePerf));
     }
 
@@ -51,6 +58,12 @@ public sealed partial class MainViewModel
 
     /// <summary>Changes whether the active profile allows money above $999,999,999.</summary>
     public Task ToggleProfileBigMoneyAsync() => UpdatePresetOptionAsync((profiles, name) => profiles.SetBigMoney(name, !ProfileBigMoney));
+
+    /// <summary>Toggles the active profile's debug-stat guard.</summary>
+    public Task ToggleProfileFairPlayAsync() => UpdatePresetOptionAsync((profiles, name) => profiles.SetFairPlay(name, !ProfileFairPlay));
+
+    /// <summary>Changes the active profile's fish sale cap.</summary>
+    public Task SetProfileFishValueCapAsync(long value) => UpdatePresetOptionAsync((profiles, name) => profiles.SetFishValueCap(name, value));
 
     /// <summary>Changes the active profile's Perf defaults.</summary>
     public Task UpdateProfilePerfAsync(bool? startEnabled = null, bool? fishGrid = null, int? interval = null) =>

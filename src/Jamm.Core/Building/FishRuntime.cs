@@ -131,13 +131,16 @@ internal static class FishRuntime
         return plan with { Assets = assets, Decisions = decisions };
     }
 
-    internal static void Inject(UndertaleData data, Dictionary<string, string> recompile)
+    internal static void Inject(UndertaleData data, Dictionary<string, string> recompile,
+        Dictionary<string, string> generated, long fishValueCap)
     {
         if (!recompile.ContainsKey(RegisterCode) && data.Scripts.ByName(RegisterScript) is null)
             return;
 
         bool hasCatalogData = data.GameObjects.ByName("CatalogData") is not null;
-        if (!recompile.ContainsKey(RegisterCode))
+        if (fishValueCap > 0)
+            generated[RegisterCode] = recompile[RegisterCode] = BuildFishRegisterGml(hasCatalogData, fishValueCap);
+        else if (!recompile.ContainsKey(RegisterCode))
             recompile[RegisterCode] = BuildFishRegisterGml(hasCatalogData);
 
         EnsureScript(data, RegisterScript, RegisterCode);
@@ -212,9 +215,10 @@ internal static class FishRuntime
         return ordered;
     }
 
-    private static string BuildFishRegisterGml(bool hasCatalogData)
+    private static string BuildFishRegisterGml(bool hasCatalogData, long fishValueCap = 0)
     {
-        string spawnBody = """
+        string saleValue = fishValueCap > 0 ? FormattableString.Invariant($"min(jamm_sale_value, {fishValueCap})") : "jamm_sale_value";
+        string spawnBody = $$"""
             var jamm_key, jamm_obj, jamm_tab, jamm_name, jamm_desc;
             var jamm_x1, jamm_x2, jamm_y1, jamm_y2, jamm_count;
             var jamm_have, jamm_need, jamm_i, jamm_sx, jamm_sy, jamm_inst;
@@ -249,6 +253,15 @@ internal static class FishRuntime
                     jamm_inst.TRUE_START_Y = jamm_sy;
                     jamm_inst.nothungry_x = jamm_sx;
                     jamm_inst.nothungry_y = jamm_sy;
+                }
+            }
+            if (argument_count > 16)
+            {
+                var jamm_sale_value;
+                jamm_sale_value = argument[16];
+                if (is_real(jamm_sale_value))
+                {
+                    with (jamm_obj) BASE_VALUE = {{saleValue}};
                 }
             }
             """;

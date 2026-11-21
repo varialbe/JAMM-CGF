@@ -56,7 +56,7 @@ int Run(string[] arguments)
             cgfmm lineage <vanilla.win> <foundation.win> <legacy-mod.win>
             cgfmm check <mod-or-patch> [...] --base <data.win> [--json <file>] [--details <asset>] [--patches-dir <dir>] [--asset-literals] [--verbose]
             cgfmm check --profile <name> [--strict] [--json <file>] [--details <asset>]
-            cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--no-big-money] [--dry-run] [--verbose]
+            cgfmm build --base <data.win> [--order <mod-or-patch>,...] [--out <merged.win>] [--resolve <file.json>] [--install <game dir>] [--acceptance-json <file>] [--no-repack] [--no-big-money] [--no-fair-play] [--fish-value-cap <n|0>] [--dry-run] [--verbose]
             cgfmm build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
@@ -69,6 +69,8 @@ int Run(string[] arguments)
             cgfmm profile resolve <name> <asset> <mod|keep-both>
             cgfmm profile repack <name> on|off
             cgfmm profile bigmoney <name> on|off
+            cgfmm profile fairplay <name> on|off
+            cgfmm profile valuecap <name> <n|0>
             cgfmm profile base <name> <mod> | addon <name> <mod> <base> | role <name> <mod> none
             cgfmm profile preset <name> weak-pc|default
             cgfmm profile builtin <name> <id> on|off

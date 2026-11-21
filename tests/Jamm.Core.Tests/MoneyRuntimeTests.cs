@@ -30,6 +30,23 @@ public sealed class MoneyRuntimeTests
     public void FormatsCompactlyWithTruncatedTenths(double value, string expected) =>
         Assert.Equal(expected, MoneyRuntime.Format(value));
 
+    [Theory]
+    [InlineData(true, "999999999", "1000000 * 1000000000")]
+    [InlineData(false, "1000000000000000", "999999999")]
+    public void ConsoleArchiveUsesTheSelectedMoneyMode(bool enabled, string before, string after)
+    {
+        const string name = ConsoleUpgradeGuard.ConsoleStep;
+        var recompile = new Dictionary<string, string>
+        {
+            [name] = $"Girl.dollars = clamp(jamm_m_val, 0, {before});\nGirl.dollars = clamp(Girl.dollars + jamm_m_val, 0, {before});"
+        };
+        var generated = new Dictionary<string, string>();
+        MoneyRuntime.ConfigureConsole(enabled, recompile, generated);
+        Assert.Contains($"clamp(jamm_m_val, 0, {after})", recompile[name]);
+        Assert.Contains($"clamp(Girl.dollars + jamm_m_val, 0, {after})", recompile[name]);
+        Assert.Equal(recompile[name], generated[name]);
+    }
+
     [Fact]
     public void GmlFormatterUsesTheSameRules()
     {

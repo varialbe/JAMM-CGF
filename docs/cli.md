@@ -26,6 +26,8 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
 | `profile repack <name> on\|off` | Enable or disable texture repacking for builds of this profile |
 | `profile bigmoney <name> on\|off` | Allow money above $999,999,999 with compact display (`$3.4M`, `$9.5T`) in modded builds. Defaults to on. Use `build --no-big-money` for one-off `--base` builds. |
+| `profile fairplay <name> on\|off` | Guard clear debug stats in the profile's modded builds. Defaults to on. Use `build --no-fair-play` with `--base` for a direct build. |
+| `profile valuecap <name> <n\|0>` | Set the profile's fish sale cap. Defaults to 100,000,000. Use 0 to disable it. Use `build --fish-value-cap <n>` with `--base` for a direct build. |
 | `profile base <name> <mod>` | Assign the base role to a mod in the profile |
 | `profile addon <name> <mod> <base>` | Assign the addon role and select its base library mod |
 | `profile role <name> <mod> none` | Assign the vanilla role, overriding any package declaration |
