@@ -397,3 +397,17 @@ combine many of them in one profile with zero conflicts:
   so reordering or temporarily removing a mod won't scramble your gear. Always empty your
   boat and reel in your lure before switching profiles, and keep a backup of your save
   folder. Details: [how saves work](modding/saves.md).
+
+
+## Fish sale cap and Fair-Play
+
+JAMM limits individual fish sales to 100,000,000 by default when you build with mods.
+Change **Fish sale cap** in the active profile's **Performance settings**, or run
+`cgfmm profile valuecap <name> <n>`. Set it to `0` to disable the cap.
+
+**Fair-Play** in the same menu detects clear debug values in modded fishing gear,
+fish XP and shop prices. Values with uncertain intent appear as informational findings
+in the build log and are kept. Disable it for a profile with
+`cgfmm profile fairplay <name> off`. The fish sale cap and Big Money are independent
+settings. Player balances, console money and quest rewards are outside Fair-Play's scope.
+Both controls take effect on the next modded build. A vanilla-only build is a byte-for-byte copy.

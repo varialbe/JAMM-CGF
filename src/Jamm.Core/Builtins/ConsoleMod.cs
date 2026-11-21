@@ -303,7 +303,7 @@ public static class ConsoleMod
             if (instance_exists(RodData))
             {
                 RodData.nItems = max(RodData.nItems, array_length_1d(RodData.name));
-                jamm_rod_total = RodData.nItems;
+                jamm_rod_total = min(RodData.nItems, array_length_1d(RodData.unlocked));
                 for (var jamm_i = 0; jamm_i < jamm_rod_total; jamm_i += 1)
                 {
                     if (RodData.unlocked[jamm_i] <= 0) jamm_rod_new += 1;
@@ -316,7 +316,7 @@ public static class ConsoleMod
             if (instance_exists(LureData))
             {
                 LureData.nItems = max(LureData.nItems, array_length_1d(LureData.name));
-                jamm_lure_total = LureData.nItems;
+                jamm_lure_total = min(LureData.nItems, array_length_1d(LureData.unlocked));
                 for (var jamm_i = 0; jamm_i < jamm_lure_total; jamm_i += 1)
                 {
                     if (LureData.unlocked[jamm_i] <= 0) jamm_lure_new += 1;
@@ -328,7 +328,7 @@ public static class ConsoleMod
             if (instance_exists(BoatData))
             {
                 BoatData.nItems = max(BoatData.nItems, array_length_1d(BoatData.name));
-                jamm_boat_total = BoatData.nItems;
+                jamm_boat_total = min(BoatData.nItems, array_length_1d(BoatData.unlocked));
                 for (var jamm_i = 0; jamm_i < jamm_boat_total; jamm_i += 1)
                 {
                     if (BoatData.unlocked[jamm_i] <= 0) jamm_boat_new += 1;
@@ -341,19 +341,22 @@ public static class ConsoleMod
             if (instance_exists(ToolData))
             {
                 ToolData.nItems = max(ToolData.nItems, array_length_1d(ToolData.name));
-                jamm_tool_total = ToolData.nItems;
+                jamm_tool_total = min(ToolData.nItems, array_length_1d(ToolData.unlocked));
                 for (var jamm_i = 0; jamm_i < jamm_tool_total; jamm_i += 1)
                 {
                     if (ToolData.unlocked[jamm_i] <= 0) jamm_tool_new += 1;
                     ToolData.unlocked[jamm_i] = 1;
-                    if (ToolData.unlocked[jamm_i] == 1 && instance_exists(ToolData.item[jamm_i])) ToolData.item[jamm_i].active = 1;
+                    if (jamm_i < array_length_1d(ToolData.item))
+                    {
+                        if (instance_exists(ToolData.item[jamm_i])) ToolData.item[jamm_i].active = 1;
+                    }
                 }
             }
             var jamm_hat_total = 0;
             var jamm_hat_new = 0;
             if (instance_exists(GearData))
             {
-                jamm_hat_total = GearData.n_gear;
+                jamm_hat_total = min(GearData.n_gear, array_length_1d(GearData.unlocked));
                 for (var jamm_i = 0; jamm_i < jamm_hat_total; jamm_i += 1)
                 {
                     if (GearData.unlocked[jamm_i] <= 0) jamm_hat_new += 1;

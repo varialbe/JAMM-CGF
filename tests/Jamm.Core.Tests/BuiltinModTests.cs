@@ -224,7 +224,9 @@ public sealed class BuiltinModTests : IDisposable
             Assert.Contains("CatalogData.life[jamm_i, jamm_j] = max(CatalogData.life[jamm_i, jamm_j], 3);", step1);
             Assert.Contains("CatalogData.hide[jamm_i, jamm_j] = 0;", step1);
             Assert.Contains("CatalogData.all_fish_revealed = 1;", step1);
-            Assert.Contains("ToolData.unlocked[jamm_i] == 1 && instance_exists(ToolData.item[jamm_i])", step1);
+            Assert.Contains("min(ToolData.nItems, array_length_1d(ToolData.unlocked))", step1);
+            Assert.Contains("jamm_i < array_length_1d(ToolData.item)", step1);
+            Assert.Contains("instance_exists(ToolData.item[jamm_i])", step1);
             Assert.Contains("ToolData.item[jamm_i].active = 1;", step1);
         }
 

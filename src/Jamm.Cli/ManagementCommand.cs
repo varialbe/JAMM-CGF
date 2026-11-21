@@ -140,6 +140,8 @@ internal static class ManagementCommand
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
                             Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for modded builds")}");
                             Console.WriteLine($"  Big money (above $999,999,999, compact display): {(profile.NoBigMoney ? "off" : "on for modded builds")}");
+                            Console.WriteLine($"  Fair-Play: {(profile.FairPlay ? "on" : "off")}");
+                            Console.WriteLine($"  Fish sale cap: {(profile.FishValueCap == 0 ? "off" : profile.FishValueCap.ToString("N0"))}");
                             Console.WriteLine($"  Perf defaults: F8 mode {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid {(profile.Perf.FishGrid ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence).");
                             foreach (string id in profile.UnlockFixMods ?? [])
                                 Console.WriteLine($"  Repair legacy shop unlocks: {library.Find(id).Name}");
@@ -155,6 +157,17 @@ internal static class ManagementCommand
                         Count(3);
                         profiles.SetBigMoney(positional[1], OnOff(positional[2]));
                         Console.WriteLine($"Money above $999,999,999 with compact display for '{positional[1]}': {positional[2]}.");
+                        break;
+                    case "fairplay":
+                        Count(3);
+                        profiles.SetFairPlay(positional[1], OnOff(positional[2]));
+                        Console.WriteLine($"Fair-Play for '{positional[1]}': {positional[2]}.");
+                        break;
+                    case "valuecap":
+                        Count(3);
+                        long cap = BuildCommand.ParseFishValueCap(positional[2]);
+                        profiles.SetFishValueCap(positional[1], cap);
+                        Console.WriteLine($"Fish sale cap for '{positional[1]}': {(cap == 0 ? "off" : cap.ToString("N0"))}.");
                         break;
                     case "preset":
                         Count(3);

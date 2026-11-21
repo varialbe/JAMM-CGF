@@ -74,6 +74,18 @@ public sealed partial class MainWindow : Window
         if (Model is { CanEditProfile: true } vm) await vm.ToggleProfileBigMoneyAsync();
     }
 
+    private async void ProfileFairPlayClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm) await vm.ToggleProfileFairPlayAsync();
+    }
+
+    private async void ProfileFishValueCapChanged(object? sender, NumericUpDownValueChangedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm && e.NewValue is >= 0 and <= long.MaxValue and decimal value
+            && value == decimal.Truncate(value) && vm.ProfileFishValueCap != value)
+            await vm.SetProfileFishValueCapAsync((long)value);
+    }
+
     private async void ProfilePerfModeClick(object? sender, RoutedEventArgs e)
     {
         if (Model is { CanEditProfile: true } vm)

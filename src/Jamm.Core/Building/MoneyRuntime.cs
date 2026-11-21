@@ -113,5 +113,23 @@ internal static class MoneyRuntime
         decisions.Add(text);
     }
 
+    // The published console archive predates the big-money generator. Normalize only its two canonical
+    // command assignments and help text, so a profile's setting also works with either console version.
+    internal static void ConfigureConsole(bool enabled, Dictionary<string, string> recompile, Dictionary<string, string> generated)
+    {
+        const string entry = ConsoleUpgradeGuard.ConsoleStep;
+        if (!recompile.TryGetValue(entry, out string? current)) return;
+        string[] oldLimits = enabled ? ["999999999"] : ["1000000 * 1000000000", "1000000000000000"];
+        string newLimit = enabled ? "1000000 * 1000000000" : "999999999";
+        string oldHelp = enabled ? "set dollars (0..999999999)" : "set dollars (up to 1e15)";
+        string newHelp = enabled ? "set dollars (up to 1e15)" : "set dollars (0..999999999)";
+        string text = current.Replace(oldHelp, newHelp, StringComparison.Ordinal);
+        foreach (string expression in new[] { "Girl.dollars + jamm_m_val", "jamm_m_val" })
+            foreach (string oldLimit in oldLimits)
+                text = text.Replace($"Girl.dollars = clamp({expression}, 0, {oldLimit});",
+                    $"Girl.dollars = clamp({expression}, 0, {newLimit});", StringComparison.Ordinal);
+        if (text != current) generated[entry] = recompile[entry] = text;
+    }
+
     private static string Normalize(string gml) => string.Join('\n', gml.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
 }
