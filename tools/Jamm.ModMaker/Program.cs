@@ -38,7 +38,7 @@ public static class Program
                   bench   <harbor-town.win> <out.win> --scene harbor
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -149,6 +149,8 @@ public static class Program
         bool profileScripts = false;
         int traceFish = 0;
         bool fishGrid = false;
+        bool decorSleep = false;
+        bool screenshot = false;
         var fishMode = BenchmarkFishMode.Full;
         int fishCap = -1;
         double fishScale = 1.0;
@@ -169,6 +171,8 @@ public static class Program
                     if (traceFish < 1) throw new ArgumentException("--trace-fish requires at least one tick.");
                     break;
                 case "--fish-grid": fishGrid = true; break;
+                case "--decor-sleep": decorSleep = true; break;
+                case "--screenshot": screenshot = true; break;
                 case "--profile-scripts": profile = true; profileScripts = true; break;
                 case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
                 case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
@@ -194,7 +198,7 @@ public static class Program
             }
         }
 
-        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, fishMode, fishCap, fishScale);
+        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot, fishMode, fishCap, fishScale);
         BenchmarkMod.ValidateOptions(options);
         return options;
     }
