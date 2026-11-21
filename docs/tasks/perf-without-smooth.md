@@ -31,3 +31,26 @@ Builds: `~/jamm-bench/builds/all7+perf.win`, `all7+perf+smooth.win`, `all7.win`,
    wait while `pgrep -f "Cat Goes Fishing.exe"` finds a process or any `systemctl --user` unit `jamm-bench-*` is active.
 5. Tests (regression test for the guard/grid path where possible), full suite green, zero warnings. Report docs/reports/perf-without-smooth.md
    with the before/after table. Commit on the branch; no merge, no push.
+
+## Round 2 (2026-11-21 17:55, clean serialized re-bench of commit 754eb8a)
+
+Loop µs, mean of 2 runs × dock/deepwater, 30 s, bench tool from this branch:
+
+| build | loop µs |
+|---|---|
+| all7 | 62 900 |
+| all7 + perf | 89 600  ← still +43 % (was +100 %) |
+| all7 + perf + smooth | 63 200 |
+| pub5 | 85 700 |
+| pub5 + perf | 81 300 (ok) |
+| vanilla | 20 960 |
+| vanilla + perf | 22 390 (+7 %, not ok) |
+
+Headers in all perf runs: `fish_grid=1`, `perf_mode=0` → the remaining cost is the FishGrid path
+(and whatever else PerfMod injects) when Smooth is absent. With Smooth the cost vanishes — find out why
+(Smooth culls Fish/SceneItem → grid work is skipped?) and make Perf-alone get the same benefit or turn the
+expensive part off by default. Acceptance: for all7, pub5 and vanilla, `+perf` loop ≤ base loop (within 3 %).
+Verify the INI switches actually reach the game (earlier runs suggested `jamm_perf.ini` is ignored).
+Bench with `~/jamm-bench/run.sh` only (it now holds a global lock; other agents share the machine).
+Build tools: copy bin output to ~/jamm-bench/tools/cli-fix and mm-fix (path has a space). Disk is limited: delete your own builds in ~/jamm-bench/builds when done.
+Write your final report into docs/tasks/perf-without-smooth-report.md and commit.
