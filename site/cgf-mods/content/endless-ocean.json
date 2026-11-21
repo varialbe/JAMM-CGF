@@ -7,12 +7,12 @@
     "Take the final vanilla boat east. To choose a layout, set `seed` in the recipe before building, or edit `[World] seed` in the generated INI while the game is closed."
   ],
   "apis": "JAMM chunk layout and streaming scripts, GameMaker instance and collision APIs, legacy Boat7, Fish and save events, and Catalog API lookup when installed.",
-  "assets": "Three runtime objects, four sprites built from the local archive, and fourteen standalone scripts. The recipe guards the native fish respawn script and both SaveManager writes.",
+  "assets": "Three runtime objects, five sprites built from the local archive, and fifteen standalone scripts. The recipe guards the native fish respawn script and both SaveManager writes.",
   "saves": "The seed is the only generated-world state saved. `jamm_endless_ocean.ini` stores it under `[World]` as `seed`, shared by all slots in that save directory. Transient fish instance IDs are excluded from `[Fishes]`. Normal catches, quests and Fishalog progress still use the game's save system.",
   "compatibility": "Targets the August 2023 legacy VM archive or a compatible merged archive. Enable the recipe in a JAMM profile, or build it on top of a verified pack archive. Use JAMM with Endless Ocean generator version 2.",
   "how": [
     "The floor joins the last collidable terrain and eases into a continuous profile over three chunks. The generator reserves the existing room dimensions and artwork before adding 488 exploration chunks of 2,048 pixels each.",
-    "Native CaveRock silhouettes, kelp, corals and lights mark sandy shelves, rocky slopes and trenches. Each floor strip has a matching slope mask and solid underlay to the room bottom.",
+    "Native CaveRock silhouettes, kelp, corals and lights mark sandy shelves, rocky slopes and trenches. Each floor strip has a matching slope mask and a world-aligned seamless cobble underlay to the room bottom.",
     "The camera streams at most five chunks. Each can spawn one vanilla fish per depth band, with a collision check before spawning. Wrecks appear 10–20 chunks apart and attract a rare fish within the same budget.",
     "The seed defaults to 271828 and is shared by all slots in the save directory. Primary and backup saves skip transient fish IDs."
   ],
@@ -59,5 +59,9 @@
       "alt": "An alternate seed's floor descending into a trough and rising on the right",
       "caption": "Floor with seed 314159 (v0 preview)"
     }
+  ],
+  "changelog": [
+    "0.2.1: Seamless cobble seafloor built from the vanilla cave rock (16 Wang tile variants on one texture page, no visible grid), matching slope caps.",
+    "0.2.0: Seeded three-biome seafloor, native scenery and wrecks, and merged-layout callback recompilation."
   ]
 }
