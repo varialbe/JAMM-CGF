@@ -1,42 +1,57 @@
-# Submarine – design notes
+# Submarine
 
-Status: **Phase 0 findings by the orchestrator (2026-11-21)**. Codex: verify these against the legacy base,
-then complete the design (mechanics, upgrade tiers, API) and build v0.1.
+The Submarine is an optional ModKit package for the August 2023 legacy VM build. Version 0.1.0 adds a late-game boat that carries the cat underwater and can fish from depth. The package builds its art from the player's own archive and original vector details.
 
-## Phase 0 – what the legacy engine already offers
-* **Vanilla already has diving: `CatSwim`.** On a boat at level ≥ 25, `Girl_KeyPress_81` (Q) fills
-  `BreathBar.breath = BreathBar.MAX_BREATH` and creates `CatSwim` at the cat. `CatSwim_Create_0` spawns a
-  `CatSwimCollider` and a `CatSwimCamTracker` (`tracker`), stores `home_x/home_y`, swim speed, grabbing state.
-  `CatSwim_Destroy_0` removes both helpers and refills breath. Keyboard events 37–40 steer, 17 (Ctrl) grabs.
-* **Camera** (`Camera_Step_0`): if `instance_exists(CatSwim) && BreathBar.breath > 0` it follows
-  `CatSwim.tracker.x/y`; otherwise the lure while cast, otherwise the cat (boat: fixed sea line y=1294).
-* **Breath** (`BreathBar_*`): `MAX_BREATH = 30 + 10 * floor((max(25, level) - 25) / 3)`, visible only while a
-  CatSwim exists, drawn in view 0. A yellow potion refills it.
-* **Boat** (`Boat_*`): the boat is the cat's surface vehicle: `Boat_Step_1` drives `Girl.hspeed` (speed from
-  `base_speed + gear_boat_speed_mod`), `Boat_Step_0` sets `Girl.y = home_y + wave offset` every step, so the
-  cat/rod cannot leave the surface while a boat exists. `MAX_X = 2000` clamps east travel in the boat step.
-* **Lure** (`Lure_Step_0`): tether from `Rod.x/Rod.y` along `ROD_LENGTH/ROD_ANGLE`; `deep = 1` below y 4500;
-  `x < 500` is clamped. The rod follows the cat, so “fishing from the sub” needs the rod/tether origin moved.
-* **Light:** vanilla `Light` instances (e.g. Bulbfish `light2 = instance_create(x, y, Light)`) light up the
-  darkness surface; a headlight can be a `Light` instance that follows the sub.
+## Legacy findings
 
-## Proposed approach (to verify)
-1. **Sub object as a child of `CatSwim`** (`jamm_sub`, parent `CatSwim`): vanilla camera, breath bar and
-   message logic then work unchanged (`instance_exists(CatSwim)` is true, `CatSwim.tracker` exists). Override only
-   what differs: Step (slower, heavier movement, depth limit from hull level, no grabbing or optional grabbing
-   with a claw), Draw (sub sprite + headlight cone), keyboard (same arrows, no swim stroke animation).
-   Oxygen = breath: set `BreathBar.MAX_BREATH`/drain per sub tier each step after the vanilla BreathBar step.
-2. **Buying:** register the sub with the Items API as a tool-shop item (`jamm_tool_register`) or a boat
-   (`jamm_boat_register`) – choose what keeps the cat on the boat; price tiers in the compact money format.
-3. **Activation:** owning the sub and pressing the dive key on the boat creates `jamm_sub` instead of the
-   swimming cat (hook into `Girl_KeyPress_81` or a separate key that vanilla does not use – verify).
-4. **Headlight:** a `Light` instance owned by the sub, radius/alpha by upgrade level; turned off at the surface.
-5. **Fishing from the sub (v0.2):** while the sub is active, offset the rod tether origin (`tether_x/y` in
-   `Lure_Step_0`) to the sub position, or spawn the lure at the sub; needs careful testing with hooked fish,
-   `Lure.x < 500` clamp and the deep flag.
-6. **Hull/pressure:** maximum safe depth per hull tier; below it the oxygen drains faster and the screen tints
-   (no instant death; surfacing restores).
+| System | Behavior in the August 16 archive |
+| --- | --- |
+| Boat and rider | The boat shop selects an object from `BoatData.object[]`. `Boat` Begin Step drives `Girl.hspeed` and enforces the boat's east limit. Normal Step sets `Girl.y` to the boat's starting height plus wave motion. Draw Begin positions the hull and its background from the rider. |
+| Swimming and camera | Q enters vanilla `CatSwim` at level 25 or higher. Its tracker drives the main camera while it has breath. Its presence also hides the cat and blocks both rod swing events. Outside swimming, the camera follows a cast lure, or the cat. When an idle boat has `wasJustMoving` cleared, the camera uses a fixed sea-line Y. |
+| Lure and rod | The room creates a persistent `Lure` instance. `Girl` sets the rod anchor and the lure computes its tether from the rod position, angle and velocity. Lure state 0 is held, 1 is traveling and 2 fishes and reels. A cast enters state 2 as soon as it reaches the water and the vanilla reel automatically brings in a line shorter than 100 world units. The deep flag is set at world Y greater than 4,500. |
+| Lighting | `LightingSystem` draws the depth/night darkness surface and subtracts visible `AbstractLight` sprites from it. `Light` contributes a small additive highlight and a larger subtraction footprint. `GeigerLight` inherits that system and adjusts its parameters. The lure's bulb creates its own light. |
+| Item registration | `jamm_boat_register` takes a stable key, shop price, card sprite, boat object and description. JAMM adds the card to the paged shop and saves ownership and equipment by key. The factory fills in the runtime boat slot when the boat enters play. |
 
-## v0.1 scope
-Buy, dive/surface with the sub, headlight, oxygen bar, depth limit by tier, vanilla-style sub art from boat parts.
-Fishing from the sub, claw, sonar integration, Endless Ocean travel → v0.2+.
+A child of `Boat` keeps a single rider and boat instance, shop integration, fish storage and surface controls. Its own events manage underwater movement and a short line deployment. This avoids coupling the vehicle to `CatSwim`'s grab state, breath progression and cast restrictions. Normal boat, swim, camera and lure code can run without a submarine-specific patch.
+
+## v0.1.0
+
+- Buy the **Submarine** for **$125M** on the Boat shop's additional page. It is available to buy immediately and has 12 fish slots. Equip it and take it east of the dock before diving. Use any normal rod and bait.
+- Press **V** or **Y / Triangle** to dive or surface. Use arrows or **WASD**, the D-pad or the left stick to steer underwater. Press **L** or **X / Square** for the headlight. Use the normal fishing controls (hold and release **Space**, left mouse or **RB / R1** to cast, then hold to reel). Use Q for vanilla swimming from the surface.
+- The starter hull reaches **4,800 world units below the surface**. It checks the terrain in short increments and stops at solid obstacles. It starts with **110 seconds of oxygen** and refills at the surface. The HUD reports remaining time, depth and lamp status. A light uses the vanilla darkness surface and moves with the bow.
+- An underwater cast starts from the bow. The short deployment pays out enough line for the vanilla fishing and reeling state to take over. Movement pauses while the line is out. Reel in to resume navigation or surface. A held catch can travel with the sub and use the standard boat storage and sell controls.
+- On empty oxygen the sub releases a deployed line and ascends. A blocked ascent returns the sub to the point where it entered the water. Normal surfacing can be requested at any remaining oxygen.
+- The main camera follows the rider when navigating and follows the lure during fishing. Ordinary sonar still follows the lure. Weather continues to use the world clock, with no change to the depth limit or oxygen. The Silo's launch shaft is below the starter depth limit and requires its own package. Endless Ocean terrain stays owned by its package and v0.1 works within the sub's legacy travel limits.
+- The boat key is `submarine:submarine`. Saves keep the purchase and equipped slot through JAMM Items. Diving, oxygen and lamp state reset at load, with the sub at the surface. An equipped sub can be removed and later re-added through the normal item migration path.
+
+## Vehicle API
+
+v0.1 uses opt-in ModKit vehicle hooks on a registered boat. A boat can reference sprite recipe keys for its world and card art. Its lifecycle hooks can initialize fields after standard Boat creation and handle Begin Step, Step, End Step, Draw GUI and Destroy. A Begin Step or Step hook can call `event_inherited()` for vanilla behavior where needed. The Destroy hook runs before inherited cleanup. Other mods can use these hooks to make another vehicle and inherit the same shop and save path. Boat state stays on the boat instance. See the ModKit reference for the event contract.
+
+A shared, read-only dive query becomes worthwhile when another mod needs to react to a submerged player. v0.2 can expose the active vehicle instance, submerged flag, depth and remaining oxygen through a qualified lookup. Any future cast or route callbacks should have a single owner per vehicle, with saves continuing to use the registered item key.
+
+## Proposed upgrades
+
+Present prices in compact form and store full integer amounts. These tiers are design targets for v0.2 and later.
+
+| Upgrade | Price | Target effect |
+| --- | ---: | --- |
+| Starter submarine | $125M | 4,800 depth, 110 s oxygen |
+| Twin Air Tanks | $240M | 180 s oxygen |
+| Long-Range Battery | $360M | Separate lamp battery, 150 s of continuous light |
+| Reinforced Hull | $650M | 8,500 depth and a warning near rated depth |
+| Pressure Hull | $1.2B | 12,500 depth and access to the Silo approach |
+| Survey Sonar | $1.6B | Vehicle-centered terrain and waypoint scan |
+
+A later pressure model can raise oxygen drain and lower thrust below rated depth, with a firm limit beyond the warning range. Battery drains only with the lamp on and recharges at the surface independently of oxygen. Upgrade ownership should be per save slot under stable keys. Purchases above $999M need a verified economy and formatter that support the full amount.
+
+## Roadmap and risks
+
+| Version | Work |
+| --- | --- |
+| 0.1 | Buy, steer, light, oxygen, safe ascent, short underwater cast, source-only art and two in-game build checks |
+| 0.2 | Hull, battery, tank tiers, explicit save migration, terrain and recovery tests around the Silo |
+| 0.3 | Survey sonar, Endless Ocean travel and return with streamed terrain, weather effects on the surface leg |
+| 1.0 | Balance upgrade costs and unlocks, test long sessions, profile changes, controller play and optional pack combinations |
+
+The highest-risk paths are releasing or landing a fish while the boat changes depth, event order around the rod anchor, surfacing beneath a ceiling, gamepad polling alongside menu input and light behavior when the scene is dark. The bench should exercise the real boat shop purchase and stock reel behavior. It should record the actual hull, camera, lure and tether positions at depth and capture a side-by-side review of locally composed hull art against vanilla boats.
