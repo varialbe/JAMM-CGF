@@ -69,6 +69,28 @@ All scenes run inside `NewWorld` with `random_set_seed(Seed)` (default `1337`), 
 | `--profile` / `--profile-scripts` | | Off | Record inclusive event timings, with optional script timings |
 | `--fish-grid` | `FishGrid` in `[Perf]` | Off unless Perf is already installed | Install the guarded grid in a benchmark copy |
 | `--trace-fish <ticks>` | | Off | Record one fish state hash per simulation tick after scene setup |
+| `--fish-mode <mode>` | `FishMode` | `full` | `full`, `nostep`, `nodraw`, or `deactivate` (applied after warmup) |
+| `--fish-cap <n>` | `FishCap` | `-1` (off) | After warmup, destroy excess fish down to `n` (keeping hooked/in-view) and freeze spawners/thinners |
+| `--fish-scale <k>` | `FishScale` | `1` | Duplicate ordinary fish before warmup (`k`x multiplier, e.g. `2`, `1..20`) |
+
+## Fish isolation and scaling experiments
+
+Test-only experiment switches isolate fish simulation, fish rendering, instance count, and CPU vs. present bottlenecks:
+
+- **`FishMode`**:
+  - `full`: unmodified simulation and drawing.
+  - `nostep`: skips all `BeginStep`/`Step`/`EndStep` logic on `Fish` and every child species via runtime-toggleable early-exit guards while keeping drawing active.
+  - `nodraw`: simulates fish normally while skipping all `Draw` family events on `Fish` and child species (needed because fish step logic resets `visible = true`).
+  - `deactivate`: calls `instance_deactivate_object(Fish)` after warmup and freezes spawners to measure the engine cost of fish instances existing at all.
+  - External object references to fish are guarded with `InstanceGuard` so `nostep`, `deactivate`, and `FishCap` never crash on missing fish instances.
+- **`FishCap`**: destroys excess fish deterministically in instance order after warmup (keeping hooked fish and fish inside active views first) until at most `n` remain, and freezes respawn/thinning/weather population (`fish_respawn`, `FishThinner`, `*Spawner*`, `Swarm`, `jamm_weather_population`) during capture.
+- **`FishScale`**: duplicates ordinary `FishSmall`/`FishMedium` instances before warmup via `instance_copy(false)` (clearing shared light handles and re-initializing paths) and suppresses `FishThinner` culling so vanilla builds can reach 2,000–4,000+ fish for scaling curves.
+
+To run the full experiment matrix (`full`, `nostep`, `nodraw`, `deactivate`, `cap 2000/1000/500/200`) against one or more `.win` archives via `~/jamm-bench/run.sh` and write a Markdown table to `~/jamm-bench/results/fish-experiments-<date>.md`:
+
+```sh
+tools/bench/fish-experiments.sh ~/jamm-bench/builds/vanilla.win ~/jamm-bench/builds/own7-pub5.win
+```
 
 ## Comparing fish behaviour
 
@@ -99,11 +121,17 @@ Each frame in GameMaker 1.4 executes in this order:
 |<---------------------------- frame_us (DrawGUIEnd to DrawGUIEnd) ----------------------------->|
 ```
 
-The output CSV starts with `#` metadata/summary lines (`min`, `p50`, `p95`, `p99`, `max`, `mean`, `avg_fps`) followed by `frame_index,frame_us,loop_us,present_sleep_us` rows in microseconds (`get_timer()`):
+The output CSV starts with `#` metadata/summary lines (`min`, `p50`, `p95`, `p99`, `max`, `mean`, `avg_fps`) followed by `frame_index,frame_us,loop_us,present_sleep_us,step_us,draw_us,fish_step_us,fish_count` rows in microseconds (`get_timer()`):
 
 - **`frame_us`**: `get_timer()` frame-to-frame at `DrawGUIEnd` (placed at `Depth = -999999`, running after normal draws/GUI and before `obj_jamm_smooth` at `-1000000`). Equals the complete wall-clock frame period (`game loop + present/sleep`).
-- **`loop_us`**: `get_timer()` at `DrawGUIEnd` minus `get_timer()` at `BeginStep` of the same frame. Measures active CPU/GML Step + Draw work, excluding post-`DrawGUIEnd` swap/present, VSync wait, and `room_speed` frame-limiter sleep. On `SmoothMod` render-only frames where `BeginStep` is frozen, `loop_us` is `-1` (while `frame_us` is still recorded).
+- **`loop_us`**: `get_timer()` at `DrawGUIEnd` minus `get_timer()` at `BeginStep` of the same frame. Measures active CPU/GML Step + Draw work, excluding post-`DrawGUIEnd` swap/present, VSync wait, and `room_speed` frame-limiter sleep. On `SmoothMod` render-only frames where `BeginStep` is frozen, `loop_us` is `-1` (while `frame_us` and `draw_us` are still recorded).
 - **`present_sleep_us`**: `frame_us - loop_us` when `loop_us >= 0` (else `-1`), which equals the exact gap from frame `k-1`'s `DrawGUIEnd` to frame `k`'s `BeginStep`: SwapBuffers/present, VSync blocking, `room_speed` pacing sleep, and engine/runner inter-frame overhead.
+- **`step_us`**: `get_timer()` at `PreDraw` minus `get_timer()` at `BeginStep` when both ran (`-1` on render-only frames). Covers `BeginStep..EndStep` including engine motion/alarms.
+- **`draw_us`**: `get_timer()` at `DrawGUIEnd` minus `get_timer()` at `PreDraw` (`Draw..DrawGUIEnd`).
+- **`fish_step_us`**: cumulative microseconds spent inside `Fish` hierarchy step events during that frame via depth-guarded begin/end hooks (`-1` on render-only frames).
+- **`fish_count`**: active `instance_number(Fish)` recorded at `DrawGUIEnd` for that sample.
+
+Each of `frame_us`, `loop_us`, `present_sleep_us`, `step_us`, `draw_us`, `fish_step_us`, and `fish_count` also has a `# <metric> ...` summary line in the CSV header.
 
 `avg_fps` and `draw_samples` count `DrawGUIEnd` callbacks. `step_samples` counts `BeginStep` callbacks during the same capture, and `draws_per_step` exposes their ratio. These counts can differ when the engine renders more than once per simulation step; they are reported separately and are not deduplicated. Use the independent MangoHud presented frametimes for presentation cadence.
 
