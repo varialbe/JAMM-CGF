@@ -68,14 +68,20 @@ public sealed class FishRuntimeTests
         int createPos = reg.IndexOf("jamm_inst = instance_create(", StringComparison.Ordinal);
         Assert.True(createPos >= 0);
         int guardPos = reg.IndexOf("if (instance_exists(jamm_inst))", createPos, StringComparison.Ordinal);
+        int sonarPos = reg.IndexOf("jamm_fish_sonar_init(jamm_inst)", createPos, StringComparison.Ordinal);
         int metadataPos = reg.IndexOf("jamm_inst.start_x =", createPos, StringComparison.Ordinal);
         int catalogPos = reg.IndexOf("jamm_catalog_register(", StringComparison.Ordinal);
-        Assert.True(guardPos > createPos && metadataPos > guardPos);
+        Assert.True(guardPos > createPos && sonarPos > guardPos && metadataPos > sonarPos);
         Assert.True(catalogPos > metadataPos);
         Assert.Contains("TRUE_START_X", reg);
         Assert.Contains("jamm_fish_names", reg);
         Assert.Contains("CatalogData", reg);
         Assert.Contains("jamm_catalog_register(", reg);
+        Assert.Contains("jamm_fish_sonar_init(jamm_inst)", reg);
+        string sonar = PatchBuilder.ReadCode(merged, FishSonarRuntime.Code).Text;
+        Assert.Contains("s1 = sprite_index", sonar);
+        Assert.Contains("s5 = (size + 0.5) / 3.5", sonar);
+        Assert.Single(merged.Data.Scripts, s => s.Name.Content == FishSonarRuntime.Script);
 
         string apiInit = PatchBuilder.ReadCode(merged, FishRuntime.ApiInitCode).Text;
         Assert.Contains("jamm_init_demo()", apiInit);
@@ -87,6 +93,22 @@ public sealed class FishRuntimeTests
 
         string toName = PatchBuilder.ReadCode(merged, FishRuntime.FishObjectToName).Text;
         Assert.Contains("jamm_fish_names", toName);
+    }
+
+    [Fact]
+    public void SharedSonarInitializerIsAddedOnlyOnceForMultipleFishFeatures()
+    {
+        using var data = UndertaleData.CreateNew();
+        var recompile = new Dictionary<string, string>(StringComparer.Ordinal);
+        var generated = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        FishSonarRuntime.Ensure(data, recompile, generated);
+        FishSonarRuntime.Ensure(data, recompile, generated);
+
+        Assert.Single(data.Scripts, s => s.Name.Content == FishSonarRuntime.Script);
+        Assert.Single(recompile);
+        Assert.Single(generated);
+        Assert.Contains("asset_get_index(\"SonarPanel\")", recompile[FishSonarRuntime.Code]);
     }
 
     [Fact]

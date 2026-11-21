@@ -28,9 +28,8 @@ for (var i = 7; i < 19; i += 4)
     {
         var species = layout[i + 2];
         var swimmer = instance_create(sx, sy, species);
-        // SonarPanel normally initializes these fields in its Begin Step. A fish streamed after
-        // that event can reach Draw before the panel's next pass (notably on Smooth render frames).
-        jmk_endless_ocean_sonar(swimmer);
+        if (!instance_exists(swimmer)) continue;
+        jamm_fish_sonar_init(swimmer);
         // Initialize base_lunge_mod/offset at creation with the exact Rod_Other_10 formula so
         // generated fish never rely on Rod_Other_10 having run before Draw or deactivation.
         swimmer.base_lunge_mod = 1;

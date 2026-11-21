@@ -80,6 +80,14 @@ public sealed class WeatherRuntimeTests
         Assert.Contains("weather_rule[0, 1] = 2;", text);
         Assert.Contains("weather_rule[1, 1] = 8;", text);
 
+        string population = PatchBuilder.ReadCode(merged, "gml_Script_jamm_weather_population").Text;
+        Assert.Contains("jamm_fish_sonar_init(fish)", population);
+        Assert.Contains("if (instance_exists(fish))", population);
+        Assert.True(population.IndexOf("jamm_fish_sonar_init(fish)", StringComparison.Ordinal)
+            < population.IndexOf("fish.base_lunge_mod = 1", StringComparison.Ordinal));
+        Assert.Contains("s5 = (size + 0.5) / 3.5", PatchBuilder.ReadCode(merged, FishSonarRuntime.Code).Text);
+        Assert.Single(merged.Data.Scripts, s => s.Name.Content == FishSonarRuntime.Script);
+
         BuildInput BuildInput(string id, string displayName, string phase)
         {
             string dir = temp.Package($$"""
