@@ -215,7 +215,7 @@ public sealed class ModSanitizerTests
     }
 
     [Fact]
-    public void LibraryStoresSanitizedPatchByDefaultAndHonorsKeepAuthorSwitch()
+    public void LibraryKeepsAuthorPerformanceByDefaultAndAllowsSanitizingOptOut()
     {
         using var temp = new TemporaryDirectory();
         string basePath = temp.PathFor("base.win");
@@ -239,16 +239,23 @@ public sealed class ModSanitizerTests
         Assert.Single(report.Removed);
         Assert.Equal(ModSanitizer.Timing, report.Removed[0].Category);
 
-        // By default, library.Patch returns the sanitized patch (0 changed code entries).
-        Assert.Empty(library.Patch(added.Mod).Changes["code"].Changed);
+        // Performance edits are the default for new imports and legacy records without an explicit choice.
+        string metadataPath = Path.Combine(store.Root, "mods", added.Mod.Id, "mod.json");
+        File.WriteAllText(metadataPath, JsonSerializer.Serialize(
+            added.Mod with { KeepAuthorPerformanceChanges = false }, ManagerStore.JsonOptions));
+        var legacyMod = library.Find(added.Mod.Id);
+        Assert.False(legacyMod.KeepAuthorPerformanceChanges);
+        Assert.False(legacyMod.KeepAuthorPerformanceChangesConfigured);
+        Assert.True(legacyMod.EffectiveKeepAuthorPerformanceChanges);
+        Assert.Single(library.Patch(legacyMod).Changes["code"].Changed);
 
-        // Toggling KeepAuthorPerformanceChanges returns the unsanitized patch.
-        var updated = library.SetKeepAuthorPerformanceChanges(added.Mod.Id, true);
-        Assert.True(updated.KeepAuthorPerformanceChanges);
-        Assert.Single(library.Patch(updated).Changes["code"].Changed);
+        // The Advanced switch remains available to use JAMM's sanitized performance patch.
+        var updated = library.SetKeepAuthorPerformanceChanges(added.Mod.Id, false);
+        Assert.False(updated.EffectiveKeepAuthorPerformanceChanges);
+        Assert.Empty(library.Patch(updated).Changes["code"].Changed);
 
-        library.SetKeepAuthorPerformanceChanges(added.Mod.Id, false);
-        Assert.Empty(library.Patch(added.Mod).Changes["code"].Changed);
+        library.SetKeepAuthorPerformanceChanges(added.Mod.Id, true);
+        Assert.Single(library.Patch(library.Find(added.Mod.Id)).Changes["code"].Changed);
     }
 
     [Fact]
@@ -339,25 +346,25 @@ public sealed class ModSanitizerTests
         var library = new ModLibrary(store);
         var added = library.Add(modReferencedPath, "RefMod").Mod;
 
-        // Default: both performance and HUD sanitized
+        // Performance is preserved by default while HUD replacements remain sanitized.
         var defaultPatch = library.Patch(added);
-        Assert.DoesNotContain(defaultPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.Contains(defaultPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
         Assert.DoesNotContain(defaultPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
 
-        // KeepAuthorHudDesign = true, KeepAuthorPerformanceChanges = false: HUD kept, performance stripped
+        // HUD and performance choices remain independent.
         var keepHud = library.SetKeepAuthorHudDesign(added.Id, true);
         Assert.True(keepHud.KeepAuthorHudDesign);
         var hudKeptPatch = library.Patch(keepHud);
-        Assert.DoesNotContain(hudKeptPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.Contains(hudKeptPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
         Assert.Contains(hudKeptPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
         Assert.Contains(hudKeptPatch.Changes["fonts"].Changed, f => f.Name == "fnt_babySmall");
 
-        // KeepAuthorHudDesign = false, KeepAuthorPerformanceChanges = true: HUD stripped, performance kept
+        // Sanitizing performance remains available without changing the HUD choice.
         library.SetKeepAuthorHudDesign(added.Id, false);
-        var keepPerf = library.SetKeepAuthorPerformanceChanges(added.Id, true);
-        var perfKeptPatch = library.Patch(keepPerf);
-        Assert.Contains(perfKeptPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
-        Assert.DoesNotContain(perfKeptPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
+        var sanitizePerf = library.SetKeepAuthorPerformanceChanges(added.Id, false);
+        var sanitizedPatch = library.Patch(sanitizePerf);
+        Assert.DoesNotContain(sanitizedPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.DoesNotContain(sanitizedPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
     }
 
     [RealFilesFact]
@@ -385,6 +392,7 @@ public sealed class ModSanitizerTests
         foreach (var (name, file) in fixtures)
         {
             var mod = library.Add(Path.Combine(modsDirectory, file), name).Mod;
+            library.SetKeepAuthorPerformanceChanges(mod.Id, false);
             var report = library.SanitizerReport(mod);
             reports[name] = report;
             var patch = library.Patch(mod);

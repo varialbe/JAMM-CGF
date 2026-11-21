@@ -30,6 +30,10 @@ Before replacement, SHA-256-verified originals are retained at `data.win.cgfmm-o
 
 No game files are distributed. Patches, details and logs can contain local game code or strings: do not redistribute them. Static verification checks archives, references and compilation; gameplay still needs testing with the legacy executable.
 
+## Author performance changes
+
+Profile builds preserve performance edits included by mod authors by default. Some packs use tick throttling, distance culling, or other techniques that can make a large mod set run faster than a sanitized build. In **Advanced mode**, expand a mod and clear **Keep the author's performance changes** to let JAMM remove those edits while keeping the mod's content. The choice is per mod and takes effect on the next build. Older library entries without an explicit choice use the preserve-performance default.
+
 ## Overhauls and their addons
 
 Keep **Settings → Base** pointed at the original August 2023 game. To play an

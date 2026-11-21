@@ -19,7 +19,7 @@ public sealed class ModLibrary(ManagerStore store)
     /// <summary>Returns the path to the sanitizer report file stored alongside the raw patch.</summary>
     public string SanitizerReportPath(ManagedMod mod) => store.Path("patches", ManagerStore.Name(mod.Id) + ".sanitizer.json");
 
-    /// <summary>Verifies archive identities, refreshes outdated caches, and returns the active (sanitized by default) patch.</summary>
+    /// <summary>Verifies archive identities, refreshes outdated caches, and returns the patch selected by the mod's settings.</summary>
     public ModPatch Patch(ManagedMod mod, Action<string>? progress = null, CancellationToken cancellationToken = default)
     {
         if (mod.Role is { Role: "addon" } role)
@@ -33,7 +33,7 @@ public sealed class ModLibrary(ManagerStore store)
 
     private ModPatch SelectPatch(ManagedMod mod, ModPatch raw, ModPatch sanitized, Func<string, VanillaSonarCondition> sonar)
     {
-        bool keepPerf = mod.KeepAuthorPerformanceChanges;
+        bool keepPerf = mod.EffectiveKeepAuthorPerformanceChanges;
         bool keepHud = mod.KeepAuthorHudDesign;
         bool keepGameplay = mod.KeepAuthorGameplayChanges;
         string metaPath = store.Path("mods", ManagerStore.Name(mod.Id), "mod.json");
@@ -42,7 +42,7 @@ public sealed class ModLibrary(ManagerStore store)
             try
             {
                 var stored = ReadMod(mod.Id);
-                keepPerf = stored.KeepAuthorPerformanceChanges;
+                keepPerf = stored.EffectiveKeepAuthorPerformanceChanges;
                 keepHud = stored.KeepAuthorHudDesign;
                 keepGameplay = stored.KeepAuthorGameplayChanges;
             }
@@ -76,7 +76,7 @@ public sealed class ModLibrary(ManagerStore store)
     public ManagedMod SetKeepAuthorPerformanceChanges(string query, bool keep)
     {
         var mod = Find(query);
-        var updated = mod with { KeepAuthorPerformanceChanges = keep };
+        var updated = mod with { KeepAuthorPerformanceChanges = keep, KeepAuthorPerformanceChangesConfigured = true };
         store.Write(store.Path("mods", mod.Id, "mod.json"), updated);
         return updated;
     }
