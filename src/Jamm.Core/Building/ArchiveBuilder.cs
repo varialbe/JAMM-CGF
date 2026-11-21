@@ -86,6 +86,7 @@ public static class ArchiveBuilder
                     semantics.Base, original.Data),
                 semantics.Base);
             plan = InstanceCompatibility.Repair(plan, patches, semantics.Base);
+            plan = NavCompatibility.GuardPatrol(plan, semantics.Base);
             ApplySourceRenames(sources.Select(s => s.Data).ToArray(), plan.AssetRenames);
             // This fresh base model is the disposable working copy; no input stream is ever writable.
             using var working = GameFileLoader.Load(basePath, cancellationToken: cancellationToken, options: options);
@@ -329,6 +330,7 @@ public static class ArchiveBuilder
         ItemsRuntime.Inject(data, recompile);
         FishRuntime.Inject(data, recompile);
         WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+        NavCompatibility.RepairRoom(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         ReassignRoomIds(data, ancestor);
         progress?.Invoke($"Compiling {recompile.Count} changed/merged/relinked code entries");
         var compiler = new CompileGroup(data);
