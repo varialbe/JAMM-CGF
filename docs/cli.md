@@ -45,6 +45,10 @@ for schemas, compatibility reporting, backups and all launch settings.
 Use full IDs or unique case-sensitive names/source stems for `<mod>`. Names containing
 spaces must be quoted, including the entire comma-separated `--mods` value.
 Management commands return 0 on success, 1 for errors or declined installation.
+Profile builds sanitize harmful author performance changes by default, while direct
+`build --base --order` keeps the mod archives' changes unfiltered. The GUI's Advanced mode
+has a per-mod option to keep every author performance edit, including harmful timing and
+gameplay changes normally stripped by the sanitizer; see [author performance changes](user-guide.md#author-performance-changes).
 
 For an overhaul with a legacy addon, add both archives and assign their roles.
 Package declarations supply the default roles and can make the two assignment

@@ -72,8 +72,13 @@ public sealed record ManagedMod(string Id, string Name, string SourceFileName, s
     public string? Description { get; init; }
     /// <summary>Exact-byte online provenance; absent in older/manual imports. Hashes identify bytes, not trusted authorship.</summary>
     public ModOrigin[] Origins { get; init; } = [];
-    /// <summary>Expert per-mod opt-out that uses the original unsanitized performance changes instead of JAMM's sanitized patch.</summary>
+    /// <summary>Whether to preserve performance edits authored by this mod.</summary>
     public bool KeepAuthorPerformanceChanges { get; init; }
+    /// <summary>Whether the player explicitly chose whether to keep all author performance changes.</summary>
+    public bool KeepAuthorPerformanceChangesConfigured { get; init; }
+    /// <summary>Effective choice, treating unconfigured legacy metadata as the default harmful-change sanitizer setting.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool EffectiveKeepAuthorPerformanceChanges => KeepAuthorPerformanceChangesConfigured && KeepAuthorPerformanceChanges;
     /// <summary>Expert per-mod opt-out that keeps the author's HUD/UI asset replacements instead of reverting to base HUD art.</summary>
     public bool KeepAuthorHudDesign { get; init; }
     /// <summary>Expert per-mod opt-out that keeps the author's gameplay/sonar changes instead of enforcing vanilla progression.</summary>

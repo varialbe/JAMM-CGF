@@ -35,7 +35,7 @@ public sealed class ModSanitizerTests
             "action_inherited();\nimage_angle = sin((current_time + jitter + x) / 1000) * 10;\n",
             "action_inherited();\nif (point_distance(x, y, Camera.x, Camera.y) > 5000)\n{\n    visible = false;\n    exit;\n}\nelse\n{\n    image_angle = sin((current_time + jitter + x) / 1000) * 10;\n}\n");
         var distHunk = Assert.Single(distCull);
-        Assert.Equal(ModSanitizer.DistanceCull, distHunk.Category);
+        Assert.Equal(ModSanitizer.BenignPerformance, distHunk.Category);
         Assert.Equal("image_angle = sin((current_time + jitter + x) / 1000) * 10;\n", distHunk.RevertedText);
 
         // 4. fps-adaptive
@@ -131,6 +131,29 @@ public sealed class ModSanitizerTests
     }
 
     [Fact]
+    public void KeepsOffscreenDrawCullsButClassifiesFishTickThrottleAsHarmful()
+    {
+        const string fishBase = "speed = spd;\n";
+        const string fishMod = "check_timer++;\nif (check_timer >= 6)\n{\n    check_timer = 0;\n    if (point_distance(x, y, Camera.x, Camera.y) > 5000 && state != 12 && state != 6)\n    {\n        speed = spd;\n    }\n}\n";
+        var fishThrottle = Assert.Single(ModSanitizer.ClassifyEntry("gml_Object_Fish_Step_2", fishBase, fishMod));
+        Assert.Equal(ModSanitizer.TickThrottle, fishThrottle.Category);
+
+        var safeDraw = Assert.Single(ModSanitizer.ClassifyEntry(
+            "gml_Object_Fish_Draw_0", "fish_predraw_switchcase();\nfish_basicdraw();\n",
+            "if (point_distance(x, y, Camera.x, Camera.y) < 5000)\n{\n    fish_predraw_switchcase();\n    fish_basicdraw();\n}\n"));
+        Assert.Equal(ModSanitizer.BenignPerformance, safeDraw.Category);
+
+        var harmfulSonar = Assert.Single(ModSanitizer.ClassifyEntry(
+            "gml_Object_SonarPanel_Draw_0", "draw_self();\n",
+            "if (point_distance(x, y, Camera.x, Camera.y) < 5000) visible = false;\ndraw_self();\n"));
+        Assert.Equal(ModSanitizer.DistanceCull, harmfulSonar.Category);
+
+        var harmfulTiming = Assert.Single(ModSanitizer.ClassifyEntry(
+            "gml_Object_Girl_Step_0", "delta = delta_time;\n", "delta = room_speed / 30;\n"));
+        Assert.Equal(ModSanitizer.Timing, harmfulTiming.Category);
+    }
+
+    [Fact]
     public void SanitizerRemovesUnreferencedHelpersAndNeverTouchesReferencedContentOrJammMods()
     {
         using var temp = new TemporaryDirectory();
@@ -188,12 +211,11 @@ public sealed class ModSanitizerTests
         Assert.False(sanitized.Report.IsJammMod);
         Assert.NotEmpty(sanitized.Report.Removed);
         Assert.Contains(sanitized.Report.Removed, r => r.Category == ModSanitizer.Timing && r.Entry == "gml_Object_Girl_Create_0");
-        Assert.Contains(sanitized.Report.Removed, r => r.Category == ModSanitizer.TickThrottle && r.Entry == "gml_Object_Fish_Create_0");
         Assert.Contains(sanitized.Report.Removed, r => r.Category == ModSanitizer.TickThrottle && r.Entry == "gml_Object_Fish_Step_2");
         Assert.Contains(sanitized.Report.Removed, r => r.Category == ModSanitizer.Timing && r.Entry == "objects/fpsController");
         Assert.Contains(sanitized.Report.Removed, r => r.Category == ModSanitizer.Timing && r.Entry.StartsWith("rooms/", StringComparison.Ordinal));
 
-        // Girl_Create_0 and Fish_Create_0 were completely reverted, so they are dropped from code.Changed.
+        // Girl_Create_0 and Fish_Create_0 are reverted with their harmful tick-throttle changes.
         Assert.DoesNotContain(sanitized.Patch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
         Assert.DoesNotContain(sanitized.Patch.Changes["code"].Changed, c => c.Name == "gml_Object_Fish_Create_0");
 
@@ -215,7 +237,7 @@ public sealed class ModSanitizerTests
     }
 
     [Fact]
-    public void LibraryStoresSanitizedPatchByDefaultAndHonorsKeepAuthorSwitch()
+    public void LibrarySanitizesHarmfulAuthorPerformanceByDefaultAndAllowsKeepingAllChanges()
     {
         using var temp = new TemporaryDirectory();
         string basePath = temp.PathFor("base.win");
@@ -239,16 +261,23 @@ public sealed class ModSanitizerTests
         Assert.Single(report.Removed);
         Assert.Equal(ModSanitizer.Timing, report.Removed[0].Category);
 
-        // By default, library.Patch returns the sanitized patch (0 changed code entries).
-        Assert.Empty(library.Patch(added.Mod).Changes["code"].Changed);
+        // New and legacy records sanitize harmful performance edits unless explicitly opted out.
+        string metadataPath = Path.Combine(store.Root, "mods", added.Mod.Id, "mod.json");
+        File.WriteAllText(metadataPath, JsonSerializer.Serialize(
+            added.Mod with { KeepAuthorPerformanceChanges = true, KeepAuthorPerformanceChangesConfigured = false }, ManagerStore.JsonOptions));
+        var legacyMod = library.Find(added.Mod.Id);
+        Assert.True(legacyMod.KeepAuthorPerformanceChanges);
+        Assert.False(legacyMod.KeepAuthorPerformanceChangesConfigured);
+        Assert.False(legacyMod.EffectiveKeepAuthorPerformanceChanges);
+        Assert.Empty(library.Patch(legacyMod).Changes["code"].Changed);
 
-        // Toggling KeepAuthorPerformanceChanges returns the unsanitized patch.
-        var updated = library.SetKeepAuthorPerformanceChanges(added.Mod.Id, true);
-        Assert.True(updated.KeepAuthorPerformanceChanges);
-        Assert.Single(library.Patch(updated).Changes["code"].Changed);
+        // The Advanced switch remains available to use JAMM's sanitized performance patch.
+        var updated = library.SetKeepAuthorPerformanceChanges(added.Mod.Id, false);
+        Assert.False(updated.KeepAuthorPerformanceChanges);
+        Assert.Empty(library.Patch(updated).Changes["code"].Changed);
 
-        library.SetKeepAuthorPerformanceChanges(added.Mod.Id, false);
-        Assert.Empty(library.Patch(added.Mod).Changes["code"].Changed);
+        library.SetKeepAuthorPerformanceChanges(added.Mod.Id, true);
+        Assert.Single(library.Patch(library.Find(added.Mod.Id)).Changes["code"].Changed);
     }
 
     [Fact]
@@ -339,12 +368,12 @@ public sealed class ModSanitizerTests
         var library = new ModLibrary(store);
         var added = library.Add(modReferencedPath, "RefMod").Mod;
 
-        // Default: both performance and HUD sanitized
+        // Harmful timing changes are sanitized by default while HUD replacements remain sanitized.
         var defaultPatch = library.Patch(added);
         Assert.DoesNotContain(defaultPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
         Assert.DoesNotContain(defaultPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
 
-        // KeepAuthorHudDesign = true, KeepAuthorPerformanceChanges = false: HUD kept, performance stripped
+        // HUD and performance choices remain independent.
         var keepHud = library.SetKeepAuthorHudDesign(added.Id, true);
         Assert.True(keepHud.KeepAuthorHudDesign);
         var hudKeptPatch = library.Patch(keepHud);
@@ -352,12 +381,14 @@ public sealed class ModSanitizerTests
         Assert.Contains(hudKeptPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
         Assert.Contains(hudKeptPatch.Changes["fonts"].Changed, f => f.Name == "fnt_babySmall");
 
-        // KeepAuthorHudDesign = false, KeepAuthorPerformanceChanges = true: HUD stripped, performance kept
+        // The Advanced performance switch keeps all author performance changes.
         library.SetKeepAuthorHudDesign(added.Id, false);
         var keepPerf = library.SetKeepAuthorPerformanceChanges(added.Id, true);
-        var perfKeptPatch = library.Patch(keepPerf);
-        Assert.Contains(perfKeptPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
-        Assert.DoesNotContain(perfKeptPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
+        Assert.True(keepPerf.KeepAuthorPerformanceChangesConfigured);
+        Assert.True(keepPerf.EffectiveKeepAuthorPerformanceChanges);
+        var rawPerfPatch = library.Patch(keepPerf);
+        Assert.Contains(rawPerfPatch.Changes["code"].Changed, c => c.Name == "gml_Object_Girl_Create_0");
+        Assert.DoesNotContain(rawPerfPatch.Changes["sprites"].Changed, s => s.Name == "spr_wallet");
     }
 
     [RealFilesFact]
@@ -385,6 +416,7 @@ public sealed class ModSanitizerTests
         foreach (var (name, file) in fixtures)
         {
             var mod = library.Add(Path.Combine(modsDirectory, file), name).Mod;
+            library.SetKeepAuthorPerformanceChanges(mod.Id, false);
             var report = library.SanitizerReport(mod);
             reports[name] = report;
             var patch = library.Patch(mod);
