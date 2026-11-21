@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JAMM Perf — JAMM CGF Mods</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="mod-header">
+      <a class="back" href="../index.html#builtin-perf">← All mods</a>
+      <div class="card-head">
+        <img src="../assets/perf.svg" alt="" width="44" height="44">
+        <div>
+          <h1>JAMM Perf</h1>
+          <div class="badges"><span class="badge b-default">First-Party Default</span> <span class="badge b-optional">Recipe</span></div>
+          <p>Version 1.0.0</p>
+        </div>
+      </div>
+      <a class="btn" href="../packages/jamm-perf.zip" download>Download jamm-perf.zip</a>
+      <div class="checksum">SHA-256: 00c97eed9562b6efd007752654cfdb3cceb62d1b6951b05e1f3611909b777da9 (359 B)</div>
+    </header>
+
+    <section class="mod-section">
+      <h2>What it does</h2>
+      <p>JAMM Perf reduces work in fish collision, avoidance and scenery updates in the legacy game. Its experimental mode also reduces how often eligible distant fish run part of their logic.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Controls</h2>
+      <ul class="controls">
+        <li>Press F8 to switch between mode 0 (base optimizations) and mode 1 (base optimizations plus experimental scheduling).</li>
+      </ul>
+    </section>
+
+    <section class="mod-section">
+      <h2>Technical datasheet</h2>
+      <table class="datasheet">
+        <tbody>
+          <tr><th scope="row">Package type</th><td>Recipe</td></tr>
+          <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
+          <tr><th scope="row">Generator</th><td><code>perf</code> (recipe generator version <code>2</code>)</td></tr>
+          <tr><th scope="row">APIs used</th><td>Built-in GameMaker event and script patches.</td></tr>
+          <tr><th scope="row">Assets and scripts added</th><td>1 persistent controller object, 0 sprites and 0 standalone scripts. The recipe adds 4 controller events and patches 7 existing code entries.</td></tr>
+          <tr><th scope="row">Save-file behaviour</th><td>Stores scheduling settings in <code>jamm_perf.ini</code>, under <code>[Perf]</code>. The default <code>Mode</code> is 0 and the default <code>Interval</code> is 4 ticks. These settings are shared across save slots.</td></tr>
+          <tr><th scope="row">Compatibility</th><td>Targets the August 2023 legacy VM archive. The repository records a verified build with Smooth, HD Lite, Console and an independent third-party mod. Mode 1 can also reach custom small or medium fish through inherited End Step logic.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mod-section">
+      <h2>How it works</h2>
+      <p>The generator guards light updates on Magmer and Volteen against stale instance IDs. It skips the precise deep-rock collision check and trawler net collision query in fish states that cannot use their results.</p>
+      <p>Fish avoidance computes two fixed expressions once per call and retains the original neighbour traversal. Scenery caches its depth transform per instance and still updates its parallax position each tick.</p>
+      <p>The <code>obj_jamm_perf</code> controller configures an early-out in the base Fish End Step. The scheduler checks ancestry, fish state and distances to active views, lures, swimmers, boats and nets before skipping work. Eligible instances are staggered by instance ID and tick, and their engine alarms, motion and Draw events still run.</p>
+    </section>
+
+    <section class="mod-section">
+      <h2>Files in the package</h2>
+      <ul class="package-files">
+        <li><code>jamm-recipe.json</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

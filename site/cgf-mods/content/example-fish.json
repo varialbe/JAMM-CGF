@@ -1,0 +1,13 @@
+{
+  "cardPackageType": "ModKit Source",
+  "cardSummary": "ModKit example adding Goldie, a shallow-water fish, and Glowfin, a nocturnal fish with pulsing fins.",
+  "summary": "Goldie is a small, shallow-water fish found near the dock. Glowfin is a medium nocturnal fish that pulses cyan and lime and can dart away from a nearby cast lure.",
+  "apis": "ModKit `fish` declarations, Fish API `jamm_fish_register`, and shared Fishalog registration through the Catalog API.",
+  "assets": "2 fish objects, 2 sprites and 4 standalone scripts in the source build on a clean base. The scripts are two Glowfin hooks, a package initializer and the Fish API registration stub.",
+  "saves": "The native slot INI stores Fishalog catch quality, discovery and population under `[JAMM_Catalog]`, keyed by the object names `jmk_example_fish_goldie` and `jmk_example_fish_glowfin`.",
+  "compatibility": "Targets the August 2023 legacy VM archive. A verified build combined Example Fish with Harbor Pack and Showcase Upgrades without conflicts. The Fish API registers species by package and fish key, and the Catalog API tracks progress across profile orders by object name.",
+  "how": [
+    "The manifest supplies single-frame PNGs and stats for fish that inherit the base `FishSmall` and `FishMedium` objects. The generated initializer registers four Goldies in x = 1,100–2,200 and y = 1,400–1,900, and three Glowfins in x = 1,400–2,800 and y = 1,600–2,300.",
+    "Glowfin's Create hook randomizes its glow phase and initializes a dart cooldown. Its End Step hook runs after inherited fish logic. At night it pulses the sprite tint and adds a velocity burst away from a cast lure within 120 pixels while the fish is swimming and the cooldown has expired. During the day it dims and sinks while shallow."
+  ]
+}

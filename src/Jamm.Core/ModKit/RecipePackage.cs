@@ -139,7 +139,7 @@ public static partial class RecipePackage
         progress?.Invoke($"Applying recipe '{recipe.Name}' ({recipe.Generator})…");
         switch (recipe.Generator)
         {
-            case "perf": PerfMod.Apply(data); break;
+            case "perf": PerfMod.Apply(data, applyFishGrid: false); break;
             case "smooth": SmoothMod.Apply(data); break;
             case "hd-lite": HdMod.Apply(data, null); break;
             case "console": ConsoleMod.Apply(data); break;

@@ -9,7 +9,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | --- | --- |
 | `config show [--json]` | Show configuration |
 | `config set <key> <value>` | Set `base`, `gameDir`, `wine.mode`, `wine.prefix`, `wine.binary`, `proton.path`, `proton.compatDataPath`, `proton.clientInstallPath`, or `steam.appId` |
-| `add <file.win, file.zip, or modkit dir> [--name <name>]` | Copy/build into the library and immediately compute a patch; warn about source build differences |
+| `add <file.win, file.zip, or modkit dir> [--name <name>]` | Copy or build into the library. Declared addons get their patch when JAMM has the selected base. |
 | `builtin list` | List built-in mods, hotkeys, and console commands |
 | `builtin add <perf\|smooth\|hd-lite\|console>` | Generate and import a built-in JAMM enhancement mod |
 | `modkit new <dir> [--template fish\|upgrade\|boat\|hat]` | Scaffold a starter ModKit folder package (`jamm-mod.json` + PNG + hook) |
@@ -20,11 +20,20 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `remove <mod>` | Remove an unused library mod and its patch; profiles using it must be deleted first |
 | `profile create <name> --mods a,b,c` | Save ordered mod IDs/names; later mods win overlaps |
 | `profile list [--json]` | List profiles and mark the active selection in text output |
-| `profile show <name> [--json]` | Show order and resolution choices |
+| `profile show <name> [--json]` | Show order, enablement, performance settings, and resolution choices |
 | `profile use <name>` | Select a profile for apply/play |
 | `profile delete <name>` | Delete a profile, clearing the active selection if needed |
 | `profile resolve <name> <asset> <mod or keep-both>` | Save an explicit `family/name` or unambiguous asset choice; insertion-only `keep-both` |
 | `profile repack <name> on\|off` | Enable or disable texture repacking for builds of this profile |
+| `profile base <name> <mod>` | Assign the base role to a mod in the profile |
+| `profile addon <name> <mod> <base>` | Assign the addon role and select its base library mod |
+| `profile role <name> <mod> none` | Assign the vanilla role, overriding any package declaration |
+| `check --profile <name> [--strict] [--json <file>] [--details <asset>]` | Check the profile's enabled groups against their respective ancestors |
+| `build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]` | Build the profile with saved choices and write a verified archive |
+| `profile preset <name> weak-pc\|default` | Apply Weak PC or restore the previous profile settings |
+| `profile builtin <name> <id> on\|off` | Enable or disable a bundled mod in the profile |
+| `profile perf <name> mode\|grid on\|off` | Set the startup default for F8 scheduling or the fish grid |
+| `profile perf <name> interval <ticks>` | Set the default distant-fish update interval from 1 to 60 ticks |
 | `profile unlockfix <profile> <mod> on\|off` | Opt a mod into legacy boat and rod shop repair for this profile. Defaults to off. |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
 | `play [--profile <name>] [--yes]` | Ensure that profile is installed, then launch Wine/Proton without waiting |
@@ -33,6 +42,28 @@ for schemas, compatibility reporting, backups and all launch settings.
 Use full IDs or unique case-sensitive names/source stems for `<mod>`. Names containing
 spaces must be quoted, including the entire comma-separated `--mods` value.
 Management commands return 0 on success, 1 for errors or declined installation.
+
+For an overhaul with a legacy addon, add both archives and assign their roles.
+Package declarations supply the default roles and can make the two assignment
+commands unnecessary.
+
+```sh
+cgfmm profile create overhaul-pack --mods Overhaul,ReefAddon
+cgfmm profile base overhaul-pack Overhaul
+cgfmm profile addon overhaul-pack ReefAddon Overhaul
+cgfmm check --profile overhaul-pack --strict
+cgfmm build --profile overhaul-pack --out build/overhaul-pack.win
+```
+
+The profile must have exactly one enabled base for its enabled addons. JAMM
+checks addon conflicts against the original archive from the base mod's library
+entry. Use `--strict` to fail on a declared base version or SHA-256 mismatch.
+Mixed profiles warn with `CGF-BASE-001` when an enabled mod targets vanilla.
+Use the displayed `addons/<asset>` with `check --details`. For `profile resolve`,
+prefix addon choices with `addons/`, for example
+`addons/code/<entry>#<zero-based ancestor line>`. Use `apply --profile <name>`
+to install the profile with a vanilla backup. A profile dry run can use temporary
+files in the manager's builds directory and leaves the requested output path alone.
 
 `check` reports `CGF-UNLOCK-001` for boats and `CGF-UNLOCK-002` for rods when it finds no unlock path. The finding names the item, slot, and source tables or events. Use `profile unlockfix` to make eligible items buyable on the next build. The build lists each repaired item and its price.
 
@@ -53,7 +84,7 @@ cgfmm modkit build my-reef-fish --out my-reef-fish.win
 cgfmm add my-reef-fish
 ```
 
-`modkit new` supports `--template fish`, `upgrade`, `boat`, or `hat` (default `fish`). `modkit build` opens `--base` (or `config.base`) read-only, compiles and verifies the new `.win`, and writes to `--out` (default `<dir>/<id>.win`). `cgfmm add <dir>` validates, builds against `config.base`, and imports the mod directly into the library. See the [ModKit getting-started guide](modding/getting-started.md) and [ModKit reference](modding/modkit-reference.md).
+`modkit new` supports `--template fish`, `upgrade`, `boat`, or `hat` (default `fish`). `modkit build` opens the supplied `--base`, the addon's declared library base, or `config.base` read-only. It compiles and verifies the new `.win` and writes to `--out` (default `<dir>/<id>.win`). `cgfmm add <dir>` builds using the same metadata and imports the mod directly into the library. See the [ModKit getting-started guide](modding/getting-started.md) and [ModKit reference](modding/modkit-reference.md).
 
 ## Archive and analysis commands
 

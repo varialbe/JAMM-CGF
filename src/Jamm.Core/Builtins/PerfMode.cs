@@ -7,7 +7,7 @@ namespace Jamm.ModMaker;
 /// <summary>Opt-in scheduling for structurally standard, distant paused fish.</summary>
 public static class PerfMode
 {
-    private const string Controller = "obj_jamm_perf";
+    internal const string ControllerName = "obj_jamm_perf";
 
     // Offline historical census only; runtime eligibility below does not use this list.
     // WHY: the original audit excluded unknown/custom species.
@@ -117,15 +117,15 @@ public static class PerfMode
     /// <summary>Adds a persistent switch, toast and optional per-second scheduling counters.</summary>
     public static void Queue(UndertaleData data, CompileGroup compiler, bool debug)
     {
-        var obj = ModObjects.Create(data, Controller, true);
+        var obj = ModObjects.Create(data, ControllerName, true);
         void Add(EventType type, uint subtype, string text) => compiler.QueueCodeReplace(obj.EventHandlerFor(type, subtype, data), text);
         Add(EventType.Create, 0, $$"""
             if (instance_number(object_index) > 1) { instance_destroy(); exit; }
             ini_open("jamm_perf.ini");
             global.jamm_perf_mode = ini_read_real("Perf", "Mode", 0) != 0;
             global.jamm_perf_interval = clamp(round(ini_read_real("Perf", "Interval", 4)), 1, 60);
-            ini_write_real("Perf", "Mode", global.jamm_perf_mode);
-            ini_write_real("Perf", "Interval", global.jamm_perf_interval);
+            if (!ini_key_exists("Perf", "Mode") && global.jamm_perf_mode)
+                ini_write_real("Perf", "Mode", global.jamm_perf_mode);
             ini_close();
             global.jamm_perf_types = ds_map_create();
             jamm_perf_map_owner = true;
@@ -188,6 +188,29 @@ public static class PerfMode
             }
             """);
         foreach (string room in new[] { "NewWorld", "room11" }) ModObjects.PlaceInstance(data, room, obj, true);
+    }
+
+    internal static void ApplyDefaults(UndertaleData data, PerfSettings settings, List<UndertaleCode> edits)
+    {
+        if (!settings.StartEnabled && settings.Interval == 4) return;
+        var create = data.Code.ByName($"gml_Object_{ControllerName}_Create_0")
+            ?? throw new InvalidDataException("The JAMM Perf controller is missing its Create event. Re-add JAMM Perf and build again.");
+        string source = ModObjects.Decompile(data, create);
+        source = ReplaceDefault(source, """ini_read_real("Perf", "Mode", 0)""",
+            $$"""ini_read_real("Perf", "Mode", {{(settings.StartEnabled ? 1 : 0)}})""");
+        source = ReplaceDefault(source, """ini_read_real("Perf", "Interval", 4)""",
+            FormattableString.Invariant($$"""ini_read_real("Perf", "Interval", {{settings.Interval}})"""));
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(create, source);
+        ModObjects.Compile(compiler);
+        edits.Add(create);
+    }
+
+    private static string ReplaceDefault(string source, string expected, string replacement)
+    {
+        if (source.Split(expected, StringSplitOptions.None).Length != 2)
+            throw new InvalidDataException("The merged JAMM Perf controller has different INI settings. Re-add JAMM Perf or reset its profile defaults before building again.");
+        return source.Replace(expected, replacement, StringComparison.Ordinal);
     }
 
     // Relative text-file writes use the runner's writable save sandbox, like Smooth's log.

@@ -11,6 +11,7 @@ Choose the workflow that fits how you want to work:
 | **[JAMM ModKit](getting-started.md)** | Most creators — adding fish, boats, hats, and rod upgrades quickly | Any text editor, an image editor for PNGs, and `cgfmm` | A small folder (`jamm-mod.json`, PNGs, optional `.gml` hooks) |
 | **[GML Modding API](api-reference.md)** | UndertaleModTool authors, or anyone adding **rods, lures, or tools** (plus custom rooms/scripts) | UndertaleModTool + JAMM | A `.win` mod containing only new assets and a `jamm_init_<id>` script |
 | **Legacy whole-`data.win` mods** | Existing mods built by editing base objects directly | UndertaleModTool | A full modified `data.win` (merged via JAMM's semantic diff/merge + [Catalog API](../catalog-api.md)) |
+| **[Overhauls and addons](modkit-reference.md#overhauls-and-addons)** | Projects with addons authored against an overhaul | JAMM ModKit or UndertaleModTool | A package or archive with base/addon metadata |
 
 > [!TIP]
 > **New to modding Cat Goes Fishing?** Start with **[Getting Started](getting-started.md)**—you can have a custom fish swimming near the dock in about 10 minutes.
