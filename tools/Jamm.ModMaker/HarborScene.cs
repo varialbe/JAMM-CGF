@@ -46,6 +46,11 @@ internal static class HarborScene
             file_text_close(output);
             """);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), """
+            if (room == NewWorld && instance_exists(GameModeMenu))
+            {
+                with (GameModeMenu) instance_destroy();
+                exit;
+            }
             if (room != NewWorld || !instance_exists(SaveManager) || !SaveManager.loaded
                 || !instance_exists(Girl) || !instance_exists(jmk_harbor_town_object_harbor)) exit;
             if (harbor_started < 0) harbor_started = current_time;

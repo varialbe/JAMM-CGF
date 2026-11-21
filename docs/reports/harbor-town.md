@@ -23,10 +23,13 @@ Private concepts and previews are in `~/jamm-night/harbor-town/concept/`; game c
 3. The revised lighthouse, aquarium, statue and sign previews were checked again at the five recipe stages (levels
    0, 1, 5, 20 and 100). The recipes retain the vanilla palette and perspective cues and use no outside art.
 
-The Harbor bench scene runs all 15 building/level combinations in-game and writes a CSV with each command result. It
-also calls GameMaker's `screen_save`; the solo run recorded the CSV but did not leave its requested PNGs on disk. A
-live-screen capture is queued during the personal run so the final visual check can be made from actual dock
-screenshots.
+The Harbor bench scene ran all 15 building/level combinations in both solo and personal profiles and wrote a CSV
+with every command result. Both runs recorded without a Harbor Code Error. GameMaker's `screen_save` did not leave its
+requested PNGs on disk. An external screen capture during the personal run showed Steam's "logged in on another
+computer" sign-in overlay over the game, so it could not serve as an honest dock-art review. The private concept
+passes above are complete; an in-game stage-by-stage visual review remains outstanding because concurrent runs on
+the shared Steam account displaced the game window. The bench scene now removes the legacy `GameModeMenu` overlay
+in its temporary instrumented archive; its updated GML compiles successfully. A final clean solo capture is queued.
 
 ## Verification
 
@@ -38,7 +41,8 @@ screenshots.
 - Strict `harbor-personal` profile check: 8 mods, 0 conflicts, 0 warnings. The verified personal archive contains
   Harbor Town, Silo, Weather Pack, Endless Ocean, JAMM Perf, HD Lite, Console and Smooth.
 - Solo in-game bench: `RECORDED`; all 15 command rows are present in `jamm_bench_harbor.csv`, with no Code Error.
-- The personal in-game run and its screenshot review are still pending the shared `~/jamm-night/bin/run.sh` lock.
+- Personal in-game bench: first attempt exited during Steam initialization; the runner retry recorded all 15 commands
+  with no Code Error. The shared Steam account overlay prevented visual evaluation of the dock screenshots.
 - `site/cgf-mods/packages/harbor-town.zip` was generated without changing the site catalog. SHA-256:
   `450b1e7a0308af3e58d9ed5268ca63b508ad221aae4a22285cebeec942ecbcc1`.
 
