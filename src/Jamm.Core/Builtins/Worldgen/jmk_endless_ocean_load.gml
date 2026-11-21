@@ -1,20 +1,26 @@
+var chunk = argument0;
 var owned = argument1;
-var layout = jmk_endless_ocean_layout(ocean_seed, argument0, ocean_start, 1244);
-for (var i = 0; i < 16; i += 4)
+var left = ocean_start + chunk * 2048;
+var layout = jmk_endless_ocean_layout(ocean_seed, chunk, ocean_anchor_y, room_height, ocean_content_chunk);
+var biome = layout[5];
+
+for (var i = 0; i < 4; i += 1)
 {
-    var rock = instance_create(layout[i], layout[i + 1], CaveRockBig);
-    rock.image_xscale = layout[i + 2];
-    rock.image_yscale = layout[i + 3];
-    ds_list_add(owned, rock);
+    var depth_fraction = ((layout[i] + layout[i + 1]) / 2 - 1244) / (room_height - 1244);
+    var tint = merge_color(make_color_rgb(246, 223, 183), make_color_rgb(153, 176, 191),
+                           clamp((depth_fraction - 0.73) * 5, 0, 1));
+    jmk_endless_ocean_ground(owned, left + i * 512, layout[i], layout[i + 1], tint);
 }
+if (chunk < ocean_content_chunk) exit;
+jmk_endless_ocean_scenery(chunk, owned, left, biome, layout[6]);
 
 var catalog_find = asset_get_index("jamm_catalog_find");
-for (var i = 16; i < 28; i += 4)
+for (var i = 7; i < 19; i += 4)
 {
-    var sx = layout[i];
+    var sx = left + layout[i];
     var sy = layout[i + 1];
     // Check the fish's spawn envelope against actual live collision masks.
-    if (collision_rectangle(sx - 180, sy - 180, sx + 180, sy + 180, Collidable, true, false) == noone)
+    if (collision_rectangle(sx - 260, sy - 260, sx + 260, sy + 260, Collidable, true, false) == noone)
     {
         var species = layout[i + 2];
         var swimmer = instance_create(sx, sy, species);

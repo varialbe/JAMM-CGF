@@ -374,6 +374,7 @@ public static class ArchiveBuilder
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile, generatedCode, valueGuard.FishValueCap);
             WeatherRuntime.Apply(data, ancestor, plan, baseCode, recompile, generatedCode, extraDecisions);
+            EndlessOceanMod.RefreshMergedLayout(data, recompile, generatedCode, extraDecisions);
             NavCompatibility.RepairRoom(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
             if (bigMoney) MoneyRuntime.Apply(baseCode, recompile, generatedCode, extraDecisions);
             ValueGuard.Apply(data, vanilla, vanillaCode, baseCode, recompile, generatedCode, plan, patches, valueGuard, extraDecisions,

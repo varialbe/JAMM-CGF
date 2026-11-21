@@ -59,6 +59,8 @@ internal sealed class SolidAt
     internal bool Intersects(ModKit.ModKitAreaBounds bounds) =>
         left < bounds.Right && right >= bounds.X && top < bounds.Bottom && bottom >= bounds.Y;
 
+    internal (double Left, double Top, double Right, double Bottom) Bounds => (left, top, right, bottom);
+
     internal bool Contains(int x, int y)
     {
         if (x < left || x > right || y < top || y > bottom)

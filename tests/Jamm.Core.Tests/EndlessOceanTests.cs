@@ -1,7 +1,7 @@
 using Jamm.Core.ModKit;
 using Jamm.ModMaker;
 using UndertaleModLib;
-using UndertaleModLib.Compiler;
+
 using UndertaleModLib.Models;
 
 namespace Jamm.Core.Tests;
@@ -36,50 +36,82 @@ public sealed class EndlessOceanTests
     }
 
     [Fact]
-    public void AppliesAfterTheRoomWidthAndTheEasterlyPlacedArtwork()
+    public void BlendsFromTheLastMaskAndReservesEasterlyArtwork()
     {
         using var data = UndertaleData.CreateNew();
         var world = new UndertaleRoom { Name = data.Strings.MakeString("NewWorld"), Width = 172000, Height = 17000, Speed = 60 };
         data.Rooms.Add(world);
-        foreach (string name in new[]
+        var collidable = new UndertaleGameObject { Name = data.Strings.MakeString("Collidable") };
+        var mask = new UndertaleSprite
         {
-            "Camera", "Boat7", "SaveManager", "Rod", "Lure", "Collidable", "CaveRockBig",
-            "Celad", "Inno", "Mustardfish", "Elder_Mustardfish", "Dijon", "Garm"
-        })
-            data.GameObjects.Add(new UndertaleGameObject { Name = data.Strings.MakeString(name) });
-
-        var sprite = new UndertaleSprite { Name = data.Strings.MakeString("far_spr"), Width = 400, Height = 200, OriginX = 50 };
-        var objectAtEdge = new UndertaleGameObject { Name = data.Strings.MakeString("far_content"), Sprite = sprite };
-        data.Sprites.Add(sprite);
-        data.GameObjects.Add(objectAtEdge);
-        world.GameObjects.Add(new UndertaleRoom.GameObject { X = 173000, ScaleX = 2, ObjectDefinition = objectAtEdge });
-        Assert.Equal(173700u, EndlessOceanMod.ProtectedEastEdge(world));
-
-        var compiler = new CompileGroup(data);
-        foreach (string name in new[] { "get_index_for_name", "fish_object_to_name" })
+            Name = data.Strings.MakeString("rock_mask"), Width = 16, Height = 16,
+            OriginX = 8, OriginY = 8, MarginRight = 15, MarginBottom = 15,
+            SepMasks = UndertaleSprite.SepMaskType.Precise
+        };
+        var bits = mask.NewMaskEntry(data);
+        bits.Data[2 * 6] = 0x10; // pixel (3, 6) is the eastmost solid pixel after the flip
+        mask.CollisionMasks.Add(bits);
+        var rock = new UndertaleGameObject { Name = data.Strings.MakeString("rock"), ParentId = collidable, Sprite = mask };
+        world.GameObjects.Add(new UndertaleRoom.GameObject
         {
-            var code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + name);
-            data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(name), Code = code });
-            compiler.QueueCodeReplace(code, "return -1;");
-        }
-        var manager = data.GameObjects.ByName("SaveManager")!;
-        foreach (uint subtype in new uint[] { 14, 15 })
-            compiler.QueueCodeReplace(manager.EventHandlerFor(EventType.Other, subtype, data), """
-                if (state == 6) ini_write_real("Fishes", string(id), -100);
-                else ini_write_real("Fishes", string(id), state);
-                """);
-        ModObjects.Compile(compiler);
+            X = 169000, Y = 13000, ScaleX = -2, ScaleY = 1, ObjectDefinition = rock
+        });
+        var artwork = new UndertaleGameObject
+        {
+            Name = data.Strings.MakeString("far_content"),
+            Sprite = new UndertaleSprite { Width = 400, Height = 200, OriginX = 50 }
+        };
+        world.GameObjects.Add(new UndertaleRoom.GameObject { X = 173000, ScaleX = 2, ObjectDefinition = artwork });
 
-        EndlessOceanMod.Apply(data, 1234);
+        var edge = EndlessOceanEdge.Find(world, world.Width);
 
-        Assert.Equal(173700u + EndlessOceanMod.ExtensionWidth, world.Width);
-        Assert.Equal(17000u, world.Height);
-        Assert.Equal(60u, world.Speed);
-        Assert.Equal(EndlessOceanMod.Controller, world.GameObjects[0].ObjectDefinition.Name.Content);
-        Assert.Same(objectAtEdge, world.GameObjects[1].ObjectDefinition);
-        Assert.Contains("\"seed\", 1234", ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{EndlessOceanMod.Controller}_Other_4")!));
-        Assert.Contains("jmk_endless_ocean_fish", ModObjects.Decompile(data, data.Code.ByName("gml_Object_SaveManager_Other_14")!));
-        Assert.Throws<InvalidDataException>(() => EndlessOceanMod.Apply(data));
+        Assert.Equal(169011, edge.X);
+        Assert.Equal(12998, edge.Floor);
+        Assert.Equal(173700u, EndlessOceanEdge.ProtectedEastEdge(world, world.Width));
+        Assert.Equal(3, edge.ContentChunk);
+        Assert.Equal(edge.X + (uint)(3 * EndlessOceanEdge.ChunkWidth + EndlessOceanMod.ExtensionWidth), edge.End);
+        Assert.Equal(172000u, world.Width);
     }
 
+    [Fact]
+    public void MergedLayoutUsesTheResolvedRoomAndCanBeRecomputed()
+    {
+        using var data = UndertaleData.CreateNew();
+        const string settings = "gml_Script_jmk_endless_ocean_setup";
+        const string step = "gml_Object_obj_jmk_endless_ocean_Step_1";
+        var world = new UndertaleRoom { Name = data.Strings.MakeString("NewWorld"), Width = 100000, Height = 13000 };
+        data.Rooms.Add(world);
+        ModObjects.Create(data, EndlessOceanMod.Controller, persistent: false);
+        UndertaleCode.CreateEmptyEntry(data, settings);
+        UndertaleCode.CreateEmptyEntry(data, step);
+        Dictionary<string, string> recompile = new() { [settings] = "ocean_end = 1100000;" };
+        Dictionary<string, string> generated = new();
+        List<string> decisions = [];
+
+        EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
+        string source = generated[settings];
+        uint width = world.Width;
+        Assert.Contains("ocean_start = 100000;", source);
+        Assert.Contains($"ocean_end = {width};", source);
+        Assert.Equal(source, recompile[settings]);
+        Assert.Contains("jamm_chunk_stream(ocean_chunks, first, last, jmk_endless_ocean_load, jmk_endless_ocean_release)", generated[step]);
+        Assert.Equal(generated[step], recompile[step]);
+        Assert.Single(decisions);
+        EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
+        Assert.Equal(width, world.Width);
+
+        // This fallback room has no terrain. In a real room the anchor comes from a mask
+        // and is invariant when the recipe's own extension is stripped.
+        var rock = new UndertaleGameObject
+        {
+            Name = data.Strings.MakeString("Collidable"),
+            Sprite = new UndertaleSprite { Width = 512, Height = 512, MarginRight = 511, MarginBottom = 511 }
+        };
+        world.GameObjects.Add(new UndertaleRoom.GameObject { X = 90000, Y = 12500, ObjectDefinition = rock });
+        EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
+        Assert.Contains("ocean_start = 90512;", generated[settings]);
+        width = world.Width;
+        EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
+        Assert.Equal(width, world.Width);
+    }
 }
