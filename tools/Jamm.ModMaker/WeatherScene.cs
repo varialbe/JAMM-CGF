@@ -168,15 +168,19 @@ internal static class WeatherScene
                 LightingSystem.overcast_coefficient = max(minimumOvercast, {{Probe}}.bench_daylight);
             }
             """);
-        // Control the native phase predicate as well as the visual clock. This gives legacy
-        // gear and daylight locks the same day/night input across profiles.
+        QueueNightOverride(data, compiler);
+        ModObjects.PlaceInstance(data, "NewWorld", probe, first: true);
+        ModObjects.Compile(compiler);
+    }
+
+    internal static void QueueNightOverride(UndertaleData data, CompileGroup compiler)
+    {
+        // Legacy gear and daylight locks use the same phase as the benchmark weather.
         var night = data.Code.ByName("gml_Script_is_it_night")
-            ?? throw new InvalidDataException("The dock scene requires the legacy day/night predicate.");
+            ?? throw new InvalidDataException("The weather benchmark requires the legacy day/night predicate.");
         compiler.QueueCodeReplace(night, """
             if (room == NewWorld && variable_global_exists("jamm_weather_bench_night"))
                 return global.jamm_weather_bench_night;
             """ + "\n" + ModObjects.Decompile(data, night));
-        ModObjects.PlaceInstance(data, "NewWorld", probe, first: true);
-        ModObjects.Compile(compiler);
     }
 }

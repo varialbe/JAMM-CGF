@@ -7,7 +7,7 @@ namespace Jamm.Core.Building;
 
 internal static class InstanceCompatibility
 {
-    internal const int Revision = 5;
+    internal const int Revision = 6;
     private const string FishThinnerEvent = "gml_Object_FishThinner_Other_10";
     private const string FishCullCondition = "if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000)";
     private const string FishCullGuardedCondition = "if (instance_number(object_index) > 5 && point_distance(x, y, Lure.x, Lure.y) > 2000 && !(light > 0))";
