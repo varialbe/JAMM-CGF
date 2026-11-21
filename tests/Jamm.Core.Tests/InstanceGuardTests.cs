@@ -32,12 +32,16 @@ public sealed class InstanceGuardTests
     }
 
     [Fact]
-    public void ParentObjectIndexUsesTheAccessorBecauseAChildMayBeFirst()
+    public void ParentAndLookupObjectIndexStayTypedAndAreOnlyReported()
     {
         List<InstanceReference> found = [];
-        string result = InstanceGuard.Rewrite("x", "if (inhale.object_index == Sizzer.object_index) a = 1;", Facts(), found, out var accessors);
-        Assert.Contains($"== jamm_iv_object_index({S("Sizzer")})", result);
-        Assert.Contains("object_index", accessors);
+        string text = "if (inhale.object_index == Sizzer.object_index) a = 1;\nbro = instance_nearest(x, y, Bo);\nif (bro.object_index != Bo) b = bro.x;";
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out var accessors);
+        Assert.Contains("== Sizzer.object_index", result);
+        Assert.Contains("if (bro.object_index != Bo)", result);
+        Assert.Contains("b = jamm_iv_x(bro)", result);
+        Assert.DoesNotContain("object_index", accessors);
+        Assert.Contains(found, f => f.Object == "Sizzer" && !f.Guarded);
         Assert.Contains("return noone;", InstanceGuard.AccessorGml("object_index"));
         Assert.Contains("return 0;", InstanceGuard.AccessorGml("state"));
     }

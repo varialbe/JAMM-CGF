@@ -159,6 +159,9 @@ public static class InstanceGuard
                 continue;
             }
             if (!facts.Risky.Contains(obj)) continue;
+            // A call around a typed member (object_index, sprite_index, ...) would untype the asset
+            // constant it is compared with, so those reads stay as they are and are only reported.
+            bool typedMember = CgfAssetTypes.Family(member, code) is not null;
             if (write && SimpleStatement(text, lineStarts, line, obj) is { } statement)
             {
                 if (guardedLines.Add(line))
@@ -170,9 +173,9 @@ public static class InstanceGuard
                 found.Add(new(code, line, "fish-write", obj, snippet, true));
                 continue;
             }
-            if (write || array)
+            if (write || array || typedMember)
             {
-                found.Add(new(code, line, write ? "fish-write" : "fish-array", obj, snippet, false));
+                found.Add(new(code, line, write ? "fish-write" : array ? "fish-array" : "fish-read", obj, snippet, false));
                 continue;
             }
             accessors.Add(member);
@@ -199,7 +202,7 @@ public static class InstanceGuard
                 string head = masked[Math.Max(0, use.Index - 2)..use.Index];
                 bool write = Regex.IsMatch(tail, @"^(=(?!=)|\+=|-=|\*=|/=|\+\+|--)") || head.EndsWith("++", StringComparison.Ordinal) || head.EndsWith("--", StringComparison.Ordinal);
                 int line = LineOf(lineStarts, use.Index);
-                if (write || tail.StartsWith('['))
+                if (write || tail.StartsWith('[') || CgfAssetTypes.Family(use.Groups[1].Value, code) is not null)
                 {
                     found.Add(new(code, line, "unchecked-lookup", variable, Line(text, lineStarts, line), false));
                     continue;
