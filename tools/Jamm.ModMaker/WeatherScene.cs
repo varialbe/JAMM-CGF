@@ -68,20 +68,22 @@ internal static class WeatherScene
               bench_capture[0] = "day";
               bench_night_flag[0] = 0;
               bench_total = 1;
-              var jamm_w_pref;
-              jamm_w_pref[0] = "rainy";
-              jamm_w_pref[1] = "super-sunny";
-              jamm_w_pref[2] = "windy";
-              jamm_w_pref[3] = "fog";
+              bench_weather_pref[0] = "rainy";
+              bench_weather_pref[1] = "super-sunny";
+              bench_weather_pref[2] = "windy";
+              bench_weather_pref[3] = "fog";
               var jamm_w_seen = ds_map_create();
               for (var jamm_wi = 0; jamm_wi < 4; jamm_wi += 1)
               {
-                  var jamm_wt = jamm_weather_find(jamm_w_pref[jamm_wi]);
+                  bench_weather_query = bench_weather_pref[jamm_wi];
+                  bench_weather_lookup_result = -1;
+                  with ({{Controller}}) other.bench_weather_lookup_result = jamm_weather_find(other.bench_weather_query);
+                  var jamm_wt = bench_weather_lookup_result;
                   if (jamm_wt >= 0 && {{Controller}}.weather_species[jamm_wt] > 0)
                   {
                       ds_map_add(jamm_w_seen, jamm_wt, 1);
                       bench_weather[bench_total] = {{Controller}}.weather_key[jamm_wt];
-                      bench_capture[bench_total] = jamm_w_pref[jamm_wi];
+                      bench_capture[bench_total] = bench_weather_pref[jamm_wi];
                       bench_night_flag[bench_total] = 0;
                       bench_total += 1;
                   }
@@ -101,7 +103,10 @@ internal static class WeatherScene
               bench_capture[bench_total] = "clear-restored";
               bench_night_flag[bench_total] = 0;
               bench_total += 1;
-              if (jamm_weather_find("fog") >= 0)
+              bench_weather_lookup_result = -1;
+              with ({{Controller}}) other.bench_weather_lookup_result = jamm_weather_find("fog");
+              var jamm_w_fog = bench_weather_lookup_result;
+              if (jamm_w_fog >= 0)
               {
                   bench_weather[bench_total] = "fog";
                   bench_capture[bench_total] = "before-dusk";
@@ -198,7 +203,10 @@ internal static class WeatherScene
                     }
                     else
                     {
-                        var jamm_w_target = jamm_weather_find(jamm_w_req);
+                        bench_weather_query = jamm_w_req;
+                        bench_weather_lookup_result = -1;
+                        with ({{Controller}}) other.bench_weather_lookup_result = jamm_weather_find(other.bench_weather_query);
+                        var jamm_w_target = bench_weather_lookup_result;
                         if (jamm_w_target >= 0)
                         {
                             if ({{Controller}}.weather_live != jamm_w_target) exit;
@@ -234,6 +242,17 @@ internal static class WeatherScene
 
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), $$"""
             if ({{readyGuards}}) exit;
+            bench_controller_ready = false;
+            with ({{Controller}})
+            {
+                if (variable_instance_exists(id, "weather_count")
+                    && variable_instance_exists(id, "weather_species")
+                    && variable_instance_exists(id, "weather_key")
+                    && variable_instance_exists(id, "weather_short")
+                    && variable_instance_exists(id, "weather_live"))
+                    other.bench_controller_ready = true;
+            }
+            if (!bench_controller_ready) exit;
             if (bench_stage < 0)
             {
                 if (current_time - bench_start < 4500) exit;

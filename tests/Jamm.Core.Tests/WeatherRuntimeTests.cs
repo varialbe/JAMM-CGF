@@ -190,12 +190,65 @@ public sealed class WeatherRuntimeTests
         Assert.Contains("\"fog\"", beginStep);
         Assert.Contains("jamm_weather_command", beginStep);
         Assert.Contains("jamm_weather_find", beginStep);
+        Assert.Contains("with (obj_jamm_weather)", beginStep);
+        Assert.Contains("bench_controller_ready", beginStep);
         Assert.Contains("jamm_weather_owner", beginStep);
         Assert.Contains("weather_species", beginStep);
         Assert.Contains("variable_instance_exists(id, \"s5\")", user0);
         Assert.Contains("sonar_missing", user0);
         Assert.Contains("fish_count", user0);
         Assert.Contains("jamm_weather_current()", user0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StressSceneRunsWithPerfHooksOptional(bool includePerf)
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        string inputPath = temp.PathFor("stress-input.win");
+        string outputPath = temp.PathFor("stress-output.win");
+        using (var data = CreateStressWorld(includePerf)) Save(data, inputPath);
+
+        var error = new StringWriter();
+        TextWriter originalError = Console.Error;
+        int rc;
+        try
+        {
+            Console.SetError(error);
+            rc = Jamm.ModMaker.Program.Main(["bench", inputPath, outputPath, "--scene", "stress", "--duration", "180"]);
+        }
+        finally { Console.SetError(originalError); }
+        Assert.True(rc == 0, error.ToString());
+
+        using var reloaded = GameFileLoader.Load(outputPath);
+        string beginStep = ModObjects.Decompile(reloaded.Data,
+            reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_stress_Step_1")!);
+        Assert.Contains("perf_hooks,perf,perf_skipped", beginStep);
+        Assert.Equal(includePerf, beginStep.Contains("global.jamm_perf_mode", StringComparison.Ordinal));
+        Assert.Equal(includePerf, beginStep.Contains("instance_exists(obj_jamm_perf)", StringComparison.Ordinal));
+    }
+
+    private static UndertaleData CreateStressWorld(bool includePerf)
+    {
+        var data = CreateWorld();
+        foreach (string name in new[] { "obj_jamm_weather", "Bo", "Gallina", "Skrimp", "Cowfish", "Grumper" })
+            data.GameObjects.Add(new() { Name = data.Strings.MakeString(name) });
+        if (includePerf) data.GameObjects.Add(new() { Name = data.Strings.MakeString("obj_jamm_perf") });
+        var compiler = new CompileGroup(data);
+        foreach ((string name, string body) in new[]
+        {
+            ("jamm_weather_command", "return 0;"),
+            ("jamm_weather_current", "return \"clear\";"),
+            ("fish_default_lunge", "return 0;")
+        })
+        {
+            var code = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + name);
+            data.Scripts.Add(new() { Name = data.Strings.MakeString(name), Code = code });
+            compiler.QueueCodeReplace(code, body);
+        }
+        ArchiveVerifier.Compile(compiler, "synthetic stress scene world");
+        return data;
     }
 
     private static UndertaleData CreateWeatherBenchWorld()
