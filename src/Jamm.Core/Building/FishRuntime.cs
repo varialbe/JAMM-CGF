@@ -131,13 +131,16 @@ internal static class FishRuntime
         return plan with { Assets = assets, Decisions = decisions };
     }
 
-    internal static void Inject(UndertaleData data, Dictionary<string, string> recompile)
+    internal static void Inject(UndertaleData data, Dictionary<string, string> recompile,
+        Dictionary<string, string> generated, long fishValueCap)
     {
         if (!recompile.ContainsKey(RegisterCode) && data.Scripts.ByName(RegisterScript) is null)
             return;
 
         bool hasCatalogData = data.GameObjects.ByName("CatalogData") is not null;
-        if (!recompile.ContainsKey(RegisterCode))
+        if (fishValueCap > 0)
+            generated[RegisterCode] = recompile[RegisterCode] = BuildFishRegisterGml(hasCatalogData, fishValueCap);
+        else if (!recompile.ContainsKey(RegisterCode))
             recompile[RegisterCode] = BuildFishRegisterGml(hasCatalogData);
 
         EnsureScript(data, RegisterScript, RegisterCode);
@@ -212,22 +215,24 @@ internal static class FishRuntime
         return ordered;
     }
 
-    private static string BuildFishRegisterGml(bool hasCatalogData)
+    private static string BuildFishRegisterGml(bool hasCatalogData, long fishValueCap = 0)
     {
-        string spawnBody = """
+        // GM1.4 allows more than 16 inputs when the script uses the argument array throughout.
+        string saleValue = fishValueCap > 0 ? FormattableString.Invariant($"min(jamm_sale_value, {fishValueCap})") : "jamm_sale_value";
+        string spawnBody = $$"""
             var jamm_key, jamm_obj, jamm_tab, jamm_name, jamm_desc;
             var jamm_x1, jamm_x2, jamm_y1, jamm_y2, jamm_count;
             var jamm_have, jamm_need, jamm_i, jamm_sx, jamm_sy, jamm_inst;
-            jamm_key = argument0;
-            jamm_obj = argument1;
-            jamm_tab = argument2;
-            jamm_name = argument3;
-            jamm_desc = argument4;
-            jamm_x1 = min(argument5, argument6);
-            jamm_x2 = max(argument5, argument6);
-            jamm_y1 = min(argument7, argument8);
-            jamm_y2 = max(argument7, argument8);
-            jamm_count = argument9;
+            jamm_key = argument[0];
+            jamm_obj = argument[1];
+            jamm_tab = argument[2];
+            jamm_name = argument[3];
+            jamm_desc = argument[4];
+            jamm_x1 = min(argument[5], argument[6]);
+            jamm_x2 = max(argument[5], argument[6]);
+            jamm_y1 = min(argument[7], argument[8]);
+            jamm_y2 = max(argument[7], argument[8]);
+            jamm_count = argument[9];
             if (!is_string(jamm_key) || jamm_key == "" || !object_exists(jamm_obj)) return -1;
             if (jamm_tab < 0 || jamm_tab > 3 || floor(jamm_tab) != jamm_tab) return -1;
             if (jamm_count < 0) return -1;
@@ -249,6 +254,15 @@ internal static class FishRuntime
                     jamm_inst.TRUE_START_Y = jamm_sy;
                     jamm_inst.nothungry_x = jamm_sx;
                     jamm_inst.nothungry_y = jamm_sy;
+                }
+            }
+            if (argument_count > 16)
+            {
+                var jamm_sale_value;
+                jamm_sale_value = argument[16];
+                if (is_real(jamm_sale_value))
+                {
+                    with (jamm_obj) BASE_VALUE = {{saleValue}};
                 }
             }
             """;
@@ -273,12 +287,12 @@ internal static class FishRuntime
             jamm_dn = jamm_desc;
             jamm_de = jamm_desc;
             jamm_ex = 0;
-            if (argument_count > 10) jamm_dc = argument10;
-            if (argument_count > 11) jamm_ds = argument11;
-            if (argument_count > 12) jamm_dh = argument12;
-            if (argument_count > 13) jamm_dn = argument13;
-            if (argument_count > 14) jamm_de = argument14;
-            if (argument_count > 15) jamm_ex = argument15;
+            if (argument_count > 10) jamm_dc = argument[10];
+            if (argument_count > 11) jamm_ds = argument[11];
+            if (argument_count > 12) jamm_dh = argument[12];
+            if (argument_count > 13) jamm_dn = argument[13];
+            if (argument_count > 14) jamm_de = argument[14];
+            if (argument_count > 15) jamm_ex = argument[15];
             var jamm_slot;
             jamm_slot = jamm_catalog_register(jamm_tab, jamm_obj, jamm_name, jamm_desc, jamm_dc, jamm_ds, jamm_dh, jamm_dn, jamm_de, jamm_ex);
             if (jamm_slot >= 0)

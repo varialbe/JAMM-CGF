@@ -93,6 +93,9 @@ public sealed class SitePackageTests
         Assert.Contains("example-rod", ids);
         Assert.Contains("example-fish", ids);
         Assert.Contains("jamm-silo", ids);
+        Assert.Contains("weather-pack", ids);
+        Assert.Contains("endless-ocean", ids);
+        Assert.Contains("example-rod", ids);
 
         foreach (var entry in entries)
         {

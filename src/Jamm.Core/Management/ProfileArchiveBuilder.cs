@@ -12,12 +12,13 @@ internal static class ProfileArchiveBuilder
         if (store.Config().GameDir is { } gameDir)
             protectedPaths = [.. protectedPaths, Path.Combine(gameDir, "data.win")];
         BuildFiles.ValidateNewOutput(output, protectedPaths, dryRun);
+        var valueGuard = new ValueGuardOptions(profile.FishValueCap, profile.FairPlay);
         var options = AnalysisOptions.Default with { DataDirectory = store.Root };
         var resolutions = new ProfileLibrary(store).ResolutionsByAncestor(profile, selection);
         if (selection.Addons.Length == 0)
         {
             var build = ArchiveBuilder.BuildLayer(selection.VanillaPath, selection.Vanilla, output, resolutions.Vanilla,
-                dryRun, progress, cancellationToken, options, noRepack, additionalProtectedPaths: protectedPaths, perfSettings: profile.Perf);
+                dryRun, progress, cancellationToken, options, noRepack, additionalProtectedPaths: protectedPaths, perfSettings: profile.Perf, bigMoney: !profile.NoBigMoney, valueGuard: valueGuard);
             return build with { Plan = build.Plan with { Decisions = [.. selection.Warnings.Select(w => w.Message), .. build.Plan.Decisions] } };
         }
 
@@ -32,7 +33,7 @@ internal static class ProfileArchiveBuilder
             var accumulated = CreateDelta(ancestorPath, intermediate, selection, first, options, progress, cancellationToken);
             var finalInputs = new[] { new BuildInput(accumulated, intermediate) }.Concat(selection.Addons).ToArray();
             var final = ArchiveBuilder.BuildLayer(ancestorPath, finalInputs, output, resolutions.Addons,
-                dryRun, progress, cancellationToken, options, noRepack, additionalProtectedPaths: protectedPaths, hasMergedBase: true, perfSettings: profile.Perf);
+                dryRun, progress, cancellationToken, options, noRepack, additionalProtectedPaths: protectedPaths, hasMergedBase: true, perfSettings: profile.Perf, bigMoney: !profile.NoBigMoney, valueGuard: valueGuard, vanillaPath: selection.VanillaPath);
             return final with
             {
                 Base = first.Base,

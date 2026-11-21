@@ -155,6 +155,30 @@ public sealed class ModKitTests
     }
 
     [Fact]
+    public void FishManifestValueIsCappedDuringFinalAssembly()
+    {
+        using var temp = new TemporaryDirectory();
+        string original = temp.PathFor("base.win"), mod = temp.PathFor("mod.win"), output = temp.PathFor("build.win");
+        WriteSyntheticBase(original);
+        string pkg = CreateMinimalPackage(temp, "sale", """
+            { "id": "sale-test", "name": "Sale Test", "fish": [
+                { "key": "minnow", "name": "Minnow", "size": "small", "sprite": "fish.png", "value": 150000000,
+                  "spawn": { "x": [1100, 1200], "y": [1400, 1500], "count": 1 } }
+            ] }
+            """);
+        File.WriteAllBytes(Path.Combine(pkg, "fish.png"), SolidPng(24, 24));
+        ModKitBuilder.Build(pkg, original, mod, noRepack: true);
+        using var vanilla = GameFileLoader.Load(original);
+        using var source = GameFileLoader.Load(mod);
+        const string create = "gml_Object_jmk_sale_test_minnow_Create_0";
+        Assert.Contains("BASE_VALUE = 150000000;", PatchBuilder.ReadCode(source, create).Text);
+        var result = ArchiveBuilder.Build(original, [new(PatchBuilder.Create(vanilla, source, "Sale Test"), mod)], output, noRepack: true);
+        Assert.Contains(result.Plan.Decisions, decision => decision.Contains("150,000,000 -> 100,000,000 (Sale Test)"));
+        using var finished = GameFileLoader.Load(output);
+        Assert.Contains("BASE_VALUE = 100000000;", PatchBuilder.ReadCode(finished, create).Text);
+    }
+
+    [Fact]
     public void BuilderCompilesAllAssetTypesAndTwoModKitModsMergeWithoutConflicts()
     {
         using var temp = new TemporaryDirectory();

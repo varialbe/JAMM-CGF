@@ -26,10 +26,12 @@ public sealed class ProfileInstaller(ManagerStore store)
         string builder = profile.EnabledMods.Contains("builtin-perf", StringComparer.Ordinal)
             ? "menu-layout-3-fish-grid-1" : "menu-layout-3";
         var inputs = loaded.Inputs.ToArray();
+        if (!profile.NoBigMoney) builder += "/" + MoneyRuntime.Revision;
+        builder += "/" + ValueGuardOptions.Revision;
         string signatureText = JsonSerializer.Serialize(new
         {
             Builder = profile.EnabledMods.Length > 0 && !profile.NoRepack ? $"{builder}/{TextureRepacker.Revision}" : builder,
-            InstanceCompatibility.Revision, profile.Name, profile.Preset, profile.Perf, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
+            InstanceCompatibility.Revision, profile.Name, profile.Preset, profile.Perf, profile.FairPlay, profile.FishValueCap, profile.Mods, profile.DisabledMods, Resolutions = profile.Resolutions.OrderBy(p => p.Key, StringComparer.Ordinal),
             Roles = loaded.Group.Select(row => new { row.Mod.Id, row.Role, Ancestor = row.Ancestor?.Id }),
             Base = loaded.VanillaHash, Game = Path.GetFullPath(config.GameDir), Patches = inputs.Select(i => i.Patch)
         }, ManagerStore.JsonOptions);

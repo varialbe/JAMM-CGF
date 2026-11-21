@@ -14,14 +14,19 @@ public static class CgfAssetTypes
         new Dictionary<string, (int, int, (int, string)[])>(StringComparer.Ordinal)
         {
             ["jamm_catalog_register"] = (4, 10, [(1, "objects")]),
-            ["jamm_fish_register"] = (10, 16, [(1, "objects")]),
+            ["jamm_fish_register"] = (10, 17, [(1, "objects")]),
+            ["jamm_rod_effect_at"] = (2, 2, [(0, "objects")]),
+            ["jamm_guard_fish_sale"] = (3, 3, [(0, "objects")]),
             ["jamm_boat_register"] = (6, 7, [(3, "sprites"), (4, "objects")]),
             ["jamm_rod_register"] = (9, 11, [(8, "sprites")]),
             ["jamm_lure_register"] = (6, 7, [(3, "objects"), (4, "sprites")]),
             ["jamm_tool_register"] = (8, 9, [(4, "objects"), (5, "objects"), (6, "sprites")]),
             ["jamm_hat_register"] = (6, 9, [(1, "objects")]),
             ["jamm_upgrade_register"] = (9, 9, [(5, "sprites"), (7, "scripts"), (8, "scripts")]),
-            ["part_type_sprite"] = (5, 5, [(1, "sprites")])
+            ["part_type_sprite"] = (5, 5, [(1, "sprites")]),
+            // Endless Ocean passes its load/release scripts by index; untyped they would keep a stale
+            // index when another mod adds scripts first (crash in a silo fish step while streaming).
+            ["jamm_chunk_stream"] = (5, 5, [(3, "scripts"), (4, "scripts")])
         };
     private static Dictionary<string, Definition> Read()
     {
@@ -35,6 +40,7 @@ public static class CgfAssetTypes
         data.GameSpecificRegistry ??= new();
         var registry = data.GameSpecificRegistry;
         registry.RegisterBasic();
+        registry.MacroResolver.GlobalNames.DefineVariableType("jamm_lamp_object", registry.FindType("Asset.Object"));
         // HUD setters preserve the built-in argument types after calls are redirected.
         // Without these, decompilation turns alignment constants into bare numbers.
         foreach (var (function, type) in new[]
@@ -45,6 +51,10 @@ public static class CgfAssetTypes
         })
             registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(function,
                 new FunctionArgsMacroType([registry.FindType(type)]));
+        // Instance-guard accessors take the object whose first instance they read.
+        foreach (var script in data.Scripts.Where(s => s?.Name?.Content?.StartsWith(InstanceGuard.AccessorPrefix, StringComparison.Ordinal) == true))
+            registry.MacroResolver.GlobalNames.DefineFunctionArgumentsType(script.Name.Content,
+                new FunctionArgsMacroType([registry.FindType("Asset.Object")]));
         foreach (var (function, (minArgs, maxArgs, typed)) in ApiFunctions)
         {
             List<IMacroType> signatures = [];

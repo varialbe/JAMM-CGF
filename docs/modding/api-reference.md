@@ -249,7 +249,7 @@ Appends a custom rod upgrade to `UpgradeData` (dynamically at `array_length_1d(U
 ### 7. `jamm_fish_register`
 
 ```gml
-jamm_fish_register(key, object, size_tab, name, desc, x1, x2, y1, y2, count [, desc_caught, desc_seen, desc_hidden, desc_n, desc_e, exotic])
+jamm_fish_register(key, object, size_tab, name, desc, x1, x2, y1, y2, count [, desc_caught, desc_seen, desc_hidden, desc_n, desc_e, exotic, sale_value])
 ```
 
 Spawns missing instances of `object` inside `[min(x1,x2)..max(x1,x2)] x [min(y1,y2)..max(y1,y2)]` (initializing `start_x`, `start_y`, `TRUE_START_X`, `TRUE_START_Y`, `nothungry_x`, `nothungry_y`), registers the display name in `CatalogData.jamm_fish_names` (so `fish_object_to_name` returns `name` in catch popups and saves), and registers the fish in the Fishalog via `jamm_catalog_register`.
@@ -270,6 +270,7 @@ Spawns missing instances of `object` inside `[min(x1,x2)..max(x1,x2)] x [min(y1,
 | 13 | `desc_n` | string | `desc` | Night description slot (`CatalogData.desc_n`). |
 | 14 | `desc_e` | string | `desc` | Extra/exotic description slot (`CatalogData.desc_e`). |
 | 15 | `exotic` | real | `0` | `1` for exotic, `0` normal. |
+| 16 | `sale_value` | real | Fish-defined | Optional `BASE_VALUE` assigned to registered fish instances. |
 
 * **Returns**: Catalog slot index (`>= 0`) in `size_tab`, `0` if the archive has no `CatalogData`, or `-1` on invalid input / missing `CatalogData` instance. Safe across `room_restart()`: only missing instances (`count - instance_number(object)`) are spawned and `jamm_catalog_register` deduplicates by `object`.
 * **Example**:
@@ -277,6 +278,11 @@ Spawns missing instances of `object` inside `[min(x1,x2)..max(x1,x2)] x [min(y1,
   // In jamm_init_mymod:
   jamm_fish_register("mymod:sunfin", obj_sunfin, 0, "Sunfin", "A sunny reef fish.", 1100, 2400, 1400, 1950, 4, "Caught Sunfin!");
   ```
+
+The optional final `sale_value` argument follows `exotic`. With a numeric value,
+registration assigns it to `BASE_VALUE` on the registered fish instances. Calls that
+omit the argument continue to use each fish's event and script assignments. The
+profile's fish sale cap applies to either source.
 
 ---
 
@@ -359,6 +365,16 @@ Returns how many copies of an upgrade are installed on the **currently equipped 
       // React to the player's installed Turbo Reel stacks!
   }
   ```
+
+## Money display
+
+Use the vanilla script `number_to_dollar_string(value)` for any price or amount you draw.
+In profiles with big money on (the default), JAMM replaces its body at build time: amounts
+below 10,000 keep the vanilla `$9,999` style, larger ones show one truncated decimal with
+`K`, `M`, `B`, `T` or `Qa` (`$3.4M`, `$9.5T`). The wallet then keeps up to 1e15. Avoid
+your own `min(..., 999999999)` clamps on `Girl.dollars`, and write GML literals above
+2,147,483,647 as products (`3400000 * 1000000`) to stay with 32-bit literals, which the legacy
+bytecode handles everywhere. Decision `[CGF-MONEY-001]` lists what was patched.
 
 ## Weather API
 
