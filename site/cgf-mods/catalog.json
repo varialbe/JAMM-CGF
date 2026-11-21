@@ -171,7 +171,7 @@
     "id": "endless-ocean",
     "name": "Endless Ocean (Preview)",
     "author": "JAMM",
-    "description": "Preview: a seeded, endlessly streamed ocean floor with vanilla fish east of NewWorld.",
+    "description": "A seeded seafloor with three biomes, vanilla fish and occasional wrecks east of NewWorld.",
     "fileUrl": "https://varialbe.xyz/cgf-mods/packages/endless-ocean.zip",
     "isPreview": false,
     "categories": [
@@ -187,9 +187,9 @@
     "packageType": "recipe",
     "manifestFile": "jamm-recipe.json",
     "isDefault": false,
-    "version": "0.1.0",
-    "sha256": "81c9ddfdd1059ed5412406438c578a43ff8048e8b3202767c217ae3693c610ca",
-    "sizeBytes": 1660
+    "version": "0.2.0",
+    "sha256": "bf9d70131aae9f0651f93c2280b7722671c9c215673b940f3c4540b2aa6171f0",
+    "sizeBytes": 1600
   },
   {
     "id": "example-rod",
