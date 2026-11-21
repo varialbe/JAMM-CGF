@@ -16,3 +16,10 @@ You must NOT edit src/Jamm.Core. Your part:
 The orchestrator runs the game. Every command in the foreground; one simple command per tool call (no &&, ;,
 pipes, redirections, no rm, no subshells); if a command is denied, write a small python3 script and run it.
 Do not commit.
+
+## Round 2 (Gemini): apply your own review findings
+Your review `docs/reports/fish-sonar-review.md` approved Codex's fix with minor findings. This branch now
+contains `fix/fish-sonar`. Implement findings 1 (integration test: Fish API + Weather API via ArchiveBuilder, then
+EndlessOceanMod.Apply, single script/code) and 2 (`FishSonarRuntime.Ensure` reuses `data.Code.ByName` like
+`FishRuntime.EnsureScript`), plus any further Low finding you listed if it is cheap and safe.
+`dotnet build -c Release` zero warnings, `dotnet test -c Release` green. Same command rules as before. Do not commit.
