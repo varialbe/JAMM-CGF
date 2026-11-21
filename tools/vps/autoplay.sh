@@ -27,7 +27,7 @@ job=$!
 RNG=$seed
 # rnd N -> R in [0,N). Not called in a subshell, so the generator state persists.
 rnd(){ RNG=$(( (RNG * 1103515245 + 12345) % 2147483648 )); R=$(( (RNG / 65536) % $1 )); }
-pick(){ rnd $#; shift $R; echo "$1"; }
+pick(){ rnd $#; shift $R; P=$1; }
 act(){ echo -e "$(date +%s)\t$step\t$*" >> "$out/actions.tsv"; }
 win(){ wmctrl -l | awk '/Cat Goes Fishing$/{print $1; exit}'; }
 key(){ xdotool key --delay 60 "$@"; }
@@ -46,14 +46,14 @@ while [[ $(date +%s) -lt $end ]]; do
   rnd 100; r=$R
   if   (( r < 28 )); then rnd 7; h=0.$((3+R)); rnd 15; t=$((3+R)); rnd 18; rl=$((4+R)); act "cast hold=$h wait=$t reel=$rl"; hold space $h; sleep $t; hold space $rl; key s
   elif (( r < 36 )); then act "sell"; key s
-  elif (( r < 46 )); then k=$(pick a d); rnd 6; t=$((1+R)); act "boat $k $t"; hold $k $t
-  elif (( r < 52 )); then act "dive"; key q; sleep 1; for j in 1 2 3; do k=$(pick Up Down Left Right); rnd 3; hold $k $((1+R)); done
-  elif (( r < 57 )); then k=$(pick b h l r); act "buy-lure $k"; key $k
-  elif (( r < 61 )); then k=$(pick z x); act "rod $k"; key $k
+  elif (( r < 46 )); then pick a d; k=$P; rnd 6; t=$((1+R)); act "boat $k $t"; hold $k $t
+  elif (( r < 52 )); then act "dive"; key q; sleep 1; for j in 1 2 3; do pick Up Down Left Right; k=$P; rnd 3; hold $k $((1+R)); done
+  elif (( r < 57 )); then pick b h l r; k=$P; act "buy-lure $k"; key $k
+  elif (( r < 61 )); then pick z x; k=$P; act "rod $k"; key $k
   elif (( r < 65 )); then act "save-menu"; key Escape; sleep 2; key Escape
   elif (( r < 90 )); then
     rnd 900; m=$((1+R)); rnd 90; g=$((1+R)); rnd 40; lv=$((10+R))
-    c=$(pick "money ${m}000000" "money +${g}000000000" "unlockgear" "unlockall" "level $lv" "catalog all" "weather rainy" "weather fog" "weather clear" "weather windy" "weather super-sunny" "help")
+    pick "money ${m}000000" "money +${g}000000000" "unlockgear" "unlockall" "level $lv" "catalog all" "weather rainy" "weather fog" "weather clear" "weather windy" "weather super-sunny" "help"; c=$P
     act "console $c"; type_console "$c"
   else rnd 8; t=$((2+R)); act "idle $t"; sleep $t; fi
   (( step % 10 == 0 )) && ffmpeg -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/shots/step$(printf %04d $step).png"
