@@ -23,3 +23,21 @@ contains `fix/fish-sonar`. Implement findings 1 (integration test: Fish API + We
 EndlessOceanMod.Apply, single script/code) and 2 (`FishSonarRuntime.Ensure` reuses `data.Code.ByName` like
 `FishRuntime.EnsureScript`), plus any further Low finding you listed if it is cheap and safe.
 `dotnet build -c Release` zero warnings, `dotnet test -c Release` green. Same command rules as before. Do not commit.
+
+## Round 3 (Codex Luna): ModMaker harness fixes from the 22c matrix
+Candidate `~/jamm-night/personal-tge/own-mods-2026-11-22c.win` (built from fix/fish-sonar incl. this branch):
+1. `--scene weather` CODE ERROR (`~/jamm-night/runs/finalc-weather/game.log`):
+   `Variable obj_jamm_bench_weather.weather_count not set before reading it. at gml_Script_jamm_weather_find`
+   (Step Event1 of obj_jamm_bench_weather). The new sonar-coverage code in `tools/Jamm.ModMaker/WeatherScene.cs`
+   calls `jamm_weather_find` outside the weather controller's scope; call it inside `with (obj_jamm_weather)` (or
+   whatever the runtime expects) everywhere, and only after the controller has initialised.
+2. `--scene stress` instrumentation fails: "The stress scene needs 'obj_jamm_perf'. Merge Weather Pack and JAMM
+   Perf before instrumenting." Since `412a7f2 fix: disable costly Perf hooks by default` the personal package no
+   longer contains that controller. Make the stress scene work without it (measure what it can, record that Perf
+   hooks are off) while still using it when present.
+Add/adjust unit tests. `dotnet build -c Release` zero warnings, `dotnet test -c Release` green. Then verify in-game:
+`JAMM_MODMAKER_DLL=$PWD/tools/Jamm.ModMaker/bin/Release/net10.0/jamm-modmaker.dll ~/jamm-night/bin/run.sh
+~/jamm-night/personal-tge/own-mods-2026-11-22c.win r3 weather 900` and `DUR=200 … r3 stress 900` (shared game lock,
+may wait; on EXITED run `~/jamm-night/bin/steam-restart.sh` and retry; delete `~/jamm-night/runs/r3-*/game`).
+Report the weather CSV (`jamm_weather*.csv` in the Wine AppData folder) incl. sonar_missing per weather.
+Commit on this branch; do not push.
