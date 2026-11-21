@@ -20,7 +20,11 @@ public sealed record RecipeManifest(
     string Version,
     string Author,
     string Description,
-    bool Default);
+    bool Default)
+{
+    /// <summary>Configured seed for the Endless Ocean generator.</summary>
+    public int Seed { get; init; } = EndlessOceanMod.DefaultSeed;
+}
 
 /// <summary>Loads, validates, and compiles pure-source first-party recipe packages (<c>jamm-recipe.json</c>).</summary>
 public static partial class RecipePackage
@@ -31,7 +35,7 @@ public static partial class RecipePackage
     /// <summary>Supported local archive generators referenced by <c>generator</c>.</summary>
     public static readonly IReadOnlySet<string> SupportedGenerators = new HashSet<string>(StringComparer.Ordinal)
     {
-        "perf", "smooth", "hd-lite", "console", "silo"
+        "perf", "smooth", "hd-lite", "console", "endless-ocean"
     };
 
     [GeneratedRegex("^[a-z0-9_-]+$", RegexOptions.CultureInvariant)]
@@ -92,7 +96,15 @@ public static partial class RecipePackage
             string description = OptionalString(obj, "description", "");
             bool isDefault = OptionalBool(obj, "default", false);
 
-            return new RecipeManifest(root, manifestPath, schemaVersion, id, generator, generatorVersion, stableId, name, version, author, description, isDefault);
+            var manifest = new RecipeManifest(root, manifestPath, schemaVersion, id, generator, generatorVersion, stableId, name, version, author, description, isDefault);
+            if (generator == "endless-ocean" && TryGet(obj, "seed", out var seed))
+            {
+                if (seed.ValueKind != JsonValueKind.Number || !seed.TryGetInt32(out int value) ||
+                    value < 0 || value > EndlessOceanMod.MaxSeed)
+                    throw new InvalidDataException($"{ManifestFileName} ($.seed): Choose an integer from 0 to {EndlessOceanMod.MaxSeed}.");
+                manifest = manifest with { Seed = value };
+            }
+            return manifest;
         }
     }
 
@@ -131,7 +143,7 @@ public static partial class RecipePackage
             case "smooth": SmoothMod.Apply(data); break;
             case "hd-lite": HdMod.Apply(data, null); break;
             case "console": ConsoleMod.Apply(data); break;
-            case "silo": SiloMod.Apply(data, recipe.RootDirectory); break;
+            case "endless-ocean": EndlessOceanMod.Apply(data, recipe.Seed, progress); break;
             default: throw new InvalidDataException($"Unsupported recipe generator '{recipe.Generator}'.");
         }
 

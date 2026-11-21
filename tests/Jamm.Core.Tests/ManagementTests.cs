@@ -148,6 +148,28 @@ public sealed class ManagementTests : IDisposable
         Assert.Contains("code/synthetic", Assert.Single(notices));
     }
 
+    [Fact]
+    public void LegacyUnlockRepairIsOffByDefaultAndPersistsPerProfileAndMod()
+    {
+        var mod = new ModLibrary(store).Add(source, "Legacy").Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("repair", [mod.Id]);
+        profiles.Create("original", [mod.Id]);
+        Assert.Null(profiles.Get("repair").UnlockFixMods);
+
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["unlockfix", "repair", "Legacy", "on"], store.Root));
+        Assert.Equal(mod.Id, Assert.Single(new ProfileLibrary(store).Get("repair").UnlockFixMods!));
+        Assert.Null(profiles.Get("original").UnlockFixMods);
+        profiles.Update("repair", [mod.Id], [mod.Id]);
+        Assert.Equal(mod.Id, Assert.Single(profiles.Get("repair").UnlockFixMods!));
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["unlockfix", "repair", mod.Id, "off"], store.Root));
+        Assert.Null(profiles.Get("repair").UnlockFixMods);
+
+        profiles.SetUnlockFix("repair", mod.Id, true);
+        profiles.Update("repair", [], []);
+        Assert.Null(profiles.Get("repair").UnlockFixMods);
+    }
+
     [Theory]
     [InlineData("check")]
     [InlineData("resolve")]

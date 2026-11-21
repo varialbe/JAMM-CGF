@@ -21,7 +21,7 @@ public sealed record ModKitBuildResult(
 }
 
 /// <summary>Compiles a validated <see cref="ModKitManifest"/> onto a read-only legacy base archive as a zero-conflict mod.</summary>
-public static class ModKitBuilder
+public static partial class ModKitBuilder
 {
     /// <summary>Builds a ModKit folder package into a new verified <c>.win</c> file without modifying the base archive.</summary>
     public static ModKitBuildResult Build(
@@ -103,6 +103,7 @@ public static class ModKitBuilder
         // Placeholder stubs for called jamm_* API functions so the mod compiles standalone.
         if (package.Fish.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_fish_register")) scriptsAdded++;
         if (package.Boats.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_boat_register")) scriptsAdded++;
+        if (package.Rods.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_rod_register")) scriptsAdded++;
         if (package.Hats.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_hat_register")) scriptsAdded++;
         if (package.Upgrades.Count > 0 && EnsurePlaceholder(data, compiler, "jamm_upgrade_register")) scriptsAdded++;
 
@@ -111,12 +112,31 @@ public static class ModKitBuilder
         bool hasFleeLarge = data.Scripts.ByName("fish_fleelarge") is not null;
         bool hasFleeHuge = data.Scripts.ByName("fish_fleehuge") is not null;
 
+        foreach (var entry in package.Objects)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string name = $"jmk_{modIdent}_object_{SanitizeIdent(entry.Key)}";
+            var sprite = entry.Sprite is { } key ? sprites[CompositionName(modIdent, key)] : null;
+            var obj = CreateModObject(data, name, null, sprite, entry.Depth);
+            QueueHook(EventType.Create, entry.Create);
+            QueueHook(EventType.Step, entry.Step);
+            QueueHook(EventType.Draw, entry.Draw);
+            objectsAdded++;
+
+            void QueueHook(EventType type, string? path)
+            {
+                if (path is not null)
+                    compiler.QueueCodeReplace(obj.EventHandlerFor(type, 0u, data), File.ReadAllText(path, Encoding.UTF8));
+            }
+        }
+
+        var weatherFish = package.Weathers.SelectMany(w => w.Fish).ToHashSet(StringComparer.Ordinal);
         foreach (var fish in package.Fish)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string keyIdent = SanitizeIdent(fish.Key);
             string assetPrefix = $"jmk_{modIdent}_{keyIdent}";
-            string spriteName = $"{assetPrefix}_spr";
+            string spriteName = fish.SpriteKey is null ? $"{assetPrefix}_spr" : CompositionName(modIdent, fish.SpriteKey);
             string objName = assetPrefix;
 
             string? createHook = AddHookScript(data, compiler, $"{assetPrefix}_create", fish.Hooks.Create, ref scriptsAdded);
@@ -193,7 +213,7 @@ public static class ModKitBuilder
 
             initBody.AppendLine(
                 $"jamm_fish_register({GmlString($"{package.Id}:{fish.Key}")}, {objName}, {fish.SizeTab}, {GmlString(fish.Name)}, " +
-                $"{GmlString(fish.Description)}, {Num(fish.Spawn.XMin)}, {Num(fish.Spawn.XMax)}, {Num(fish.Spawn.YMin)}, {Num(fish.Spawn.YMax)}, {fish.Spawn.Count}, " +
+                $"{GmlString(fish.Description)}, {Num(fish.Spawn.XMin)}, {Num(fish.Spawn.XMax)}, {Num(fish.Spawn.YMin)}, {Num(fish.Spawn.YMax)}, {(fish.Spawn.Area is null && !weatherFish.Contains(fish.Key) ? fish.Spawn.Count : 0)}, " +
                 $"{GmlString(fish.CaughtDescription)}, {GmlString(fish.SeenDescription)}, {GmlString(fish.HiddenDescription)}, " +
                 $"{GmlString(fish.Description)}, {GmlString(fish.Description)}, {(fish.Exotic ? 1 : 0)});");
         }
@@ -230,6 +250,12 @@ public static class ModKitBuilder
             initBody.AppendLine(
                 $"jamm_boat_register({GmlString($"{package.Id}:{boat.Key}")}, {GmlString(boat.Name)}, {Num(boat.Cost)}, " +
                 $"{cardName}, {objName}, {GmlString(boat.Description)}, {(boat.Unlocked ? 1 : 0)});");
+        }
+
+        foreach (var rod in package.Rods)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            initBody.AppendLine(RodRegistration(package.Id, rod));
         }
 
         foreach (var hat in package.Hats)
@@ -277,10 +303,27 @@ public static class ModKitBuilder
                 $"{upgrade.MaxStacks}, {applyHook ?? "-1"}, {stepHook ?? "-1"});");
         }
 
-        initBody.AppendLine("return 0;");
-        string initScript = $"jamm_init_{modIdent}";
-        AddScript(data, compiler, initScript, initBody.ToString());
-        scriptsAdded++;
+        AddWeathers(data, compiler, package, modIdent, ref scriptsAdded);
+
+        AreaPlacement.ValidateSource(data, package);
+        foreach (var area in package.Areas)
+        {
+            var population = package.Fish.Where(f => f.Spawn.Area == area.Id).Select(f =>
+                new AreaFish($"jmk_{modIdent}_{SanitizeIdent(f.Key)}", f.Spawn.Count, f.Spawn.Within)).ToArray();
+            var opening = area.Opens;
+            if (opening?.Sprite is { } sprite && package.Sprites.Any(s => s.Key == sprite))
+                opening = opening with { Sprite = CompositionName(modIdent, sprite) };
+            AddScript(data, compiler, $"{AreaDeclarations.Prefix}{modIdent}_{SanitizeIdent(area.Id)}",
+                AreaDeclarations.Encode(new AreaDeclaration(package.Id, area with { Opens = opening }, population)));
+            scriptsAdded++;
+        }
+
+        if (initBody.Length > 0)
+        {
+            initBody.AppendLine("return 0;");
+            AddScript(data, compiler, $"jamm_init_{modIdent}", initBody.ToString());
+            scriptsAdded++;
+        }
 
         progress?.Invoke($"Compiling {scriptsAdded} script(s) and {objectsAdded} object(s)…");
         ArchiveVerifier.Compile(compiler, $"ModKit package '{package.Id}'");
@@ -307,7 +350,13 @@ public static class ModKitBuilder
     private static List<SpriteImportSpec> CollectSpriteSpecs(ModKitManifest package, string modIdent)
     {
         var specs = new List<SpriteImportSpec>();
-        foreach (var fish in package.Fish)
+        var tiledWeatherSprites = package.Weathers.SelectMany(w => w.Background)
+            .Where(layer => layer.Repeat).Select(layer => layer.Sprite).ToHashSet(StringComparer.Ordinal);
+        foreach (var recipe in package.Sprites)
+            specs.Add(new(CompositionName(modIdent, recipe.Key), "", recipe.Frames.Count, recipe.Origin,
+                CenterOrigin: true, GenerateMask: true, recipe, WrapHorizontal: tiledWeatherSprites.Contains(recipe.Key)));
+
+        foreach (var fish in package.Fish.Where(f => f.SpriteKey is null))
         {
             string keyIdent = SanitizeIdent(fish.Key);
             specs.Add(new($"jmk_{modIdent}_{keyIdent}_spr", fish.SpritePath, fish.Frames, fish.Origin, CenterOrigin: true, GenerateMask: true));
@@ -317,6 +366,10 @@ public static class ModKitBuilder
             string keyIdent = SanitizeIdent(boat.Key);
             specs.Add(new($"jmk_{modIdent}_{keyIdent}_spr", boat.SpritePath, 1, boat.Origin, CenterOrigin: true, GenerateMask: false));
             specs.Add(new($"jmk_{modIdent}_{keyIdent}_card", boat.CardPath, 1, null, CenterOrigin: true, GenerateMask: false));
+        }
+        foreach (var rod in package.Rods)
+        {
+            specs.Add(new(RodSpriteName(modIdent, rod), rod.SpritePath, 1, rod.Origin, CenterOrigin: true, GenerateMask: false));
         }
         foreach (var hat in package.Hats)
         {
@@ -330,6 +383,8 @@ public static class ModKitBuilder
         }
         return specs;
     }
+
+    private static string CompositionName(string id, string key) => $"jmk_{id}_recipe_{SanitizeIdent(key)}";
 
     private static bool EnsurePlaceholder(UndertaleData data, CompileGroup compiler, string scriptName)
     {
@@ -365,8 +420,8 @@ public static class ModKitBuilder
     private static UndertaleGameObject CreateModObject(
         UndertaleData data,
         string name,
-        UndertaleGameObject parent,
-        UndertaleSprite sprite,
+        UndertaleGameObject? parent,
+        UndertaleSprite? sprite,
         int depth)
     {
         if (data.GameObjects.ByName(name) is not null)
@@ -387,9 +442,34 @@ public static class ModKitBuilder
 
     internal static string SanitizeIdent(string value) => value.Replace('-', '_');
 
+    internal static string RodRegistration(string id, ModKitRod rod) =>
+        $"jamm_rod_register({GmlString($"{id}:{rod.Key}")}, {GmlString(rod.Name)}, {RodNumber(rod.Cost)}, {RodNumber(rod.CastSpeed)}, " +
+        $"{RodNumber(rod.RodPower)}, {RodNumber(rod.RodPowerFlat)}, {RodNumber(rod.ReelSpeed)}, {RodNumber(rod.SinkerDistance)}, " +
+        $"{RodSpriteName(SanitizeIdent(id), rod)}, {rod.UpgradeSlots}, {(rod.Unlocked ? 1 : 0)});";
+
+    private static string RodSpriteName(string modIdent, ModKitRod rod) => $"jmk_{modIdent}_{SanitizeIdent(rod.Key)}_rod_sprite";
+
     private static string Num(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
-    private static string GmlString(string value)
+    private static string RodNumber(double value)
+    {
+        // The legacy compiler accepts plain decimal literals. Keep the parsed number's precision.
+        string literal = Math.Abs(value).ToString("R", CultureInfo.InvariantCulture);
+        int exponent = literal.IndexOf('E');
+        if (exponent >= 0)
+        {
+            string mantissa = literal[..exponent];
+            int point = mantissa.IndexOf('.');
+            int offset = (point < 0 ? mantissa.Length : point)
+                + int.Parse(literal.AsSpan(exponent + 1), CultureInfo.InvariantCulture);
+            string digits = mantissa.Replace(".", "", StringComparison.Ordinal);
+            literal = offset <= 0 ? "0." + new string('0', -offset) + digits
+                : offset >= digits.Length ? digits.PadRight(offset, '0') : digits.Insert(offset, ".");
+        }
+        return value < 0 ? "-" + literal : literal;
+    }
+
+    internal static string GmlString(string value)
     {
         string normalized = value.Replace("\r\n", "#", StringComparison.Ordinal).Replace("\n", "#", StringComparison.Ordinal);
         if (!normalized.Contains('"', StringComparison.Ordinal))

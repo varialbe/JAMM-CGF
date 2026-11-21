@@ -87,7 +87,7 @@ internal sealed class SemanticCode
         return result;
     }
 
-    internal Dictionary<string, IReadOnlyList<ResolvedCodeReference>> Expected(BuildPlan plan, UndertaleData merged)
+    internal Dictionary<string, IReadOnlyList<ResolvedCodeReference>> Expected(BuildPlan plan, UndertaleData merged, IReadOnlyDictionary<string, string> generatedCode)
     {
         var selected = plan.Assets.Where(a => a.Family == "code").ToDictionary(a => a.Name, StringComparer.Ordinal);
         // A union catalog recognizes selected names even if a mistaken plan omitted their assets.
@@ -99,7 +99,8 @@ internal sealed class SemanticCode
         foreach (var code in merged.Code.Where(c => c.ParentEntry is null))
         {
             string name = code.Name.Content;
-            string text = selected.TryGetValue(name, out var choice) ? choice.Gml!
+            string text = generatedCode.TryGetValue(name, out var generated) ? generated
+                : selected.TryGetValue(name, out var choice) ? choice.Gml!
                 : name.StartsWith("gml_Script_", StringComparison.Ordinal) && CatalogRuntime.Scripts.TryGetValue(name[11..], out var runtime) ? runtime
                 : name.StartsWith("gml_Script_", StringComparison.Ordinal) && HudRuntime.Scripts.TryGetValue(name[11..], out var hud) ? hud
                 : name.StartsWith("gml_Script_", StringComparison.Ordinal) && ItemsRuntimeScripts.DefaultScripts.TryGetValue(name[11..], out var items) ? items

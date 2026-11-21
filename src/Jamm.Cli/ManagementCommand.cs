@@ -139,6 +139,8 @@ internal static class ManagementCommand
                             foreach (var (asset, choice) in profile.Resolutions) Console.WriteLine($"  Resolve {asset}: {choice}");
                             Console.WriteLine($"  Texture repacking: {(profile.NoRepack ? "off" : "on for modded builds")}");
                             Console.WriteLine($"  Perf defaults: F8 mode {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid {(profile.Perf.FishGrid ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence).");
+                            foreach (string id in profile.UnlockFixMods ?? [])
+                                Console.WriteLine($"  Repair legacy shop unlocks: {library.Find(id).Name}");
                         }
                         break;
                     case "use": Count(2); profiles.Use(positional[1]); Console.WriteLine($"Active profile: {positional[1]}."); break;
@@ -169,6 +171,17 @@ internal static class ManagementCommand
                         Console.WriteLine($"Set Perf {positional[2]} for '{positional[1]}' to {positional[3]}.");
                         break;
                     case "delete": Count(2); profiles.Delete(positional[1]); Console.WriteLine($"Deleted profile '{positional[1]}'."); break;
+                    case "unlockfix":
+                        Count(4);
+                        bool unlockFix = positional[3] switch
+                        {
+                            "on" => true,
+                            "off" => false,
+                            _ => throw new ArgumentException("Use profile unlockfix <profile> <mod> on|off.")
+                        };
+                        profiles.SetUnlockFix(positional[1], positional[2], unlockFix);
+                        Console.WriteLine($"Legacy shop unlock repair for '{positional[2]}' in '{positional[1]}': {positional[3]}.");
+                        break;
                     case "resolve": Count(4); profiles.Resolve(positional[1], positional[2], positional[3], Console.WriteLine); Console.WriteLine($"Saved resolution for '{positional[2]}'."); break;
                     default: throw new ArgumentException($"Unknown profile action '{action}'. See 'cgfmm --help'.");
                 }

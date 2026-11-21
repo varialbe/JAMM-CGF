@@ -123,7 +123,7 @@
     "id": "jamm-silo",
     "name": "The Silo",
     "author": "JAMM",
-    "description": "Dive through the maintenance hatch near the Missile Silo. Explore the flooded launch shaft, refill air and recover four salvage items for cash.",
+    "description": "Open the Missile Silo in NewWorld and fish its flooded launch shaft for four deep-water species.",
     "fileUrl": "https://varialbe.xyz/cgf-mods/packages/jamm-silo.zip",
     "isPreview": false,
     "categories": [
@@ -136,11 +136,83 @@
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#jamm-silo",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
+    "isDefault": false,
+    "version": "2.2.0",
+    "sha256": "9bbfc6aaed00b72540b5f6ad5c174887deb8e7a80e4ef9cbcbead0fb99b11acb",
+    "sizeBytes": 7633
+  },
+  {
+    "id": "weather-pack",
+    "name": "Weather Pack",
+    "author": "JAMM",
+    "description": "Four daylight weathers (Super Sunny, Rainy, Windy, Fog) with eight new surface fish, animated skies and original sound.",
+    "fileUrl": "https://varialbe.xyz/cgf-mods/packages/weather-pack.zip",
+    "isPreview": false,
+    "categories": [
+      "Optional",
+      "Weather"
+    ],
+    "createdUtc": "2026-11-18T00:00:00Z",
+    "rating": null,
+    "iconUrl": "https://varialbe.xyz/cgf-mods/assets/weather.svg",
+    "verifiedCreator": true,
+    "credits": "JAMM-CGF first-party pure-source package",
+    "catalogPage": "https://varialbe.xyz/cgf-mods/#weather-pack",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
+    "isDefault": false,
+    "version": "1.0.1",
+    "sha256": "d37f49328d697a5af420111c8b496c16e81713c15e7549b72154f9bbc53f64a7",
+    "sizeBytes": 950560
+  },
+  {
+    "id": "endless-ocean",
+    "name": "Endless Ocean (Preview)",
+    "author": "JAMM",
+    "description": "Preview: a seeded, endlessly streamed ocean floor with vanilla fish east of NewWorld.",
+    "fileUrl": "https://varialbe.xyz/cgf-mods/packages/endless-ocean.zip",
+    "isPreview": false,
+    "categories": [
+      "Optional",
+      "Exploration"
+    ],
+    "createdUtc": "2026-11-18T00:00:00Z",
+    "rating": null,
+    "iconUrl": "https://varialbe.xyz/cgf-mods/assets/endless-ocean.svg",
+    "verifiedCreator": true,
+    "credits": "JAMM-CGF first-party pure-source package",
+    "catalogPage": "https://varialbe.xyz/cgf-mods/#endless-ocean",
     "packageType": "recipe",
     "manifestFile": "jamm-recipe.json",
     "isDefault": false,
-    "version": "2.0.0",
-    "sha256": "7564a1bf1cfcc902cf4bcceaceceac0a10a223859d6c725b7e28f204b138a860",
-    "sizeBytes": 6411
+    "version": "0.1.0",
+    "sha256": "81c9ddfdd1059ed5412406438c578a43ff8048e8b3202767c217ae3693c610ca",
+    "sizeBytes": 1660
+  },
+  {
+    "id": "example-rod",
+    "name": "Example Rod",
+    "author": "JAMM",
+    "description": "Test ModKit source package adding the Copper Current rod ($25,000) to the rod shop.",
+    "fileUrl": "https://varialbe.xyz/cgf-mods/packages/example-rod.zip",
+    "isPreview": false,
+    "categories": [
+      "ModKit",
+      "Rods"
+    ],
+    "createdUtc": "2026-11-18T00:00:00Z",
+    "rating": null,
+    "iconUrl": "https://varialbe.xyz/cgf-mods/assets/example-rod.svg",
+    "verifiedCreator": true,
+    "credits": "JAMM-CGF first-party pure-source package",
+    "catalogPage": "https://varialbe.xyz/cgf-mods/#example-rod",
+    "packageType": "modkit",
+    "manifestFile": "jamm-mod.json",
+    "isDefault": false,
+    "version": "1.0.0",
+    "sha256": "3b24dfb69e05e07e533ef37f42edf7696bad7744b152a02df5b663969fec8a6c",
+    "sizeBytes": 1058
   }
 ]
