@@ -76,7 +76,7 @@ public static class FishVirtualizationPrototype
                 ds_list_add(rec, image_angle); ds_list_add(rec, image_alpha);
                 ds_list_add(rec, state); ds_list_add(rec, life);
                 ds_list_add(rec, respawn_time); ds_list_add(rec, catalog_index);
-                ds_list_add(jamm_b_virtual_records, rec);
+                ds_list_add(other.jamm_b_virtual_records, rec);
                 instance_destroy();
                 other.jamm_b_virtualized_count += 1;
             }

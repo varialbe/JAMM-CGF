@@ -1,4 +1,5 @@
 using Jamm.ModMaker;
+using System.Reflection;
 
 namespace Jamm.Core.Tests;
 
@@ -41,5 +42,16 @@ public sealed class FishVirtualizationPrototypeTests
     {
         Assert.Equal(0, Jamm.ModMaker.Program.ParseBenchOptions([]).FishVirtualizationCount);
         Assert.Equal(100, Jamm.ModMaker.Program.ParseBenchOptions(["--fish-virtualization-count", "100"]).FishVirtualizationCount);
+    }
+
+    [Fact]
+    public void GarderVirtualizationUsesTheControllerRecordListFromInsideWith()
+    {
+        var script = typeof(FishVirtualizationPrototype)
+            .GetField("VirtualizeGarderGml", BindingFlags.NonPublic | BindingFlags.Static)
+            ?.GetRawConstantValue() as string;
+
+        Assert.NotNull(script);
+        Assert.Contains("ds_list_add(other.jamm_b_virtual_records, rec)", script);
     }
 }
