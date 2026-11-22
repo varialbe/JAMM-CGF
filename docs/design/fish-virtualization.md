@@ -213,3 +213,28 @@ counts. Step 2b before Hydrogen continues:
   of `fish_step_us` and `loop_us` with the spread between same-mode repeats;
 - explain the 42 µs vs 4 µs transition cost and whether it amortises at the planned wake/sleep rate;
 - go/no-go statement for steps 3–8: worth it if ≥ 100 virtualised fish save clearly more than the repeat spread.
+
+### Step 2b status (2026-11-22)
+
+The bench now has a deterministic Garder fixture (`--fish-virtualization-fixture-count`), and fixture runs freeze
+normal spawners. The available controlled OFF capture used `FishCap=0`, seed 1337, and 300 fixture Garders; all
+406 samples reported exactly 300 active fish. Its `fish_step_us` mean/p50/p95 were 8,099/7,423/12,683 µs and its
+`loop_us` mean/p50/p95 were 71,292/68,298/100,444 µs. The CSV is local at
+`~/jamm-night/runs/fish2b-v4-p1-off-dock/jamm_bench_dock.csv`.
+
+The matching ON capture and the three repeated OFF/ON pairs were not obtained: the shared game lock remained held
+by a separate stopped run, and this task's queued runner was cancelled before it could launch. No other run was
+interrupted. Therefore this baseline is not a paired performance result, and the fish-count control has not yet
+been demonstrated across modes.
+
+The earlier transition microbenchmark measured 42 µs for a four-record virtualise/materialise round trip versus
+4 µs for four `instance_create`/destroy operations: 10.5 µs versus 1 µs per record, or 9.5 µs extra per record.
+At 100 records that suggests about 0.95 ms of additional one-time transition cost. The OFF fixture's aggregate
+fish-step mean is about 27 µs per fish per frame (8,099 / 300); linear scaling would imply roughly 2.7 ms saved
+per frame for 100 fish, enough to amortise the extra transition cost within one frame. That is only a directional
+estimate from one OFF capture and assumes per-fish linearity; it is not an observed saving or a wake/sleep-rate
+result.
+
+**Decision: no-go for steps 3–8 pending the paired matrix.** The fixture and baseline are ready, but the ON result,
+three same-mode repeats, repeat spread, and measured ≥100-fish saving are still missing. Resume the controlled
+matrix after the shared runner is available; do not treat the estimate above as passing the review gate.

@@ -20,3 +20,11 @@ Prototype with vanilla + 1 pack, off by default, measured serially (shared game 
 on EXITED `~/jamm-night/bin/steam-restart.sh` and retry; delete `~/jamm-night/runs/*/game` copies).
 Plan in `docs/design/fish-virtualization.md` with steps and a measurement point each.
 Commit on this branch; do not push. AGENTS.md applies.
+
+## Orchestrator review round 2 outcome
+
+The deterministic 300-Garder fixture and one controlled OFF baseline are available; all 406 samples held exactly
+300 active fish. The matching ON capture and three repeated OFF/ON pairs remain outstanding because another
+stopped run held the shared game lock. No other run was interrupted. See `docs/design/fish-virtualization.md` for
+the CSV metrics and transition-cost estimate. **No-go for steps 3–8 until the paired matrix measures at least 100
+virtualised fish and shows savings larger than the repeat spread.**
