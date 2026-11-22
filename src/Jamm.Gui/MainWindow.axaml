@@ -32,6 +32,7 @@
                                    AutomationProperties.Name="Fish sale cap" Value="{Binding ProfileFishValueCap, Mode=OneWay}" ValueChanged="ProfileFishValueCapChanged"/>
                     <CheckBox Content="Start with F8 mode on" IsChecked="{Binding ProfilePerf.StartEnabled, Mode=OneWay}" Click="ProfilePerfModeClick"/>
                     <CheckBox Content="Fish grid" IsChecked="{Binding ProfilePerf.FishGrid, Mode=OneWay}" Click="ProfileFishGridClick"/>
+                    <CheckBox Content="Fish micro-optimisations (experimental)" IsChecked="{Binding ProfilePerf.FishMicro, Mode=OneWay}" Click="ProfileFishMicroClick"/>
                     <TextBlock Text="Distant fish update interval (ticks)"/>
                     <NumericUpDown Minimum="1" Maximum="60" FormatString="0" Value="{Binding ProfilePerf.Interval, Mode=OneWay}" ValueChanged="ProfileFishIntervalChanged"/>
                     <TextBlock Text="JAMM Perf and HD Lite can be switched in Built-in (JAMM). Your in-game Perf settings take precedence." TextWrapping="Wrap" Classes="muted"/>

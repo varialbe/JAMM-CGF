@@ -14,7 +14,7 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 public sealed class BuiltinMods(ManagerStore store)
 {
     /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "8";
+    public const string GeneratorVersion = "9";
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {

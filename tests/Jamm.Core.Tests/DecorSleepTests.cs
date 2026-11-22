@@ -337,6 +337,7 @@ public sealed class DecorSleepTests
     {
         var defaults = new PerfSettings();
         Assert.True(defaults.DecorSleep);
+        Assert.False(defaults.FishMicro);
 
         string temp = Path.Combine(Path.GetTempPath(), $"jamm-ds-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(temp);
@@ -347,7 +348,12 @@ public sealed class DecorSleepTests
             profiles.CreateEmpty("p1");
             var updated = profiles.SetPerf("p1", decorSleep: false);
             Assert.False(updated.Perf.DecorSleep);
+            Assert.False(updated.Perf.FishMicro);
             Assert.False(profiles.Get("p1").Perf.DecorSleep);
+
+            updated = profiles.SetPerf("p1", fishMicro: true);
+            Assert.True(updated.Perf.FishMicro);
+            Assert.True(profiles.Get("p1").Perf.FishMicro);
 
             // Older profile JSON lacking "decorSleep" defaults DecorSleep to true.
             string p2Path = Path.Combine(temp, "profiles", "p2.json");
@@ -360,6 +366,7 @@ public sealed class DecorSleepTests
                 }
                 """);
             Assert.True(profiles.Get("p2").Perf.DecorSleep);
+            Assert.False(profiles.Get("p2").Perf.FishMicro);
         }
         finally
         {

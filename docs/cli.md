@@ -36,6 +36,7 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `profile preset <name> weak-pc\|default` | Apply Weak PC or restore the previous profile settings |
 | `profile builtin <name> <id> on\|off` | Enable or disable a bundled mod in the profile |
 | `profile perf <name> mode\|grid on\|off` | Set the startup default for F8 scheduling or the fish grid |
+| `profile perf <name> fish-micro on\|off` | Opt in to the experimental post-merge Fish micro-optimisation (off by default) |
 | `profile perf <name> interval <ticks>` | Set the default distant-fish update interval from 1 to 60 ticks |
 | `profile unlockfix <profile> <mod> on\|off` | Opt a mod into legacy boat and rod shop repair for this profile. Defaults to off. |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |

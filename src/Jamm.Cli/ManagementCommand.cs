@@ -186,8 +186,9 @@ internal static class ManagementCommand
                             "mode" => profiles.SetPerf(positional[1], startEnabled: OnOff(positional[3])),
                             "grid" => profiles.SetPerf(positional[1], fishGrid: OnOff(positional[3])),
                             "decor" => profiles.SetPerf(positional[1], decorSleep: OnOff(positional[3])),
+                            "fish-micro" => profiles.SetPerf(positional[1], fishMicro: OnOff(positional[3])),
                             "interval" when int.TryParse(positional[3], out int interval) => profiles.SetPerf(positional[1], interval: interval),
-                            _ => throw new ArgumentException("Use profile perf <name> mode|grid|decor on|off or profile perf <name> interval <ticks>.")
+                            _ => throw new ArgumentException("Use profile perf <name> mode|grid|decor|fish-micro on|off or profile perf <name> interval <ticks>.")
                         };
                         Console.WriteLine($"Set Perf {positional[2]} for '{positional[1]}' to {positional[3]}.");
                         break;

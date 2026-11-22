@@ -41,6 +41,7 @@ public sealed class ManagementTests : IDisposable
         profiles.SetBuiltin("laptop", "perf", false);
         profiles.SetRepack("laptop", false);
         profiles.SetPerf("laptop", fishGrid: false, interval: 6);
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["perf", "laptop", "fish-micro", "on"], store.Root));
         var before = profiles.Get("laptop");
 
         Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile", ["preset", "laptop", "weak-pc"], store.Root));
@@ -50,6 +51,7 @@ public sealed class ManagementTests : IDisposable
         Assert.False(active.NoRepack);
         Assert.True(active.Perf.StartEnabled);
         Assert.False(active.Perf.FishGrid);
+        Assert.False(active.Perf.FishMicro);
         Assert.True(active.Perf.Interval > 4);
         Assert.Equal(active.BeforeWeakPc, profiles.SetPreset("laptop", "weak-pc").BeforeWeakPc);
 

@@ -256,11 +256,12 @@ active profile. From the CLI, run `cgfmm profile preset <name> weak-pc`, then
 | --- | --- |
 | JAMM Perf and F8 mode | Perf includes guarded event optimizations. F8 mode runs fewer updates for eligible distant fish, so they can move less often. The Weak PC default runs their full update every 8 ticks. |
 | Fish grid | Uses JAMM Perf's guarded neighbour search when the merged avoidance script is compatible. |
+| Fish micro-optimisations | Experimental and off by default. Caches one repeated fish-flock direction calculation after profile mods are merged. Reuses the lunge distance only when the merged source has no other visible `check_lunge` caller. |
 | Pack textures | Packs the same sprite and background pixels into fewer texture pages where it can. Recent default builds already pack textures. |
 | HD Lite off | Uses the game's normal rendering size instead of HD Lite scaling. |
 
 Use **Performance settings** to change texture packing, the startup F8 default,
-the fish grid or the update interval. Use the **Built-in (JAMM)** switches for
+the fish grid, fish micro-optimisations or the update interval. Use the **Built-in (JAMM)** switches for
 Perf and HD Lite. `cgfmm profile show <name>` lists the settings, and the
 [CLI reference](cli.md) lists the matching commands. Turn off **Weak PC** or run
 `cgfmm profile preset <name> default` to restore the profile settings you had

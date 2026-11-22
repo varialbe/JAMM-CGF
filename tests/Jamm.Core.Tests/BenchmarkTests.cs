@@ -613,6 +613,13 @@ public class BenchmarkTests
         data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("fish_check_trawler"), Code = trawler });
         compiler.QueueCodeReplace(trawler, "if (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false))\n{\n    state = 3;\n}");
 
+        var flock = UndertaleCode.CreateEmptyEntry(data, "gml_Script_fish_flock");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("fish_flock"), Code = flock });
+        compiler.QueueCodeReplace(flock,
+            "if (pal > 0)\n{\n    impulse = point_distance(x, y, pal.x, pal.y) - argument0;\n"
+            + "    hspeed += lengthdir_x(impulse * argument1, point_direction(x, y, pal.x, pal.y));\n"
+            + "    vspeed += lengthdir_y(impulse * argument1, point_direction(x, y, pal.x, pal.y));\n    return 1;\n}\nreturn 0;");
+
         ModObjects.Compile(compiler);
         return data;
     }

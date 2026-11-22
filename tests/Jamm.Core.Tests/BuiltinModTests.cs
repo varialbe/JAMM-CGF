@@ -46,13 +46,107 @@ public sealed class BuiltinModTests : IDisposable
                 ["gml_Object_Fish_Step_2"] = "if (y > 5000 && !deepfish) { x += 1; y += 1; }",
                 ["gml_Script_fish_check_trawler"] = "if (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false)) { x += 1; y += 1; }",
                 ["gml_Script_fish_avoid_fish"] = "x = (argument1 * argument1) + 1; y = (100000 * argument2) + 1; z = (100000 * argument2) + 2;",
+                ["gml_Script_fish_flock"] = "if (pal > 0) { impulse = point_distance(x, y, pal.x, pal.y) - argument0; hspeed += lengthdir_x(impulse * argument1, point_direction(x, y, pal.x, pal.y)); vspeed += lengthdir_y(impulse * argument1, point_direction(x, y, pal.x, pal.y)); return 1; } return 0;",
+                ["gml_Script_fish_lunge"] = "distance_to_lure = point_distance(x, y, Lure.x, Lure.y); fish_set_lunge_mod(); if (check_lunge()) { state = 1; }",
+                ["gml_Script_check_lunge"] = "if (point_distance(x, y, Lure.x, Lure.y) < 100) { return 1; } return 0;",
+                ["gml_Script_fish_set_lunge_mod"] = "lunge_mod = base_lunge_mod;",
                 ["gml_Object_SceneItem_Step_2"] = "scene_depth = depth + 18; x = home_x;"
             }) compiler.QueueCodeReplace(UndertaleCode.CreateEmptyEntry(data, name), source);
+            foreach (string name in new[] { "fish_lunge", "check_lunge", "fish_set_lunge_mod" })
+                data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(name), Code = data.Code.ByName("gml_Script_" + name)! });
         }
         ModObjects.Compile(compiler);
         edit?.Invoke(data);
         using var stream = File.Create(path); UndertaleIO.Write(stream, data);
     }
+
+    [Fact]
+    public void PerfHoistsRepeatedFlockDirectionWithoutChangingItsGuard()
+    {
+        WriteBase(original);
+        using var stream = File.OpenRead(original);
+        using var data = UndertaleIO.Read(stream, (_, _) => { }, _ => { });
+        var flock = data.Code.ByName("gml_Script_fish_flock")!;
+        int callsBefore = CountCalls(flock, "point_direction");
+        var check = data.Code.ByName("gml_Script_check_lunge")!;
+        int lungeCheckInstructionsBefore = data.Code.ByName("gml_Script_fish_lunge")!.Instructions.Count + check.Instructions.Count;
+        int flockInstructionsBefore = flock.Instructions.Count;
+
+        PerfMod.Apply(data, applyScheduler: false, applyDecorSleep: false);
+        var microCompiler = new CompileGroup(data);
+        _ = FishMicroOptimizations.Queue(data, microCompiler);
+        ModObjects.Compile(microCompiler);
+
+        flock = data.Code.ByName("gml_Script_fish_flock")!;
+        int callsAfter = CountCalls(flock, "point_direction");
+        int instructionsAfter = flock.Instructions.Count;
+        int lungeCheckInstructionsAfter = data.Code.ByName("gml_Script_fish_lunge")!.Instructions.Count
+            + data.Code.ByName("gml_Script_check_lunge")!.Instructions.Count;
+        string source = ModObjects.Decompile(data, flock);
+        Assert.True(instructionsAfter < flockInstructionsBefore,
+            $"Expected fewer fish_flock VM instructions after caching the shared direction ({flockInstructionsBefore} -> {instructionsAfter}).");
+        Assert.Equal(2, callsBefore);
+        Assert.Equal(1, callsAfter);
+        Assert.Contains("if (pal > 0)", source);
+        Assert.Contains("var jamm_perf_flock_direction = point_direction(x, y, pal.x, pal.y);", source);
+        Assert.True(source.IndexOf("var jamm_perf_flock_direction", StringComparison.Ordinal)
+            > source.IndexOf("if (pal > 0)", StringComparison.Ordinal));
+        Assert.Equal(0, CountCalls(data.Code.ByName("gml_Script_check_lunge")!, "point_distance"));
+        Assert.Contains("check_lunge(distance_to_lure)", ModObjects.Decompile(data, data.Code.ByName("gml_Script_fish_lunge")!));
+        Assert.True(lungeCheckInstructionsAfter < lungeCheckInstructionsBefore,
+            $"Expected fewer lunge/check VM instructions ({lungeCheckInstructionsBefore} -> {lungeCheckInstructionsAfter}).");
+    }
+
+    [Fact]
+    public void FishMicroIsOptInAndOnlyChangesTheSelectedPerfProfileBuild()
+    {
+        var perf = new BuiltinMods(store).Add("perf").Mod;
+        var library = new ModLibrary(store);
+        var input = new BuildInput(library.Patch(perf), library.Archive(perf));
+        using (var plainArchive = File.OpenRead(library.Archive(perf)))
+        using (var plainData = UndertaleIO.Read(plainArchive, (_, _) => { }, _ => { }))
+            Assert.Equal(2, CountCalls(plainData.Code.ByName("gml_Script_fish_flock")!, "point_direction"));
+        string defaultOutput = Path.Combine(root, "perf-default.win");
+        string microOutput = Path.Combine(root, "perf-micro.win");
+
+        ArchiveBuilder.Build(original, [input], defaultOutput, noRepack: true,
+            perfSettings: new PerfSettings(DecorSleep: false));
+        Assert.Equal(BuildFiles.Hash(original), BuildFiles.Hash(defaultOutput));
+
+        var result = ArchiveBuilder.Build(original, [input], microOutput, noRepack: true,
+            perfSettings: new PerfSettings(DecorSleep: false, FishMicro: true));
+        Assert.Contains(result.Plan.Decisions, decision => decision.Contains("fish_flock: cached", StringComparison.Ordinal));
+        using var stream = File.OpenRead(microOutput);
+        using var optimized = UndertaleIO.Read(stream, (_, _) => { }, _ => { });
+        Assert.Equal(1, CountCalls(optimized.Code.ByName("gml_Script_fish_flock")!, "point_direction"));
+        Assert.Contains("check_lunge(distance_to_lure)", ModObjects.Decompile(optimized, optimized.Code.ByName("gml_Script_fish_lunge")!));
+    }
+
+    [Fact]
+    public void FishMicroSkipsDistanceReuseWhenMergedSourceAddsAnotherCheckLungeCaller()
+    {
+        WriteBase(original);
+        using var stream = File.OpenRead(original);
+        using var data = UndertaleIO.Read(stream, (_, _) => { }, _ => { });
+        var externalCaller = UndertaleCode.CreateEmptyEntry(data, "gml_Script_mod_check_lunge");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("mod_check_lunge"), Code = externalCaller });
+        var callerCompiler = new CompileGroup(data);
+        callerCompiler.QueueCodeReplace(externalCaller, "check_lunge();");
+        ModObjects.Compile(callerCompiler);
+
+        var microCompiler = new CompileGroup(data);
+        var edits = new List<UndertaleCode>();
+        string decision = FishMicroOptimizations.Queue(data, microCompiler, edits);
+        ModObjects.Compile(microCompiler);
+
+        Assert.Contains("fish_lunge/check_lunge: skipped (another merged caller: gml_Script_mod_check_lunge)", decision);
+        Assert.Equal(1, CountCalls(data.Code.ByName("gml_Script_check_lunge")!, "point_distance"));
+        Assert.Contains(data.Code.ByName("gml_Script_fish_flock")!, edits);
+    }
+
+    private static int CountCalls(UndertaleCode code, string name) => code.Instructions.Count(instruction =>
+        instruction.Kind == UndertaleInstruction.Opcode.Call
+        && instruction.ValueFunction?.Name.Content == name);
 
     [Fact]
     public void BuiltinOnlyProfileRepacksAndInvalidatesAnUnrepackedInstallation()

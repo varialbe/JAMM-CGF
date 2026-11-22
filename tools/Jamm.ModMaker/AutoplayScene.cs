@@ -25,6 +25,11 @@ internal static class AutoplayScene
             throw new InvalidDataException("The autoplay scene needs the legacy NewWorld room and Girl object.");
         var probe = ModObjects.Create(data, Probe, persistent: true);
         var compiler = new CompileGroup(data);
+        string sonarCapture = string.Join('\n', new[]
+        {
+            data.GameObjects.ByName("SonarPanel") is not null ? "if (instance_exists(SonarPanel)) jamm_ap_sonar = SonarPanel.active;" : "",
+            data.GameObjects.ByName("SonarPanelAdvanced") is not null ? "if (instance_exists(SonarPanelAdvanced)) jamm_ap_sonar_advanced = SonarPanelAdvanced.active;" : ""
+        }.Where(line => line.Length > 0));
         string dismiss = string.Join('\n', new[] { "GameModeMenu", "GM_Classic", "GM_Realism", "Message_Start" }
             .Where(name => data.GameObjects.ByName(name) is not null)
             .Select(name => $"with ({name}) instance_destroy();"));
@@ -33,7 +38,7 @@ internal static class AutoplayScene
             jamm_ap_next = 0;
             jamm_ap_dismissed = 0;
             var f = file_text_open_write("jamm_autoplay.csv");
-            file_text_write_string(f, "ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub,has_weather,has_ocean,has_silo,has_console,boat_icon_xy,boat7_card_xy,sub_card_xy,boat_menu,cancel_icon_xy,silo_x,ocean_start");
+            file_text_write_string(f, "ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub,has_weather,has_ocean,has_silo,has_console,boat_icon_xy,boat7_card_xy,sub_card_xy,boat_menu,cancel_icon_xy,silo_x,ocean_start,lure_fish,hooked_fish_size,sonar_active,advanced_sonar_active");
             file_text_writeln(f);
             file_text_close(f);
             """);
@@ -65,6 +70,7 @@ internal static class AutoplayScene
             jamm_ap_next = current_time + (jamm_ap_bmenu_open ? 500 : 2000);
 
             var jamm_ap_ls = -1, jamm_ap_ly = 0, jamm_ap_x = 0, jamm_ap_y = 0, jamm_ap_depth = 0, jamm_ap_d = 0, jamm_ap_lv = 0;
+            var jamm_ap_fish = -1, jamm_ap_hooked_size = 0, jamm_ap_sonar = 0, jamm_ap_sonar_advanced = 0;
             if (instance_exists(Girl))
             {
                 jamm_ap_x = Girl.x;
@@ -80,9 +86,12 @@ internal static class AutoplayScene
                 if (instance_exists(jamm_ap_lure))
                 {
                     if (variable_instance_exists(jamm_ap_lure, "state")) jamm_ap_ls = jamm_ap_lure.state;
+                    if (variable_instance_exists(jamm_ap_lure, "fish")) jamm_ap_fish = jamm_ap_lure.fish;
+                    if (variable_instance_exists(jamm_ap_lure, "hookedFishSize")) jamm_ap_hooked_size = jamm_ap_lure.hookedFishSize;
                     jamm_ap_ly = jamm_ap_lure.y;
                 }
             }
+            {{sonarCapture}}
 
             var jamm_ap_sub_obj = asset_get_index("jmk_submarine_submarine");
             if (jamm_ap_sub_obj < 0 || asset_get_type("jmk_submarine_submarine") != asset_object || !object_exists(jamm_ap_sub_obj))
@@ -259,7 +268,8 @@ internal static class AutoplayScene
                 + string(jamm_ap_chunks) + "," + jamm_ap_weather + "," + string(jamm_ap_has_sub) + ","
                 + string(jamm_ap_has_weather) + "," + string(jamm_ap_has_ocean) + "," + string(jamm_ap_has_silo) + ","
                 + string(jamm_ap_has_console) + "," + jamm_ap_bicon_xy + "," + jamm_ap_b7_xy + ","
-                + jamm_ap_sub_xy + "," + jamm_ap_bmenu + "," + jamm_ap_cicon_xy + "," + string(jamm_ap_silo_x) + "," + string(jamm_ap_ocean_start));
+                + jamm_ap_sub_xy + "," + jamm_ap_bmenu + "," + jamm_ap_cicon_xy + "," + string(jamm_ap_silo_x) + "," + string(jamm_ap_ocean_start) + ","
+                + string(jamm_ap_fish) + "," + string(jamm_ap_hooked_size) + "," + string(jamm_ap_sonar) + "," + string(jamm_ap_sonar_advanced));
             file_text_writeln(f);
             file_text_close(f);
             """);
