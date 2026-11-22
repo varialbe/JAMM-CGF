@@ -90,6 +90,8 @@ public sealed class FishSleepTests
         var cusperLike = ModObjects.Create(data, "ModAlarmClamp", false); cusperLike.ParentId = fishLarge;
         var anglerLike = ModObjects.Create(data, "Anglerfish", false); anglerLike.ParentId = fishLarge;
         var chawLike = ModObjects.Create(data, "Chaw", false); chawLike.ParentId = fishSmall;
+        var babyjawLike = ModObjects.Create(data, "Babyjaw", false); babyjawLike.ParentId = fishSmall;
+        var bluecheekLike = ModObjects.Create(data, "Bluecheek_Frog", false); bluecheekLike.ParentId = fishSmall;
 
         var compiler = new CompileGroup(data);
         compiler.QueueCodeReplace(snobLike.EventHandlerFor(EventType.Other, 18u, data), "target_x = 1;");
@@ -105,6 +107,10 @@ public sealed class FishSleepTests
             "action_inherited();\nnearest_piercer = instance_nearest(x, y, Piercer);");
         compiler.QueueCodeReplace(chawLike.EventHandlerFor(EventType.Collision, 112u, data),
             "if (state == 1)\n{\n    x += 1;\n}");
+        compiler.QueueCodeReplace(babyjawLike.EventHandlerFor(EventType.Collision, 111u, data),
+            "if (id > other.id && parent == other.parent)\n{\n    target = other.id;\n}");
+        compiler.QueueCodeReplace(bluecheekLike.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data),
+            "action_inherited();\nif (state == 0) { x += 0; }");
         ModObjects.Compile(compiler);
 
         FishSleep.Apply(data);
@@ -115,6 +121,8 @@ public sealed class FishSleepTests
         Assert.True(byName["ModAlarmClamp"].Covered);
         Assert.True(byName["Anglerfish"].Covered);
         Assert.True(byName["Chaw"].Covered);
+        Assert.True(byName["Babyjaw"].Covered);
+        Assert.True(byName["Bluecheek_Frog"].Covered);
 
         string anglerStep2 = ModObjects.Decompile(data, anglerLike.Events[(int)EventType.Step]
             .First(e => e.EventSubtype == (uint)EventSubtypeStep.EndStep).Actions[0].CodeId!);

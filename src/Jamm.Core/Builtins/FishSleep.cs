@@ -65,7 +65,7 @@ public static partial class FishSleep
     {
         "Chaw", "Skrimp", "Bombat", "Reddart_Frog", "Boom_Puff", "Primal_Turgeon",
         "Glio", "Buffalofish", "Gloombat", "Anglerfish", "Airy", "Duleoculi",
-        "Felish", "Spotter", "Ghast", "Tik_Tik", "Koin", "Vouval"
+        "Felish", "Spotter", "Ghast", "Tik_Tik", "Koin", "Vouval", "Bluecheek_Frog"
     };
 
     [GeneratedRegex(@"//[^\n]*|/\*[\s\S]*?\*/", RegexOptions.Compiled)]
@@ -83,7 +83,7 @@ public static partial class FishSleep
     [GeneratedRegex(@"\b(instance_create|instance_destroy|audio_play_sound|global\.)", RegexOptions.Compiled)]
     private static partial Regex UnsafeStepSideEffects();
 
-    [GeneratedRegex(@"^(?:if\s*\(\s*state\s*==\s*1\s*\)\s*\{[\s\S]*\}|//.*)$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^(?:if\s*\(\s*(?:state\s*==\s*1|id\s*>\s*other\.id\b[^)]*)\s*\)\s*\{[\s\S]*\}|//.*)$", RegexOptions.Compiled)]
     private static partial Regex ActiveStateOnlyCollision();
 
     [GeneratedRegex(@"\b(instance_create|instance_destroy|alarm\s*\[|state\s*=|global\s*\.)", RegexOptions.Compiled)]
