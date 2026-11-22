@@ -125,3 +125,12 @@ the runtime probes did not produce measurements. The currently measured bounded 
 application costs. The larger Fish Step and decor event shares are not measurements of pure offloadable work. There is
 therefore no measured first hotspot that clears the required gain threshold, and the worker probe did not demonstrate
 a functioning native round trip. Phase 3 remains unapproved and was not started.
+
+## Orchestrator review (Phase 2, final, 2026-11-22 07:00)
+No-go accepted. Both crashes are null-pointer accesses (write/read at `00000000`), which strongly suggests that
+`buffer_get_address` returns 0 in this GM 1.4 runner (the function is a later GameMaker feature), so the zero-copy
+buffer hand-off the design relies on is not available; passing data per call would make the per-call overhead the
+bottleneck. Independently of that, the only cleanly offloadable hotspot (FishLarge avoidance, 4.2–4.9 % of the loop)
+cannot reach the ≥ 5 % gate even with an infinitely fast kernel. Phase 3 is not started. If revisited later: first
+verify a plain scalar `external_call` (no buffers) to measure call overhead, and only reconsider once a fish-sleep /
+virtualisation result shows a larger pure-math share.
