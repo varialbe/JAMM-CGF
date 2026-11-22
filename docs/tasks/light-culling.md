@@ -19,3 +19,9 @@ visible frame (view rectangle + light radius + margin), without any visible diff
    (copy PNGs to `~/jamm-night/light-culling/`).
 Game runs serial via `~/jamm-night/bin/run.sh` (shared lock, wait; never kill other runs; on EXITED
 `~/jamm-night/bin/steam-restart.sh` and retry; delete `~/jamm-night/runs/*/game` copies). AGENTS.md applies.
+
+## Resume note (orchestrator, 2026-11-22 13:00)
+Paused at 04:05 for the Gemini quota; your WIP is commit `b579056`. Note: `~/jamm-night/PAUSE-GAMES` currently blocks
+all VPS game starts (the user tests on the PC with the same Steam account) – do not delete it and never start the game
+past the lock; `run.sh` simply waits. Continue with code, build and unit tests; queue in-game measurements, they run
+once the pause ends. Its ModMaker build output was removed during a disk cleanup, rebuild first.
