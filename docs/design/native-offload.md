@@ -99,3 +99,29 @@ Phase 3 depends on the live numbers, so Phase 1b runs first:
 Then update this document with the measured numbers and a go/no-go for Phase 3 by the criteria: per-call overhead
 small enough that one batched call per tick costs < 0.5 ms, and a first hotspot with a measured share large enough to
 win ≥ 5 % tick time. If the numbers say no, write that clearly – a negative result is acceptable.
+
+## Phase 1b results and decision (2026-11-22)
+
+The prepared probes were queued through `~/jamm-night/bin/run.sh`; no shared lock was bypassed. The initial matrix
+archive used the newer variadic `external_define` form and ended in a GameMaker code error (`Wrong number of
+arguments to external_define()`). The matrix was regenerated with the legacy fixed-arity helpers and run again. That
+attempt reached the game but timed out after Wine reported an unhandled write page fault at `00000000` (instruction
+address `764F1518`). The 2,000-distance worker probe also reached the game and timed out after an unhandled read page
+fault at `00000000` (instruction address `764F15C8`). Both runs showed the Wine debugger's program-error dialog and
+produced no probe CSV. The earlier worker launches exited during Steam initialization; Steam was restarted and the
+probe retried as directed. Disposable `runs/*/game` copies were removed after the runs.
+
+| Phase 1b measurement | Result |
+| --- | --- |
+| DLL load and native call on the legacy VM | Not verified: the fixed-arity matrix crashed before recording a result. |
+| `buffer_get_address` pointer round trip | Not verified: no round-trip value was recorded before the crash. |
+| Accepted external argument count | Not verified: the variadic attempt was rejected by GML, and the fixed-arity probe crashed without recording whether the eight-real call completed. |
+| 1 / 100 / 10,000 calls per tick, including µs/call and GML baseline | No measurements: the matrix produced no CSV. |
+| One worker round trip per tick, N=2,000 distances | No measurement: the worker probe crashed before recording a checksum or timing. |
+
+**Decision: no-go for Phase 3.** The call-cost gate (<0.5 ms for one batched call per tick) is unverified because
+the runtime probes did not produce measurements. The currently measured bounded `FishLarge` avoidance share is
+4.20–4.94% of loop time, below the review's ≥5% tick-time win gate even before snapshot, synchronization, and result
+application costs. The larger Fish Step and decor event shares are not measurements of pure offloadable work. There is
+therefore no measured first hotspot that clears the required gain threshold, and the worker probe did not demonstrate
+a functioning native round trip. Phase 3 remains unapproved and was not started.
