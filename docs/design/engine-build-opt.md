@@ -65,3 +65,16 @@ All passes must run automatically on every JAMM build and inspect the final merg
 2. Verify no gameplay or visual changes: same saved/in-memory gameplay behavior, screenshot parity, and `tools/vps/autoplay.sh` for each comparison pack.
 3. Report unprofiled `loop_us` mean/p50/p95 with repeated same-build controls, event call counts/times with instrumentation caveats, and a measured exclusive event-vs-runner split. A candidate that does not beat baseline variance is dropped.
 4. Confirm no duplicate work with DecorSleep or the parallel fish bytecode optimizer; preserve semantic-reference verification and archive read-back validation.
+
+## Orchestrator review (Phase 2, 2026-11-22 02:55)
+Approved in this order (each step its own commit, report numbers in `docs/reports/engine-build-opt.md`):
+1. **Empty/dead override pruning** (effective parent chains after merge, `Rock_Step_2`, `Rockbed_Step_0`, plus any other
+   archive-specific verified no-op) as an automatic final-merge pass with per-event diagnostics. Tests: synthetic
+   archives for override-exposes-parent, mod-added handlers, descendants; idempotence; vanilla/pub5/all7 builds.
+2. **Exclusive profiler attribution** (non-overlapping event vs runner split) in ModMaker so later steps can be judged.
+3. **`Water1` → tile prototype** with screenshot parity (dock, sonar, deepwater, camera edges) and autoplay.
+4. Depth guards only if step 2 shows recurring real `depth` writes with measurable cost; otherwise record "not
+   applicable" – the hypothesis is not confirmed by the source.
+Merge gate per step: zero warnings, tests green, unprofiled `loop_us` repeated pairs beating baseline variance,
+screenshot parity, autoplay without Code Error on pub5 and the personal package. Pass names/metadata coordinated with
+`exp/fish-step-micro` (no second bytecode optimiser).
