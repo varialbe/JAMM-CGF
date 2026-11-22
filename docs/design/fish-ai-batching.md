@@ -97,3 +97,15 @@ At this research point, `exp/native-offload` contains `docs/tasks/native-offload
 - Profile rows: `~/jamm-night/runs/vanilla-prof-dock/jamm_profile_dock.csv`, `heavy-prof-scripts-dock/jamm_profile_dock.csv`, and `fish-grid-baseline-all7-dock/jamm_profile_dock.csv`; aggregate context in `docs/reports/overnight-2026-11-19.md`, `docs/reports/fish-perf-grid.md`, and `origin/exp/fish-sleep:docs/reports/fish-experiments-2026-11-21.md`.
 - `Fish_Step_2` decompilation calls state handlers, `fish_check_trawler`, lure distance/reveal and boundary checks for every fish. `Chaw_Other_10` and `Snobfish_Other_10` are examples of species-specific nearest-target, random and lure behavior. `Cuddlefish_Other_10` demonstrates that a repeated family event still uses each instance's position and fish targets.
 - The measured FishGrid prototype was run serially in the existing fish-grid experiment and is documented in `docs/reports/fish-perf-grid.md`. At this research session's inspection time, the shared runner was occupied, so no new autoplay catch-rate/sonar comparison was launched. The state/RNG trace parity claim is limited to the exact completed captures listed in that report.
+
+## Orchestrator review (Phase 2, 2026-11-22 02:20)
+Accepted as a research result. The conclusion is well founded: no vanilla or inspected pack species has a provably
+pure shared calculation, so cross-instance result sharing is **not** implemented. The missing autoplay CSV
+prototype is acceptable because there is no eligible candidate to prototype.
+Follow-ups instead of a batching patch:
+1. Off-screen per-fish cadence ("reuse with tolerance", individually) goes into Fish Sleep (Hydrogen, `exp/fish-sleep`).
+2. Spatial-hash neighbour queries stay with the opt-in FishGrid experiment; re-measure on the all-7 dock with several
+   pairs before any default change.
+3. Hoisting/caching inside `Fish_Step_2` is covered by `exp/fish-step-micro` (VM optimiser, section 15).
+4. Fish virtualisation (`exp/fish-virtualization`) is the larger structural lever for far fish.
+No Hydrogen implementation job for batching itself.
