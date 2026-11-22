@@ -54,3 +54,60 @@ agents test too). On EXITED run `~/jamm-night/bin/steam-restart.sh` and retry. D
 copies after your runs (disk is tight). Before finishing: autoplay 20 min on the personal package with Fish Sleep
 on (`tools/vps/autoplay.sh`), `dotnet build -c Release` zero warnings, `dotnet test -c Release` green, report
 `docs/reports/fish-sleep.md` with numbers (fish_step ms before/after, sleeping count, all7 + personal) and screenshots.
+
+## Local round on the PC (orchestrator, 2026-11-22 13:05) — replaces the VPS continuation
+
+The VPS is paused for game runs. Work ONLY on this PC. Base: `3fc3b67`.
+
+### Local measurements (unprofiled, 30 s, 2 rounds, `~/jamm-bench/run.sh`, mm built from 3fc3b67)
+| Build | Scene | Off FPS / loop ms | On FPS / loop ms | Fish count off → on |
+| --- | --- | --- | --- | --- |
+| vanilla | dock | 48.1 / 20.2 | 63.8 / 14.8 | 956 → **1459** |
+| pub5 | dock | 11.9 / 82.2 | 24.8 / 38.8 | 2157 → 2034 |
+| all7 | dock | 16.6 / 58.4 | 18.4 / 52.3 | 2194 → 2199 |
+| all7+perf (DecorSleep on) | dock | 17.2 / 55.6 | 20.4 / 46.3 | 2198 → 2204 |
+Code installed but `FishSleep=0` in INI: no measurable overhead (vanilla 48.6 vs 47.5, all7 16.4 vs 16.1), fish count normal (932).
+Profile all7 dock with sleep on (`--profile-scripts`): `Fish_Step_2` is still called for all ~2200 fish and costs 49 ms/tick
+profiled (80 ms off) although ~85 % sleep (`Fish_Other_22` calls 1649 → 239 per tick). `FishLarge_Step_0` unchanged
+(6.8 ms, 474 calls; FishLarge mostly exempt as huge/boss). `jamm_sleep_should_sleep` 376 calls/tick. The end-of-run counter
+`asleep=` (3000) is larger than the fish count (2200) → the counter drifts.
+
+### Part A — Gemini Hydrogen (worktree `JAMM-CGF-fishsleep`, branch `exp/fish-sleep`): cheap sleeping path
+Goal: a sleeping fish must cost almost nothing per tick (target: close to the `--fish-mode nostep` exit).
+1. Asleep fast path as the FIRST statements of the Fish_Step_2 prefix: one instance read + one global compare, e.g.
+   `if (jamm_asleep) { if (global.jamm_sleep_tick < jamm_sleep_next) exit; ...full wake checks...; jamm_sleep_next = global.jamm_sleep_tick + N; }`
+   with staggering (N≈8, first slot offset by id) so wake checks spread over ticks. Wake latency must stay invisible: the
+   margin (≥ view width + 200) covers N ticks of camera/boat/lure travel; hooked/lure-targeted fish wake immediately
+   (the Lure/catch code paths must wake a fish directly, not wait for the next slot).
+2. Same staggering for awake fish outside the view: call `jamm_sleep_should_sleep()` only every N ticks per fish.
+3. Guards in subclass Step/Draw/Collision events: replace `variable_instance_exists(id, "jamm_asleep") && jamm_asleep`
+   with a plain `jamm_asleep` read where Fish Create guarantees the variable (keep the safe form only where a fish can run
+   before Fish_Create_0).
+4. Check whether huge/boss FishLarge species can be covered safely (at least those whose custom events are pure movement);
+   otherwise document why not.
+Prove: unit tests, then local bench (vanilla, pub5, all7 from `~/jamm-bench/builds/decor/` and the clean vanilla
+`~/.var/app/com.valvesoftware.Steam/data/JAMM-CGF/CGF-legacy-clean/data.win`), dock + deepwater, off/on, 2 rounds,
+plus one `--profile-scripts` all7 run. Report FPS/loop table in `docs/reports/fish-sleep.md`.
+
+### Part B — Codex Luna (worktree `JAMM-CGF-fishpop`, branch `exp/fish-sleep-pop`): population + counter
+1. Vanilla dock has 50 % MORE fish with sleep on (956 → 1459, already constant at capture start, seed 1337). Find the
+   cause (candidates: FishThinner `Other_10` culls via `instance_deactivate_object` and `kill_extras`/`fish_die`;
+   spawners/`fish_respawn`; predation; sleeping fish skipping their own death/despawn logic; `visible = false` on sleep)
+   and fix it so the population matches sleep-off within noise, without changing vanilla behaviour when sleep is off.
+2. Fix the `global.jamm_sleep_asleep_count` drift (fish destroyed or deactivated while asleep must decrement it, or count
+   it differently), so the bench line `asleep=` is the real number of sleeping fish.
+3. Tests for both. Prove with the local bench: vanilla and pub5 dock, off/on, compare `fish_count` and `asleep=`.
+Keep changes small and in separate functions where possible: Part A edits the same file (`FishSleep.cs`); the
+orchestrator merges both branches.
+
+### Rules for both
+- Models: Codex only `gpt-6-luna` (high), Gemini only `gemini-4-hydrogen-high`. Never Sol.
+- Games ONLY through `~/jamm-bench/run.sh <win> <label> <scene> [sec] [bench flags]` with `MM=<your worktree's
+  published jamm-modmaker.dll>` (publish to `~/jamm-bench/tools/mm-<yourname>/`). run.sh holds a global lock: only one
+  game at a time, wait for it. Never start the game any other way. Labels: Part A `fsa-*`, Part B `fsb-*`.
+- NO xdotool key/mouse input, NO desktop portals / screen sharing (they open GNOME remote-desktop popups).
+- Never touch `~/.var/app/com.valvesoftware.Steam/data/CGF-Personal`, compatdata `cgf-personal` or `343780`.
+- Disk is tight (16 GB free): run.sh deletes data.win after each run; do not keep extra .win copies.
+- TGE/PWB stay local: never commit them or images of them.
+- Run dotnet from the REAL path (`/run/media/varialbe/Festplatte 2/...`). `dotnet build -c Release` zero warnings,
+  `dotnet test -c Release` green. Commit on your branch; no merge, no push.
