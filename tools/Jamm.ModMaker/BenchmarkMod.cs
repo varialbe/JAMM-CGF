@@ -346,7 +346,7 @@ public static partial class BenchmarkMod
             jamm_b_step_samples = 0;
             jamm_b_fish_total = 0;
             jamm_b_summary_line = "";
-            {{(o.Profile ? "global.__jamm_prof_us = ds_map_create();\nglobal.__jamm_prof_n = ds_map_create();\nglobal.__jamm_prof_on = 0;" : "")}}
+            {{(o.Profile ? "global.__jamm_prof_us = ds_map_create();\nglobal.__jamm_prof_exclusive_us = ds_map_create();\nglobal.__jamm_prof_n = ds_map_create();\nglobal.__jamm_prof_event_starts = ds_list_create();\nglobal.__jamm_prof_event_children = ds_list_create();\nglobal.__jamm_prof_on = 0;" : "")}}
             """;
     }
 
@@ -966,7 +966,7 @@ public static partial class BenchmarkMod
                 jamm_b_prev_gui_t = jamm_b_now;
                 jamm_b_has_step = 0;
                 jamm_b_has_draw = 0;
-                {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_n);\nglobal.__jamm_prof_on = 1;" : "")}}
+                {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_exclusive_us);\nds_map_clear(global.__jamm_prof_n);\nds_list_clear(global.__jamm_prof_event_starts);\nds_list_clear(global.__jamm_prof_event_children);\nglobal.__jamm_prof_on = 1;" : "")}}
                 {{(trace ? FishTrace.Start : "")}}
                 jamm_b_state = 2;
             }
@@ -1193,9 +1193,9 @@ public static partial class BenchmarkMod
         var jamm_p_f = file_text_open_write(jamm_p_name);
         if (jamm_p_f >= 0)
         {
-            file_text_write_string(jamm_p_f, "# ticks=" + string(jamm_b_loop_n) + " loop_us_mean=" + string(round(jamm_b_l_mean)) + " overhead=get_timer_start_and_end_per_invocation; relative_cpu_only; draw_entries_render_affected");
+        file_text_write_string(jamm_p_f, "# ticks=" + string(jamm_b_loop_n) + " loop_us_mean=" + string(round(jamm_b_l_mean)) + " overhead=get_timer_start_and_end_per_invocation; exclusive_events=subtracts_nested_object_event_time; event_vs_runner_is_unattributed_residual; draw_entries_render_affected");
             file_text_writeln(jamm_p_f);
-            file_text_write_string(jamm_p_f, "code_entry,calls,total_us,us_per_tick,share_of_loop");
+        file_text_write_string(jamm_p_f, "code_entry,calls,total_us,inclusive_us_per_tick,exclusive_us,exclusive_us_per_tick,exclusive_share_of_loop");
             file_text_writeln(jamm_p_f);
             var jamm_p_keys = ds_list_create();
             var jamm_p_key = ds_map_find_first(global.__jamm_prof_us);
@@ -1204,7 +1204,8 @@ public static partial class BenchmarkMod
                 ds_list_add(jamm_p_keys, jamm_p_key);
                 jamm_p_key = ds_map_find_next(global.__jamm_prof_us, jamm_p_key);
             }
-            var jamm_p_i, jamm_p_j, jamm_p_left, jamm_p_right;
+        var jamm_p_i, jamm_p_j, jamm_p_left, jamm_p_right, jamm_p_exclusive_total;
+        jamm_p_exclusive_total = 0;
             for (jamm_p_i = 0; jamm_p_i < ds_list_size(jamm_p_keys); jamm_p_i += 1)
             {
                 for (jamm_p_j = jamm_p_i + 1; jamm_p_j < ds_list_size(jamm_p_keys); jamm_p_j += 1)
@@ -1223,7 +1224,27 @@ public static partial class BenchmarkMod
                 jamm_p_key = ds_list_find_value(jamm_p_keys, jamm_p_i);
                 var jamm_p_us = ds_map_find_value(global.__jamm_prof_us, jamm_p_key);
                 var jamm_p_calls = ds_map_find_value(global.__jamm_prof_n, jamm_p_key);
-                file_text_write_string(jamm_p_f, string(jamm_p_key) + "," + string(jamm_p_calls) + "," + string(round(jamm_p_us)) + "," + string(round(jamm_p_us / max(1, jamm_b_loop_n))) + "," + string(jamm_p_us / max(1, jamm_b_loop_sum)));
+                var jamm_p_exclusive = ds_map_find_value(global.__jamm_prof_exclusive_us, jamm_p_key);
+                if (!is_undefined(jamm_p_exclusive)) jamm_p_exclusive_total += jamm_p_exclusive;
+            }
+            file_text_write_string(jamm_p_f, "# exclusive_event_us_per_tick=" + string(round(jamm_p_exclusive_total / max(1, jamm_b_loop_n))) + " unattributed_runner_us_per_tick=" + string(round(max(0, jamm_b_l_mean - jamm_p_exclusive_total / max(1, jamm_b_loop_n)))));
+            file_text_writeln(jamm_p_f);
+            for (jamm_p_i = 0; jamm_p_i < ds_list_size(jamm_p_keys); jamm_p_i += 1)
+            {
+                jamm_p_key = ds_list_find_value(jamm_p_keys, jamm_p_i);
+                var jamm_p_us = ds_map_find_value(global.__jamm_prof_us, jamm_p_key);
+                var jamm_p_calls = ds_map_find_value(global.__jamm_prof_n, jamm_p_key);
+                var jamm_p_exclusive = ds_map_find_value(global.__jamm_prof_exclusive_us, jamm_p_key);
+                var jamm_p_exclusive_us = "n/a";
+                var jamm_p_exclusive_tick = "n/a";
+                var jamm_p_exclusive_share = "n/a";
+                if (!is_undefined(jamm_p_exclusive))
+                {
+                    jamm_p_exclusive_us = string(round(jamm_p_exclusive));
+                    jamm_p_exclusive_tick = string(round(jamm_p_exclusive / max(1, jamm_b_loop_n)));
+                    jamm_p_exclusive_share = string(jamm_p_exclusive / max(1, jamm_b_loop_sum));
+                }
+                file_text_write_string(jamm_p_f, string(jamm_p_key) + "," + string(jamm_p_calls) + "," + string(round(jamm_p_us)) + "," + string(round(jamm_p_us / max(1, jamm_b_loop_n))) + "," + jamm_p_exclusive_us + "," + jamm_p_exclusive_tick + "," + jamm_p_exclusive_share);
                 file_text_writeln(jamm_p_f);
             }
             ds_list_destroy(jamm_p_keys);

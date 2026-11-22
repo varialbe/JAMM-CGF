@@ -205,12 +205,16 @@ public class BenchmarkTests
         Assert.Contains("__jamm_prof_original_", eventStub);
         Assert.Contains("ds_map_set(global.__jamm_prof_us", eventStub);
         Assert.Contains("get_timer() - __jamm_prof_start", eventStub);
+        Assert.Contains("global.__jamm_prof_event_starts", eventStub);
+        Assert.Contains("__jamm_prof_elapsed - __jamm_prof_child_us", eventStub);
+        Assert.Contains("global.__jamm_prof_exclusive_us", eventStub);
 
         var wrappedScript = data.Scripts.Single(s => s.Name.Content == "profile_test").Code;
         string scriptStub = ModObjects.Decompile(data, wrappedScript);
         Assert.Contains("switch (argument_count)", scriptStub);
         Assert.Contains("return __jamm_prof_result", scriptStub);
         Assert.Contains("ds_map_set(global.__jamm_prof_n", scriptStub);
+        Assert.DoesNotContain("__jamm_prof_event_starts", scriptStub);
 
         string benchCreate = Code(data, "Create_0");
         string drawEnd = Code(data, "Draw_75");
@@ -218,7 +222,9 @@ public class BenchmarkTests
         Assert.Contains("global.__jamm_prof_on = 1", drawEnd);
         Assert.Contains("global.__jamm_prof_on = 0", drawEnd);
         Assert.Contains("jamm_profile_", drawEnd);
-        Assert.Contains("code_entry,calls,total_us,us_per_tick,share_of_loop", drawEnd);
+        Assert.Contains("code_entry,calls,total_us,inclusive_us_per_tick,exclusive_us,exclusive_us_per_tick,exclusive_share_of_loop", drawEnd);
+        Assert.Contains("exclusive_event_us_per_tick", drawEnd);
+        Assert.Contains("unattributed_runner_us_per_tick", drawEnd);
         Assert.Contains("get_timer_start_and_end_per_invocation", drawEnd);
     }
 

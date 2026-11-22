@@ -66,12 +66,14 @@ All scenes run inside `NewWorld` with `random_set_seed(Seed)` (default `1337`), 
 | `--boat-slot <n>` | `BoatSlot` | `7` | `BoatData` slot used in `deepwater` (clamped to `[1, nItems - 1]`) |
 | `--deep-sonar` | `DeepSonar` | `0` (`false`) | Also enable `SonarPanelAdvanced` in `sonar` scene |
 | `--show-hud` | `ShowHud` | `0` (`false`) | Show status box outside capture (suppressed during capture) |
-| `--profile` / `--profile-scripts` | | Off | Record inclusive event timings, with optional script timings |
+| `--profile` / `--profile-scripts` | | Off | Record inclusive event timings and non-overlapping exclusive object-event timings, with optional script timings |
 | `--fish-grid` | `FishGrid` in `[Perf]` | Off unless Perf is already installed | Install the guarded grid in a benchmark copy |
 | `--trace-fish <ticks>` | | Off | Record one fish state hash per simulation tick after scene setup |
 | `--fish-mode <mode>` | `FishMode` | `full` | `full`, `nostep`, `nodraw`, or `deactivate` (applied after warmup) |
 | `--fish-cap <n>` | `FishCap` | `-1` (off) | After warmup, destroy excess fish down to `n` (keeping hooked/in-view) and freeze spawners/thinners |
 | `--fish-scale <k>` | `FishScale` | `1` | Duplicate ordinary fish before warmup (`k`x multiplier, e.g. `2`, `1..20`) |
+
+Profile CSV rows keep `total_us` and `inclusive_us_per_tick`. Object-event rows also include exclusive time, which subtracts nested object-event wrappers while keeping called scripts inside their caller's time. Script rows have `n/a` for exclusive columns. The summary's `exclusive_event_us_per_tick` is the sum of object-event exclusive time; `unattributed_runner_us_per_tick` is the nonnegative remainder against `loop_us`. This remainder includes engine work and any uninstrumented work, so it is an attribution residual rather than a direct engine timer. Entry wrappers and `get_timer()` add capture overhead; use these figures to compare attribution, not as unprofiled performance results.
 
 ## Fish isolation and scaling experiments
 
