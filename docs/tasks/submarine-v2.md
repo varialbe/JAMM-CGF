@@ -41,3 +41,15 @@ screenshots `~/jamm-night/submarine-v2/jamm_submarine_depth_2.png` and `jamm_sub
    catch popup, Fishalog, pause/save menu) and fix those too.
 3. Re-run `--scene submarine` solo + personal, update the report and screenshots (before/after crop of the HUD).
 `dotnet build -c Release` zero warnings, `dotnet test -c Release` green. Commit on this branch; do not push.
+
+## Round 3 (orchestrator review of 6ff5290, 2026-11-22 12:15)
+The HUD fix works (see `hud_before_after_depth_2.png`) – thanks. One blocking issue:
+`ZoomUiRuntime.Apply` runs for every archive that has `Camera` and `Girl`, i.e. **every** CGF build, and patches ~20
+vanilla HUD/menu objects even when Submarine is not part of the build. Builds without the feature must stay
+byte-identical to before.
+1. Install `ZoomUiRuntime` only when a mod in the build actually requests view zoom (Submarine declares it, e.g. via
+   a ModKit flag/capability), never by default.
+2. Add tests: (a) vanilla build and (b) a build with another ModKit mod (e.g. weather-pack) produce byte-identical
+   code entries for all patched objects compared to before this branch; (c) Submarine build still gets the patches.
+3. `dotnet build -c Release` zero warnings, `dotnet test -c Release` green; re-run `--scene submarine` solo once.
+Commit on this branch; do not push.
