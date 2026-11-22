@@ -1,4 +1,5 @@
 var swimmer = argument0;
+if (!instance_exists(swimmer)) return 0;
 var advanced = false;
 var adv_obj = asset_get_index("SonarPanelAdvanced");
 if (adv_obj >= 0 && instance_exists(adv_obj))
@@ -46,3 +47,4 @@ with (swimmer)
         s5 = (size + 0.5) / 3.5;
     }
 }
+return 0;

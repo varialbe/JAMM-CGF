@@ -15,9 +15,10 @@ internal static class StressScene
         if (duration is not null && (!int.TryParse(duration, NumberStyles.None, CultureInfo.InvariantCulture, out seconds)
             || seconds < 180 || seconds > 3600))
             throw new ArgumentException("Set the stress duration to a whole number of seconds from 180 to 3600.");
-        foreach (string name in new[] { "obj_jamm_weather", "obj_jamm_perf", "Bo", "Gallina", "Skrimp", "Cowfish", "Grumper", "Fish" })
+        bool hasPerf = data.GameObjects.ByName("obj_jamm_perf") is not null;
+        foreach (string name in new[] { "obj_jamm_weather", "Bo", "Gallina", "Skrimp", "Cowfish", "Grumper", "Fish" })
             if (data.GameObjects.ByName(name) is null)
-                throw new InvalidDataException($"The stress scene needs '{name}'. Merge Weather Pack and JAMM Perf before instrumenting.");
+                throw new InvalidDataException($"The stress scene needs '{name}'. Merge Weather Pack and the fish content package before instrumenting.");
 
         var probe = ModObjects.Create(data, "obj_jamm_bench_stress", persistent: false);
         var compiler = new CompileGroup(data);
@@ -45,7 +46,7 @@ internal static class StressScene
         Queue(EventType.Step, (uint)EventSubtypeStep.BeginStep, $$"""
             if (!instance_exists(SaveManager) || !instance_exists(Girl) || !instance_exists(Lure)) exit;
             SaveManager.saving_locked = 1;
-            if (!SaveManager.loaded || SaveManager.loadingFish || !instance_exists(obj_jamm_weather) || !instance_exists(obj_jamm_perf)) exit;
+            if (!SaveManager.loaded || SaveManager.loadingFish || !instance_exists(obj_jamm_weather) {{(hasPerf ? "|| !instance_exists(obj_jamm_perf)" : "")}}) exit;
             if (stress_start < 0)
             {
                 {{dismiss}}
@@ -54,9 +55,7 @@ internal static class StressScene
                 Girl.level = max(Girl.level, 25);
                 Girl.boatMessageShown = 1;
                 Girl.startMessageShown = 1;
-                global.jamm_perf_mode = true;
-                global.jamm_perf_interval = 4;
-                stress_skip_start = global.jamm_perf_skipped;
+                {{(hasPerf ? "global.jamm_perf_mode = true;\nglobal.jamm_perf_interval = 4;\nstress_skip_start = global.jamm_perf_skipped;" : "stress_skip_start = 0;")}}
                 stress_initial_bo = instance_number(Bo);
                 // Keep a control Bo outside the weather's surface band for repeated deactivate/activate checks.
                 with (instance_create(1600, 2300, Bo)) base_lunge_mod = 1;
@@ -94,12 +93,14 @@ internal static class StressScene
             if (current_time - stress_start >= {{(seconds * 1000).ToString(CultureInfo.InvariantCulture)}} && stress_restore_at == 0)
             {
                 var file = file_text_open_write("{{Report}}");
-                file_text_write_string(file, "elapsed_ms,cycles,school_bites,initial_bo,bo_absent,reactivations,perf,perf_skipped,fish,weather");
+                file_text_write_string(file, "elapsed_ms,cycles,school_bites,initial_bo,bo_absent,reactivations,perf_hooks,perf,perf_skipped,fish,weather");
                 file_text_writeln(file);
                 file_text_write_string(file, string(current_time - stress_start) + "," + string(stress_cycles) + ","
                     + string(stress_hits) + "," + string(stress_initial_bo) + ","
-                    + string(stress_unavailable) + "," + string(stress_reactivated) + "," + string(global.jamm_perf_mode)
-                    + "," + string(global.jamm_perf_skipped - stress_skip_start) + "," + string(instance_number(Fish))
+                    + string(stress_unavailable) + "," + string(stress_reactivated) + "," + string({{(hasPerf ? "1" : "0")}})
+                    + "," + {{(hasPerf ? "string(global.jamm_perf_mode)" : "\"0\"")}}
+                    + "," + {{(hasPerf ? "string(global.jamm_perf_skipped - stress_skip_start)" : "\"0\"")}}
+                    + "," + string(instance_number(Fish))
                     + "," + jamm_weather_current());
                 file_text_writeln(file);
                 file_text_close(file);
