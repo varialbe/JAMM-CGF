@@ -48,6 +48,20 @@ public readonly record struct FishVirtualizationState(
 /// <summary>Deterministic record helpers and the isolated transition microbenchmark.</summary>
 public static class FishVirtualizationPrototype
 {
+    internal const string SpawnGarderFixtureGml = """
+        var rng = random_get_seed();
+        random_set_seed(jamm_b_seed + 2027);
+        var spawned = 0;
+        for (var i = 0; i < argument0; i += 1)
+        {
+            instance_create(100000 + (i * 64), 100000, Garder);
+            spawned += 1;
+        }
+        if (instance_exists(Rod)) with (Rod) event_user(0);
+        random_set_seed(rng);
+        return spawned;
+        """;
+
     internal const string VirtualizeGarderGml = """
         jamm_b_virtual_limit = max(0, round(argument0));
         jamm_b_virtualized_count = 0;

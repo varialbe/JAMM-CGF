@@ -159,6 +159,7 @@ public static class Program
         int fishCap = -1;
         double fishScale = 1.0;
         int fishVirtualizationCount = 0;
+        int fishVirtualizationFixtureCount = 0;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -200,11 +201,12 @@ public static class Program
                         throw new ArgumentException("--fish-scale must be >= 1.");
                     break;
                 case "--fish-virtualization-count": fishVirtualizationCount = ParseInt(RequireValue(args, ref i, arg), arg); break;
+                case "--fish-virtualization-fixture-count": fishVirtualizationFixtureCount = ParseInt(RequireValue(args, ref i, arg), arg); break;
                 default: throw new ArgumentException($"Unknown bench option '{arg}'.");
             }
         }
 
-        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot, fishMode, fishCap, fishScale, fishVirtualizationCount);
+        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot, fishMode, fishCap, fishScale, fishVirtualizationCount, fishVirtualizationFixtureCount);
         BenchmarkMod.ValidateOptions(options);
         return options;
     }

@@ -42,6 +42,22 @@ public sealed class FishVirtualizationPrototypeTests
     {
         Assert.Equal(0, Jamm.ModMaker.Program.ParseBenchOptions([]).FishVirtualizationCount);
         Assert.Equal(100, Jamm.ModMaker.Program.ParseBenchOptions(["--fish-virtualization-count", "100"]).FishVirtualizationCount);
+        Assert.Equal(0, Jamm.ModMaker.Program.ParseBenchOptions([]).FishVirtualizationFixtureCount);
+        Assert.Equal(300, Jamm.ModMaker.Program.ParseBenchOptions(["--fish-virtualization-fixture-count", "300"]).FishVirtualizationFixtureCount);
+    }
+
+    [Fact]
+    public void ControlledGarderFixtureUsesASeedAndRestoresGlobalRandomState()
+    {
+        var script = typeof(FishVirtualizationPrototype)
+            .GetField("SpawnGarderFixtureGml", BindingFlags.NonPublic | BindingFlags.Static)
+            ?.GetRawConstantValue() as string;
+
+        Assert.NotNull(script);
+        Assert.Contains("random_set_seed(jamm_b_seed + 2027)", script);
+        Assert.Contains("random_set_seed(rng)", script);
+        Assert.Contains("with (Rod) event_user(0)", script);
+        Assert.Contains("100000 + (i * 64)", script);
     }
 
     [Fact]
