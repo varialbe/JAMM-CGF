@@ -1,6 +1,7 @@
 /// command(arguments) is shared by JAMM Console and the benchmark scene.
 var harbor = instance_find(jmk_harbor_town_object_harbor, 0);
-if (!instance_exists(harbor) || !harbor.harbor_ready || !instance_exists(Girl) || !instance_exists(SaveManager))
+if (!instance_exists(harbor) || !harbor.harbor_ready || !instance_exists(Girl) || !instance_exists(SaveManager)
+    || !variable_instance_exists(SaveManager.id, "loaded") || !SaveManager.loaded)
     return "Load a fishing save before using harbor.";
 
 var input = argument0;

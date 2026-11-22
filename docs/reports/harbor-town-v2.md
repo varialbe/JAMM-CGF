@@ -31,11 +31,10 @@ solo reached the fishing scene and recorded, but the Harbor bench CSV contained 
 non-persistent and was destroyed during the menu-to-fishing-room transition. Commit `f2746e9` makes it persistent.
 An interactive solo retry again reached the fishing scene without a Code Error, but recorded only the CSV header.
 
-The latest personal retry used the merged post-merge archive and a window recovery watcher. The game process stayed
-alive for the run, but the game window rendered black. The diagnostic sample was `room=0; menu=0; save=1; girl=1;
-harbor=1; loaded=0; harbor_ready=0`, and the CSV remained header-only. `run.sh` reported `RECORDED` because a
-header-only CSV was present; this is not counted as successful verification. A further solo retry is queued behind
-the shared `game-run.lock`.
+The latest earlier personal retry used the merged post-merge archive and a window recovery watcher. The game process
+stayed alive for the run, but the game window rendered black. Its diagnostic sample was `room=0; menu=0; save=1;
+girl=1; harbor=1; loaded=0; harbor_ready=0`, and the CSV remained header-only. `run.sh` reported `RECORDED` because
+a header-only CSV was present; this is not counted as successful verification.
 
 The requested screenshots of Research Station stages, titles, and dock decorations were not captured because neither
 in-game run reached the Harbor scene. Diagnostic captures and the latest personal CSV/probe are in
@@ -45,6 +44,14 @@ in-game run reached the Harbor scene. Diagnostic captures and the latest persona
 
 - `dotnet build -c Release`: passed, 0 warnings and 0 errors.
 - `dotnet test -c Release`: passed, 651 tests; 17 opt-in real-file tests skipped.
-- A fresh solo retry using `harbor-town-v2-source-postmerge.win` and this worktree's ModMaker DLL is queued in
-  `~/jamm-night/bin/run.sh`. It has not launched because the shared lock is held by a suspended submarine run; no
-  Harbor output or screenshots have been produced by this retry yet.
+- ModMaker Harbor scene compiled into a throwaway archive successfully.
+- `harbor-town-v2-solo-seed2` completed as `RECORDED`, but its CSV contained only the header. The 60 second capture
+  showed the fishing room with a Wine `steamwebhelper` error dialog, not Harbor features.
+- `harbor-town-v2-personal-seed2` also completed as `RECORDED` with only the CSV header. Its 60 second capture was
+  black with the Wine `steamwebhelper` error dialog; it produced no feature screenshots and no Harbor Code Error.
+- Updated the bench fixture to run without a loaded save, create the Harbor instance when missing, force its menu
+  visible after normal Step events, and log room/player/save/Harbor state while waiting.
+- The first solo run with this fixture exited during `SteamAPI_InitSafe`. Its logs were preserved externally, its
+  `game` copy was deleted, and a Steam restart plus retry is queued through the shared lock. A personal run using
+  the diagnostic fixture is also queued.
+- Diagnostic captures and CSVs remain under `~/jamm-night/harbor-town-v2/`; none are game files in the repository.

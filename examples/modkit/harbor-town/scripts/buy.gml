@@ -1,6 +1,6 @@
 /// buy(building)
 var building = argument0;
-if (!harbor_ready || !instance_exists(SaveManager) || SaveManager.saving_locked)
+if (!harbor_ready || !instance_exists(SaveManager) || !SaveManager.loaded || SaveManager.saving_locked)
     return "Wait for the save slot to finish loading.";
 var level = harbor_level[building];
 var price = jmk_harbor_town_script_cost(harbor_base[building], level);

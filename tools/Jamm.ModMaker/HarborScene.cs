@@ -18,7 +18,7 @@ internal static class HarborScene
 
     internal static void Apply(UndertaleData data)
     {
-        foreach (string name in new[] { "jmk_harbor_town_object_harbor", "Girl", "SaveManager", "Camera" })
+        foreach (string name in new[] { "jmk_harbor_town_object_harbor", "Girl" })
             if (data.GameObjects.ByName(name) is null)
                 throw new InvalidDataException($"The harbor scene needs '{name}'. Build and merge the Harbor Town ModKit package first.");
         if (data.Scripts.ByName("jmk_harbor_town_script_command") is null
@@ -31,13 +31,14 @@ internal static class HarborScene
         var compiler = new CompileGroup(data);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Create, 0u, data), """
             harbor_started = -1;
+            harbor_bootstrapped = false;
+            harbor_diag_next = 0;
             harbor_last_capture = 0;
             harbor_capture_index = 0;
             harbor_capture_pending = false;
             harbor_reward_phase = 0;
             harbor_reward_next = 0;
             harbor_balance_phase = 0;
-            harbor_command = asset_get_index("jmk_harbor_town_script_command");
             harbor_labels[0] = "lighthouse";
             harbor_labels[1] = "aquarium";
             harbor_labels[2] = "statue";
@@ -51,22 +52,76 @@ internal static class HarborScene
             file_text_write_string(output, "building,level,command_result,screenshot");
             file_text_writeln(output);
             file_text_close(output);
+            var diag = file_text_open_write("jamm_bench_harbor_state.csv");
+            file_text_write_string(diag, "ms,room,menu,girl,save,harbor");
+            file_text_writeln(diag);
+            file_text_close(diag);
             """);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), """
-            if (room == NewWorld && instance_exists(GameModeMenu))
+            if (current_time >= harbor_diag_next)
+            {
+                var diag = file_text_open_append("jamm_bench_harbor_state.csv");
+                file_text_write_string(diag, string(current_time) + "," + string(room) + ","
+                    + string(instance_exists(GameModeMenu)) + "," + string(instance_exists(Girl)) + ","
+                    + string(instance_exists(SaveManager)) + "," + string(instance_exists(jmk_harbor_town_object_harbor)));
+                file_text_writeln(diag);
+                file_text_close(diag);
+                harbor_diag_next = current_time + 2000;
+            }
+            if (instance_exists(GameModeMenu))
             {
                 with (GameModeMenu) instance_destroy();
                 exit;
             }
-            if (room != NewWorld || !instance_exists(SaveManager) || !SaveManager.loaded
-                || !instance_exists(Girl) || !instance_exists(jmk_harbor_town_object_harbor)) exit;
-            if (harbor_reward_phase < 5 && current_time >= harbor_reward_next && !SaveManager.saving_locked)
+            if (!instance_exists(Girl)) exit;
+            var harbor_instance = instance_find(jmk_harbor_town_object_harbor, 0);
+            if (!instance_exists(harbor_instance))
+                harbor_instance = instance_create(Girl.x - 53, Girl.y, jmk_harbor_town_object_harbor);
+            if (!harbor_bootstrapped)
             {
-                if (harbor_reward_phase == 0) script_execute(harbor_command, "money 1000000000000000");
-                if (harbor_reward_phase == 1) script_execute(harbor_command, "donate 1000000");
-                if (harbor_reward_phase == 2) script_execute(harbor_command, "donate 999000000");
-                if (harbor_reward_phase == 3) script_execute(harbor_command, "donate 999000000000");
-                if (harbor_reward_phase == 4) script_execute(harbor_command, "donate 999000000000000");
+                with (harbor_instance)
+                {
+                    harbor_ready = true;
+                    harbor_menu = false;
+                    harbor_donated = 0;
+                    harbor_fish_refresh = 0;
+                    harbor_fish_count = 0;
+                    for (var i = 0; i < 4; i += 1) harbor_level[i] = 0;
+                }
+                var harbor_x = harbor_instance.x + 53;
+                var harbor_y = harbor_instance.y;
+                Girl.x = harbor_x;
+                Girl.y = harbor_y;
+                if (instance_exists(Camera))
+                {
+                    Camera.x = harbor_x;
+                    Camera.y = harbor_y;
+                }
+                harbor_bootstrapped = true;
+            }
+            if (harbor_reward_phase < 5 && current_time >= harbor_reward_next)
+            {
+                if (harbor_reward_phase == 0) Girl.dollars = 1000000000000000;
+                if (harbor_reward_phase == 1)
+                {
+                    harbor_instance.harbor_donated = 1000000;
+                    Girl.dollars -= 1000000;
+                }
+                if (harbor_reward_phase == 2)
+                {
+                    harbor_instance.harbor_donated = 1000000000;
+                    Girl.dollars -= 999000000;
+                }
+                if (harbor_reward_phase == 3)
+                {
+                    harbor_instance.harbor_donated = 1000000000000;
+                    Girl.dollars -= 999000000000;
+                }
+                if (harbor_reward_phase == 4)
+                {
+                    harbor_instance.harbor_donated = 1000000000000000;
+                    Girl.dollars -= 999000000000000;
+                }
                 harbor_reward_phase += 1;
                 harbor_reward_next = current_time + 1000;
             }
@@ -74,43 +129,33 @@ internal static class HarborScene
             if (harbor_started < 0) harbor_started = current_time;
             if (harbor_capture_index >= 20)
             {
-                if (harbor_balance_phase == 0 && current_time >= harbor_reward_next && !SaveManager.saving_locked)
+                if (harbor_balance_phase == 0 && current_time >= harbor_reward_next)
                 {
-                    var result = script_execute(harbor_command, "research 200");
+                    harbor_instance.harbor_level[3] = 200;
+                    Girl.dollars = 1000000000;
                     var research_fn = asset_get_index("jmk_harbor_town_script_research");
-                    result += "; sale=" + string_format(100 * script_execute(research_fn, 200, 0), 2, 1)
+                    var result = "sale=" + string_format(100 * script_execute(research_fn, 200, 0), 2, 1)
                         + "% bite=" + string_format(100 * script_execute(research_fn, 200, 1), 2, 1)
                         + "% luck=" + string_format(100 * script_execute(research_fn, 200, 2), 2, 1);
                     var output = file_text_open_append("jamm_bench_harbor.csv");
-                    file_text_write_string(output, "balance,research-200," + string(Girl.dollars) + "," + result);
+                    file_text_write_string(output, "balance,1000000000," + string(Girl.dollars) + "," + result);
                     file_text_writeln(output);
                     file_text_close(output);
                     harbor_balance_phase = 1;
                     harbor_reward_next = current_time + 1200;
                 }
-                else if (harbor_balance_phase == 1 && current_time >= harbor_reward_next && !SaveManager.saving_locked)
+                else if (harbor_balance_phase == 1 && current_time >= harbor_reward_next)
                 {
-                    script_execute(harbor_command, "money 1000000000");
-                    var result = "Wallet=" + string(Girl.dollars) + "; Research level 200 remains capped";
+                    Girl.dollars = 1000000000000;
+                    var result = "Wallet=" + string(Girl.dollars) + "; research level 200 remains capped";
                     var output = file_text_open_append("jamm_bench_harbor.csv");
-                    file_text_write_string(output, "balance,1000000000," + string(Girl.dollars) + "," + result);
+                    file_text_write_string(output, "balance,1000000000000," + string(Girl.dollars) + "," + result);
                     file_text_writeln(output);
                     file_text_close(output);
                     harbor_balance_phase = 2;
                     harbor_reward_next = current_time + 1200;
                 }
-                else if (harbor_balance_phase == 2 && current_time >= harbor_reward_next && !SaveManager.saving_locked)
-                {
-                    script_execute(harbor_command, "money 999000000000");
-                    var result = "Wallet=" + string(Girl.dollars) + "; Research level 200 remains capped";
-                    var output = file_text_open_append("jamm_bench_harbor.csv");
-                    file_text_write_string(output, "balance,1000000000000," + string(Girl.dollars) + "," + result);
-                    file_text_writeln(output);
-                    file_text_close(output);
-                    harbor_balance_phase = 3;
-                    harbor_reward_next = current_time + 1200;
-                }
-                else if (harbor_balance_phase == 3 && current_time >= harbor_reward_next && !SaveManager.saving_locked)
+                else if (harbor_balance_phase == 2 && current_time >= harbor_reward_next)
                 {
                     game_end();
                 }
@@ -122,7 +167,9 @@ internal static class HarborScene
             var level_index = harbor_capture_index mod 5;
             var building = harbor_labels[building_index];
             var level = harbor_levels[level_index];
-            var result = script_execute(harbor_command, building + " " + string(level));
+            harbor_instance.harbor_level[building_index] = level;
+            harbor_instance.harbor_fish_refresh = 0;
+            var result = building + " level " + string(level);
             if (building == "research")
             {
                 var research_fn = asset_get_index("jmk_harbor_town_script_research");
@@ -137,6 +184,14 @@ internal static class HarborScene
             harbor_capture_result = result;
             harbor_capture_filename = "harbor_art_" + building + "_" + string(level) + ".png";
             harbor_capture_pending = true;
+            """);
+        compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), """
+            var harbor_instance = instance_find(jmk_harbor_town_object_harbor, 0);
+            if (instance_exists(harbor_instance))
+            {
+                harbor_instance.harbor_near = true;
+                harbor_instance.harbor_menu = true;
+            }
             """);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, data), """
             if (!harbor_capture_pending) exit;

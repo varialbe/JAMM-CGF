@@ -1,6 +1,6 @@
 /// donate(amount): apply money to the next cumulative town milestone.
 var amount = argument0;
-if (!harbor_ready || !instance_exists(SaveManager) || SaveManager.saving_locked)
+if (!harbor_ready || !instance_exists(SaveManager) || !SaveManager.loaded || SaveManager.saving_locked)
     return "Wait for the save slot to finish loading.";
 if (amount <= 0 || amount > Girl.dollars) return "Donation must be affordable and greater than zero.";
 var next = 1000000;
