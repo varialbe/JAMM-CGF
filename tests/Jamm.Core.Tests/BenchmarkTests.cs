@@ -502,6 +502,59 @@ public class BenchmarkTests
     }
 
     [Fact]
+    public void FishCapGuardsBishopEscortTargetFumerAndCaval()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var fish = data.GameObjects.ByName("Fish")!;
+        var fishMinor = ModObjects.Create(data, "FishMinorPiece", persistent: false);
+        fishMinor.ParentId = fish;
+        var bishop = ModObjects.Create(data, "Bishop", persistent: false);
+        bishop.ParentId = fishMinor;
+        var fumer = ModObjects.Create(data, "Fumer", persistent: false);
+        fumer.ParentId = fishMinor;
+        var caval = ModObjects.Create(data, "Caval", persistent: false);
+        caval.ParentId = fishMinor;
+
+        var compiler = new CompileGroup(data);
+        foreach (string sname in new[] { "fish_king_hide", "fish_king_special", "fish_elast_towards_target", "fish_lunge", "fish_shove_schoolmates" })
+        {
+            var sc = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + sname);
+            data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(sname), Code = sc });
+            compiler.QueueCodeReplace(sc, "return 0;");
+        }
+        compiler.QueueCodeReplace(bishop.EventHandlerFor(EventType.Other, 10u, data), """
+            fish_king_hide();
+            if (escort_target.state == 3)
+            {
+                target_x = Lure.x;
+            }
+            """);
+        compiler.QueueCodeReplace(fumer.EventHandlerFor(EventType.Other, 18u, data), """
+            fish_king_special();
+            target = instance_nearest(x, y, FishMinorPiece);
+            target_x = target.x;
+            target_y = target.y;
+            """);
+        compiler.QueueCodeReplace(caval.EventHandlerFor(EventType.Other, 10u, data), """
+            fish_king_hide();
+            target_x = pather2.x;
+            target_y = pather2.y;
+            """);
+        ModObjects.Compile(compiler);
+
+        BenchmarkMod.Apply(data, new BenchmarkOptions(FishCap: 500));
+
+        string bishopOut = ModObjects.Decompile(data, bishop.EventHandlerFor(EventType.Other, 10u, data));
+        string fumerOut = ModObjects.Decompile(data, fumer.EventHandlerFor(EventType.Other, 18u, data));
+        string cavalOut = ModObjects.Decompile(data, caval.EventHandlerFor(EventType.Other, 10u, data));
+
+        Assert.Contains("variable_instance_exists(id, \"escort_target\")", bishopOut);
+        Assert.Contains("instance_exists(escort_target)", bishopOut);
+        Assert.Contains("instance_exists(pather2)", cavalOut);
+        Assert.True(fumerOut.Contains("jamm_iv_x(target)", StringComparison.Ordinal) || fumerOut.Contains("instance_exists(target)", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void FishExperimentsInstrumentGenericHierarchyGuardsSpawnersAndExternalRefs()
     {
         using var data = CreateSyntheticGame(includeOptionalObjects: true);

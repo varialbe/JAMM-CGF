@@ -55,7 +55,7 @@ public sealed class FishSleepTests
         compiler.QueueCodeReplace(customStep.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data), "action_inherited(); x += 1;");
         compiler.QueueCodeReplace(customAlarm.EventHandlerFor(EventType.Alarm, 0u, data), "state = 0;");
         compiler.QueueCodeReplace(customDestroy.EventHandlerFor(EventType.Destroy, 0u, data), "score += 1;");
-        compiler.QueueCodeReplace(customOther.EventHandlerFor(EventType.Other, 16u, data), "custom_var = 1;");
+        compiler.QueueCodeReplace(customOther.EventHandlerFor(EventType.Other, 20u, data), "custom_var = 1;");
         compiler.QueueCodeReplace(gameplayDraw.EventHandlerFor(EventType.Draw, 0u, data), "if (x > 0) state = 2; draw_self();");
         ModObjects.Compile(compiler);
 
@@ -76,6 +76,60 @@ public sealed class FishSleepTests
         Assert.False(byName["Kingfish"].Covered);
         Assert.False(byName["ModSiloFish"].Covered);
         Assert.False(byName["ModAreaFish"].Covered);
+    }
+
+    [Fact]
+    public void EligibilityCoversFishStateOtherEventsAlarmClampSafeStepsAndGuardsEndStepAfterInherited()
+    {
+        using var data = CreateSyntheticPerfArchive(out _);
+        var fishSmall = data.GameObjects.ByName("FishSmall")!;
+        var fishLarge = data.GameObjects.ByName("FishLarge")!;
+        var piercer = ModObjects.Create(data, "Piercer", false); piercer.ParentId = fishLarge;
+        var snobLike = ModObjects.Create(data, "ModUserEvents", false); snobLike.ParentId = fishSmall;
+        var outsideRoom = ModObjects.Create(data, "ModOutsideOther", false); outsideRoom.ParentId = fishSmall;
+        var cusperLike = ModObjects.Create(data, "ModAlarmClamp", false); cusperLike.ParentId = fishLarge;
+        var anglerLike = ModObjects.Create(data, "Anglerfish", false); anglerLike.ParentId = fishLarge;
+        var chawLike = ModObjects.Create(data, "Chaw", false); chawLike.ParentId = fishSmall;
+
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(snobLike.EventHandlerFor(EventType.Other, 18u, data), "target_x = 1;");
+        compiler.QueueCodeReplace(snobLike.EventHandlerFor(EventType.Other, 22u, data), "isVisible = 1;");
+        compiler.QueueCodeReplace(snobLike.EventHandlerFor(EventType.Other, 23u, data), "vspeed -= 1;");
+        compiler.QueueCodeReplace(snobLike.EventHandlerFor(EventType.Other, 25u, data), "following = 0;");
+        compiler.QueueCodeReplace(outsideRoom.EventHandlerFor(EventType.Other, 0u, data), "x = 100;");
+        compiler.QueueCodeReplace(cusperLike.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data),
+            "action_inherited();\nif (alarm[0] > 60)\n{\n    alarm[0] = 30;\n}");
+        compiler.QueueCodeReplace(anglerLike.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data),
+            "action_inherited();\nif (y < start_y - 500)\n{\n    lungeCooldown = 10;\n}");
+        compiler.QueueCodeReplace(chawLike.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data),
+            "action_inherited();\nnearest_piercer = instance_nearest(x, y, Piercer);");
+        compiler.QueueCodeReplace(chawLike.EventHandlerFor(EventType.Collision, 112u, data),
+            "if (state == 1)\n{\n    x += 1;\n}");
+        ModObjects.Compile(compiler);
+
+        FishSleep.Apply(data);
+
+        var byName = FishSleep.AnalyzeEligibility(data).ToDictionary(d => d.ObjectName, StringComparer.Ordinal);
+        Assert.True(byName["ModUserEvents"].Covered);
+        Assert.False(byName["ModOutsideOther"].Covered);
+        Assert.True(byName["ModAlarmClamp"].Covered);
+        Assert.True(byName["Anglerfish"].Covered);
+        Assert.True(byName["Chaw"].Covered);
+
+        string anglerStep2 = ModObjects.Decompile(data, anglerLike.Events[(int)EventType.Step]
+            .First(e => e.EventSubtype == (uint)EventSubtypeStep.EndStep).Actions[0].CodeId!);
+        int inheritedIdx = anglerStep2.IndexOf("action_inherited()", StringComparison.Ordinal);
+        int asleepIdx = anglerStep2.IndexOf("jamm_asleep", StringComparison.Ordinal);
+        Assert.True(inheritedIdx >= 0 && asleepIdx > inheritedIdx);
+
+        string chawStep0 = ModObjects.Decompile(data, chawLike.Events[(int)EventType.Step]
+            .First(e => e.EventSubtype == (uint)EventSubtypeStep.Step).Actions[0].CodeId!);
+        string chawCol = ModObjects.Decompile(data, chawLike.Events[(int)EventType.Collision][0].Actions[0].CodeId!);
+        Assert.Contains("jamm_asleep", chawStep0);
+        Assert.Contains("jamm_asleep", chawCol);
+
+        string beginStep = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_begin_step")!);
+        Assert.Contains("with (Piercer)", beginStep);
     }
 
     [Fact]

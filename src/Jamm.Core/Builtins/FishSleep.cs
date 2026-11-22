@@ -61,8 +61,30 @@ public static partial class FishSleep
         "Centy", "Chrono", "Thermo", "Goldfish", "EvilCoupleFish", "FishYinYang", "Rodi", "Lav"
     };
 
+    private static readonly HashSet<string> SafeCustomStepObjects = new(StringComparer.Ordinal)
+    {
+        "Chaw", "Skrimp", "Bombat", "Reddart_Frog", "Boom_Puff", "Primal_Turgeon",
+        "Glio", "Buffalofish", "Gloombat", "Anglerfish", "Airy", "Duleoculi",
+        "Felish", "Spotter", "Ghast", "Tik_Tik", "Koin", "Vouval"
+    };
+
     [GeneratedRegex(@"//[^\n]*|/\*[\s\S]*?\*/", RegexOptions.Compiled)]
     private static partial Regex Comments();
+
+    [GeneratedRegex(@"if\s*\(\s*variable_instance_exists\s*\(\s*id\s*,\s*""jamm_asleep""\s*\)\s*&&\s*jamm_asleep\s*\)\s*(?:\{\s*exit\s*;\s*\}|exit\s*;)", RegexOptions.Compiled)]
+    private static partial Regex GuardPrefixPattern();
+
+    [GeneratedRegex(@"^(?:(?:action_inherited|event_inherited)\s*\(\s*\)\s*;\s*)?if\s*\(\s*alarm\s*\[\s*\d+\s*\]\s*>\s*\d+\s*\)\s*\{\s*alarm\s*\[\s*\d+\s*\]\s*=\s*\d+\s*;\s*\}$", RegexOptions.Compiled)]
+    private static partial Regex AlarmClampOnlyStep();
+
+    [GeneratedRegex(@"^\s*(?:action_inherited|event_inherited)\s*\(\s*\)\s*;", RegexOptions.Compiled)]
+    private static partial Regex InheritedCallPrefix();
+
+    [GeneratedRegex(@"\b(instance_create|instance_destroy|audio_play_sound|global\.)", RegexOptions.Compiled)]
+    private static partial Regex UnsafeStepSideEffects();
+
+    [GeneratedRegex(@"^(?:if\s*\(\s*state\s*==\s*1\s*\)\s*\{[\s\S]*\}|//.*)$", RegexOptions.Compiled)]
+    private static partial Regex ActiveStateOnlyCollision();
 
     [GeneratedRegex(@"\b(instance_create|instance_destroy|alarm\s*\[|state\s*=|global\s*\.)", RegexOptions.Compiled)]
     private static partial Regex DrawSideEffects();
@@ -142,7 +164,7 @@ public static partial class FishSleep
                 return (false, "custom Alarm event");
             if (HasAnyEvent(cursor, EventType.Destroy))
                 return (false, "custom Destroy event");
-            if (HasAnyEvent(cursor, EventType.Collision))
+            if (HasUnsafeCollision(data, cursor))
                 return (false, "custom Collision event");
 
             if (cursor.Events.Count > (int)EventType.Other)
@@ -150,7 +172,9 @@ public static partial class FishSleep
                 foreach (var ev in cursor.Events[(int)EventType.Other])
                 {
                     if (ev.Actions.Count == 0) continue;
-                    if (ev.EventSubtype is not (10 or 11 or 12 or 13 or 17 or 21))
+                    // Subtypes 10..19, 21..23, 25 are standard Fish_Step_2 / hook / respawn / death user hooks
+                    // (unreachable while Fish_Step_2 exits early at state == 0 || state == 12); keep non-user <10 & 20/24 exempt.
+                    if (ev.EventSubtype is not (10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 21 or 22 or 23 or 25))
                         return (false, $"custom Other:{ev.EventSubtype} event");
                 }
             }
@@ -168,9 +192,9 @@ public static partial class FishSleep
         return idx < obj.Events.Count && obj.Events[idx].Any(e => e.Actions.Count > 0);
     }
 
-    private static bool HasNonTrivialStep(UndertaleData data, UndertaleGameObject obj)
+    private static bool HasUnsafeCollision(UndertaleData data, UndertaleGameObject obj)
     {
-        int idx = (int)EventType.Step;
+        int idx = (int)EventType.Collision;
         if (idx >= obj.Events.Count) return false;
         foreach (var ev in obj.Events[idx])
         {
@@ -178,8 +202,36 @@ public static partial class FishSleep
             {
                 if (action.CodeId is not { } code) continue;
                 if (!TryDecompile(data, code, out string text)) return true;
-                string stripped = Comments().Replace(text, "").Trim();
+                string stripped = GuardPrefixPattern().Replace(Comments().Replace(text, ""), "").Trim();
                 if (stripped is "" or "action_inherited();" or "event_inherited();") continue;
+                if (ActiveStateOnlyCollision().IsMatch(stripped)) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool HasNonTrivialStep(UndertaleData data, UndertaleGameObject obj)
+    {
+        int idx = (int)EventType.Step;
+        if (idx >= obj.Events.Count) return false;
+        bool isSafeCustomSpecies = SafeCustomStepObjects.Contains(obj.Name.Content);
+        foreach (var ev in obj.Events[idx])
+        {
+            foreach (var action in ev.Actions)
+            {
+                if (action.CodeId is not { } code) continue;
+                if (!TryDecompile(data, code, out string text)) return true;
+                string stripped = GuardPrefixPattern().Replace(Comments().Replace(text, ""), "").Trim();
+                if (stripped is "" or "action_inherited();" or "event_inherited();") continue;
+                if (ev.EventSubtype == (uint)EventSubtypeStep.EndStep
+                    && !(stripped.StartsWith("action_inherited();", StringComparison.Ordinal)
+                         || stripped.StartsWith("event_inherited();", StringComparison.Ordinal)))
+                {
+                    return true;
+                }
+                if (AlarmClampOnlyStep().IsMatch(stripped)) continue;
+                if (isSafeCustomSpecies && !UnsafeStepSideEffects().IsMatch(stripped)) continue;
                 return true;
             }
         }
@@ -366,7 +418,7 @@ public static partial class FishSleep
             EnsurePrefix(fishDraw, GuardLine + "\n", "jamm_asleep");
         }
 
-        // Guard any covered subclass's own Draw or trivial Step events so Draw_0/Draw_72 never execute while asleep.
+        // Guard any covered subclass's own Step, Draw, or active-only Collision events while asleep.
         var coveredSet = eligibility.Where(e => e.Covered).Select(e => e.ObjectName).ToHashSet(StringComparer.Ordinal);
         var guardedCodes = new HashSet<UndertaleCode>();
         foreach (var obj in data.GameObjects)
@@ -375,7 +427,7 @@ public static partial class FishSleep
             for (var cursor = obj; cursor is not null && cursor != fishRoot; cursor = cursor.ParentId)
             {
                 if (AbstractTiers.Contains(cursor.Name.Content)) continue;
-                foreach (var et in new[] { EventType.Step, EventType.Draw })
+                foreach (var et in new[] { EventType.Step, EventType.Draw, EventType.Collision })
                 {
                     int idx = (int)et;
                     if (idx >= cursor.Events.Count) continue;
@@ -383,7 +435,12 @@ public static partial class FishSleep
                     foreach (var action in ev.Actions)
                     {
                         if (action.CodeId is { ParentEntry: null } code && guardedCodes.Add(code))
-                            EnsurePrefix(code, GuardLine + "\n", "jamm_asleep");
+                        {
+                            if (et == EventType.Step && ev.EventSubtype == (uint)EventSubtypeStep.EndStep)
+                                EnsureGuardAfterInherited(code);
+                            else
+                                EnsurePrefix(code, GuardLine + "\n", "jamm_asleep");
+                        }
                     }
                 }
             }
@@ -423,6 +480,17 @@ public static partial class FishSleep
             if (!TryDecompile(data, code, out string current)) return;
             if (current.Contains(marker, StringComparison.Ordinal)) return;
             compiler.QueueCodeReplace(code, prefix + current);
+            edits.Add(code);
+        }
+
+        void EnsureGuardAfterInherited(UndertaleCode code)
+        {
+            if (!TryDecompile(data, code, out string current)) return;
+            if (current.Contains("jamm_asleep", StringComparison.Ordinal)) return;
+            var match = InheritedCallPrefix().Match(current);
+            if (!match.Success) return;
+            string updated = current[..match.Length] + "\n" + GuardLine + current[match.Length..];
+            compiler.QueueCodeReplace(code, updated);
             edits.Add(code);
         }
     }
@@ -550,6 +618,7 @@ public static partial class FishSleep
         bool hasDeepSonar = data.GameObjects.ByName("SonarPanelAdvanced") is not null;
         bool hasCatchQuest = data.GameObjects.ByName("CatchQuestNewNew") is not null;
         bool hasQuest = data.GameObjects.ByName("Quest") is not null;
+        bool hasPiercer = data.GameObjects.ByName("Piercer") is not null;
 
         var sb = new StringBuilder();
         sb.AppendLine("""
@@ -670,6 +739,13 @@ public static partial class FishSleep
                     if (variable_instance_exists(id, "target_x") && variable_instance_exists(id, "target_y"))
                         jamm_sleep_add_box(target_x - margin, target_y - margin, target_x + margin, target_y + margin);
                 }
+                """);
+        }
+        if (hasPiercer)
+        {
+            sb.AppendLine("""
+                with (Piercer)
+                    jamm_sleep_add_box(x - 400, y - 400, x + 400, y + 400);
                 """);
         }
 

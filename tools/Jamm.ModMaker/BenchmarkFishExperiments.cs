@@ -193,7 +193,10 @@ internal static class BenchmarkFishExperiments
             "if (parent <= 0 || !instance_exists(parent)) { start_x = x; start_y = y; } else if (parent.state == 6 || parent.state == 4)");
         PatchEntry("gml_Object_Bishop_Other_10",
             "if (escort_target.state == 3)",
-            "if (escort_target <= 0 || !instance_exists(escort_target)) { target_x = start_x; target_y = start_y; if (point_distance(x, y, target_x, target_y) > 200) fish_elast_towards_target(0.01, 0.985); fish_lunge(); exit; }\nif (escort_target.state == 3)");
+            "if (!variable_instance_exists(id, \"escort_target\") || escort_target <= 0 || !instance_exists(escort_target)) { target_x = start_x; target_y = start_y; if (point_distance(x, y, target_x, target_y) > 200) fish_elast_towards_target(0.01, 0.985); fish_lunge(); exit; }\nif (escort_target.state == 3)");
+        PatchEntry("gml_Object_Caval_Other_10",
+            "target_x = pather2.x;",
+            "if (pather2 <= 0 || !instance_exists(pather2)) exit;\ntarget_x = pather2.x;");
         PatchEntry("gml_Object_Bishop_Other_18",
             "target_x = pather.x;",
             "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
