@@ -163,3 +163,13 @@ Therefore: relevance/exemption audit → instance-preserving Fish Sleep baseline
 - What is the real target set and source revision for “seven packs”? This document uses the local TGE, PWB, Abyss, Antiquity, Colour, Verdant, and Cave Expansion patch set; re-audit any other load order/version.
 - Can logical population queries be centralized without rewriting every mod's direct `instance_number` / `with (Fish)` calls? If not, supported packs must be explicitly limited and virtual fish may need proxy instances for some queries.
 - What is the authoritative fish RNG model? If fish consume global RNG in parent or species events, the pilot must use instance-preserving sleep or exclude that species until a deterministic per-fish RNG shim is proven.
+
+## Orchestrator review (Phase 2, 2026-11-22 02:25)
+Plan approved as the structural lever for far fish. Condition: the requested prototype is still missing, so steps 1
+and 2 run now (Codex Luna, this branch) before any Hydrogen implementation:
+- Step 1: generated inventory for vanilla + the seven local packs; pick the pilot species from vanilla profiler data.
+- Step 2: opt-in (default OFF) one-species record store/materialise path with the 10,000-cycle round-trip test and a
+  measured transition cost vs `instance_create`/`instance_destroy`, plus one serial in-game measurement (vanilla) of
+  fish_step/loop with N pilot fish virtualised vs OFF.
+Answer the open questions on RNG model and population queries with evidence. Steps 3–8 go to Hydrogen after Fish Sleep,
+combined with its relevance zone (one shared zone implementation, not two).
