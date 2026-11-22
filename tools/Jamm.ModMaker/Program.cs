@@ -40,7 +40,7 @@ public static class Program
                   bench   <video.win> <out.win> --scene showcase-submarine
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>] [--fish-virtualization-count <n>]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>] [--fish-virtualization-count <n>] [--fish-virtualization-fixture-count <n>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);

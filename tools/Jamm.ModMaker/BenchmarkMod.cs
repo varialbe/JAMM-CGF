@@ -964,7 +964,7 @@ public static partial class BenchmarkMod
                 jamm_b_step_samples = 0;
                 jamm_b_fish_total = 0;
 
-                if (jamm_b_fish_cap >= 0 || jamm_b_fish_mode == "deactivate")
+                if (jamm_b_fish_cap >= 0 || jamm_b_fish_mode == "deactivate" || jamm_b_fish_fixture_count > 0)
                     global.jamm_b_freeze_spawners = 1;
                 {{applyFishCap}}
                 {{spawnFishFixture}}
