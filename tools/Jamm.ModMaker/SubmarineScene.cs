@@ -239,21 +239,49 @@ internal static class SubmarineScene
                 capture = "light_on";
                 break;
             case 25:
+                if (current_time - stage_at < 450) exit;
+                keyboard_key_press(vk_escape);
+                break;
+            case 26:
+                if (!instance_exists(SaveMenu) || !SaveMenu.done_spawning) exit;
+                keyboard_key_release(vk_escape);
+                break;
+            case 27:
+                if (current_time - stage_at < 600) exit;
+                if (!instance_exists(SaveCard) || !instance_exists(icon_Cancel) || !icon_Cancel.visible
+                    || icon_Cancel.x < view_xview[0] || icon_Cancel.x > view_xview[0] + view_wview[0]
+                    || icon_Cancel.y < view_yview[0] || icon_Cancel.y > view_yview[0] + view_hview[0])
+                {
+                    capture = "pause_menu_misplaced";
+                    stage = 99;
+                    exit;
+                }
+                capture = "pause_menu";
+                break;
+            case 28:
+                if (current_time - stage_at < 350) exit;
+                keyboard_key_press(vk_backspace);
+                break;
+            case 29:
+                if (instance_exists(Handler)) exit;
+                keyboard_key_release(vk_backspace);
+                break;
+            case 30:
                 if (current_time - stage_at < 400) exit;
                 keyboard_key_press(ord("V"));
                 break;
-            case 26:
+            case 31:
                 if ({{Sub}}.sub_diving || {{Sub}}.sub_oxygen != {{Sub}}.sub_oxygen_max
                     || instance_exists({{Sub}}.sub_lamp)
                     || view_wview[0] != 800 || view_hview[0] != 480) exit;
                 keyboard_key_release(ord("V"));
                 capture = "surfaced";
                 break;
-            case 27:
+            case 32:
                 if (current_time - stage_at < 500) exit;
                 with (icon_Tools) event_user(0);
                 break;
-            case 28:
+            case 33:
                 if (!instance_exists(ToolMenu) || !ToolMenu.done_spawning) exit;
                 var tcard = noone;
                 with (ToolCard)
@@ -269,68 +297,68 @@ internal static class SubmarineScene
                 winch_card = tcard;
                 capture = "tool_shop";
                 break;
-            case 29:
+            case 34:
                 if (current_time - stage_at < 800) exit;
                 with (winch_card) event_user(0);
                 break;
-            case 30:
+            case 35:
                 if (ToolData.unlocked[winch_slot] != 1 || Girl.dollars != 75000000 || !{{Sub}}.sub_has_winch) exit;
                 capture = "winch_purchased";
                 break;
-            case 31:
+            case 36:
                 if (current_time - stage_at < 500) exit;
                 keyboard_key_press(ord("V"));
                 break;
-            case 32:
+            case 37:
                 if (!{{Sub}}.sub_diving || view_wview[0] < 1100) exit;
                 keyboard_key_release(ord("V"));
                 keyboard_key_press(vk_down);
                 break;
-            case 33:
+            case 38:
                 if ({{Sub}}.sub_y - 1294 < 1200) exit;
                 keyboard_key_release(vk_down);
                 break;
-            case 34:
+            case 39:
                 if (current_time - stage_at < 500) exit;
                 keyboard_key_press(vk_space);
                 break;
-            case 35:
+            case 40:
                 if (current_time - stage_at < 250) exit;
                 keyboard_key_release(vk_space);
                 break;
-            case 36:
+            case 41:
                 if ({{Sub}}.sub_drop <= 0) exit;
                 capture = "cast_start";
                 break;
-            case 37:
+            case 42:
                 if (Lure.state != 2) exit;
                 capture = "cast";
                 break;
-            case 38:
+            case 43:
                 if (current_time - stage_at < 700) exit;
                 keyboard_key_press(ord("V"));
                 break;
-            case 39:
+            case 44:
                 if (!{{Sub}}.sub_ascending) exit;
                 keyboard_key_release(ord("V"));
                 capture = "reel_to_surface";
                 break;
-            case 40:
+            case 45:
                 if (current_time - stage_at < 450) exit;
                 keyboard_key_press(vk_space);
                 break;
-            case 41:
+            case 46:
                 if (Lure.state != 0) exit;
                 keyboard_key_release(vk_space);
                 capture = "reeled";
                 break;
-            case 42:
+            case 47:
                 if ({{Sub}}.sub_diving || {{Sub}}.sub_oxygen != {{Sub}}.sub_oxygen_max
                     || instance_exists({{Sub}}.sub_lamp)
                     || view_wview[0] != 800 || view_hview[0] != 480) exit;
                 capture = "surfaced_2";
                 break;
-            case 43:
+            case 48:
                 if (current_time - stage_at < 850) exit;
                 capture = "passed";
                 stage = 99;

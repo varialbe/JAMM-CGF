@@ -98,7 +98,8 @@ else if (dive && sub_oxygen > 0)
 }
 
 if (lamp) sub_lamp_on = !sub_lamp_on;
-sub_oxygen = max(0, sub_oxygen - sub_dt);
+if (!instance_exists(Handler))
+    sub_oxygen = max(0, sub_oxygen - sub_dt);
 if (sub_oxygen <= 0)
 {
     sub_ascending = true;

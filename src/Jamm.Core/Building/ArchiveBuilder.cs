@@ -425,6 +425,7 @@ public static class ArchiveBuilder
                 baseMod: vanilla != ancestor ? patches[0].Mod.Name : null);
             ConsoleUpgradeGuard.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
             MoneyRuntime.ConfigureConsole(bigMoney, recompile, generatedCode);
+            ZoomUiRuntime.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
             // Last, so the guard also covers code that the runtimes above generated or merged.
             InstanceGuard.Apply(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         }

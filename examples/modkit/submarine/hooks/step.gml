@@ -5,6 +5,7 @@ if (!sub_diving)
 }
 // Retain the normal boat's cargo bookkeeping; restore the submerged rider after its wave calculation.
 event_inherited();
+if (instance_exists(Camera)) Camera.atOrigin = 0;
 Girl.x = sub_x;
 Girl.y = sub_y;
 image_angle = 0;

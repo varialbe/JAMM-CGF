@@ -56,8 +56,11 @@ if (sub_diving || sub_cam_blend > 0.002 || sub_cam_zoom > 1.002)
         zoom_target = 1.55;
         blend_target = 1.0;
     }
-    sub_cam_zoom += (zoom_target - sub_cam_zoom) * min(1, 5.0 * sub_dt);
-    sub_cam_blend += (blend_target - sub_cam_blend) * min(1, 6.0 * sub_dt);
+    if (!instance_exists(Handler))
+    {
+        sub_cam_zoom += (zoom_target - sub_cam_zoom) * min(1, 5.0 * sub_dt);
+        sub_cam_blend += (blend_target - sub_cam_blend) * min(1, 6.0 * sub_dt);
+    }
 
     var look_target = sub_facing * 150;
     sub_cam_look_x += (look_target - sub_cam_look_x) * min(1, 5.5 * sub_dt);

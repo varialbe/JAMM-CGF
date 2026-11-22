@@ -23,14 +23,18 @@ internal static class HudRuntime
             if (!variable_global_exists("jamm_hud_halign")) global.jamm_hud_halign = fa_left;
             if (!variable_global_exists("jamm_hud_valign")) global.jamm_hud_valign = fa_top;
             global.jamm_hud_count = 0;
-            var jamm_vw, jamm_vh, jamm_cancel, jamm_handler, jamm_cy, jamm_ctop, jamm_cright;
+            var jamm_vw, jamm_vh, jamm_zx, jamm_zy, jamm_cancel, jamm_handler, jamm_cy, jamm_ctop, jamm_cright;
             jamm_vw = view_wview[view_current];
             if (jamm_vw <= 0) jamm_vw = 800;
             jamm_vh = view_hview[view_current];
             if (jamm_vh <= 0) jamm_vh = 480;
-            global.jamm_hud_x = view_xview[view_current] + jamm_vw - 25;
-            global.jamm_hud_cursor = view_yview[view_current] + jamm_vh - 28;
-            if (instance_exists(ExperienceBar) && ExperienceBar.offset_y < jamm_vh) global.jamm_hud_cursor = min(global.jamm_hud_cursor, view_yview[view_current] + ExperienceBar.offset_y - 4);
+            jamm_zx = jamm_vw / 800;
+            jamm_zy = jamm_vh / 480;
+            global.jamm_hud_zx = jamm_zx;
+            global.jamm_hud_zy = jamm_zy;
+            global.jamm_hud_x = view_xview[view_current] + jamm_vw - (25 * jamm_zx);
+            global.jamm_hud_cursor = view_yview[view_current] + jamm_vh - (28 * jamm_zy);
+            if (instance_exists(ExperienceBar) && ExperienceBar.offset_y < 480) global.jamm_hud_cursor = min(global.jamm_hud_cursor, view_yview[view_current] + ((ExperienceBar.offset_y - 4) * jamm_zy));
             if (view_current == 0) {
                 jamm_cancel = asset_get_index("icon_Cancel");
                 if (jamm_cancel > -1 && instance_exists(jamm_cancel) && jamm_cancel.visible) {
@@ -45,18 +49,20 @@ internal static class HudRuntime
                         if (jamm_cancel.bbox_bottom > jamm_cancel.bbox_top) jamm_ctop = min(jamm_ctop, jamm_cancel.bbox_top);
                         if (jamm_cancel.bbox_right > jamm_cancel.bbox_left) jamm_cright = max(jamm_cright, jamm_cancel.bbox_right);
                     }
-                    if (jamm_ctop >= view_yview[view_current] && jamm_ctop < view_yview[view_current] + jamm_vh && jamm_cright >= view_xview[view_current] + jamm_vw - 260) {
-                        global.jamm_hud_cursor = min(global.jamm_hud_cursor, jamm_ctop - 8);
+                    if (jamm_ctop >= view_yview[view_current] && jamm_ctop < view_yview[view_current] + jamm_vh && jamm_cright >= view_xview[view_current] + jamm_vw - (260 * jamm_zx)) {
+                        global.jamm_hud_cursor = min(global.jamm_hud_cursor, jamm_ctop - (8 * jamm_zy));
                     }
                 }
             }
             """,
         ["jamm_hud_reserve"] = """
-            var jamm_h;
+            var jamm_h, jamm_zy;
+            jamm_zy = 1;
+            if (variable_global_exists("jamm_hud_zy")) jamm_zy = global.jamm_hud_zy;
             jamm_h = max(0, argument0);
             global.jamm_hud_cursor -= jamm_h;
             global.jamm_hud_y = global.jamm_hud_cursor + jamm_h / 2;
-            global.jamm_hud_cursor -= 4;
+            global.jamm_hud_cursor -= 4 * jamm_zy;
             return global.jamm_hud_y;
             """,
         ["jamm_hud_text"] = """
@@ -78,10 +84,13 @@ internal static class HudRuntime
             """,
         ["jamm_hud_flush"] = """
             if (view_current != 0) return 0;
-            var jamm_font, jamm_color, jamm_alpha, jamm_ha, jamm_va;
+            var jamm_font, jamm_color, jamm_alpha, jamm_ha, jamm_va, jamm_zx, jamm_zy;
             var jamm_lane, jamm_n, jamm_text, jamm_sx, jamm_sy, jamm_angle, jamm_h, jamm_y, jamm_shadow;
             jamm_font = global.jamm_hud_font; jamm_color = draw_get_color(); jamm_alpha = draw_get_alpha();
             jamm_ha = global.jamm_hud_halign; jamm_va = global.jamm_hud_valign;
+            jamm_zx = 1; jamm_zy = 1;
+            if (variable_global_exists("jamm_hud_zx")) jamm_zx = global.jamm_hud_zx;
+            if (variable_global_exists("jamm_hud_zy")) jamm_zy = global.jamm_hud_zy;
             draw_set_halign(fa_right); draw_set_valign(fa_middle);
             for (jamm_lane = 0; jamm_lane <= 2; jamm_lane += 1) {
                 for (jamm_n = 0; jamm_n < global.jamm_hud_count; jamm_n += 1) {
@@ -94,10 +103,19 @@ internal static class HudRuntime
                         draw_set_alpha(global.jamm_hud_rows[jamm_n,8]);
                         jamm_shadow = 0;
                         if (global.jamm_hud_rows[jamm_n,1] == 1) jamm_shadow = 2;
-                        jamm_h = max(16, abs(string_height(jamm_text) * jamm_sy * dcos(jamm_angle)) + abs(string_width(jamm_text) * jamm_sx * dsin(jamm_angle)) + jamm_shadow);
-                        jamm_y = jamm_hud_reserve(jamm_h) - jamm_shadow / 2;
-                        if (global.jamm_hud_rows[jamm_n,1] == 1) draw_text_shadowed(global.jamm_hud_x, jamm_y, jamm_text);
-                        else draw_text_transformed(global.jamm_hud_x, jamm_y, jamm_text, jamm_sx, jamm_sy, jamm_angle);
+                        jamm_h = max(16, abs(string_height(jamm_text) * jamm_sy * dcos(jamm_angle)) + abs(string_width(jamm_text) * jamm_sx * dsin(jamm_angle)) + jamm_shadow) * jamm_zy;
+                        jamm_y = jamm_hud_reserve(jamm_h) - (jamm_shadow * 0.5 * jamm_zy);
+                        if (global.jamm_hud_rows[jamm_n,1] == 1) {
+                            if (jamm_zx == 1 && jamm_zy == 1) draw_text_shadowed(global.jamm_hud_x, jamm_y, jamm_text);
+                            else {
+                                draw_set_color(Colors.ui_dark);
+                                draw_text_transformed(global.jamm_hud_x + (2 * jamm_zx), jamm_y + (2 * jamm_zy), jamm_text, jamm_zx, jamm_zy, 0);
+                                draw_text_transformed(global.jamm_hud_x + jamm_zx, jamm_y + jamm_zy, jamm_text, jamm_zx, jamm_zy, 0);
+                                draw_set_color(Colors.ui_light);
+                                draw_text_transformed(global.jamm_hud_x, jamm_y, jamm_text, jamm_zx, jamm_zy, 0);
+                            }
+                        }
+                        else draw_text_transformed(global.jamm_hud_x, jamm_y, jamm_text, jamm_sx * jamm_zx, jamm_sy * jamm_zy, jamm_angle);
                     }
                 }
             }
