@@ -1,0 +1,21 @@
+{
+  "builtin-perf": [
+    "Measured 2026-11-21 on a Ryzen 7 5700X / RTX 2070 Super (Proton, 1200×720 window), 30-second captures, seed 1337, game-loop time per tick. Cat Goes Fishing's GameMaker loop is single-threaded and CPU-bound, so loop time — not GPU load — decides FPS.",
+    "Since generator 7, JAMM Perf adds no per-frame code by default: vanilla +Perf is byte-identical to vanilla; a five-pack build measured 85.7 → 81.3 ms (dock); a seven-pack build measured +0.2 % (dock) and +1.2 % (deepwater), within run-to-run noise.",
+    "Older builds (generator ≤ 6) installed the fish neighbour grid unconditionally and made large packs up to 2× slower when JAMM Smooth was not also enabled. Rebuild your profile to pick up the fix.",
+    "Weak-PC preset (fish scheduling interval 8, HD-Lite off): about 21 % faster loop on a seven-pack profile build."
+  ],
+  "builtin-smooth": [
+    "Seven-pack build, dock: 48.4 ms without Smooth vs 51.4 ms with Smooth (mean of 2 runs) — loop cost is neutral within noise. Smooth's benefit is frame pacing and off-screen culling, not raw loop time.",
+    "With JAMM Perf generator ≤ 6, Smooth masked the Perf regression (Perf + Smooth = 48.4 ms vs Perf alone = 98 ms). Generator 7 removes the need for that pairing."
+  ],
+  "jamm-silo": [
+    "Seven-pack build, dock: 48.4 ms → 50.8 ms with Silo (mean of 2 runs, within run-to-run noise of ±3 ms). No measurable cost while the silo is off-screen."
+  ],
+  "endless-ocean": [
+    "Seven-pack build, dock: 48.4 ms → 49.7 ms with Endless Ocean (mean of 2 runs, within noise). Chunks outside the view are not simulated, so the extended area does not add per-tick fish work at the dock."
+  ],
+  "weather-pack": [
+    "Seven-pack build, dock: 48.4 ms → 55.6 ms with Weather Pack (mean of 2 runs; one run was noisy at 58.7 ms). The particle/lighting overlay is the most expensive first-party mod we measured; disable it first on weak CPUs."
+  ]
+}

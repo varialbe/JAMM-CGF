@@ -7,6 +7,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from zipfile import ZipFile
 
+from make_progress import progress_page
+
 SITE_DIR = Path(__file__).resolve().parent
 PACKAGE_TYPES = {"recipe": "Recipe", "modkit": "ModKit"}
 DATASHEET_ROWS = (
@@ -48,6 +50,7 @@ def page(title: str, stylesheet: str, body: str, current: str = "") -> str:
       <a href="{('../' if current == 'detail' else '')}index.html#packages">Packages</a>
       <a href="{('../' if current == 'detail' else '')}how-jamm-builds.html">How builds work</a>
       <a href="{('../' if current == 'detail' else '')}compatibility.html">Compatibility</a>
+      <a href="{('../' if current == 'detail' else '')}progress.html">Progress</a>
     </div>
   </nav>
   <main id="main-content">
@@ -261,6 +264,7 @@ def main() -> None:
         [{"heading":"Public five-pack", "text":["The public five-pack used in the reports is Antiquity, PWB, The Abyss, Colour Expansion and Verdant. Silo and Weather Pack were built with that pack at zero pack-specific conflicts. Endless Ocean completed a route across the five-pack's extended east boundary using its seeded chunk stream."], "list":["The Silo: five-pack and all-seven archive builds passed; the Area follow anchor tracks Cave Expansion's moved and rotated MissileSilo.","Weather Pack: five-pack and all-seven builds passed with zero Weather Pack conflicts and all 53 Weather assets accepted.","Endless Ocean: the five-pack route crossed the generated boundary, streamed terrain and returned west with generated instances released."]},
          {"heading":"First-party defaults", "text":["JAMM Perf, Smooth, HD Lite and Console are documented together as a verified first-party combination. The site recipes are source packages that still build locally against the configured legacy base."], "list":["Example Fish was verified alongside Harbor Pack and Showcase Upgrades.","Example Rod uses the shared Items runtime and stable item keys, so its save ownership is independent of its current numeric slot."]},
          {"heading":"Know the limits", "text":["Compatibility is tied to the August 2023 legacy VM archive and the tested package versions. The current Steam YYC build is not a supported base. Legacy whole-archive mods can edit the same code or room entries; JAMM reports those overlaps and profile choices determine the retained changes.","The reports contain some broader all-seven runs. One Silo all-seven save run hit an existing Maize patrol crash after the four catches had been deposited; the save was independently reloaded and checked. This is recorded as a limitation of that pack combination, not a Silo package failure.","Keep boat contents and live lure interactions clear when changing profiles because some legacy save sections still use numeric object IDs. Back up saves before profile changes."]}]))
+    (SITE_DIR / "progress.html").write_text(progress_page(SITE_DIR), encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -17,8 +17,8 @@ internal static class WorldgenScene
 
     internal static void Apply(UndertaleData data, bool showcase)
     {
-        if (data.GameObjects.ByName(Controller) is null)
-            throw new InvalidDataException("The worldgen scene needs Endless Ocean. Build the recipe before instrumenting the archive.");
+        if (data.Scripts.ByName("jmk_endless_ocean_setup") is null)
+            throw new InvalidDataException("The worldgen scene needs Endless Ocean 0.2.0. Build the current recipe before instrumenting the archive.");
 
         var probe = ModObjects.Create(data, "obj_jamm_bench_worldgen", persistent: false);
         var compiler = new CompileGroup(data);
@@ -55,6 +55,23 @@ internal static class WorldgenScene
             compiler.QueueCodeReplace(probe.EventHandlerFor(type, subtype, data), gml);
     }
 
+    private const string FindCheckpoints = """
+        route[0] = 0;
+        route[1] = -1;
+        route[2] = -1;
+        route[3] = -1;
+        route[4] = -1;
+        route[5] = ocean.ocean_chunk_count - 1;
+        for (var chunk = ocean.ocean_content_chunk + 4; chunk < ocean.ocean_chunk_count - 1; chunk += 1)
+        {
+            var layout = jmk_endless_ocean_layout(ocean.ocean_seed, chunk, ocean.ocean_anchor_y, room_height, ocean.ocean_content_chunk);
+            var biome = layout[5] + 1;
+            if (route[biome] == -1) route[biome] = chunk;
+            if (route[4] == -1 && layout[6]) route[4] = chunk;
+            if (route[1] >= 0 && route[2] >= 0 && route[3] >= 0 && route[4] >= 0) break;
+        }
+        """;
+
     private static void QueueValidation(Action<EventType, uint, string> queue, string dismiss)
     {
         queue(EventType.Create, 0, $$"""
@@ -62,9 +79,10 @@ internal static class WorldgenScene
             ticks = 0;
             shot = "";
             target = 0;
+            chunk_at_stop = -1;
             lamp = noone;
             var file = file_text_open_write("{{Report}}");
-            file_text_write_string(file, "stage,boat_x,view_x,view_y,chunks,owned,instances,rock_hit,seed,first,last,fish,writes");
+            file_text_write_string(file, "stage,boat_x,view_x,view_y,chunks,owned,instances,rock_hits,seed,first,last,fish,writes,clear_hits,bottom_hits,seam_hits,sonar_missing");
             file_text_writeln(file);
             file_text_close(file);
             """);
@@ -76,6 +94,13 @@ internal static class WorldgenScene
             {
                 if (!instance_exists(SaveManager) || !SaveManager.loaded || ticks < 6) exit;
                 {{dismiss}}
+                if (instance_exists(SonarPanel))
+                {
+                    SonarPanel.active = 1;
+                    SonarPanel.shouldDraw = 1;
+                }
+                view_visible[3] = 1;
+                {{FindCheckpoints}}
                 window_set_fullscreen(false);
                 window_set_size(1200, 720);
                 with (Boat) instance_destroy();
@@ -115,17 +140,20 @@ internal static class WorldgenScene
                     ticks = 0;
                 }
             }
-            else if (stage >= 3 && stage <= 5)
+            else if (stage >= 3 && stage <= 8)
             {
-                var chunk = 1;
-                if (stage == 4) chunk = 117;
-                if (stage == 5) chunk = ocean.ocean_chunk_count - 1;
-                var layout = jmk_endless_ocean_layout(ocean.ocean_seed, chunk, ocean.ocean_start, 1244);
-                // Frame terrain at the first and last stops, and the deep fish at the middle stop.
-                rock_x = layout[4] + 330;
-                floor_y = layout[5];
-                target = stage == 4 ? layout[24] : rock_x;
-                var camera_y = stage == 4 ? layout[25] + 45 : floor_y - 40;
+                var chunk = route[stage - 3];
+                if (chunk < 0)
+                {
+                    label = "missing_point_" + string(stage - 2);
+                    event_user(0);
+                    game_end();
+                    exit;
+                }
+                var offset_x = chunk * 2048 + 1024;
+                target = ocean.ocean_start + offset_x;
+                var floor_y = jmk_endless_ocean_height(ocean.ocean_seed, offset_x, ocean.ocean_anchor_y, room_height, ocean.ocean_content_chunk);
+                var camera_y = floor_y - 200;
                 if (ticks == 1) event_user(1);
                 if (!instance_exists(CatSwim)) instance_create(target, camera_y, CatSwim);
                 CatSwim.x = target;
@@ -144,24 +172,25 @@ internal static class WorldgenScene
                 if (lamp == noone)
                 {
                     lamp = instance_create(target, camera_y, Light);
-                    lamp.image_scale = 5;
+                    lamp.image_scale = 4;
                     lamp.sub_blend = c_white;
                 }
                 lamp.x = target;
-                lamp.y = camera_y + 10;
+                lamp.y = camera_y;
                 if (ticks == 8)
                 {
+                    chunk_at_stop = chunk;
                     label = "point_" + string(stage - 2);
                     event_user(0);
                     shot = label;
                 }
-                if (ticks == 15)
+                if (ticks == 11)
                 {
                     stage += 1;
                     ticks = 0;
                 }
             }
-            else if (stage == 6)
+            else if (stage == 9)
             {
                 if (ticks == 2)
                 {
@@ -173,14 +202,19 @@ internal static class WorldgenScene
                     with (CatSwim) instance_destroy();
                     if (instance_exists(lamp)) with (lamp) instance_destroy();
                     Camera.hold_position = 0;
-                    target = stock_limit + 5;
+                    target = ocean.ocean_start - 4096 + 80;
                     event_user(1);
+                    chunk_at_stop = -1;
                 }
-                if (ticks == 13)
+                if (ticks >= 6)
                 {
-                    label = "returned";
-                    event_user(0);
-                    game_end();
+                    Boat.move_left = 1;
+                    if (Girl.x < ocean.ocean_start - 4100 && ds_map_size(ocean.ocean_chunks) == 0)
+                    {
+                        label = "returned";
+                        event_user(0);
+                        game_end();
+                    }
                 }
             }
 
@@ -218,11 +252,37 @@ internal static class WorldgenScene
                 if (variable_instance_exists(id, "jmk_endless_ocean_fish"))
                     ds_list_add(generated_fish, id);
             }
-            var hit = false;
-            if (stage >= 3 && stage <= 6)
+            var sonar_missing = 0;
+            with (Fish)
             {
-                with (Lure)
-                    hit = position_meeting(other.rock_x, other.floor_y + 430, CaveRock);
+                if (variable_instance_exists(id, "jmk_endless_ocean_fish") &&
+                    !variable_instance_exists(id, "s5")) sonar_missing += 1;
+            }
+            var rock_hits = 0;
+            var clear_hits = 0;
+            var bottom_hits = 0;
+            var seam_hits = 0;
+            if (chunk_at_stop >= 0 && label != "save")
+            {
+                for (var i = 0; i < 8; i += 1)
+                {
+                    var offset_x = chunk_at_stop * 2048 + i * 256;
+                    var probe_x = ocean.ocean_start + offset_x;
+                    var floor_y = jmk_endless_ocean_height(ocean.ocean_seed, offset_x, ocean.ocean_anchor_y, room_height, ocean.ocean_content_chunk);
+                    with (Lure)
+                    {
+                        if (position_meeting(probe_x, min(room_height - 1, floor_y + 14), CaveRock)) rock_hits += 1;
+                        if (!position_meeting(probe_x, floor_y - 850, CaveRock)) clear_hits += 1;
+                        if (position_meeting(probe_x, room_height - 1, obj_jmk_ocean_ground)) bottom_hits += 1;
+                    }
+                }
+                if (chunk_at_stop == 0)
+                {
+                    var sx = ocean.ocean_start;
+                    var sy = ocean.ocean_anchor_y;
+                    if (collision_line(sx - 1, sy - 4, sx - 1, sy + 12, Collidable, true, false) != noone) seam_hits += 1;
+                    if (position_meeting(sx, min(room_height - 1, sy + 12), obj_jmk_ocean_ground)) seam_hits += 1;
+                }
             }
 
             var writes = 0;
@@ -247,9 +307,10 @@ internal static class WorldgenScene
 
             var file = file_text_open_append("{{Report}}");
             var row = label + "," + string(round(Girl.x)) + "," + string(round(view_xview[0])) + "," + string(round(view_yview[0]));
-            row += "," + string(ds_map_size(map)) + "," + string(owned) + "," + string(instance_count) + "," + string(hit);
+            row += "," + string(ds_map_size(map)) + "," + string(owned) + "," + string(instance_count) + "," + string(rock_hits);
             row += "," + string(ocean.ocean_seed) + "," + string(ocean.ocean_first) + "," + string(ocean.ocean_last);
             row += "," + string(ds_list_size(generated_fish)) + "," + string(writes);
+            row += "," + string(clear_hits) + "," + string(bottom_hits) + "," + string(seam_hits) + "," + string(sonar_missing);
             file_text_write_string(file, row);
             file_text_writeln(file);
             file_text_close(file);
@@ -259,40 +320,8 @@ internal static class WorldgenScene
 
     private static void QueueShowcase(Action<EventType, uint, string> queue, string dismiss)
     {
-        const int chunkWidth = 2048;
-        const int floorY = 11008;
-        const int surfaceWidth = 2200;
-        const int wideWidth = 2 * chunkWidth;
-        const int panoramaFirst = 26;
-        const int panoramaCount = 5;
-
-        var frames = new List<(string Name, int X, int Y, int Width, int LampX, int LampWidth)>();
-        AddFrame("surface", ChunkCenter(117), 1040, surfaceWidth);
-        AddFrame("transition", 0, floorY, wideWidth);
-        foreach (int chunk in new[] { 3, 117, 486 })
-        {
-            AddFrame($"floor_{chunk}", ChunkCenter(chunk), floorY, wideWidth);
-            AddFrame($"mid_{chunk}", ChunkCenter(chunk), 5794, wideWidth);
-            AddFrame($"upper_{chunk}", ChunkCenter(chunk), 2494, wideWidth);
-        }
-
-        // Keep the light in world coordinates so the adjoining panorama crops share its falloff.
-        int panoramaLampX = ChunkCenter(panoramaFirst + panoramaCount / 2);
-        for (int i = 0; i < panoramaCount; i++)
-            AddFrame($"panorama_{i + 1}", ChunkCenter(panoramaFirst + i), floorY, wideWidth,
-                panoramaLampX, chunkWidth * panoramaCount);
-
-        string route = string.Join("\n", frames.Select((frame, i) => FormattableString.Invariant($"""
-            name_at[{i}] = "{frame.Name}";
-            x_at[{i}] = {frame.X};
-            y_at[{i}] = {frame.Y};
-            width_at[{i}] = {frame.Width};
-            lamp_x_at[{i}] = {frame.LampX};
-            lamp_width_at[{i}] = {frame.LampWidth};
-            """)));
-
+        const int frameCount = 15;
         queue(EventType.Create, 0, $$"""
-            {{route}}
             frame = 0;
             ticks = 0;
             ready = false;
@@ -312,6 +341,32 @@ internal static class WorldgenScene
             window_set_fullscreen(false);
             window_set_size(1200, 720);
             var ocean = instance_find({{Controller}}, 0);
+            {{FindCheckpoints}}
+            name_at[0] = "surface";
+            x_at[0] = (ocean.ocean_content_chunk + 12) * 2048 + 1024;
+            y_at[0] = 1040;
+            for (var i = 0; i < 4; i += 1)
+            {
+                var cx = i == 0 ? 0 : route[i] * 2048 + 1024;
+                var cy = jmk_endless_ocean_height(ocean.ocean_seed, cx, ocean.ocean_anchor_y, room_height, ocean.ocean_content_chunk) - 180;
+                for (var j = 0; j < 3; j += 1)
+                {
+                    var slot = 1 + 3 * i + j;
+                    name_at[slot] = "pan_" + string(i) + "_" + string(j);
+                    x_at[slot] = cx + (j - 1) * 2048;
+                    y_at[slot] = cy;
+                    lamp_x_at[slot] = cx;
+                }
+            }
+            name_at[13] = "wreck";
+            x_at[13] = route[4] * 2048 + 1040;
+            name_at[14] = "seed_comparison";
+            x_at[14] = x_at[0];
+            for (var i = 13; i <= 14; i += 1)
+            {
+                y_at[i] = jmk_endless_ocean_height(ocean.ocean_seed, x_at[i], ocean.ocean_anchor_y, room_height, ocean.ocean_content_chunk) - 140;
+                lamp_x_at[i] = x_at[i];
+            }
             var boat_x = ocean.ocean_start + x_at[0];
             with (Boat) instance_destroy();
             instance_create(boat_x, 1294, Boat7);
@@ -334,14 +389,14 @@ internal static class WorldgenScene
             if (!ready) exit;
             ticks += 1;
             var ocean = instance_find({{Controller}}, 0);
-            var frame_width = width_at[frame];
+            var frame_width = frame == 0 ? 2200 : 4096;
             var frame_height = round(frame_width * 3 / 5);
             Camera.x = ocean.ocean_start + x_at[frame];
             Camera.y = y_at[frame];
             view_wview[0] = frame_width;
             view_hview[0] = frame_height;
             view_xview[0] = Camera.x - frame_width / 2;
-            view_yview[0] = Camera.y - frame_height / 2;
+            view_yview[0] = clamp(Camera.y - frame_height / 2, 0, room_height - frame_height);
             with (Message) visible = false;
 
             // The vanilla renderer allocates its light surface at the original view size.
@@ -361,7 +416,7 @@ internal static class WorldgenScene
             lamp.visible = frame > 0;
             lamp.x = ocean.ocean_start + lamp_x_at[frame];
             lamp.y = Camera.y;
-            lamp.image_scale = 4 * lamp_width_at[frame] / sprite_get_width(lamp.sprite_index);
+            lamp.image_scale = (frame < 13 ? 22000 : 12500) / sprite_get_width(lamp.sprite_index);
             lamp.special_scale = lamp.image_scale;
 
             // Allow the normal streamer and fish steps to settle before saving the rendered frame.
@@ -387,13 +442,9 @@ internal static class WorldgenScene
             {
                 frame += 1;
                 ticks = 0;
-                if (frame == {{frames.Count}}) game_end();
+                if (frame == {{frameCount}}) game_end();
             }
             """);
 
-        static int ChunkCenter(int chunk) => chunk * chunkWidth + chunkWidth / 2;
-
-        void AddFrame(string name, int x, int y, int width, int? lampX = null, int? lampWidth = null) =>
-            frames.Add((name, x, y, width, lampX ?? x, lampWidth ?? width));
     }
 }

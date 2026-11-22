@@ -49,7 +49,7 @@ public sealed class ManagementTests : IDisposable
         Assert.Equal([perf.Id], active.EnabledMods);
         Assert.False(active.NoRepack);
         Assert.True(active.Perf.StartEnabled);
-        Assert.True(active.Perf.FishGrid);
+        Assert.False(active.Perf.FishGrid);
         Assert.True(active.Perf.Interval > 4);
         Assert.Equal(active.BeforeWeakPc, profiles.SetPreset("laptop", "weak-pc").BeforeWeakPc);
 

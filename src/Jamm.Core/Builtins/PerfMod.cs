@@ -7,74 +7,79 @@ namespace Jamm.ModMaker;
 public static class PerfMod
 {
     /// <summary>Applies guarded source edits to an original legacy game.</summary>
-    public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = true)
-        => Apply(data, debug, applyFishGrid, null);
-
-    /// <summary>Applies guarded source edits to an original legacy game and optionally records sleep/grid decisions.</summary>
-    public static void Apply(UndertaleData data, bool debug, bool applyFishGrid, List<string>? decisions)
+    public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = false,
+        bool applyScheduler = true, bool applyCoreOptimizations = true, bool applyDecorSleep = false,
+        bool applyFishSleep = false, List<string>? decisions = null)
     {
+        if (data.GeneralInfo.Major != 1 || data.GeneralInfo.BytecodeVersion != 16
+            || data.Code.ByName("gml_Object_Fish_Step_2") is null
+            || data.Code.ByName("gml_Script_fish_check_trawler") is null
+            || data.Code.ByName("gml_Script_fish_avoid_fish") is null)
+            throw new InvalidDataException("Perf requires the supported legacy GameMaker 1 archive. Select the August 2023 legacy data.win.");
+
         var compiler = new CompileGroup(data);
-        // FishThinner destroys owned lights before deactivation/death; reactivation and
-        // fish_respawn's instance_copy can leave the dead id behind. Preserve all other
-        // drawing/state work, and do not recreate lights or change the culling policy.
-        Patch("gml_Object_Magmer_Draw_0",
-            "light.image_alpha = 1 - power(1 - heat_level, 2);",
-            "if (instance_exists(light))\n    light.image_alpha = 1 - power(1 - heat_level, 2);");
-        Patch("gml_Object_Volteen_Other_13",
-            "light.add_blend = 4210752;\nlight.sub_blend = 4210752;",
-            "if (instance_exists(light))\n{\n    light.add_blend = 4210752;\n    light.sub_blend = 4210752;\n}");
-        Patch("gml_Object_Volteen_Other_10",
-            "    light.add_blend = 0;\n    light.sub_blend = 0;",
-            "    if (instance_exists(light))\n    {\n        light.add_blend = 0;\n        light.sub_blend = 0;\n    }",
-            "    light.add_blend = 4210752;\n    light.sub_blend = 4210752;",
-            "    if (instance_exists(light))\n    {\n        light.add_blend = 4210752;\n        light.sub_blend = 4210752;\n    }");
-        // GM1's boolean evaluation must not be relied on to short circuit. The outer guard
-        // prevents a precise CaveRockBig collision query for states that cannot use its result.
-        Patch("gml_Object_Fish_Step_2",
-            "if (y > 5000 && !deepfish)",
-            "if (state == 0 || state == 1 || state == 9 || state == 5)\nif (y > 5000 && !deepfish)");
+        if (applyCoreOptimizations)
+        {
+            // FishThinner destroys owned lights before deactivation/death; reactivation and
+            // fish_respawn's instance_copy can leave the dead id behind. Preserve all other
+            // drawing/state work, and do not recreate lights or change the culling policy.
+            Patch("gml_Object_Magmer_Draw_0",
+                "light.image_alpha = 1 - power(1 - heat_level, 2);",
+                "if (instance_exists(light))\n    light.image_alpha = 1 - power(1 - heat_level, 2);");
+            Patch("gml_Object_Volteen_Other_13",
+                "light.add_blend = 4210752;\nlight.sub_blend = 4210752;",
+                "if (instance_exists(light))\n{\n    light.add_blend = 4210752;\n    light.sub_blend = 4210752;\n}");
+            Patch("gml_Object_Volteen_Other_10",
+                "    light.add_blend = 0;\n    light.sub_blend = 0;",
+                "    if (instance_exists(light))\n    {\n        light.add_blend = 0;\n        light.sub_blend = 0;\n    }",
+                "    light.add_blend = 4210752;\n    light.sub_blend = 4210752;",
+                "    if (instance_exists(light))\n    {\n        light.add_blend = 4210752;\n        light.sub_blend = 4210752;\n    }");
+            // A collision query has no game side effects. Preserve Net existence checks and
+            // every transition, but do not query a net for states that cannot be caught.
+            Patch("gml_Script_fish_check_trawler",
+                "if (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false))",
+                "if (state == 0 || state == 2 || state == 1 || state == 5 || state == 8 || state == 9 || state == 10)\nif (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false))");
 
-        // A collision query has no game side effects. Preserve Net existence checks and
-        // every transition, but do not query a net for states that cannot be caught.
-        Patch("gml_Script_fish_check_trawler",
-            "if (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false))",
-            "if (state == 0 || state == 2 || state == 1 || state == 5 || state == 8 || state == 9 || state == 10)\nif (collision_line(Net.top.x, Net.top.y, Net.bot.x, Net.bot.y, id, true, false))");
+            // All original callers pass object assets (including object_index), so with must
+            // retain descendant traversal and engine order. Hoist only arithmetic invariants:
+            // no neighbour is omitted and the sum, including coincident-point behaviour, is unchanged.
+            var avoid = data.Code.ByName("gml_Script_fish_avoid_fish")
+                ?? throw new InvalidDataException("fish_avoid_fish missing: use the original legacy data.win.");
+            string avoidance = ModObjects.Decompile(data, avoid);
+            if (!avoidance.Contains("(argument1 * argument1)", StringComparison.Ordinal)
+                || avoidance.Split("(100000 * argument2)", StringSplitOptions.None).Length != 3)
+                throw new InvalidDataException("fish_avoid_fish differs: use the original legacy data.win.");
+            compiler.QueueCodeReplace(avoid,
+                "var jamm_perf_radius2 = argument1 * argument1;\nvar jamm_perf_force = 100000 * argument2;\n"
+                + avoidance.Replace("(argument1 * argument1)", "jamm_perf_radius2", StringComparison.Ordinal)
+                    .Replace("(100000 * argument2)", "jamm_perf_force", StringComparison.Ordinal));
+        }
 
-        // All original callers pass object assets (including object_index), so with must
-        // retain descendant traversal and engine order. Hoist only arithmetic invariants:
-        // no neighbour is omitted and the sum, including coincident-point behaviour, is unchanged.
-        var avoid = data.Code.ByName("gml_Script_fish_avoid_fish")
-            ?? throw new InvalidDataException("fish_avoid_fish missing: use the original legacy data.win.");
-        string avoidance = ModObjects.Decompile(data, avoid);
-        if (!avoidance.Contains("(argument1 * argument1)", StringComparison.Ordinal)
-            || avoidance.Split("(100000 * argument2)", StringSplitOptions.None).Length != 3)
-            throw new InvalidDataException("fish_avoid_fish differs: use the original legacy data.win.");
-        compiler.QueueCodeReplace(avoid,
-            "var jamm_perf_radius2 = argument1 * argument1;\nvar jamm_perf_force = 100000 * argument2;\n"
-            + avoidance.Replace("(argument1 * argument1)", "jamm_perf_radius2", StringComparison.Ordinal)
-                .Replace("(100000 * argument2)", "jamm_perf_force", StringComparison.Ordinal));
+        if (applyScheduler)
+        {
+            var fishStep = data.Code.ByName("gml_Object_Fish_Step_2")
+                ?? throw new InvalidDataException("Fish End Step missing: use the original legacy data.win.");
+            compiler.QueueCodeReplace(fishStep, PerfMode.Prefix(data) + ModObjects.Decompile(data, fishStep));
+        }
 
-        // Parallax still follows the camera every tick, including off-screen scenery (other
-        // objects may read its coordinates). Only the pure depth transform is memoized.
-        var scene = data.Code.ByName("gml_Object_SceneItem_Step_2")
-            ?? throw new InvalidDataException("SceneItem step missing: use the original legacy data.win.");
-        string source = ModObjects.Decompile(data, scene);
-        int end = source.IndexOf("x = home_x", StringComparison.Ordinal);
-        if (end < 0 || !source.StartsWith("scene_depth = depth + 18;", StringComparison.Ordinal))
-            throw new InvalidDataException("SceneItem step differs: use the original legacy data.win.");
-        compiler.QueueCodeReplace(scene, "if (!variable_instance_exists(id, \"jamm_perf_depth\")) { jamm_perf_depth = depth + 1; jamm_perf_object = object_index; }\n"
-            + "if (jamm_perf_depth != depth || jamm_perf_object != object_index)\n{\n" + source[..end]
-            + "jamm_perf_scene_depth = scene_depth;\njamm_perf_depth = depth;\njamm_perf_object = object_index;\n}\nscene_depth = jamm_perf_scene_depth;\n" + source[end..]);
-        FishSleep.Install(data, compiler);
-        PerfMode.Queue(data, compiler, debug);
+        // Leave SceneItem's per-instance depth transform alone. Runtime profiling on large
+        // packs showed the cache probes cost more than the small transform they replace.
+        if (applyScheduler) PerfMode.Queue(data, compiler, debug);
         ModObjects.Compile(compiler);
-        List<string> sleepDecisions = [];
-        FishSleep.Finalize(data, [], sleepDecisions);
-        decisions?.AddRange(sleepDecisions);
         if (applyFishGrid)
         {
             string gridDecision = FishGrid.Apply(data);
             decisions?.Add(gridDecision);
+        }
+        if (applyDecorSleep)
+        {
+            var decorDecisions = DecorSleep.Apply(data);
+            decisions?.AddRange(decorDecisions);
+        }
+        if (applyFishSleep)
+        {
+            var sleepDecisions = FishSleep.Apply(data, [], debug: debug);
+            decisions?.AddRange(sleepDecisions);
         }
 
         void Patch(string name, string before, string after, string? secondBefore = null, string? secondAfter = null)
@@ -92,10 +97,10 @@ public static class PerfMod
                     throw new InvalidDataException($"'{name}' differs: use the original legacy data.win.");
                 text = text.Replace(secondBefore, secondAfter!, StringComparison.Ordinal);
             }
-            if (name == "gml_Object_Fish_Step_2") text = FishSleep.Step2Prefix() + PerfMode.Prefix(data) + text;
             compiler.QueueCodeReplace(code, text);
         }
     }
+
     // WHY: wrapping an if that owns an else changes which if receives that else in GM1.
     private static void AssertNoElse(string source, string before, string name)
     {
@@ -111,5 +116,4 @@ public static class PerfMod
         if (depth != 0 || source[end..].TrimStart().StartsWith("else", StringComparison.Ordinal))
             throw new InvalidDataException($"'{name}': guarded statement has an else or unexpected shape; cannot safely apply Perf. Use the original legacy data.win.");
     }
-
 }

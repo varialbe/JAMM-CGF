@@ -8,7 +8,9 @@ namespace Jamm.ModMaker;
 internal static class LegacyCodeHooks
 {
     internal readonly record struct Hook(UndertaleFunction? Before = null, UndertaleFunction? After = null,
-        UndertaleFunction? ReplaceCall = null);
+        UndertaleFunction? ReplaceCall = null,
+        IReadOnlyList<UndertaleInstruction>? BeforeInline = null,
+        IReadOnlyList<UndertaleInstruction>? AfterInline = null);
 
     internal static bool Supports(UndertaleCode code)
     {
@@ -31,23 +33,29 @@ internal static class LegacyCodeHooks
             && !(instruction.Kind == Opcode.PopEnv && instruction.JumpOffsetPopenvExitMagic);
 
     internal static bool Insert(UndertaleCode code, Func<UndertaleInstruction, Hook> select,
-        UndertaleFunction? enter = null, UndertaleFunction? leave = null)
+        UndertaleFunction? enter = null, UndertaleFunction? leave = null,
+        IReadOnlyList<UndertaleInstruction>? enterInline = null,
+        IReadOnlyList<UndertaleInstruction>? leaveInline = null)
     {
         var edits = code.Instructions.Select(select).ToArray();
-        if (enter is null && leave is null && edits.All(hook => hook == default)) return false;
+        if (enter is null && leave is null && enterInline is null && leaveInline is null
+            && edits.All(hook => hook == default)) return false;
 
         var replacement = new List<UndertaleInstruction>(code.Instructions.Count);
         var destinations = new Dictionary<int, int>();
         var branches = new List<(UndertaleInstruction Branch, int Origin, int Destination)>();
         int oldAddress = 0, newAddress = 0;
         AddCall(enter);
+        AddInline(enterInline);
         for (int i = 0; i < edits.Length; i++)
         {
             var instruction = code.Instructions[i];
             var edit = edits[i];
             destinations.Add(oldAddress, newAddress);
             AddCall(edit.Before);
+            AddInline(edit.BeforeInline);
             if (instruction.Kind is Opcode.Ret or Opcode.Exit) AddCall(leave);
+            if (instruction.Kind is Opcode.Ret or Opcode.Exit) AddInline(leaveInline);
             if (HasBranchTarget(instruction))
                 branches.Add((instruction, newAddress, oldAddress + instruction.JumpOffset));
             if (edit.ReplaceCall is not null)
@@ -68,9 +76,11 @@ internal static class LegacyCodeHooks
             oldAddress += size;
             newAddress += size;
             AddCall(edit.After);
+            AddInline(edit.AfterInline);
         }
         destinations.Add(oldAddress, newAddress);
         AddCall(leave);
+        AddInline(leaveInline);
 
         foreach (var (branch, origin, destination) in branches)
             branch.JumpOffset = destinations[destination] - origin;
@@ -88,6 +98,50 @@ internal static class LegacyCodeHooks
             });
             replacement.Add(new UndertaleInstruction { Kind = Opcode.Popz, Type1 = DataType.Variable });
             newAddress += 3;
+        }
+
+        void AddInline(IReadOnlyList<UndertaleInstruction>? instructions)
+        {
+            if (instructions is null) return;
+            foreach (var instruction in instructions)
+            {
+                var copy = Copy(instruction);
+                replacement.Add(copy);
+                newAddress += (int)copy.CalculateInstructionSize();
+            }
+        }
+
+        static UndertaleInstruction Copy(UndertaleInstruction source)
+        {
+            var copy = new UndertaleInstruction
+            {
+                Kind = source.Kind,
+                Type1 = source.Type1,
+                Type2 = source.Type2,
+                TypeInst = source.TypeInst,
+                ValueLong = source.ValueLong
+            };
+            if (source.Kind == Opcode.Cmp)
+                copy.ComparisonKind = source.ComparisonKind;
+            if (GetInstructionType(source.Kind) == InstructionType.GotoInstruction)
+            {
+                if (source.JumpOffsetPopenvExitMagic) copy.JumpOffsetPopenvExitMagic = true;
+                else copy.JumpOffset = source.JumpOffset;
+            }
+            if (source.Kind == Opcode.Call)
+                copy.ArgumentsCount = source.ArgumentsCount;
+            if (source.Kind == Opcode.Dup)
+                copy.Extra = source.Extra;
+            if (source.ValueVariable is not null)
+            {
+                copy.ValueVariable = source.ValueVariable;
+                copy.ReferenceType = source.ReferenceType;
+            }
+            else if (source.ValueFunction is not null)
+                copy.ValueFunction = source.ValueFunction;
+            else if (source.ValueString is not null)
+                copy.ValueString = source.ValueString;
+            return copy;
         }
     }
 }

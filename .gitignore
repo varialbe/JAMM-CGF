@@ -23,3 +23,6 @@ TestResults/
 *.win.cgfmm-original
 *.win.cgfmm-build.json
 .cgfmm-*.tmp
+.audit/
+.review/
+__pycache__/

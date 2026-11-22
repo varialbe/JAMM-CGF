@@ -29,14 +29,18 @@ public static class Program
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
                   console <original.win> <out.win>
-                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload] [--silo-video] [--silo-frames]
+                  bench   <silo.win> <out.win> --scene silo [--silo-mode cycle|save|reload|cycle-save] [--silo-video] [--silo-frames]
+                  bench   <submarine.win> <out.win> --scene submarine (requires JAMM Console)
                   bench   <weather.win> <out.win> --scene weather
                   bench   <any.win> <out.win> --scene autoplay
                   bench   <legacy.win> <out.win> --scene maize
                   bench   <modded.win> <out.win> --scene money
+                  bench   <harbor-town.win> <out.win> --scene harbor
+                  bench   <video.win> <out.win> --scene showcase-harbor
+                  bench   <video.win> <out.win> --scene showcase-submarine
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -86,11 +90,13 @@ public static class Program
             case "export-pages": TexturePages.Export(data, output!, Console.WriteLine); return 0;
             case "perf":
                 string[] changed = ["gml_Object_Fish_Step_2", "gml_Script_fish_check_trawler",
-                    "gml_Script_fish_avoid_fish", "gml_Object_SceneItem_Step_2",
-                    "gml_Object_Magmer_Draw_0", "gml_Object_Volteen_Other_13", "gml_Object_Volteen_Other_10"];
+                    "gml_Script_fish_avoid_fish", "gml_Object_Magmer_Draw_0",
+                    "gml_Object_Volteen_Other_13", "gml_Object_Volteen_Other_10"];
                 var before = changed.ToDictionary(n => n, n => data.Code.ByName(n)?.Instructions.Count ?? 0);
                 List<string> perfDecisions = [];
-                PerfMod.Apply(data, args.Contains("--debug"), applyFishGrid: true, perfDecisions);
+                PerfMod.Apply(data, args.Contains("--debug"), applyFishGrid: args.Contains("--fish-grid"),
+                    applyDecorSleep: !args.Contains("--no-decor-sleep"), applyFishSleep: !args.Contains("--no-fish-sleep"),
+                    decisions: perfDecisions);
                 foreach (string name in changed)
                     Console.WriteLine($"{name}: {before[name]} -> {data.Code.ByName(name)!.Instructions.Count} instructions (static size, not executed work).");
                 foreach (string decision in perfDecisions)
@@ -98,7 +104,11 @@ public static class Program
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;
+            case "bench" when SubmarineScene.Requested(args): SubmarineScene.Apply(data); Save(data, output!); return 0;
             case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when HarborScene.Requested(args): HarborScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when ShowcaseHarborScene.Requested(args): ShowcaseHarborScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when ShowcaseSubmarineScene.Requested(args): ShowcaseSubmarineScene.Apply(data); Save(data, output!); return 0;
             case "bench" when AutoplayScene.Requested(args): AutoplayScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
             case "bench" when OptionValue(args, "--scene") == "maize": MaizeScene.Apply(data); Save(data, output!); return 0;
@@ -148,6 +158,9 @@ public static class Program
         bool profileScripts = false;
         int traceFish = 0;
         bool fishGrid = false;
+        bool decorSleep = false;
+        bool fishSleep = false;
+        bool screenshot = false;
         var fishMode = BenchmarkFishMode.Full;
         int fishCap = -1;
         double fishScale = 1.0;
@@ -168,6 +181,9 @@ public static class Program
                     if (traceFish < 1) throw new ArgumentException("--trace-fish requires at least one tick.");
                     break;
                 case "--fish-grid": fishGrid = true; break;
+                case "--decor-sleep": decorSleep = true; break;
+                case "--fish-sleep": fishSleep = true; break;
+                case "--screenshot": screenshot = true; break;
                 case "--profile-scripts": profile = true; profileScripts = true; break;
                 case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
                 case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
@@ -193,7 +209,7 @@ public static class Program
             }
         }
 
-        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, fishMode, fishCap, fishScale);
+        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, fishSleep, screenshot, fishMode, fishCap, fishScale);
         BenchmarkMod.ValidateOptions(options);
         return options;
     }

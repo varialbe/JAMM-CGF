@@ -105,7 +105,7 @@ public sealed class BuiltinModTests : IDisposable
         Assert.Equal("builtin-" + id, first.Mod.Id);
         Assert.NotEmpty(first.Mod.Description!);
         var library = new ModLibrary(store);
-        Assert.True(library.SanitizerReport(first.Mod).IsJammMod);
+        Assert.Equal(id != "perf", library.SanitizerReport(first.Mod).IsJammMod);
         Assert.Empty(library.SanitizerReport(first.Mod).Removed);
         progress.Clear();
         Assert.True(service.Add(id, progress.Add).AlreadyAdded);
@@ -135,6 +135,24 @@ public sealed class BuiltinModTests : IDisposable
         Assert.NotEqual(first.Mod.BaseSha256, next.Mod.BaseSha256);
         Assert.Equal(next.Mod.Id, Assert.Single(profiles.Get("test").Mods));
         Assert.True(new ModLibrary(store).SanitizerReport(next.Mod).IsJammMod);
+    }
+
+    [Fact]
+    public void EmptyPerfPatchCopiesBaseWithoutAddingGenericRuntimeCode()
+    {
+        var mod = new BuiltinMods(store).Add("perf").Mod;
+        var library = new ModLibrary(store);
+        var patch = library.Patch(mod);
+        string output = Path.Combine(root, "perf-only.win");
+
+        var result = ArchiveBuilder.Build(original,
+            [new BuildInput(patch, library.Archive(mod))], output, noRepack: true);
+
+        Assert.Equal(BuildFiles.Hash(original), BuildFiles.Hash(output));
+        Assert.Equal(BuildFiles.Hash(original), result.Verification!.Inspection.Sha256);
+        using var loaded = GameFileLoader.Load(output);
+        Assert.Null(loaded.Data.GameObjects.ByName("obj_jamm_perf"));
+        Assert.Null(loaded.Data.GameObjects.ByName("obj_jamm_catalog"));
     }
 
     [Fact]
@@ -201,7 +219,8 @@ public sealed class BuiltinModTests : IDisposable
         var result = ArchiveBuilder.Build(original, mods.Select(m => new BuildInput(library.Patch(m), Path.Combine(store.Root, "mods", m.Id, "data.win"))).ToArray(), merged);
         Assert.NotNull(result.Verification);
         using var loaded = GameFileLoader.Load(merged);
-        foreach (string name in new[] { "obj_jamm_perf", "obj_jamm_smooth", "obj_jamm_hd", "obj_jamm_console", "third_party_controller" })
+        Assert.Null(loaded.Data.GameObjects.ByName("obj_jamm_perf"));
+        foreach (string name in new[] { "obj_jamm_smooth", "obj_jamm_hd", "obj_jamm_console", "third_party_controller" })
             Assert.NotNull(loaded.Data.GameObjects.ByName(name));
     }
 

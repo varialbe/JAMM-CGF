@@ -108,6 +108,250 @@ public sealed class InstanceGuardTests
         Assert.Contains(found, f => f.Kind == "with-object" && f.Object == "Bo");
         Assert.Equal(result, InstanceGuard.Rewrite("x", result, Facts(), [], out _));
     }
+
+    [Fact]
+    public void WrapsCompoundAssignmentsAndPrefixIncrements()
+    {
+        List<InstanceReference> found = [];
+        string text = """
+            Bo.flags |= 1;
+            Bo.flags &= 2;
+            Bo.flags ^= 3;
+            Bo.x %= 4;
+            Bo.x <<= 1;
+            Bo.x >>= 1;
+            ++Bo.x;
+            --Bo.y;
+            near = instance_nearest(x, y, Bo);
+            near.flags |= 4;
+            ++near.x;
+            """;
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out _);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.flags |= 1; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.flags &= 2; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.flags ^= 3; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.x %= 4; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.x <<= 1; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.x >>= 1; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ ++Bo.x; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ --Bo.y; }}", result);
+        Assert.Contains("if (near >= 0 && instance_exists(near)) { near.flags |= 4; }", result);
+        Assert.Contains("if (near >= 0 && instance_exists(near)) { ++near.x; }", result);
+        Assert.All(found, f => Assert.True(f.Guarded));
+    }
+
+    [Fact]
+    public void GuardsMultilineStatementsAndMultipleStatementsPerLineWithoutBreakingForHeaders()
+    {
+        List<InstanceReference> found = [];
+        string text = """
+            Bo.x = clamp(
+                a,
+                0,
+                10
+            );
+            Bo
+                .y = 2;
+            d = Bo
+                .z;
+            a = 1; Bo.x = 2; Worm.y = 3;
+            if (b) Bo.x = 4; else y = 1;
+            for (
+                Bo.i = 0;
+                Bo.i < 10;
+                Bo.i++
+            )
+            {
+                z = 1;
+            }
+            """;
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out _);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.x = clamp(\n    a,\n    0,\n    10\n); }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo\n    .y = 2; }}", result);
+        Assert.Contains($"d = jamm_iv_z({S("Bo")});", result);
+        Assert.Contains($"a = 1; {{ if (instance_exists({S("Bo")})) {{ Bo.x = 2; }} }} {{ if (instance_exists({S("Worm")})) {{ Worm.y = 3; }} }}", result);
+        Assert.Contains($"if (b) {{ if (instance_exists({S("Bo")})) {{ Bo.x = 4; }} }} else y = 1;", result);
+        Assert.Contains("for (\n    Bo.i = 0;\n", result);
+        Assert.DoesNotContain("{ Bo.i = 0; }", result);
+        Assert.Contains($"jamm_iv_i({S("Bo")}) < 10;", result);
+    }
+
+    [Fact]
+    public void DetectsShadowedVariablesInMixedVarFunctionArgsAndCompoundOps()
+    {
+        List<InstanceReference> found = [];
+        string text = """
+            function move_fish(a, Bo, Worm = 0)
+            {
+                return Bo.x + Worm.y;
+            }
+            var x = foo(1, 2), Sizzer;
+            a = Sizzer.x;
+            Baby_Sizzer += 1;
+            b = Baby_Sizzer.y;
+            other . Lure = 1;
+            c = Lure.object_index == Fish.object_index;
+            """;
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out var accessors);
+        Assert.Contains("return Bo.x + Worm.y;", result);
+        Assert.Contains("a = Sizzer.x;", result);
+        Assert.Contains("b = Baby_Sizzer.y;", result);
+        Assert.Contains($"c = {S("Lure")} == Fish.object_index;", result);
+        Assert.Empty(accessors);
+        Assert.Equal(new[] { "Lure", "Fish" }, found.Select(f => f.Object));
+    }
+
+    [Fact]
+    public void GuardsLookupVariablesEvenWhenNamedLikeObjectsAndRespectsIfScope()
+    {
+        List<InstanceReference> found = [];
+        string text = """
+            var Bo = instance_nearest(x, y, Fish);
+            d = Bo.x;
+            near = instance_nearest(x, y, Worm);
+            if (near != noone)
+            {
+                a = near.x;
+            }
+            b = near.y;
+            if (near != noone || fallback)
+                c = near.z;
+            if (near == noone)
+                show_debug_message("missing");
+            e = near.speed;
+            near = near.parent;
+            safe = instance_nearest(x, y, Worm);
+            if (safe == noone) exit;
+            f = safe.x;
+            scoped = instance_nearest(x, y, Worm);
+            if (cond)
+            {
+                if (scoped == noone) exit;
+                g = scoped.x;
+            }
+            h = scoped.y;
+            """;
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out _);
+        Assert.Contains("d = jamm_iv_x(Bo);", result);
+        Assert.Contains("a = near.x;", result);
+        Assert.Contains("b = jamm_iv_y(near);", result);
+        Assert.Contains("c = jamm_iv_z(near);", result);
+        Assert.Contains("e = jamm_iv_speed(near);", result);
+        Assert.Contains("near = jamm_iv_parent(near);", result);
+        Assert.Contains("f = safe.x;", result);
+        Assert.Contains("g = scoped.x;", result);
+        Assert.Contains("h = jamm_iv_y(scoped);", result);
+    }
+
+    [Fact]
+    public void ExistenceGuardHandlesBooleanOperatorsUnbracedBlocksAndNoSemicolons()
+    {
+        List<InstanceReference> found = [];
+        string text = """
+            if (a or b && instance_exists(Bo))
+                Bo.x = 1;
+            if (a ^^ b && instance_exists(Bo))
+                Bo.y = 2;
+            if (instance_exists(Bo))
+                if (c) {}
+            Bo.z = 3;
+            if (instance_exists(Bo))
+                exit
+            Bo.w = 4;
+            if ((a || b) && instance_exists(Bo))
+                Bo.k = 5;
+            if (!instance_exists(Bo)) exit;
+            Bo.m = 6;
+            """;
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out _);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.x = 1; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.y = 2; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.z = 3; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.w = 4; }}", result);
+        Assert.Contains("Bo.k = 5;\nif (!instance_exists(Bo)) exit;\nBo.m = 6;", result);
+    }
+
+    [Fact]
+    public void PinsNestedParensQualifiedNamesChainingMaskingSwitchAndElse()
+    {
+        List<InstanceReference> found = [];
+        string text = """
+            if ((a && instance_exists(Bo)) || b)
+                Bo.x = 1;
+            if (!(a && instance_exists(Bo)))
+                Bo.y = 2;
+            other.Bo.x = 1;
+            self.Bo.y = 2;
+            global.Bo.z = 3;
+            global.near = instance_nearest(x, y, Bo);
+            d = other.near.x;
+            near = instance_nearest(x, y, Bo);
+            other.near = 1;
+            e = near.x;
+            f = Bo.target.x;
+            Bo.target.x = 1;
+            s1 = "escaped \"Bo.x\"";
+            s2 = 'escaped \'Bo.y\'';
+            s3 = "slash \\"; Bo.z = 4;
+            /* Bo.x */ /* " */ g = Bo.w;
+            // /*
+            h = Bo.v;
+            Bo.name = "a; \"b\"";
+            if (cond)
+                y = 1;
+            else
+                Bo.u = 5;
+            switch (Bo.state)
+            {
+                case 0: Bo.p = 1; break;
+                case Bo.object_index: break;
+                default: return Bo.q;
+            }
+            """;
+        string result = InstanceGuard.Rewrite("x", text, Facts(), found, out _);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.x = 1; }}", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.y = 2; }}", result);
+        Assert.Contains("other.Bo.x = 1;", result);
+        Assert.Contains("self.Bo.y = 2;", result);
+        Assert.Contains("global.Bo.z = 3;", result);
+        Assert.Contains("d = other.near.x;", result);
+        Assert.Contains("e = jamm_iv_x(near);", result);
+        Assert.Contains("f = Bo.target.x;", result);
+        Assert.Contains("Bo.target.x = 1;", result);
+        Assert.Contains("s1 = \"escaped \\\"Bo.x\\\"\";", result);
+        Assert.Contains("s2 = 'escaped \\'Bo.y\\'';", result);
+        Assert.Contains($"s3 = \"slash \\\\\"; {{ if (instance_exists({S("Bo")})) {{ Bo.z = 4; }} }}", result);
+        Assert.Contains($"/* Bo.x */ /* \" */ g = jamm_iv_w({S("Bo")});", result);
+        Assert.Contains($"h = jamm_iv_v({S("Bo")});", result);
+        Assert.Contains($"if (instance_exists({S("Bo")})) {{ Bo.name = \"a; \\\"b\\\"\"; }}", result);
+        Assert.Contains($"else\n    {{ if (instance_exists({S("Bo")})) {{ Bo.u = 5; }} }}", result);
+        Assert.Contains($"switch (jamm_iv_state({S("Bo")}))", result);
+        Assert.Contains($"case 0: {{ if (instance_exists({S("Bo")})) {{ Bo.p = 1; }} }} break;", result);
+        Assert.Contains("case Bo.object_index: break;", result);
+        Assert.Contains($"default: return jamm_iv_q({S("Bo")});", result);
+    }
+
+    [Fact]
+    public void PinsLegacyInstanceSitesAndIdempotency()
+    {
+        var facts = Facts();
+        foreach (var (code, input, expected) in new[]
+        {
+            ("gml_Object_Chook_Other_10", "if (point_distance(x, y, Lure.x, Lure.y) <= 51)\n{\n    alarm[0] = 1;\n}", $"instance_exists({S("Ancient_Kingfish")})"),
+            ("gml_Object_Thermo_Other_10", "var dist = point_distance(ThermoSchool.x, ThermoSchool.y, nearby_magmer.x, nearby_magmer.y);", "if (instance_exists(nearby_magmer))"),
+            ("gml_Object_SaveManager_Other_13", "ind = Bulbfish.object_index;", $"var jamm_lamp_object = {S("Bulbfish")};"),
+            ("gml_Object_LightingSystem_Draw_0", "draw_sprite_ext(Torby.sprite_index, 0, Girl.x + ox, Girl.y + oy, -1, 1, 0, c_white, 0.3);", $"var jamm_ghost_sprite = object_get_sprite({S("Torby")});"),
+            ("gml_Object_Snobfish_Other_10", "if (bro.object_index != Nightfish)\n{\n    a = 1;\n}", $"bro.object_index == {S("Nightfish")}"),
+            ("gml_Object_Flash_Other_10", "target_x = target_node.x;\ntarget_y = target_node.y;", $"instance_nearest(x, y, {S("NavNode")})")
+        })
+        {
+            List<InstanceReference> found = [];
+            string rewritten = InstanceGuard.Rewrite(code, input, facts, found, out _);
+            Assert.Contains(expected, rewritten);
+            Assert.Contains(found, f => f.Kind is "instance-repair" or "object-index" && f.Guarded);
+            Assert.Equal(rewritten, InstanceGuard.Rewrite(code, rewritten, facts, [], out _));
+        }
+    }
 }
 
 public sealed partial class BuildingTests

@@ -55,7 +55,9 @@ internal static class ValueGuard
         var candidates = live.SelectMany(p => Read(p.Key, p.Value, currentContext))
             .Select(value => (Value: value, Changed: Changed(value)))
             .Select(c => (c.Value, c.Changed, Mod: c.Changed ? Source(c.Value) : "vanilla")).ToArray();
-        var peers = candidates.Where(c => c.Changed && c.Value.Literal is > 0)
+        var peers = candidates.Where(c => c.Changed && c.Value.Literal is > 0
+                && !(maxima.GetValueOrDefault(c.Value.Stat) is > 0 and var vmax
+                    && c.Value.Literal.Value > vmax * Headroom && IsPlaceholder(c.Value.Literal.Value)))
             .GroupBy(c => (c.Mod, c.Value.Stat))
             .ToDictionary(g => g.Key, g => g.GroupBy(c => c.Value.Item)
                 .Select(item => (Item: item.Key, Max: item.Max(c => c.Value.Literal!.Value)))
@@ -86,7 +88,9 @@ internal static class ValueGuard
                     Replace(value, cap);
                     decisions.Add($"[CGF-VALUE-001] Capped fish sale values above {Format(options.FishValueCap)}: {value.Item} {Format(literal.Value)} -> {Format(options.FishValueCap)} ({mod}) in {value.Entry}");
                 }
-                else if (literal is null && changed && Wrap(value, expression => $"min({expression}, {cap})"))
+                else if (literal is null && changed
+                    && !(value.Span.End == value.Span.First + 1 && value.Gml.Tokens[value.Span.First].Kind == 's')
+                    && Wrap(value, expression => $"min({expression}, {cap})"))
                     decisions.Add($"[CGF-VALUE-001] Runtime fish sale cap for {location}: computed value -> maximum {Format(options.FishValueCap)}");
                 continue;
             }
@@ -163,7 +167,7 @@ internal static class ValueGuard
             PutScript(data, DynamicFishScript, $$"""
                 var jamm_value;
                 jamm_value = argument1;
-                if (instance_exists(argument0))
+                if (is_real(jamm_value) && instance_exists(argument0))
                 {
                     with (argument0)
                     {
@@ -284,9 +288,10 @@ internal static class ValueGuard
             }
             if (stat is null) continue;
             string item = owners.Length == 1 && owners[0] is { } owner ? owner : entry;
-            if (write.Index is { } index) item += "[" + gml.Key(index) + "]";
+            if (write.Index is { } index) item += "[" + (gml.Number(index) is double slot ? GmlNumber(slot) : gml.Key(index)) + "]";
             yield return new(entry, gml, write.Value, stat, item, write.Operator + gml.Key(write.Value),
-                (write.Operator == "=" || stat != Sale && write.Operator == "+=") ? gml.Number(write.Value) : null, write, dynamicTarget);
+                (write.Operator == "=" || stat != Sale && !stat.StartsWith("price.", StringComparison.Ordinal) && write.Operator == "+=")
+                    ? gml.Number(write.Value) : null, write, dynamicTarget);
         }
 
         foreach (var call in gml.Calls())

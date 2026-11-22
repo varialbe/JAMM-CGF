@@ -14,6 +14,14 @@
   --test-fg: #6c4800;
   --opt-bg: #e3edf9;
   --opt-fg: #1d4e83;
+  --branch-open: #bb6b00;
+  --branch-merged: #347a58;
+  --chart-start: #788793;
+  --chart-intermediate: #2672b8;
+  --chart-latest: #278357;
+  --bar-alt: #148365;
+  --bar-third: #8157b6;
+  --bar-fourth: #bb6b00;
   --shadow: 0 12px 30px rgb(27 55 70 / 7%);
 }
 @media (prefers-color-scheme: dark) {
@@ -32,6 +40,14 @@
     --test-fg: #fcd34d;
     --opt-bg: #1e293b;
     --opt-fg: #b4d2ff;
+    --branch-open: #ffc45c;
+    --branch-merged: #78c99b;
+    --chart-start: #91a1ad;
+    --chart-intermediate: #75b9f5;
+    --chart-latest: #70d49a;
+    --bar-alt: #5bd0aa;
+    --bar-third: #c3a0ff;
+    --bar-fourth: #ffc45c;
     --shadow: 0 12px 30px rgb(0 0 0 / 18%);
   }
 }
@@ -152,6 +168,55 @@ summary { color: var(--text); font-weight: 650; cursor: pointer; }
 summary + p { margin-bottom: 0; }
 .guide-header { margin-bottom: 1.2rem; }
 .guide-back { margin: 1.5rem 0; }
+.progress-section { margin: 1.2rem 0; padding: clamp(1rem, 3vw, 1.5rem); background: var(--panel); border: 1px solid var(--border); border-radius: 16px; min-width: 0; }
+.progress-section > p:not(.eyebrow) { max-width: 900px; }
+.graph-wrap, .chart-wrap { max-width: 100%; overflow-x: auto; padding: .8rem; background: var(--panel-alt); border-radius: 12px; }
+.branch-graph { display: block; width: 1210px; max-width: none; height: auto; }
+.branch-graph text { fill: var(--text); font: 600 12px system-ui, sans-serif; }
+.branch-graph .main-trunk { fill: none; stroke: var(--muted); stroke-width: 4; }
+.branch-graph .branch-lane path { fill: none; stroke: currentColor; stroke-width: 3; }
+.branch-graph .branch-lane.open { color: var(--branch-open); }
+.branch-graph .branch-lane.merged { color: var(--branch-merged); }
+.branch-graph .lane-fork, .branch-graph .lane-join { fill: currentColor; }
+.branch-graph .lane-label-bg { fill: var(--panel-alt); stroke: var(--border); stroke-width: 1; }
+.branch-graph .lane-label { font-size: 12px; font-weight: 650; }
+.branch-graph .lane-badge-bg { fill: var(--panel); stroke: currentColor; stroke-width: 1; }
+.branch-graph .lane-badge { fill: currentColor; font-size: 10px; font-weight: 700; }
+.branch-graph .branch-group { font-size: 13px; font-weight: 750; }
+.branch-graph .timeline-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 5; }
+.branch-graph .timeline-label, .branch-graph .trunk-label { fill: var(--muted); font-weight: 750; }
+.graph-key { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; font-size: .85rem; margin: .4rem 0 0; }
+.graph-key > span { white-space: nowrap; }
+.key-merged { color: var(--branch-merged); }
+.key-open { color: var(--branch-open); margin-left: .5rem; }
+.older-branches { margin-top: .6rem; }
+.older-branches ul { columns: 2; margin-bottom: 0; }
+.series-chart { margin-top: 1rem; }
+.series-chart h3 { margin-bottom: .35rem; font-size: 1.05rem; }
+.chart-wrap { margin-top: .4rem; }
+.perf-chart { display: block; width: 1000px; max-width: none; height: auto; }
+.perf-chart .grid-line { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 5; }
+.perf-chart text { fill: var(--text); font: 12px system-ui, sans-serif; }
+.perf-chart .bar-label { font-weight: 650; }
+.perf-chart .bar-value { font-weight: 700; }
+.perf-chart .bar-note, .perf-chart .axis-label { fill: var(--muted); font-size: 11px; }
+.perf-row .perf-bar { fill: var(--chart-intermediate); }
+.perf-row.start .perf-bar { fill: var(--chart-start); }
+.perf-row.latest .perf-bar { fill: var(--chart-latest); }
+.perf-row.reference .perf-bar { fill: none; stroke: var(--chart-intermediate); stroke-width: 3; }
+.perf-mobile { display: none; }
+.mobile-stage { padding: .6rem 0; border-top: 1px solid var(--border); }
+.mobile-stage:first-child { border-top: 0; }
+.mobile-stage-label { display: block; line-height: 1.35; }
+.mobile-bar-track { height: 16px; margin-top: .4rem; background: var(--border); border-radius: 5px; overflow: hidden; }
+.mobile-bar { display: block; height: 100%; background: var(--chart-intermediate); border-radius: 5px; }
+.mobile-stage.start .mobile-bar { background: var(--chart-start); }
+.mobile-stage.latest .mobile-bar { background: var(--chart-latest); }
+.mobile-stage.reference .mobile-bar { background: transparent; border: 2px solid var(--chart-intermediate); }
+.mobile-stage-value, .mobile-stage-note { margin: .2rem 0 0; font-size: .82rem; }
+.mobile-stage-value { color: var(--text); font-weight: 700; }
+.mobile-stage-note { color: var(--muted); overflow-wrap: anywhere; }
+.method-note { margin-top: .8rem; padding-left: .8rem; border-left: 3px solid var(--accent); }
 @media (max-width: 600px) {
   .site-nav { width: 100%; padding: .7rem 16px; align-items: flex-start; flex-direction: column; gap: .45rem; }
   .nav-links { gap: .25rem 1rem; }
@@ -166,6 +231,9 @@ summary + p { margin-bottom: 0; }
   .diagram-mobile { display: grid; gap: .4rem; padding-left: 1.5rem; color: var(--text); }
   .diagram-mobile li { padding: .4rem .55rem; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
   .download-row { align-items: flex-start; flex-direction: column; }
+  .perf-chart { display: none; }
+  .perf-mobile { display: block; width: 100%; }
+  .graph-key { align-items: flex-start; }
 }
 @media (max-width: 350px) {
   .card { padding: .85rem; }

@@ -15,29 +15,28 @@
       <a href="../index.html#packages">Packages</a>
       <a href="../how-jamm-builds.html">How builds work</a>
       <a href="../compatibility.html">Compatibility</a>
+      <a href="../progress.html">Progress</a>
     </div>
   </nav>
   <main id="main-content">
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html#packages">Packages</a><span aria-hidden="true">/</span><span>Endless Ocean (Preview)</span></nav>
     <header class="mod-header">
       <a class="back" href="../index.html#packages">← All packages</a>
-      <div class="card-head"><img src="../assets/endless-ocean.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Endless Ocean (Preview)</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">Recipe</span></div><p>Version 0.1.0</p></div></div>
-      <div class="download-row"><a class="btn" href="../packages/endless-ocean.zip" download>Download source ZIP</a><span>Source-only ZIP · 1,660 bytes</span></div>
-      <dl class="download-meta"><div><dt>Download size</dt><dd>1,660 bytes</dd></div><div><dt>SHA-256</dt><dd><code>81c9ddfdd1059ed5412406438c578a43ff8048e8b3202767c217ae3693c610ca</code></dd></div></dl>
+      <div class="card-head"><img src="../assets/endless-ocean.svg" alt="" width="52" height="52"><div><p class="eyebrow">Package detail</p><h1>Endless Ocean (Preview)</h1><div class="badges"><span class="badge b-optional">Optional</span> <span class="badge b-optional">Recipe</span></div><p>Version 0.2.1</p></div></div>
+      <div class="download-row"><a class="btn" href="../packages/endless-ocean.zip" download>Download source ZIP</a><span>Source-only ZIP · 1,599 bytes</span></div>
+      <dl class="download-meta"><div><dt>Download size</dt><dd>1,599 bytes</dd></div><div><dt>SHA-256</dt><dd><code>36344f758fc77d928c3cdc9fdd75cecd13570299c6d6c86f9c477070258d0c5f</code></dd></div></dl>
     </header>
 
     <section class="mod-section">
       <h2>What it does</h2>
-      <p>Endless Ocean adds a long stretch of seeded seafloor east of NewWorld. Take the final vanilla boat past the old eastern limit to fish three depth bands populated by familiar species. Returning to an unloaded stretch regenerates its terrain and fish.</p>
+      <p>Take the final vanilla boat east to find a continuous seabed, three biomes and wrecks with rare fish nearby. Returning to an unloaded stretch regenerates its initial terrain and fish from the saved seed.</p>
     </section>
 
     <section class="mod-section">
       <h2>Requirements</h2>
 <ul class="requirements">
-        <li>JAMM-CGF configured with the untouched August 2023 legacy VM <code>data.win</code> (bytecode 16).</li>
-        <li>A separate game copy for the built output; the current Steam YYC archive is not a compatible build base.</li>
-        <li>The recipe must run after the target mod pack has been merged so it can inspect room width and eastern artwork bounds.</li>
-        <li>Use the final vanilla boat, Boat7, to reach generated territory.</li>
+        <li>JAMM-CGF with a configured August 2023 legacy VM base.</li>
+        <li>Build into a separate game copy; do not use the current Steam YYC archive as the base.</li>
       </ul>
     </section>
 
@@ -46,8 +45,7 @@
 <ul class="install-steps">
         <li>Download this source ZIP.</li>
         <li>In JAMM, choose Add mods and import the ZIP.</li>
-        <li>Enable it in a profile, run Check, then build or install to a separate game copy.</li>
-        <li>For a pack, build the pack first and apply Endless Ocean as the last recipe step.</li>
+        <li>Enable it in a profile, check the profile, then build or install to a separate game copy.</li>
       </ul>
     </section>
 
@@ -61,22 +59,22 @@
     <section class="mod-section">
       <h2>Screenshots</h2>
 <div class="gallery">
-        <figure><a href="../images/endless-ocean/vanilla-1.webp"><img src="../images/endless-ocean/vanilla-1-thumb.webp" loading="lazy" alt="Lure near the dark rocks at the first generated terrain checkpoint" width="480" height="288"></a><figcaption>First terrain stop</figcaption></figure>
-        <figure><a href="../images/endless-ocean/vanilla-2.webp"><img src="../images/endless-ocean/vanilla-2-thumb.webp" loading="lazy" alt="Deep fish checkpoint above the generated ocean floor" width="480" height="288"></a><figcaption>Deep fish stop</figcaption></figure>
-        <figure><a href="../images/endless-ocean/vanilla-3.webp"><img src="../images/endless-ocean/vanilla-3-thumb.webp" loading="lazy" alt="Generated rock terrain near the eastern end of the ocean" width="480" height="288"></a><figcaption>Final chunk</figcaption></figure>
-        <figure><a href="../images/endless-ocean/vanilla-1337-transition.webp"><img src="../images/endless-ocean/vanilla-1337-transition-thumb.webp" loading="lazy" alt="Open water on the left and the first generated rock rising on the right" width="480" height="288"></a><figcaption>Transition to generated terrain</figcaption></figure>
-        <figure><a href="../images/endless-ocean/vanilla-1337-depths-117.webp"><img src="../images/endless-ocean/vanilla-1337-depths-117-thumb.webp" loading="lazy" alt="Stacked views of the upper, middle and near-floor fish bands" width="480" height="288"></a><figcaption>Three fish depth bands</figcaption></figure>
-        <figure><a href="../images/endless-ocean/vanilla-1337-panorama.webp"><img src="../images/endless-ocean/vanilla-1337-panorama-thumb.webp" loading="lazy" alt="Wide panorama of the ridges and troughs across five generated chunks" width="480" height="288"></a><figcaption>Five-chunk panorama</figcaption></figure>
-        <figure><a href="../images/endless-ocean/vanilla-314159-floor-03.webp"><img src="../images/endless-ocean/vanilla-314159-floor-03-thumb.webp" loading="lazy" alt="An alternate seed&#x27;s floor descending into a trough and rising on the right" width="480" height="288"></a><figcaption>Floor with seed 314159</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-1.webp"><img src="../images/endless-ocean/vanilla-1-thumb.webp" loading="lazy" alt="Lure near the dark rocks at the first generated terrain checkpoint" width="480" height="288"></a><figcaption>First terrain stop (v0 preview)</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-2.webp"><img src="../images/endless-ocean/vanilla-2-thumb.webp" loading="lazy" alt="Deep fish checkpoint above the generated ocean floor" width="480" height="288"></a><figcaption>Deep fish stop (v0 preview)</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-3.webp"><img src="../images/endless-ocean/vanilla-3-thumb.webp" loading="lazy" alt="Generated rock terrain near the eastern end of the ocean" width="480" height="288"></a><figcaption>Final chunk (v0 preview)</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-1337-transition.webp"><img src="../images/endless-ocean/vanilla-1337-transition-thumb.webp" loading="lazy" alt="Open water on the left and the first generated rock rising on the right" width="480" height="288"></a><figcaption>Transition to generated terrain (v0 preview)</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-1337-depths-117.webp"><img src="../images/endless-ocean/vanilla-1337-depths-117-thumb.webp" loading="lazy" alt="Stacked views of the upper, middle and near-floor fish bands" width="480" height="288"></a><figcaption>Three fish depth bands (v0 preview)</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-1337-panorama.webp"><img src="../images/endless-ocean/vanilla-1337-panorama-thumb.webp" loading="lazy" alt="Wide panorama of the ridges and troughs across five generated chunks" width="480" height="288"></a><figcaption>Five-chunk panorama (v0 preview)</figcaption></figure>
+        <figure><a href="../images/endless-ocean/vanilla-314159-floor-03.webp"><img src="../images/endless-ocean/vanilla-314159-floor-03-thumb.webp" loading="lazy" alt="An alternate seed&#x27;s floor descending into a trough and rising on the right" width="480" height="288"></a><figcaption>Floor with seed 314159 (v0 preview)</figcaption></figure>
 </div>
     </section>
 
     <section class="mod-section">
       <h2>How it works</h2>
-      <p>At build time the recipe reads the merged <code>NewWorld</code> room and placed sprite/mask bounds. It starts generated territory at the maximum of x=170,000, the room width and the eastern extent of placed content. It extends the room by 488 chunks × 2,048 pixels (999,424 pixels); on the vanilla base the room ends at x=1,169,424. Only the final vanilla boat, <code>Boat7</code>, receives a longer MAX_X, stopping 400 pixels before that edge. The camera follows through the enlarged native room; Boat7, its buoy, lure and existing navigation keep their usual coordinate frame. The normal and deep sonar remain the vanilla bounded overlays following Girl and Lure; Endless Ocean does not add a floating-origin transform or rewrite sonar noise, which still uses absolute x and depth.</p>
-      <p><code>jamm_chunk_unit(seed,index,channel)</code> creates deterministic layout values without consuming GameMaker&#x27;s gameplay random stream. <code>jmk_endless_ocean_floor</code> samples smooth value noise at two frequencies, so adjacent chunk edges agree. A chunk places four collidable <code>CaveRockBig</code> instances and tests three candidate fish slots across upper (Celad/Inno), middle (Mustardfish/Elder Mustardfish) and near-floor (Dijon/Garm) depth bands. Before placing each fish, the loader checks its padded spawn envelope against live <code>Collidable</code> masks. The native species keep their usual swimming, bait, lunge, catch, sell and Fishalog behavior.</p>
-      <p>The room controller reads the camera center and requests the current chunk plus two neighbors on either side through <code>jamm_chunk_stream(chunks, first, last, create_script, release_script)</code>. Its callback receives the chunk index and an ownership list; the helper releases chunks outside the range and invokes the release callback for each tracked instance. A full window owns up to 20 rocks and 15 free fish. Hooked fish, fish in the net and fish aboard stay with vanilla gameplay until their interaction finishes; generated free instances are destroyed when their chunk leaves the window. Revisiting reconstructs the original layout from the seed.</p>
-      <p>The recipe default seed is 271828. On first visit it writes only <code>[World] seed</code> to <code>jamm_endless_ocean.ini</code> in the game save directory, shared by all slots. Patches to both primary and backup SaveManager <code>[Fishes]</code> writes omit transient streamed fish IDs. Native position, catches, quests and Fishalog records continue to use the game&#x27;s slot format. This preview is finite: fixed chunks stop at the east edge, wave tiles are allocated at room startup, and unloading respawns the original chunk population rather than preserving local depletion. The fixed room width also remains visible to other legacy systems such as room-width-based routes and wave calculations; this recipe does not implement floating-origin travel or a streamed navigation graph.</p><figure class="diagram"><svg viewBox="0 0 880 160" role="img" aria-labelledby="diag-title diag-desc"><title id="diag-title">Endless Ocean chunk stream</title><desc id="diag-desc">The camera selects five nearby chunks; the seeded loader builds floor, rocks and fish; distant chunk instances are released while interacting fish remain owned by vanilla gameplay.</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"/></marker></defs><path d="M 212 81 H 230" marker-end="url(#arrow)"/><path d="M 430 81 H 448" marker-end="url(#arrow)"/><path d="M 648 81 H 666" marker-end="url(#arrow)"/><g><rect x="19" y="35" width="188" height="92" rx="14"/><text x="113" y="81" text-anchor="middle">Seed + chunk index</text></g><g><rect x="237" y="35" width="188" height="92" rx="14"/><text x="331" y="81" text-anchor="middle">Five-chunk window</text></g><g><rect x="455" y="35" width="188" height="92" rx="14"/><text x="549" y="81" text-anchor="middle">Build floor + fish</text></g><g><rect x="673" y="35" width="188" height="92" rx="14"/><text x="767" y="81" text-anchor="middle">Release distant chunks</text></g></svg><ol class="diagram-mobile" aria-label="Endless Ocean chunk stream"><li>Seed + chunk index</li><li>Five-chunk window</li><li>Build floor + fish</li><li>Release distant chunks</li></ol><figcaption>The seeded chunk layout is reproducible; only the camera&#x27;s nearby window is resident.</figcaption></figure>
+      <p>The floor joins the last collidable terrain and eases into a continuous profile over three chunks. The generator reserves the existing room dimensions and artwork before adding 488 exploration chunks of 2,048 pixels each.</p>
+      <p>Native CaveRock silhouettes, kelp, corals and lights mark sandy shelves, rocky slopes and trenches. Each floor strip has a matching slope mask and a world-aligned seamless cobble underlay to the room bottom.</p>
+      <p>The camera streams at most five chunks. Each can spawn one vanilla fish per depth band, with a collision check before spawning. Wrecks appear 10–20 chunks apart and attract a rare fish within the same budget.</p>
+      <p>The seed defaults to 271828 and is shared by all slots in the save directory. Primary and backup saves skip transient fish IDs.</p>
     </section>
 
     <section class="mod-section">
@@ -84,31 +82,31 @@
 <div class="table-wrap"><table class="datasheet"><tbody>
 <tr><th scope="row">Package type</th><td>Recipe</td></tr>
 <tr><th scope="row">Manifest file</th><td><code>jamm-recipe.json</code></td></tr>
-<tr><th scope="row">Version</th><td>0.1.0</td></tr>
-<tr><th scope="row">Generator</th><td><code>endless-ocean</code></td></tr>
+<tr><th scope="row">Version</th><td>0.2.1</td></tr>
+<tr><th scope="row">Generator</th><td><code>endless-ocean</code> (recipe generator version <code>2</code>)</td></tr>
 <tr><th scope="row">APIs used</th><td>JAMM chunk layout and streaming scripts, GameMaker instance and collision APIs, legacy Boat7, Fish and save events, and Catalog API lookup when installed.</td></tr>
-<tr><th scope="row">Assets and scripts added</th><td>1 NewWorld controller object, 0 sprites and 7 standalone scripts. The recipe adds 5 controller events and patches 2 SaveManager events.</td></tr>
+<tr><th scope="row">Assets and scripts added</th><td>Three runtime objects, five sprites built from the local archive, and fifteen standalone scripts. The recipe guards the native fish respawn script and both SaveManager writes.</td></tr>
 <tr><th scope="row">Save-file behaviour</th><td>The seed is the only generated-world state saved. <code>jamm_endless_ocean.ini</code> stores it under <code>[World]</code> as <code>seed</code>, shared by all slots in that save directory. Transient fish instance IDs are excluded from <code>[Fishes]</code>. Normal catches, quests and Fishalog progress still use the game&#x27;s save system.</td></tr>
-<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive or a compatible merged archive. For a pack, build the profile first and use that verified archive as the recipe base. The repository reports an in-game run with Antiquity, PWB, Abyss, Colour and Verdant. An existing Endless Ocean controller or colliding chunk script names prevent a second installation.</td></tr>
+<tr><th scope="row">Compatibility and merge behaviour</th><td>Targets the August 2023 legacy VM archive or a compatible merged archive. Enable the recipe in a JAMM profile, or build it on top of a verified pack archive. Use JAMM with Endless Ocean generator version 2.</td></tr>
 </tbody></table></div>
     </section>
 
     <section class="mod-section">
       <h2>Version history</h2>
 <ul class="changelog">
-        <li>0.1.0: Preview of seeded, finite eastward chunk streaming with vanilla fish and persistent per-directory seed.</li>
+        <li>0.2.1: Seamless cobble seafloor built from the vanilla cave rock (16 Wang tile variants on one texture page, no visible grid), matching slope caps.</li>
+        <li>0.2.0: Seeded three-biome seafloor, native scenery and wrecks, and merged-layout callback recompilation.</li>
       </ul>
     </section>
 
     <section class="mod-section">
       <h2>Measured performance</h2>
-<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+      <p>Seven-pack build, dock: 48.4 ms → 49.7 ms with Endless Ocean (mean of 2 runs, within noise). Chunks outside the view are not simulated, so the extended area does not add per-tick fish work at the dock.</p>
     </section>
 
     <section class="mod-section">
       <h2>FAQ</h2>
-<details><summary>How far east does the preview go?</summary><p>It generates 488 chunks of 2,048 pixels (999,424 pixels) from a start at or east of x=170,000, adjusted beyond the input room and placed artwork. On the vanilla base, the far edge is x=1,169,424.</p></details>
-<details><summary>Do caught fish come back when a chunk reloads?</summary><p>Unloaded chunks regenerate their initial fish layout from the seed, including fish previously caught there. Ordinary catches and Fishalog progress continue to use the native save system.</p></details>
+
     </section>
 
     <section class="mod-section">

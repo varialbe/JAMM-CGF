@@ -1,0 +1,6 @@
+[Unit]
+Description=Regenerate and publish the JAMM-CGF static site
+
+[Service]
+Type=oneshot
+ExecStart=%h/JAMM-CGF/tools/site/auto-publish.sh

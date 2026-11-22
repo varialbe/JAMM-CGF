@@ -15,6 +15,7 @@
       <a href="../index.html#packages">Packages</a>
       <a href="../how-jamm-builds.html">How builds work</a>
       <a href="../compatibility.html">Compatibility</a>
+      <a href="../progress.html">Progress</a>
     </div>
   </nav>
   <main id="main-content">
@@ -87,7 +88,10 @@
 
     <section class="mod-section">
       <h2>Measured performance</h2>
-<p class="placeholder">Measured performance data will appear here when <code>content/benchmarks.json</code> is added. No performance figures are assumed.</p>
+      <p>Measured 2026-11-21 on a Ryzen 7 5700X / RTX 2070 Super (Proton, 1200×720 window), 30-second captures, seed 1337, game-loop time per tick. Cat Goes Fishing&#x27;s GameMaker loop is single-threaded and CPU-bound, so loop time — not GPU load — decides FPS.</p>
+      <p>Since generator 7, JAMM Perf adds no per-frame code by default: vanilla +Perf is byte-identical to vanilla; a five-pack build measured 85.7 → 81.3 ms (dock); a seven-pack build measured +0.2 % (dock) and +1.2 % (deepwater), within run-to-run noise.</p>
+      <p>Older builds (generator ≤ 6) installed the fish neighbour grid unconditionally and made large packs up to 2× slower when JAMM Smooth was not also enabled. Rebuild your profile to pick up the fix.</p>
+      <p>Weak-PC preset (fish scheduling interval 8, HD-Lite off): about 21 % faster loop on a seven-pack profile build.</p>
     </section>
 
     <section class="mod-section">

@@ -227,6 +227,168 @@ public sealed partial class BuildingTests
         }
     }
 
+    [Fact]
+    public void CompoundPriceDeltaUsesRuntimeGuardInsteadOfAddingPaidPrice()
+    {
+        using var temp = new TemporaryDirectory();
+        string original = temp.PathFor("base.win"), mod = temp.PathFor("mod.win"), output = temp.PathFor("merged.win");
+        WriteModel(original, d => Setup(d, false));
+        WriteModel(mod, d => Setup(d, true));
+        var res = ArchiveBuilder.Build(original, [Input(original, mod)], output);
+
+        using var merged = GameFileLoader.Load(output);
+        string rod = Read(merged, "gml_Object_RodData_Create_0");
+        Assert.DoesNotContain("cost[0] += 100", rod);
+        Assert.DoesNotContain("cost[1] += 100", rod);
+        Assert.Contains("cost[0] = jamm_guard_stat(cost[0] + 0", rod);
+        Assert.Contains("cost[1] = jamm_guard_stat(cost[1]", rod);
+        Assert.DoesNotContain(res.Plan.Decisions, d => d.Contains("RodData[0] price.RodData") && d.Contains("-> 100"));
+
+        static void Setup(UndertaleData data, bool modded)
+        {
+            var rodData = GuardObject(data, "RodData");
+            var compiler = new CompileGroup(data);
+            compiler.QueueCodeReplace(rodData.EventHandlerFor(EventType.Create, data), modded
+                ? "cost[0] = 100; cost[0] += 0; cost[1] = 100; cost[1] += -50;"
+                : "cost[0] = 100; cost[1] = 100;");
+            CheckCompile(compiler);
+        }
+    }
+
+    [Fact]
+    public void HexAndParenthesizedIndicesNormalizeForPaidPriceMatching()
+    {
+        using var temp = new TemporaryDirectory();
+        string original = temp.PathFor("base.win"), mod = temp.PathFor("mod.win"), output = temp.PathFor("merged.win");
+        WriteModel(original, d => Setup(d, false));
+        WriteModel(mod, d => Setup(d, true));
+        ArchiveBuilder.Build(original, [Input(original, mod)], output);
+
+        using var merged = GameFileLoader.Load(output);
+        string rod = Read(merged, "gml_Object_RodData_Create_0");
+        Assert.Contains("cost[0] = 100;", rod);
+        Assert.Contains("cost[1] = 200;", rod);
+        Assert.Contains("cost[2] = 300;", rod);
+        // Also verify GuardGml directly handles raw hex/parenthesized indices without recompilation normalizing them.
+        Assert.Equal(0, new GuardGml("cost[$0] = 0;").Number(new(2, 3)));
+        Assert.Equal(1, new GuardGml("cost[0x1] = 0;").Number(new(2, 3)));
+        Assert.Equal(2, new GuardGml("cost[(2)] = 0;").Number(new(2, 5)));
+
+        static void Setup(UndertaleData data, bool modded)
+        {
+            var rodData = GuardObject(data, "RodData");
+            var compiler = new CompileGroup(data);
+            compiler.QueueCodeReplace(rodData.EventHandlerFor(EventType.Create, data), modded
+                ? "cost[$0] = 0; cost[0x1] = -5; cost[(2)] = 0;"
+                : "cost[0] = 100; cost[1] = 200; cost[2] = 300;");
+            CheckCompile(compiler);
+        }
+    }
+
+    [Fact]
+    public void CollisionOtherBaseValueUsesDynamicFishGuardAndMultilineBracelessWithResolvesTarget()
+    {
+        using var temp = new TemporaryDirectory();
+        string original = temp.PathFor("base.win"), mod = temp.PathFor("mod.win"), output = temp.PathFor("merged.win");
+        WriteModel(original, d => Setup(d, false));
+        WriteModel(mod, d => Setup(d, true));
+        ArchiveBuilder.Build(original, [Input(original, mod)], output);
+
+        using var merged = GameFileLoader.Load(output);
+        string hookCollision = Read(merged, merged.Data.GameObjects.ByName("Hook")!.Events[4][0].Actions[0].CodeId.Name.Content);
+        string fishCollision = Read(merged, merged.Data.GameObjects.ByName("Cuddlefish")!.Events[4][0].Actions[0].CodeId.Name.Content);
+        string controller = Read(merged, "gml_Object_Controller_Create_0");
+        Assert.Contains("jamm_guard_fish_sale(-2, 5000000000, 100000000)", hookCollision);
+        Assert.Contains("jamm_guard_fish_sale(-2, 5000000000, 100000000)", fishCollision);
+        Assert.Contains("BASE_VALUE = 100000000;", controller);
+
+        static void Setup(UndertaleData data, bool modded)
+        {
+            var fish = GuardObject(data, "Fish");
+            var cuddlefish = GuardObject(data, "Cuddlefish", fish);
+            var hook = GuardObject(data, "Hook");
+            var controller = GuardObject(data, "Controller");
+            var compiler = new CompileGroup(data);
+            compiler.QueueCodeReplace(cuddlefish.EventHandlerFor(EventType.Create, data), "BASE_VALUE = 50;");
+            compiler.QueueCodeReplace(hook.EventHandlerFor(EventType.Collision, (uint)data.GameObjects.IndexOf(cuddlefish), data),
+                modded ? "other.BASE_VALUE = 5000000000;" : "other.x = 0;");
+            compiler.QueueCodeReplace(cuddlefish.EventHandlerFor(EventType.Collision, (uint)data.GameObjects.IndexOf(hook), data),
+                modded ? "other.BASE_VALUE = 5000000000;" : "other.x = 0;");
+            compiler.QueueCodeReplace(controller.EventHandlerFor(EventType.Create, data), modded
+                ? """
+                  with (Cuddlefish)
+                      if (active)
+                          BASE_VALUE = 5000000000;
+                  """
+                : "active = 1;");
+            CheckCompile(compiler);
+        }
+    }
+
+    [Fact]
+    public void HexScientificNegativeZeroAndNestedScriptCallsBehaveCorrectly()
+    {
+        using var temp = new TemporaryDirectory();
+        string original = temp.PathFor("base.win"), mod = temp.PathFor("mod.win"), output = temp.PathFor("merged.win");
+        WriteModel(original, d => Setup(d, false));
+        WriteModel(mod, d => Setup(d, true));
+        var res = ArchiveBuilder.Build(original, [Input(original, mod)], output);
+
+        using var merged = GameFileLoader.Load(output);
+        string fishCreate = Read(merged, "gml_Object_Cuddlefish_Create_0");
+        string negFish = Read(merged, "gml_Object_NegFish_Create_0");
+        string hexFish = Read(merged, "gml_Object_HexFish_Create_0");
+        string leafScript = Read(merged, "gml_Script_leaf_set_stats");
+        string uncalledScript = Read(merged, "gml_Script_uncalled_fish_value");
+
+        Assert.Contains("BASE_VALUE = 100000000;", fishCreate);
+        Assert.Contains("XP_VALUE = 1000;", fishCreate);
+        Assert.Contains("BASE_VALUE = -500;", negFish);
+        Assert.Contains("XP_VALUE = 0;", negFish);
+        Assert.Contains("BASE_VALUE = 100000000;", hexFish);
+        Assert.Contains("XP_VALUE = 1000;", hexFish);
+        Assert.Contains("BASE_VALUE = 100000000;", leafScript);
+        Assert.Contains("XP_VALUE = 1000;", leafScript);
+        Assert.Contains("jamm_guard_fish_sale(id, 5000000000, 100000000)", uncalledScript);
+        Assert.Contains("jamm_fish_register(\"demo:bad\", Cuddlefish, 0, \"C\", \"d\", 0, 10, 0, 10, 1, \"\", \"\", \"\", \"\", \"\", 0, \"bad\")",
+            Read(merged, "gml_Script_jamm_init_demo"));
+        Assert.Contains(res.Plan.Decisions, d => d.Contains("[CGF-VALUE-001]") && d.Contains("HexFish"));
+        Assert.Equal(5e9, new GuardGml("BASE_VALUE = 5e+9;").Number(new(2, 5)));
+
+        static void Setup(UndertaleData data, bool modded)
+        {
+            var fish = GuardObject(data, "Fish");
+            var cuddlefish = GuardObject(data, "Cuddlefish", fish);
+            var negFish = GuardObject(data, "NegFish", fish);
+            var hexFish = GuardObject(data, "HexFish", fish);
+            var leaf = GuardScript(data, "leaf_set_stats");
+            var outer = GuardScript(data, "outer_set_stats");
+            var uncalled = GuardScript(data, "uncalled_fish_value");
+            var compiler = new CompileGroup(data);
+            compiler.QueueCodeReplace(cuddlefish.EventHandlerFor(EventType.Create, data), modded
+                ? "BASE_VALUE = 0x12A05F200; XP_VALUE = $3B9AC9FF; outer_set_stats();"
+                : "BASE_VALUE = 50; XP_VALUE = 100;");
+            compiler.QueueCodeReplace(negFish.EventHandlerFor(EventType.Create, data), modded
+                ? "BASE_VALUE = -500; XP_VALUE = 0;"
+                : "BASE_VALUE = 10; XP_VALUE = 10;");
+            compiler.QueueCodeReplace(hexFish.EventHandlerFor(EventType.Create, data), modded
+                ? "BASE_VALUE = $12A05F200; XP_VALUE = 0x12A05F200;"
+                : "BASE_VALUE = 10; XP_VALUE = 10;");
+            compiler.QueueCodeReplace(leaf, modded ? "BASE_VALUE = 5000000000; XP_VALUE = 9999999;" : "return 0;");
+            compiler.QueueCodeReplace(outer, modded ? "leaf_set_stats();" : "return 0;");
+            compiler.QueueCodeReplace(uncalled, modded ? "BASE_VALUE = 5000000000;" : "return 0;");
+            if (modded)
+            {
+                compiler.QueueCodeReplace(GuardScript(data, "jamm_fish_register"), "return -1;");
+                compiler.QueueCodeReplace(GuardScript(data, "jamm_init_demo"), """
+                    jamm_fish_register("demo:bad", Cuddlefish, 0, "C", "d", 0, 10, 0, 10, 1, "", "", "", "", "", 0, "bad");
+                    return 0;
+                    """);
+            }
+            CheckCompile(compiler);
+        }
+    }
+
     private static UndertaleGameObject GuardObject(UndertaleData data, string name, UndertaleGameObject? parent = null)
     {
         var obj = new UndertaleGameObject { Name = data.Strings.MakeString(name), ParentId = parent, Visible = true };

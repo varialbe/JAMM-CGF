@@ -49,6 +49,9 @@ public sealed record BenchmarkOptions(
     bool ProfileScripts = false,
     int TraceFish = 0,
     bool FishGrid = false,
+    bool DecorSleep = false,
+    bool FishSleep = false,
+    bool Screenshot = false,
     BenchmarkFishMode FishMode = BenchmarkFishMode.Full,
     int FishCap = -1,
     double FishScale = 1.0);
@@ -137,6 +140,16 @@ public static partial class BenchmarkMod
         {
             string result = FishGrid.Apply(data);
             decision?.Invoke(result);
+        }
+        if (options.DecorSleep)
+        {
+            foreach (string line in DecorSleep.Apply(data))
+                decision?.Invoke(line);
+        }
+        if (options.FishSleep)
+        {
+            foreach (string line in FishSleep.Apply(data))
+                decision?.Invoke(line);
         }
 
         if (options.TraceFish > 0) FishTrace.Instrument(data, options.Seed);
@@ -258,6 +271,7 @@ public static partial class BenchmarkMod
             jamm_b_boat_slot = {{o.BoatSlot}};
             jamm_b_deep_sonar = {{(o.DeepSonar ? 1 : 0)}};
             jamm_b_show_hud = {{(o.ShowHud ? 1 : 0)}};
+            jamm_b_screenshot = {{(o.Screenshot ? 1 : 0)}};
             jamm_b_fish_mode = "{{fishMode}}";
             jamm_b_fish_mode_req = jamm_b_fish_mode;
             jamm_b_fish_cap = {{o.FishCap}};
@@ -285,6 +299,7 @@ public static partial class BenchmarkMod
                 jamm_b_boat_slot = max(1, round(ini_read_real("Bench", "BoatSlot", jamm_b_boat_slot)));
                 jamm_b_deep_sonar = ini_read_real("Bench", "DeepSonar", jamm_b_deep_sonar) != 0;
                 jamm_b_show_hud = ini_read_real("Bench", "ShowHud", jamm_b_show_hud) != 0;
+                jamm_b_screenshot = ini_read_real("Bench", "Screenshot", jamm_b_screenshot) != 0;
                 jamm_b_fish_mode = string_lower(ini_read_string("Bench", "FishMode", jamm_b_fish_mode));
                 jamm_b_fish_mode_req = jamm_b_fish_mode;
                 jamm_b_fish_cap = round(ini_read_real("Bench", "FishCap", jamm_b_fish_cap));
@@ -1167,9 +1182,27 @@ public static partial class BenchmarkMod
                 {
                     file_text_write_string(jamm_b_f, "# jamm_bench v1");
                     file_text_writeln(jamm_b_f);
+                    var jamm_b_fish_grid = 0;
                     if (variable_global_exists("jamm_fg_enabled"))
+                        jamm_b_fish_grid = global.jamm_fg_enabled;
+                    file_text_write_string(jamm_b_f, "# fish_grid=" + string(jamm_b_fish_grid));
+                    file_text_writeln(jamm_b_f);
+                    if (variable_global_exists("jamm_ds_enabled"))
                     {
-                        file_text_write_string(jamm_b_f, "# fish_grid=" + string(global.jamm_fg_enabled));
+                        var ds_deact_n = 0;
+                        if (variable_global_exists("jamm_ds_deact_n")) ds_deact_n = global.jamm_ds_deact_n;
+                        var ds_n = 0;
+                        if (variable_global_exists("jamm_ds_count")) ds_n = global.jamm_ds_count;
+                        file_text_write_string(jamm_b_f, "# decor_sleep=" + string(global.jamm_ds_enabled) + " tracked=" + string(ds_n) + " sleeping_deact=" + string(ds_deact_n));
+                        file_text_writeln(jamm_b_f);
+                    }
+                    if (variable_global_exists("jamm_perf_sleep"))
+                    {
+                        var fs_asleep = 0;
+                        if (variable_global_exists("jamm_sleep_asleep_count")) fs_asleep = global.jamm_sleep_asleep_count;
+                        var fs_wakes = 0;
+                        if (variable_global_exists("jamm_sleep_wake_count")) fs_wakes = global.jamm_sleep_wake_count;
+                        file_text_write_string(jamm_b_f, "# fish_sleep=" + string(global.jamm_perf_sleep) + " asleep=" + string(fs_asleep) + " wakes=" + string(fs_wakes));
                         file_text_writeln(jamm_b_f);
                     }
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));
@@ -1180,11 +1213,19 @@ public static partial class BenchmarkMod
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# active_fish_mean=" + string(jamm_b_fish_total / max(1, jamm_b_loop_n)));
                     file_text_writeln(jamm_b_f);
+                    var jamm_b_perf_mode = 0;
+                    var jamm_b_perf_interval = 4;
+                    var jamm_b_perf_eligible = 0;
+                    var jamm_b_perf_skipped = 0;
                     if (variable_global_exists("jamm_perf_mode"))
                     {
-                        file_text_write_string(jamm_b_f, "# perf_mode=" + string(global.jamm_perf_mode) + " interval=" + string(global.jamm_perf_interval) + " eligible_events=" + string(global.jamm_perf_eligible) + " skipped_events=" + string(global.jamm_perf_skipped));
-                        file_text_writeln(jamm_b_f);
+                        jamm_b_perf_mode = global.jamm_perf_mode;
+                        jamm_b_perf_interval = global.jamm_perf_interval;
+                        jamm_b_perf_eligible = global.jamm_perf_eligible;
+                        jamm_b_perf_skipped = global.jamm_perf_skipped;
                     }
+                    file_text_write_string(jamm_b_f, "# perf_mode=" + string(jamm_b_perf_mode) + " interval=" + string(jamm_b_perf_interval) + " eligible_events=" + string(jamm_b_perf_eligible) + " skipped_events=" + string(jamm_b_perf_skipped));
+                    file_text_writeln(jamm_b_f);
                     if (!jamm_b_size_ok)
                     {
                         file_text_write_string(jamm_b_f, "# warning=render_size_normalization_not_applied_or_overridden_requested_window=1200x720_application_surface=1200x720_fullscreen=0");
@@ -1230,6 +1271,8 @@ public static partial class BenchmarkMod
                     }
                     file_text_close(jamm_b_f);
                 }
+                if (jamm_b_screenshot)
+                    screen_save("jamm_bench_shot_" + jamm_b_scene + ".png");
 
                 {{(profile ? ProfileWriterGml() : "")}}
 

@@ -128,6 +128,28 @@ public sealed class FishRuntimeTests
     }
 
     [Fact]
+    public void FishRuntimeGuardsCaughtFishNameAndValueBeforeHudDraw()
+    {
+        const string draw = "with (Lure.fish)\n{\n    draw_text_shadowed(Camera.x, Camera.y - 6, name);\n    draw_text_shadowed(Camera.x, Camera.y + 26, \"Worth \" + number_to_dollar_string(value));\n}\n";
+        var baseline = new Dictionary<string, CodeText>(StringComparer.Ordinal)
+        {
+            [FishRuntime.CatalogDataDraw] = new(draw, "gml", 0, 0, null, [])
+        };
+
+        var plan = FishRuntime.PreparePlan(new BuildPlan([], []), baseline);
+
+        string guarded = Assert.Single(plan.Assets, a => a.Name == FishRuntime.CatalogDataDraw).Gml!;
+        int nameGuard = guarded.IndexOf("if (!variable_instance_exists(id, \"name\"))", StringComparison.Ordinal);
+        int nameDraw = guarded.IndexOf("draw_text_shadowed(Camera.x, Camera.y - 6, name);", StringComparison.Ordinal);
+        Assert.True(nameGuard >= 0 && nameGuard < nameDraw);
+        Assert.Contains("name = object_get_name(object_index);", guarded);
+        int valueGuard = guarded.IndexOf("if (!variable_instance_exists(id, \"value\"))", StringComparison.Ordinal);
+        int valueDraw = guarded.IndexOf("number_to_dollar_string(value)", StringComparison.Ordinal);
+        Assert.True(valueGuard >= nameDraw && valueGuard < valueDraw);
+        Assert.Contains("value = 0;", guarded);
+    }
+
+    [Fact]
     public void FishApiModAlsoActivatesCatalogRuntimeNameKeyedSavePersistence()
     {
         var snapshot = JsonSerializer.SerializeToElement(new { });

@@ -137,32 +137,86 @@ public sealed class FishSleepTests
     {
         using var data = CreateSyntheticPerfArchive(out var visualDrawFish);
         var decisions = new List<string>();
+        var edits = new List<UndertaleCode>();
 
-        PerfMod.Apply(data, debug: false, applyFishGrid: false, decisions);
-        FishSleep.Finalize(data, [], decisions, new PerfSettings(StartEnabled: false, FishGrid: true, Interval: 4)
-        {
-            FishSleep = false,
-            FishSleepMargin = 3200
-        });
+        PerfMod.Apply(data, debug: false, applyFishGrid: false, applyScheduler: true, applyCoreOptimizations: true, applyDecorSleep: false, applyFishSleep: false);
+        decisions.AddRange(FishSleep.Apply(data, edits, enabledByDefault: false, margin: 3200));
 
-        string perfCreate = ModObjects.Decompile(data, data.Code.ByName("gml_Object_obj_jamm_perf_Create_0")!);
-        string perfBegin = ModObjects.Decompile(data, data.Code.ByName("gml_Object_obj_jamm_perf_Step_1")!);
-        string perfDestroy = ModObjects.Decompile(data, data.Code.ByName("gml_Object_obj_jamm_perf_Destroy_0")!);
+        string sleepCreate = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Create_0")!);
+        string sleepBegin = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Step_1")!);
+        string sleepDestroy = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Destroy_0")!);
         string fishStep2 = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Step_2")!);
         string customDraw = ModObjects.Decompile(data, visualDrawFish.Events[(int)EventType.Draw].First().Actions.First().CodeId!);
         string initTypes = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_init_types")!);
 
-        Assert.Contains("""ini_read_real("Perf", "FishSleep", 0)""", perfCreate);
-        Assert.Contains("""ini_read_real("Perf", "FishSleepMargin", 3200)""", perfCreate);
-        Assert.Contains("jamm_sleep_init_types()", perfCreate);
-        Assert.Contains("jamm_sleep_begin_step()", perfBegin);
-        Assert.Contains("ds_map_destroy(global.jamm_sleep_types)", perfDestroy);
-        Assert.Contains("ds_map_destroy(global.jamm_sleep_quest_objs)", perfDestroy);
+        Assert.Contains("""ini_read_real("Perf", "FishSleep", 0)""", sleepCreate);
+        Assert.Contains("""ini_read_real("Perf", "FishSleepMargin", 3200)""", sleepCreate);
+        Assert.Contains("jamm_sleep_init_types()", sleepCreate);
+        Assert.Contains("jamm_sleep_begin_step()", sleepBegin);
+        Assert.Contains("ds_map_destroy(global.jamm_sleep_types)", sleepDestroy);
+        Assert.Contains("ds_map_destroy(global.jamm_sleep_quest_objs)", sleepDestroy);
         Assert.Contains("jamm_sleep_wake()", fishStep2);
-        Assert.Contains("if (!global.jamm_perf_sleep && global.jamm_perf_mode)", fishStep2);
+        Assert.Contains("global.jamm_perf_mode", fishStep2);
         Assert.Contains("jamm_asleep", customDraw);
         Assert.Contains("ModVisual", initTypes);
         Assert.Contains(decisions, d => d.Contains("[CGF-PERF-SLEEP] ModVisual: covered", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ArchiveBuilderInstallsFishSleepOnlyWhenEnabledAndKeepsPlainPerfByteIdentical()
+    {
+        string temp = Path.Combine(Path.GetTempPath(), $"jamm-fs-build-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temp);
+        try
+        {
+            string basePath = Path.Combine(temp, "base.win");
+            using (var baseData = CreateSyntheticPerfArchive(out _))
+            using (var fs = File.Create(basePath))
+                UndertaleIO.Write(fs, baseData);
+
+            var store = new ManagerStore(Path.Combine(temp, "store"));
+            store.Set("base", basePath);
+            var perfMod = new BuiltinMods(store).Add("perf").Mod;
+            var library = new ModLibrary(store);
+            var input = new Jamm.Core.Building.BuildInput(library.Patch(perfMod), library.Archive(perfMod));
+
+            // 1. Plain Perf with null PerfSettings or both sleep flags off: byte-identical to vanilla base.
+            string outPlain = Path.Combine(temp, "plain.win");
+            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outPlain, noRepack: true, perfSettings: null);
+            Assert.Equal(Jamm.Core.Building.BuildFiles.Hash(basePath), Jamm.Core.Building.BuildFiles.Hash(outPlain));
+
+            string outOff = Path.Combine(temp, "off.win");
+            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outOff, noRepack: true,
+                perfSettings: new PerfSettings(DecorSleep: false) { FishSleep = false });
+            Assert.Equal(Jamm.Core.Building.BuildFiles.Hash(basePath), Jamm.Core.Building.BuildFiles.Hash(outOff));
+
+            // 2. DecorSleep on, FishSleep off: FishSleep controller and prefix are NOT installed.
+            string outDecorOnly = Path.Combine(temp, "decor-only.win");
+            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outDecorOnly, noRepack: true,
+                perfSettings: new PerfSettings(DecorSleep: true) { FishSleep = false });
+            using (var loadedDecorOnly = GameFileLoader.Load(outDecorOnly))
+            {
+                Assert.Null(loadedDecorOnly.Data.GameObjects.ByName(FishSleep.Controller));
+                Assert.Null(loadedDecorOnly.Data.Code.ByName("gml_Script_jamm_sleep_wake"));
+            }
+
+            // 3. FishSleep on, DecorSleep off: installs FishSleep only, no PerfMode or FishGrid.
+            string outSleepOnly = Path.Combine(temp, "sleep-only.win");
+            var res = Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outSleepOnly, noRepack: true,
+                perfSettings: new PerfSettings(DecorSleep: false) { FishSleep = true, FishSleepMargin = 2600 });
+            Assert.Contains(res.Plan.Decisions, d => d.StartsWith("[CGF-PERF-SLEEP] enabled", StringComparison.Ordinal));
+            using var loaded = GameFileLoader.Load(outSleepOnly);
+            Assert.NotNull(loaded.Data.GameObjects.ByName(FishSleep.Controller));
+            Assert.Null(loaded.Data.GameObjects.ByName(DecorSleep.Controller));
+            Assert.Null(loaded.Data.GameObjects.ByName(PerfMode.ControllerName));
+            Assert.Null(loaded.Data.GameObjects.ByName(FishGrid.Controller));
+            string create = ModObjects.Decompile(loaded.Data, loaded.Data.Code.ByName($"gml_Object_{FishSleep.Controller}_Create_0")!);
+            Assert.Contains("""ini_read_real("Perf", "FishSleepMargin", 2600)""", create);
+        }
+        finally
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        }
     }
 
     [Fact]
@@ -212,7 +266,7 @@ public sealed class FishSleepTests
         using var input = File.OpenRead(vanillaPath);
         using var data = UndertaleIO.Read(input);
         List<string> decisions = [];
-        PerfMod.Apply(data, debug: true, applyFishGrid: true, decisions);
+        PerfMod.Apply(data, debug: true, applyFishGrid: true, applyFishSleep: true, decisions: decisions);
 
         Assert.Contains(decisions, d => d.StartsWith("[CGF-PERF-SLEEP]", StringComparison.Ordinal));
         Assert.True(decisions.Count(d => d.Contains(": covered", StringComparison.Ordinal)) >= 50);

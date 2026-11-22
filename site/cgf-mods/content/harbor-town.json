@@ -1,0 +1,78 @@
+{
+  "cardPackageType": "ModKit Area + UI",
+  "cardSummary": "Spend late-game wealth building a dockside Lighthouse, Aquarium and Golden Cat statue across unlimited levels and five visual growth stages.",
+  "summary": "Harbor Town turns the land west of the dock into an optional endgame money sink. Walk to the Harbor Town sign and open the menu to build and upgrade three landmarks: a Lighthouse that widens your lure light radius by up to 40% at night or in deep water, an Aquarium that displays up to six caught Fishalog species swimming behind glass, and a Golden Cat statue for pure dockside prestige. Every building has unlimited levels along an exponential-to-linear cost curve and grows across five visual stages.",
+  "controls": [
+    "Walk near the Harbor Town sign on the dock (lure uncast, not swimming or in another shop) and press E (gamepad X) to toggle the Harbor Town menu.",
+    "Use Up and Down (or gamepad D-pad) to select a building, Space (gamepad A) to build or upgrade, and Escape (gamepad B) to close.",
+    "Click any building card's Build / Upgrade button or Close with the mouse.",
+    "With JAMM Console enabled (F12): type `harbor` to print levels, `harbor <lighthouse|aquarium|statue> <n>` to set a level, or `harbor money <n>` to add test funds."
+  ],
+  "apis": "ModKit Area API (`follow` anchor on `Cliff`), composed sprite recipes, 1 custom object (`harbor`) with `create`, `step`, `draw` and `drawGui` hooks, 8 standalone scripts, `CatalogData` Fishalog lookup, `Lightbulb` scaling and native `SaveManager` events.",
+  "assets": "1 object (`harbor`), 4 composed sprites (`lighthouse`, `aquarium` and `statue` at 5 stages each, plus `sign`), 8 standalone scripts and 5 SVG detail parts. Build-time recipes sample the player's own `spr_landscape3`, `spr_landscape4` and `spr_cat` pixels locally; no extracted game art is shipped.",
+  "saves": "Building levels are stored per save slot in `[JAMM_Harbor]` of the active native save INI under keys `lighthouse`, `aquarium` and `statue`, and synced to the backup slot through `SaveManager`. Missing entries default to level 0, and removing the mod leaves vanilla save keys untouched.",
+  "compatibility": "Targets the August 2023 legacy VM archive (bytecode 16). Verified in a solo build and in the 8-mod `harbor-personal` profile (Harbor Town, The Silo, Weather Pack, Endless Ocean, JAMM Perf, JAMM HD Lite, JAMM Console and JAMM Smooth) with 0 conflicts and 0 warnings; both in-game Harbor bench runs recorded all 15 building/level checks without Code Errors. Non-solid `follow` placement on `Cliff` keeps the dock walking path clear.",
+  "how": [
+    "The `dock` Area declaration anchors the `harbor` controller to the vanilla `Cliff` landmark with a non-solid `follow` offset, leaving the cat's walking path, shops and boat launch unobstructed. Each landmark starts as a wooden stake at level 0 and advances through composed sprite stages at levels 1, 5, 20 and 100, with a subtle logarithmic scale tail past level 100.",
+    "The Lighthouse (base $25.0K) sweeps a rotating night beam above stage 0 and multiplies the lure `Lightbulb` scale at night or at depth `y >= 2000` by `min(0.40, 0.03 * ln(1 + level))`, capping at +40%. The Aquarium (base $40.0K) reads caught rows from `CatalogData` and animates up to six species inside its glass tank using sprite draws only — no fish AI, instances or collisions. The Golden Cat statue (base $10.0K) grows on progressively taller stepped plinths as a purely cosmetic landmark.",
+    "Upgrade costs follow `base * 1.6^level` through level 40 ($3.6T Lighthouse, $5.8T Aquarium, $1.4T Golden Cat) and then switch to linear growth (`base * 1.6^40 * (1 + 0.25 * (level - 40))`), capped at $1.0Qa and formatted with `jamm_money_format` when available. Every purchase and `harbor` console update immediately calls `SaveManager` to write `[JAMM_Harbor]`."
+  ],
+  "gallery": [
+    {
+      "image": "dock-clean.jpg",
+      "thumbnail": "dock-clean-thumb.jpg",
+      "alt": "In-game dock view showing the Lighthouse, Aquarium and the E Harbor Town sign prompt beside the cat",
+      "caption": "Harbor Town buildings and sign prompt on the dock"
+    },
+    {
+      "image": "lighthouse-stages.png",
+      "thumbnail": "lighthouse-stages-thumb.png",
+      "alt": "Five composed recipe stages for the Lighthouse at levels 0, 1, 5, 20 and 100",
+      "caption": "Lighthouse recipe stages (Lv 0, 1, 5, 20, 100)"
+    },
+    {
+      "image": "aquarium-stages.png",
+      "thumbnail": "aquarium-stages-thumb.png",
+      "alt": "Five composed recipe stages for the Aquarium at levels 0, 1, 5, 20 and 100",
+      "caption": "Aquarium recipe stages (Lv 0, 1, 5, 20, 100)"
+    },
+    {
+      "image": "statue-stages.png",
+      "thumbnail": "statue-stages-thumb.png",
+      "alt": "Five composed recipe stages for the Golden Cat statue at levels 0, 1, 5, 20 and 100",
+      "caption": "Golden Cat statue stages (Lv 0, 1, 5, 20, 100)"
+    }
+  ],
+  "diagram": {
+    "title": "Dock upgrade loop",
+    "description": "Open the Harbor Town menu at the sign, buy unlimited levels along the exponential-to-linear cost curve, advance through five visual stages and persist levels in [JAMM_Harbor].",
+    "labels": [
+      "Sign + menu (E)",
+      "Cost curve buy",
+      "5 visual stages",
+      "Save [JAMM_Harbor]"
+    ],
+    "caption": "Art composes locally from vanilla landscape and cat sprites; levels persist per save slot."
+  },
+  "changelog": [
+    "0.1.0: Sign post and dock menu, Lighthouse (+40% capped night/deep lure light), 1-tank Aquarium (up to 6 caught Fishalog species), Golden Cat statue, 5 visual stages, exponential-to-linear cost curve, `[JAMM_Harbor]` save persistence and `harbor` console command."
+  ],
+  "faq": [
+    {
+      "q": "Where do the buildings appear?",
+      "a": "West of the dock along the grass, anchored to `Cliff` with non-solid placement so the cat's walking path and boat launch stay unobstructed."
+    },
+    {
+      "q": "What happens to my save if I remove Harbor Town?",
+      "a": "All progress sits inside the `[JAMM_Harbor]` section of the native slot save INI. Vanilla ignores unknown sections and no vanilla save keys are modified."
+    },
+    {
+      "q": "Can I hook or catch the fish inside the Aquarium?",
+      "a": "No. Aquarium fish are sprite-only drawings taken from caught rows in `CatalogData`; they have no fish AI, world instances or collisions."
+    },
+    {
+      "q": "How does upgrade pricing scale at high levels?",
+      "a": "Prices start at $25.0K (Lighthouse), $40.0K (Aquarium) and $10.0K (Golden Cat), scale by `1.6^level` through level 40 ($3.6T, $5.8T and $1.4T), and then increase linearly (`+25%` of the level-40 cost per level) up to the $1.0Qa cap."
+    }
+  ]
+}

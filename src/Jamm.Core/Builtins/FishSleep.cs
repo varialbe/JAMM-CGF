@@ -34,6 +34,9 @@ public readonly record struct FishSleepBox(double X1, double Y1, double X2, doub
 /// </summary>
 public static partial class FishSleep
 {
+    /// <summary>Persistent controller object that tracks the player relevance zone and sleep tick counter.</summary>
+    public const string Controller = "obj_jamm_fish_sleep";
+
     /// <summary>Default Fish Sleep margin in pixels around views, lure, boat, Girl, sonar, and targets.</summary>
     public const int DefaultMargin = 2000;
 
@@ -281,30 +284,35 @@ public static partial class FishSleep
         return (nx, ny, true);
     }
 
-    /// <summary>Installs Fish Sleep scripts and base Fish hooks during <c>PerfMod.Apply</c>.</summary>
-    internal static void Install(UndertaleData data, CompileGroup compiler)
-    {
-        if (data.GameObjects.ByName("Fish") is null) return;
-
-        AddOrReplaceScript(data, compiler, "jamm_sleep_init_types", "// populated by FishSleep.Finalize");
-        AddOrReplaceScript(data, compiler, "jamm_sleep_add_box", AddBoxGml());
-        AddOrReplaceScript(data, compiler, "jamm_sleep_begin_step", BeginStepGml(data));
-        AddOrReplaceScript(data, compiler, "jamm_sleep_in_zone", InZoneGml());
-        AddOrReplaceScript(data, compiler, "jamm_sleep_should_sleep", ShouldSleepGml(data));
-        AddOrReplaceScript(data, compiler, "jamm_sleep_enter", EnterGml());
-        AddOrReplaceScript(data, compiler, "jamm_sleep_wake", WakeGml(data));
-    }
+    /// <summary>Applies Fish Sleep to a final GM1 archive using default-enabled INI settings.</summary>
+    public static IReadOnlyList<string> Apply(UndertaleData data) => Apply(data, []);
 
     /// <summary>
     /// Analyzes all fish objects in <paramref name="data"/>, emits <c>[CGF-PERF-SLEEP]</c> decisions,
-    /// updates <c>jamm_sleep_init_types</c>, refreshes <c>jamm_sleep_begin_step</c>, and ensures
-    /// Step/Draw sleep guards are in place on <c>Fish</c> and covered subclasses.
+    /// installs <see cref="Controller"/> and <c>jamm_sleep_*</c> helpers, and adds Step/Draw sleep guards
+    /// on <c>Fish</c> and covered subclasses.
     /// </summary>
-    internal static void Finalize(UndertaleData data, List<UndertaleCode> edits, List<string> decisions,
-        PerfSettings? settings = null, IReadOnlySet<string>? areaFishNames = null)
+    internal static IReadOnlyList<string> Apply(
+        UndertaleData data,
+        List<UndertaleCode> edits,
+        bool enabledByDefault = true,
+        int margin = DefaultMargin,
+        IReadOnlySet<string>? areaFishNames = null,
+        bool debug = false)
     {
+        var decisions = new List<string>();
+        if (data.GameObjects.ByName(Controller) is not null)
+        {
+            decisions.Add("[CGF-PERF-SLEEP] skipped (runtime already installed)");
+            return decisions;
+        }
         var fishRoot = data.GameObjects.ByName("Fish");
-        if (fishRoot is null) return;
+        if (data.GeneralInfo.Major != 1 || data.GeneralInfo.BytecodeVersion != 16
+            || fishRoot is null || data.Rooms.ByName("NewWorld") is null)
+        {
+            decisions.Add("[CGF-PERF-SLEEP] skipped (required GameMaker 1.4 layout, Fish, or NewWorld missing)");
+            return decisions;
+        }
 
         var eligibility = AnalyzeEligibility(data, areaFishNames);
         foreach (var entry in eligibility)
@@ -314,34 +322,21 @@ public static partial class FishSleep
         }
 
         var compiler = new CompileGroup(data);
-        bool compileNeeded = false;
+        int clampedMargin = Math.Clamp(margin, MinMargin, MaxMargin);
 
-        // Always update runtime scripts on final archive so modded objects (CatSwim, CatchQuestNewNew,
-        // Collidable, MissileSilo, etc.) and final fish eligibility map are reflected accurately.
-        QueueScript("jamm_sleep_init_types", InitTypesGml(eligibility));
-        QueueScript("jamm_sleep_add_box", AddBoxGml());
-        QueueScript("jamm_sleep_begin_step", BeginStepGml(data));
-        QueueScript("jamm_sleep_in_zone", InZoneGml());
-        QueueScript("jamm_sleep_should_sleep", ShouldSleepGml(data));
-        QueueScript("jamm_sleep_enter", EnterGml());
-        QueueScript("jamm_sleep_wake", WakeGml(data));
+        AddScript("jamm_sleep_init_types", InitTypesGml(eligibility));
+        AddScript("jamm_sleep_add_box", AddBoxGml());
+        AddScript("jamm_sleep_begin_step", BeginStepGml(data));
+        AddScript("jamm_sleep_in_zone", InZoneGml());
+        AddScript("jamm_sleep_should_sleep", ShouldSleepGml(data));
+        AddScript("jamm_sleep_enter", EnterGml());
+        AddScript("jamm_sleep_wake", WakeGml(data));
 
-        if (settings is not null && data.Code.ByName($"gml_Object_{PerfMode.ControllerName}_Create_0") is { } perfCreate)
-        {
-            string createSrc = ModObjects.Decompile(data, perfCreate);
-            string updated = createSrc;
-            updated = ReplaceIniDefault(updated, """ini_read_real("Perf", "FishSleep", 1)""",
-                $$"""ini_read_real("Perf", "FishSleep", {{(settings.FishSleep ? 1 : 0)}})""");
-            int margin = Math.Clamp(settings.FishSleepMargin, MinMargin, MaxMargin);
-            updated = ReplaceIniDefault(updated, """ini_read_real("Perf", "FishSleepMargin", 2000)""",
-                FormattableString.Invariant($$"""ini_read_real("Perf", "FishSleepMargin", {{margin}})"""));
-            if (updated != createSrc)
-            {
-                compiler.QueueCodeReplace(perfCreate, updated);
-                edits.Add(perfCreate);
-                compileNeeded = true;
-            }
-        }
+        var controller = ModObjects.Create(data, Controller, persistent: true);
+        controller.Visible = false;
+        AddEvent(EventType.Create, 0u, CreateControllerGml(enabledByDefault, clampedMargin, debug));
+        AddEvent(EventType.Destroy, 0u, DestroyControllerGml());
+        AddEvent(EventType.Step, (uint)EventSubtypeStep.BeginStep, BeginStepControllerGml(debug));
 
         // Ensure Fish Create_0 initializes jamm_asleep so direct field reads never throw.
         var fishCreate = fishRoot.Events[(int)EventType.Create]
@@ -394,22 +389,33 @@ public static partial class FishSleep
             }
         }
 
-        if (compileNeeded)
-            ModObjects.Compile(compiler);
+        ModObjects.Compile(compiler);
 
-        void QueueScript(string name, string body)
+        foreach (string room in new[] { "NewWorld", "room11" })
+        {
+            if (data.Rooms.ByName(room) is not null)
+                ModObjects.PlaceInstance(data, room, controller, first: true);
+        }
+
+        int coveredCount = eligibility.Count(e => e.Covered);
+        decisions.Insert(0, $"[CGF-PERF-SLEEP] enabled (default {(enabledByDefault ? "on" : "off")}, margin {clampedMargin}, {coveredCount}/{eligibility.Count} fish types covered)");
+        return decisions;
+
+        void AddScript(string name, string body)
         {
             string codeName = "gml_Script_" + name;
-            var existing = data.Code.ByName(codeName);
-            if (existing is not null && TryDecompile(data, existing, out string current)
-                && current.Trim() == body.Trim())
-                return;
-            var code = existing ?? UndertaleCode.CreateEmptyEntry(data, codeName);
+            var code = data.Code.ByName(codeName) ?? UndertaleCode.CreateEmptyEntry(data, codeName);
             if (data.Scripts.ByName(name) is { } script) script.Code = code;
             else data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(name), Code = code });
             compiler.QueueCodeReplace(code, body);
             edits.Add(code);
-            compileNeeded = true;
+        }
+
+        void AddEvent(EventType type, uint subtype, string body)
+        {
+            var code = controller.EventHandlerFor(type, subtype, data);
+            compiler.QueueCodeReplace(code, body);
+            edits.Add(code);
         }
 
         void EnsurePrefix(UndertaleCode code, string prefix, string marker)
@@ -418,23 +424,48 @@ public static partial class FishSleep
             if (current.Contains(marker, StringComparison.Ordinal)) return;
             compiler.QueueCodeReplace(code, prefix + current);
             edits.Add(code);
-            compileNeeded = true;
         }
     }
 
-    private static string ReplaceIniDefault(string source, string expected, string replacement)
-        => source.Contains(expected, StringComparison.Ordinal)
-            ? source.Replace(expected, replacement, StringComparison.Ordinal)
-            : source;
+    private static string CreateControllerGml(bool enabledByDefault, int margin, bool debug) => $$"""
+        if (instance_number(object_index) > 1) { instance_destroy(); exit; }
+        ini_open("jamm_perf.ini");
+        global.jamm_perf_sleep = ini_read_real("Perf", "FishSleep", {{(enabledByDefault ? 1 : 0)}}) != 0;
+        global.jamm_perf_sleep_margin = clamp(round(ini_read_real("Perf", "FishSleepMargin", {{margin}})), {{MinMargin}}, {{MaxMargin}});
+        ini_close();
+        global.jamm_sleep_types = ds_map_create();
+        global.jamm_sleep_quest_objs = ds_map_create();
+        global.jamm_sleep_zone_n = 0;
+        global.jamm_sleep_hyst = 500;
+        global.jamm_sleep_min_x = -100000000;
+        global.jamm_sleep_min_y = -100000000;
+        global.jamm_sleep_max_x = 100000000;
+        global.jamm_sleep_max_y = 100000000;
+        global.jamm_sleep_view_x1 = 0;
+        global.jamm_sleep_view_y1 = 0;
+        global.jamm_sleep_view_x2 = 0;
+        global.jamm_sleep_view_y2 = 0;
+        global.jamm_sleep_tick = 0;
+        global.jamm_sleep_asleep_count = 0;
+        global.jamm_sleep_wake_count = 0;
+        jamm_sleep_init_types();
+        jamm_sleep_owner = true;
+        {{(debug ? "jamm_sleep_log = current_time + 1000;" : "")}}
+        """;
 
-    private static void AddOrReplaceScript(UndertaleData data, CompileGroup compiler, string name, string body)
-    {
-        string codeName = "gml_Script_" + name;
-        var code = data.Code.ByName(codeName) ?? UndertaleCode.CreateEmptyEntry(data, codeName);
-        if (data.Scripts.ByName(name) is { } existing) existing.Code = code;
-        else data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(name), Code = code });
-        compiler.QueueCodeReplace(code, body);
-    }
+    private static string DestroyControllerGml() => """
+        if (variable_instance_exists(id, "jamm_sleep_owner") && jamm_sleep_owner)
+        {
+            ds_map_destroy(global.jamm_sleep_types);
+            ds_map_destroy(global.jamm_sleep_quest_objs);
+        }
+        """;
+
+    private static string BeginStepControllerGml(bool debug) => $$"""
+        global.jamm_sleep_tick += 1;
+        jamm_sleep_begin_step();
+        {{(debug ? "if (current_time >= jamm_sleep_log) { jamm_sleep_log = current_time + 1000; show_debug_message(\"FishSleep=\" + string(global.jamm_perf_sleep) + \" asleep=\" + string(global.jamm_sleep_asleep_count) + \" wakes=\" + string(global.jamm_sleep_wake_count)); }" : "")}}
+        """;
 
     internal static string Step2Prefix() => """
         if (jamm_asleep)
@@ -707,7 +738,7 @@ public static partial class FishSleep
 
     private static string EnterGml() => """
         jamm_asleep = true;
-        jamm_sleep_tick = global.jamm_perf_tick;
+        jamm_sleep_tick = global.jamm_sleep_tick;
         jamm_sleep_state = state;
         jamm_sleep_x = x;
         jamm_sleep_y = y;
@@ -719,7 +750,7 @@ public static partial class FishSleep
         jamm_sleep_speed = speed;
         jamm_sleep_dir = direction;
         jamm_sleep_visible = visible;
-        if (path_index >= 0) path_speed = 0;
+        if (path_index != -1) path_speed = 0;
         speed = 0;
         hspeed = 0;
         vspeed = 0;
@@ -739,7 +770,7 @@ public static partial class FishSleep
             jamm_asleep = false;
             if (global.jamm_sleep_asleep_count > 0) global.jamm_sleep_asleep_count -= 1;
             global.jamm_sleep_wake_count += 1;
-            var jw_elapsed = max(0, global.jamm_perf_tick - jamm_sleep_tick);
+            var jw_elapsed = max(0, global.jamm_sleep_tick - jamm_sleep_tick);
             var jw_vx1 = global.jamm_sleep_view_x1;
             var jw_vy1 = global.jamm_sleep_view_y1;
             var jw_vx2 = global.jamm_sleep_view_x2;
@@ -747,7 +778,7 @@ public static partial class FishSleep
             var jw_has_view = (jw_vx2 > jw_vx1) && (jw_vy2 > jw_vy1);
             if (state == jamm_sleep_state && life > 0 && !deactivated)
             {
-                if (jamm_sleep_path >= 0 && path_exists(jamm_sleep_path) && path_index == jamm_sleep_path)
+                if (jamm_sleep_path != -1 && path_exists(jamm_sleep_path) && path_index == jamm_sleep_path)
                 {
                     var jw_plen = max(1, path_get_length(jamm_sleep_path));
                     var jw_rate = abs(jamm_sleep_path_spd);
@@ -810,7 +841,7 @@ public static partial class FishSleep
             }
             else
             {
-                if (jamm_sleep_path >= 0 && path_exists(jamm_sleep_path) && path_index == jamm_sleep_path && state == 0)
+                if (jamm_sleep_path != -1 && path_exists(jamm_sleep_path) && path_index == jamm_sleep_path && state == 0)
                     path_speed = jamm_sleep_path_spd;
                 if (state != 6 && state != 11 && state != 12) visible = true;
             }

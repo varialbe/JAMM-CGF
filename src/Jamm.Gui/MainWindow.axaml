@@ -159,7 +159,7 @@
                 <Button.Flyout><Flyout><ScrollViewer MaxHeight="360" MaxWidth="560"><SelectableTextBlock Text="{Binding SanitizedDetails}" TextWrapping="Wrap" Focusable="True"/></ScrollViewer></Flyout></Button.Flyout>
               </Button>
             </StackPanel>
-            <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's performance changes" IsChecked="{Binding KeepAuthorPerformanceChanges, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorPerformanceChanges}"/>
+            <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep all the author's performance changes" IsChecked="{Binding KeepAuthorPerformanceChanges, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorPerformanceChanges}"/>
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's HUD design" IsChecked="{Binding KeepAuthorHudDesign, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorHudDesign}"/>
             <CheckBox IsVisible="{Binding $parent[Window].DataContext.AdvancedMode}" Content="Keep the author's gameplay/sonar changes" IsChecked="{Binding KeepAuthorGameplayChanges, Mode=TwoWay}" IsEnabled="{Binding CanKeepAuthorGameplayChanges}"/>
             <WrapPanel Orientation="Horizontal" Margin="0,2,0,0" IsVisible="{Binding IsModKit}">

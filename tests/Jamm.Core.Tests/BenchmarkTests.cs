@@ -145,6 +145,7 @@ public class BenchmarkTests
         using var data = CreateSyntheticGame(includeOptionalObjects: true);
         SmoothMod.Apply(data, debug: false);
         PerfMod.Apply(data, debug: false);
+        Assert.Null(data.GameObjects.ByName(FishGrid.Controller));
         HdMod.Apply(data, upscaledPages: null, debug: false);
 
         int countBeforeBench = data.Code.Count;
@@ -153,9 +154,34 @@ public class BenchmarkTests
         Assert.Equal(countBeforeBench + 12, data.Code.Count);
         Assert.Equal(-999999, data.GameObjects.ByName(BenchmarkMod.ObjectName)!.Depth);
         Assert.Equal(-1000000, data.GameObjects.ByName(SmoothMod.ObjectName)!.Depth);
+        string summary = Code(data, $"Draw_{(uint)EventSubtypeDraw.DrawGUIEnd}");
+        Assert.Contains("# fish_grid=", summary);
+        Assert.Contains("# perf_mode=", summary);
+        Assert.Contains("var jamm_b_fish_grid = 0", summary);
+        Assert.Contains("var jamm_b_perf_mode = 0", summary);
 
         // Double instrumentation is cleanly rejected.
         Assert.Throws<InvalidDataException>(() => BenchmarkMod.Apply(data));
+    }
+
+    [Fact]
+    public void PerfSchedulerIsOmittedByDefaultAndAddedForEnabledProfiles()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        PerfMod.Apply(data, applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false);
+
+        Assert.Null(data.GameObjects.ByName(FishGrid.Controller));
+        Assert.Null(data.GameObjects.ByName(PerfMode.ControllerName));
+        var fishStep = data.Code.ByName("gml_Object_Fish_Step_2")!;
+        Assert.DoesNotContain(fishStep.Instructions, instruction => instruction.ValueVariable?.Name.Content == "jamm_perf_mode");
+        var simpleStep = new CompileGroup(data);
+        simpleStep.QueueCodeReplace(fishStep, "x += 1;");
+        ModObjects.Compile(simpleStep);
+        var edits = new List<UndertaleCode>();
+        PerfMode.ApplyScheduling(data, edits);
+
+        Assert.Contains(fishStep.Instructions, instruction => instruction.ValueVariable?.Name.Content == "jamm_perf_mode");
+        Assert.Contains(fishStep, edits);
     }
 
     [Fact]
@@ -650,4 +676,69 @@ public class BenchmarkTests
         ModObjects.Compile(compiler);
         return data;
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AutoplaySceneCompilesWithAndWithoutOptionalModObjects(bool includeOptionalObjects)
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "jamm-autoplay-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string inputPath = Path.Combine(tempDir, "input.win");
+            string outputPath = Path.Combine(tempDir, "autoplay-out.win");
+            using (var data = CreateSyntheticGame(includeOptionalObjects))
+            {
+                if (!includeOptionalObjects)
+                    ModObjects.Create(data, "Girl", persistent: false);
+                if (includeOptionalObjects)
+                {
+                    foreach (string extra in new[]
+                    {
+                        "Boat7", "BoatMenu", "BoatCard", "Handler", "icon_Boats", "icon_Cancel",
+                        "obj_jmk_endless_ocean", "obj_jamm_weather", "jmk_submarine_submarine",
+                        "jmk_jamm_silo_object_hatch", "obj_jamm_console"
+                    })
+                    {
+                        ModObjects.Create(data, extra, persistent: false);
+                    }
+                }
+                using var fs = File.Create(inputPath);
+                UndertaleIO.Write(fs, data);
+            }
+
+            byte[] beforeHash = SHA256.HashData(File.ReadAllBytes(inputPath));
+            int rc = Jamm.ModMaker.Program.Main(["bench", inputPath, outputPath, "--scene", "autoplay"]);
+            Assert.Equal(0, rc);
+            Assert.True(File.Exists(outputPath));
+            Assert.Equal(beforeHash, SHA256.HashData(File.ReadAllBytes(inputPath)));
+
+            using var readStream = File.OpenRead(outputPath);
+            using var reloaded = UndertaleIO.Read(readStream);
+            var probe = reloaded.GameObjects.ByName("obj_jamm_autoplay");
+            Assert.NotNull(probe);
+            Assert.True(probe.Persistent);
+
+            string create = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_obj_jamm_autoplay_Create_0")!);
+            string endStep = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_obj_jamm_autoplay_Step_2")!);
+            Assert.Contains("ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub", create);
+            Assert.Contains("ocean_start", create);
+            Assert.Contains("ocean_start", endStep);
+            Assert.Contains("asset_get_index", endStep);
+            Assert.Contains("object_exists", endStep);
+            Assert.Contains("instance_exists", endStep);
+            Assert.Contains("variable_instance_exists", endStep);
+            Assert.Contains("jmk_submarine_submarine", endStep);
+            Assert.Contains("obj_jmk_endless_ocean", endStep);
+            Assert.Contains("obj_jamm_weather", endStep);
+            Assert.Contains("jmk_jamm_silo_object_hatch", endStep);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
 }

@@ -74,7 +74,7 @@ int Run(string[] arguments)
             cgfmm profile base <name> <mod> | addon <name> <mod> <base> | role <name> <mod> none
             cgfmm profile preset <name> weak-pc|default
             cgfmm profile builtin <name> <id> on|off
-            cgfmm profile perf <name> mode|grid on|off
+            cgfmm profile perf <name> mode|grid|decor on|off
             cgfmm profile perf <name> interval <ticks>
             cgfmm profile unlockfix <profile> <mod> on|off
             cgfmm apply [--profile <name>] [--yes]

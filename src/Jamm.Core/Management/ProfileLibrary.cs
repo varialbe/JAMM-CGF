@@ -197,9 +197,9 @@ public sealed class ProfileLibrary(ManagerStore store)
         store.Write(FilePath(name), Get(name) with { FishValueCap = value });
     }
 
-    /// <summary>Changes a profile's mode, interval, fish sleep and grid defaults without editing the game's INI.</summary>
+    /// <summary>Changes a profile's mode, interval, grid, decor sleep, and fish sleep defaults without editing the game's INI.</summary>
     public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null,
-        bool? fishSleep = null, int? fishSleepMargin = null)
+        bool? decorSleep = null, bool? fishSleep = null, int? fishSleepMargin = null)
     {
         var profile = Get(name);
         if (interval is < 1 or > 60)
@@ -207,7 +207,7 @@ public sealed class ProfileLibrary(ManagerStore store)
         if (fishSleepMargin is < FishSleep.MinMargin or > FishSleep.MaxMargin)
             throw new ArgumentException($"Choose a Fish Sleep margin between {FishSleep.MinMargin} and {FishSleep.MaxMargin} pixels.");
         PerfSettings Update(PerfSettings settings) => new(
-            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval)
+            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval, decorSleep ?? settings.DecorSleep)
         {
             FishSleep = fishSleep ?? settings.FishSleep,
             FishSleepMargin = fishSleepMargin ?? settings.FishSleepMargin
@@ -258,7 +258,7 @@ public sealed class ProfileLibrary(ManagerStore store)
             result = SetBuiltin(SetBuiltin(profile, PerfId, true), HdId, before.HdEnabled is null ? null : false) with
             {
                 Preset = WeakPcPreset, BeforeWeakPc = before, NoRepack = false,
-                Perf = new(StartEnabled: true, FishGrid: true, Interval: 8)
+                Perf = new(StartEnabled: true, FishGrid: false, Interval: 8)
             };
         }
         else

@@ -142,7 +142,7 @@ internal static class ManagementCommand
                             Console.WriteLine($"  Big money (above $999,999,999, compact display): {(profile.NoBigMoney ? "off" : "on for modded builds")}");
                             Console.WriteLine($"  Fair-Play: {(profile.FairPlay ? "on" : "off")}");
                             Console.WriteLine($"  Fish sale cap: {(profile.FishValueCap == 0 ? "off" : profile.FishValueCap.ToString("N0"))}");
-                            Console.WriteLine($"  Perf defaults: F8 mode {(profile.Perf.StartEnabled ? "on" : "off")}, fish sleep {(profile.Perf.FishSleep ? "on" : "off")} (margin {profile.Perf.FishSleepMargin}), fish grid {(profile.Perf.FishGrid ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence).");
+                            Console.WriteLine($"  Perf defaults: fish scheduler/F8 {(profile.Perf.StartEnabled ? "on" : "off")}, fish sleep {(profile.Perf.FishSleep ? "on" : "off")} (margin {profile.Perf.FishSleepMargin}), fish grid hooks {(profile.Perf.FishGrid ? "on" : "off")}, decor sleep {(profile.Perf.DecorSleep ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence when installed).");
                             foreach (string id in profile.UnlockFixMods ?? [])
                                 Console.WriteLine($"  Repair legacy shop unlocks: {library.Find(id).Name}");
                         }
@@ -187,8 +187,9 @@ internal static class ManagementCommand
                             "grid" => profiles.SetPerf(positional[1], fishGrid: OnOff(positional[3])),
                             "sleep" => profiles.SetPerf(positional[1], fishSleep: OnOff(positional[3])),
                             "sleep-margin" when int.TryParse(positional[3], out int margin) => profiles.SetPerf(positional[1], fishSleepMargin: margin),
+                            "decor" => profiles.SetPerf(positional[1], decorSleep: OnOff(positional[3])),
                             "interval" when int.TryParse(positional[3], out int interval) => profiles.SetPerf(positional[1], interval: interval),
-                            _ => throw new ArgumentException("Use profile perf <name> mode|grid|sleep on|off or interval|sleep-margin <value>.")
+                            _ => throw new ArgumentException("Use profile perf <name> mode|grid|sleep|decor on|off or interval|sleep-margin <value>.")
                         };
                         Console.WriteLine($"Set Perf {positional[2]} for '{positional[1]}' to {positional[3]}.");
                         break;

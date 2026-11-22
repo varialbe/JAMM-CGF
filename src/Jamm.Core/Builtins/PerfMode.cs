@@ -48,7 +48,7 @@ public static class PerfMode
 
     /// <summary>Builds the narrow End Step prefix; Mode 0 falls through to phase 6a.</summary>
     public static string Prefix(UndertaleData data) => """
-        if (!global.jamm_perf_sleep && global.jamm_perf_mode)
+        if (!(variable_global_exists("jamm_perf_sleep") && global.jamm_perf_sleep) && global.jamm_perf_mode)
         {
             // WHY: cache runtime ancestry, so newly merged species need no original allowlist.
             if (!ds_map_exists(global.jamm_perf_types, object_index))
@@ -118,34 +118,16 @@ public static class PerfMode
     public static void Queue(UndertaleData data, CompileGroup compiler, bool debug)
     {
         var obj = ModObjects.Create(data, ControllerName, true);
-        bool hasFishSleep = data.GameObjects.ByName("Fish") is not null;
         void Add(EventType type, uint subtype, string text) => compiler.QueueCodeReplace(obj.EventHandlerFor(type, subtype, data), text);
         Add(EventType.Create, 0, $$"""
             if (instance_number(object_index) > 1) { instance_destroy(); exit; }
             ini_open("jamm_perf.ini");
             global.jamm_perf_mode = ini_read_real("Perf", "Mode", 0) != 0;
             global.jamm_perf_interval = clamp(round(ini_read_real("Perf", "Interval", 4)), 1, 60);
-            global.jamm_perf_sleep = ini_read_real("Perf", "FishSleep", 1) != 0;
-            global.jamm_perf_sleep_margin = clamp(round(ini_read_real("Perf", "FishSleepMargin", {{FishSleep.DefaultMargin}})), {{FishSleep.MinMargin}}, {{FishSleep.MaxMargin}});
             if (!ini_key_exists("Perf", "Mode") && global.jamm_perf_mode)
                 ini_write_real("Perf", "Mode", global.jamm_perf_mode);
             ini_close();
             global.jamm_perf_types = ds_map_create();
-            global.jamm_sleep_types = ds_map_create();
-            global.jamm_sleep_quest_objs = ds_map_create();
-            global.jamm_sleep_zone_n = 0;
-            global.jamm_sleep_hyst = 500;
-            global.jamm_sleep_min_x = -100000000;
-            global.jamm_sleep_min_y = -100000000;
-            global.jamm_sleep_max_x = 100000000;
-            global.jamm_sleep_max_y = 100000000;
-            global.jamm_sleep_view_x1 = 0;
-            global.jamm_sleep_view_y1 = 0;
-            global.jamm_sleep_view_x2 = 0;
-            global.jamm_sleep_view_y2 = 0;
-            global.jamm_sleep_asleep_count = 0;
-            global.jamm_sleep_wake_count = 0;
-            {{(hasFishSleep ? "jamm_sleep_init_types();" : "")}}
             jamm_perf_map_owner = true;
             global.jamm_perf_tick = 0;
             global.jamm_perf_eligible = 0;
@@ -158,16 +140,11 @@ public static class PerfMode
         Add(EventType.Destroy, 0, """
             if (variable_instance_exists(id, "jamm_perf_map_owner"))
                 if (jamm_perf_map_owner)
-                {
                     ds_map_destroy(global.jamm_perf_types);
-                    ds_map_destroy(global.jamm_sleep_types);
-                    ds_map_destroy(global.jamm_sleep_quest_objs);
-                }
             """);
         Add(EventType.Step, (uint)EventSubtypeStep.BeginStep, $$"""
             {{(debug ? "jamm_perf_begin = get_timer();" : "")}}
             global.jamm_perf_tick += 1;
-            {{(hasFishSleep ? "jamm_sleep_begin_step();" : "")}}
             if (keyboard_check_pressed(vk_f8))
             {
                 global.jamm_perf_mode = !global.jamm_perf_mode;
@@ -177,7 +154,7 @@ public static class PerfMode
                 jamm_perf_toast = current_time + 2500;
                 {{(debug ? "global.jamm_perf_eligible = 0; global.jamm_perf_skipped = 0; jamm_perf_ms = 0; jamm_perf_max = 0; jamm_perf_n = 0; jamm_perf_log = current_time + 1000; jamm_perf_count_log = current_time + 1000;" : "")}}
             }
-            {{(debug ? "if (current_time >= jamm_perf_count_log) { jamm_perf_count_log = current_time + 1000; " + DebugLog("\"Perf mode=\" + string(global.jamm_perf_mode) + \" interval=\" + string(global.jamm_perf_interval) + \" eligible_events=\" + string(global.jamm_perf_eligible) + \" skipped_events=\" + string(global.jamm_perf_skipped) + \" sleep=\" + string(global.jamm_perf_sleep) + \" asleep=\" + string(global.jamm_sleep_asleep_count) + \" wakes=\" + string(global.jamm_sleep_wake_count)") + " global.jamm_perf_eligible = 0; global.jamm_perf_skipped = 0; }" : "")}}
+            {{(debug ? "if (current_time >= jamm_perf_count_log) { jamm_perf_count_log = current_time + 1000; " + DebugLog("\"Perf mode=\" + string(global.jamm_perf_mode) + \" interval=\" + string(global.jamm_perf_interval) + \" eligible_events=\" + string(global.jamm_perf_eligible) + \" skipped_events=\" + string(global.jamm_perf_skipped)") + " global.jamm_perf_eligible = 0; global.jamm_perf_skipped = 0; }" : "")}}
             """);
         if (debug)
             Add(EventType.Draw, (uint)EventSubtypeDraw.DrawGUIEnd, $$"""
@@ -228,6 +205,19 @@ public static class PerfMode
         compiler.QueueCodeReplace(create, source);
         ModObjects.Compile(compiler);
         edits.Add(create);
+    }
+
+    internal static void ApplyScheduling(UndertaleData data, List<UndertaleCode> edits)
+    {
+        var fishStep = data.Code.ByName("gml_Object_Fish_Step_2")
+            ?? throw new InvalidDataException("The Fish End Step event is missing. Re-add JAMM Perf and build again.");
+        string source = ModObjects.Decompile(data, fishStep);
+        const string marker = "// WHY: cache runtime ancestry";
+        if (source.Contains(marker, StringComparison.Ordinal)) return;
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(fishStep, Prefix(data) + source);
+        ModObjects.Compile(compiler);
+        edits.Add(fishStep);
     }
 
     private static string ReplaceDefault(string source, string expected, string replacement)

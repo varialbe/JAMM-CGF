@@ -17,14 +17,14 @@ internal static class FishGridScripts
         """;
 
     internal const string Available = "variable_global_exists(\"jamm_fg_enabled\")";
+    internal static string GuardedCall(string helper) => $"if (global.jamm_fg_enabled) {helper}();";
 
     internal static readonly IReadOnlyDictionary<string, string> Scripts = new Dictionary<string, string>
     {
-        ["jamm_fg_enter"] = $"if ({Available}) global.jamm_fg_scope += 1;",
-        ["jamm_fg_leave"] = $"if ({Available}) global.jamm_fg_scope -= 1;",
-        ["jamm_fg_dirty"] = $"if ({Available}) global.jamm_fg_valid = false;",
+        ["jamm_fg_enter"] = "global.jamm_fg_scope += 1;",
+        ["jamm_fg_leave"] = "global.jamm_fg_scope -= 1;",
+        ["jamm_fg_dirty"] = "global.jamm_fg_valid = false;",
         ["jamm_fg_touch"] = $$"""
-            if (!({{Available}})) exit;
             if (!global.jamm_fg_valid) exit;
             if (!variable_instance_exists(id, "jamm_fg_serial_seen")) exit;
             if (jamm_fg_serial_seen != global.jamm_fg_serial) exit;
