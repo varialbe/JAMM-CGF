@@ -330,6 +330,45 @@ public sealed class ItemsRuntimeTests
     }
 
     [Fact]
+    public void OldSaveWithoutNewToolKeyPreservesBoatKeysAndDefaultsToolToLocked()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string modPath = temp.PathFor("mod.win");
+        WriteSyntheticGame(basePath);
+        WriteSyntheticGame(modPath, d =>
+        {
+            AddApiPlaceholders(d);
+            var hullSpr = AddSprite(d, "spr_sub_card");
+            var winchIcon = AddSprite(d, "spr_bow_winch");
+            var subObj = AddObject(d, "jmk_sub_submarine");
+            var winchObj = AddObject(d, "jmk_sub_bow_winch_tool");
+            AddScript(d, "jamm_init_sub", $"""
+                jamm_boat_register("submarine:submarine", "Submarine", 125000000, {hullSpr.Name.Content}, {subObj.Name.Content}, "Sub", 0);
+                jamm_tool_register("submarine:bow-winch", "Bow Winch", 250000000, 0, {winchObj.Name.Content}, -1, {winchIcon.Name.Content}, "Winch", 0);
+                """);
+        });
+
+        using var original = GameFileLoader.Load(basePath);
+        using var mod = GameFileLoader.Load(modPath);
+        string output = temp.PathFor("merged.win");
+        var build = ArchiveBuilder.Build(basePath, [new(PatchBuilder.Create(original, mod, "Submarine"), modPath)], output);
+        Assert.NotNull(build.Verification);
+
+        using var merged = GameFileLoader.Load(output);
+        string toolReg = PatchBuilder.ReadCode(merged, "gml_Script_jamm_tool_register").Text;
+        Assert.Contains("ToolData.unlocked[jamm_slot] = jamm_unl", toolReg);
+        Assert.Contains("ToolData.jamm_default_unlocked[jamm_slot] = jamm_unl", toolReg);
+
+        string loadScript = PatchBuilder.ReadCode(merged, "gml_Script_jamm_items_load").Text;
+        Assert.Contains("\"u:boat:\"", loadScript);
+        Assert.Contains("\"eq:boat\"", loadScript);
+        Assert.Contains("\"u:tool:\"", loadScript);
+        Assert.Contains("ToolData.unlocked[jamm_i] = ToolData.jamm_default_unlocked[jamm_i]", loadScript);
+        Assert.Contains("ToolData.item[jamm_i].active = 0", loadScript);
+    }
+
+    [Fact]
     public void MissingOrChangedAnchorThrowsInvalidDataExceptionNamingCodeEntry()
     {
         using var temp = new TemporaryDirectory();

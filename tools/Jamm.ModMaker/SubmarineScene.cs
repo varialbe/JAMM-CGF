@@ -50,7 +50,7 @@ internal static class SubmarineScene
 
     private const string Steps = $$"""
         if (!instance_exists(SaveManager) || !SaveManager.loaded || !instance_exists(Girl)) exit;
-        if (current_time - stage_at > 30000)
+        if (current_time - stage_at > 45000)
         {
             capture = "timeout_" + string(stage);
             stage = 99;
@@ -141,6 +141,10 @@ internal static class SubmarineScene
                 Girl.x = launch_x;
                 Girl.hspeed = 0;
                 Girl.hspeed_base = 0;
+                Lure.x = launch_x + 208;
+                Lure.y = 1294;
+                Lure.x_previous = Lure.x;
+                Lure.y_previous = Lure.y;
                 Camera.x = launch_x + Camera.RELATIVE_ANCHOR_X;
                 Camera.y = 1294 + Camera.RELATIVE_ANCHOR_Y_FROM_SEA;
                 capture = "at_sea";
@@ -369,7 +373,12 @@ internal static class SubmarineScene
         file_text_write_string(file, telemetry);
         file_text_writeln(file);
         file_text_close(file);
-        if (capture != "passed") screen_save("jamm_submarine_" + capture + ".png");
+        if (capture != "passed")
+        {
+            screen_save("jamm_submarine_" + capture + ".png");
+            if (surface_exists(application_surface))
+                surface_save(application_surface, "jamm_submarine_surf_" + capture + ".png");
+        }
         capture = "";
         if (stage == 99) game_end();
         """;

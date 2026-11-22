@@ -89,12 +89,26 @@ if (sub_diving || sub_cam_blend > 0.002 || sub_cam_zoom > 1.002)
         sub_peek_amount += (0.0 - sub_peek_amount) * min(1, 8.0 * sub_dt);
         if (instance_exists(Camera))
         {
-            Camera.x = lerp(Camera.x, sub_cam_x, sub_cam_blend);
-            Camera.y = lerp(Camera.y, sub_cam_y, sub_cam_blend);
+            var van_x, van_y;
+            if (Lure.state != 0 && !instance_exists(CatSwim))
+            {
+                van_x = Lure.x;
+                van_y = Lure.y;
+            }
+            else
+            {
+                van_x = Girl.x + Camera.RELATIVE_ANCHOR_X;
+                if (wasJustMoving) van_y = Girl.y + Camera.RELATIVE_ANCHOR_Y;
+                else van_y = 1294 + Camera.RELATIVE_ANCHOR_Y_FROM_SEA;
+            }
+            sub_cam_x += (van_x - sub_cam_x) * min(1, 6.0 * sub_dt);
+            sub_cam_y += (van_y - sub_cam_y) * min(1, 6.0 * sub_dt);
+            Camera.x = sub_cam_x;
+            Camera.y = sub_cam_y;
         }
     }
 
-    if (!sub_diving && sub_cam_blend <= 0.002 && sub_cam_zoom <= 1.002)
+    if (!sub_diving && sub_cam_blend <= 0.004 && sub_cam_zoom <= 1.004)
     {
         sub_cam_zoom = 1;
         sub_cam_blend = 0;
@@ -124,6 +138,8 @@ if (sub_diving || sub_cam_blend > 0.002 || sub_cam_zoom > 1.002)
     {
         var vw = round(sub_cam_base_w * sub_cam_zoom);
         var vh = round(sub_cam_base_h * sub_cam_zoom);
+        var lw = round(sub_cam_base_w * 1.55);
+        var lh = round(sub_cam_base_h * 1.55);
         view_wview[0] = vw;
         view_hview[0] = vh;
         view_hborder[0] = vw * 0.5;
@@ -133,15 +149,16 @@ if (sub_diving || sub_cam_blend > 0.002 || sub_cam_zoom > 1.002)
             view_xview[0] = clamp(Camera.x - vw * 0.5, 0, max(0, room_width - vw));
             view_yview[0] = clamp(Camera.y - vh * 0.5, 0, max(0, room_height - vh));
         }
+        // Keep the lighting surface at the zoomed dimensions across the transition to avoid per-frame reallocations.
         if (instance_exists(LightingSystem))
         {
-            if (LightingSystem.width != vw || LightingSystem.height != vh)
+            if (LightingSystem.width != lw || LightingSystem.height != lh)
             {
-                LightingSystem.width = vw;
-                LightingSystem.height = vh;
+                LightingSystem.width = lw;
+                LightingSystem.height = lh;
                 if (surface_exists(LightingSystem.light_surface))
                     surface_free(LightingSystem.light_surface);
-                LightingSystem.light_surface = surface_create(vw, vh);
+                LightingSystem.light_surface = surface_create(lw, lh);
             }
         }
     }

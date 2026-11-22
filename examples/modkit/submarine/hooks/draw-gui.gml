@@ -22,8 +22,8 @@ draw_set_halign(fa_left);
 draw_set_valign(fa_top);
 draw_set_alpha(0.78);
 draw_set_color(make_color_rgb(25, 39, 48));
-if (sub_diving) draw_rectangle(left - 6, top - 4, left + width + 6, top + 47 + 14 * (status != ""), false);
-else draw_rectangle(left - 6, top - 4, left + 278, top + 19, false);
+if (sub_diving) draw_rectangle(left - 6, top - 6, left + width + 6, top + 49 + 14 * (status != ""), false);
+else draw_rectangle(left - 6, top - 6, left + 278, top + 20, false);
 draw_set_alpha(1);
 if (sub_diving)
 {
