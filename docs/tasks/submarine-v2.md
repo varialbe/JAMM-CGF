@@ -28,3 +28,16 @@ Base: Submarine 0.1 on main (`examples/modkit/submarine`, design `docs/design/su
    water, zoomed camera, lights rotated, peek, casting after the winch). Copy the chosen PNGs to
    `~/jamm-night/submarine-v2/`.
 AGENTS.md applies (never modify input game files, never commit *.win or game data, zero warnings, XML docs).
+
+## Round 2 (orchestrator review of f44e0a7, 2026-11-22 06:20)
+Hull, thrusters, zoom, light rotation, peek and the Bow Winch look right – good work. One real bug in the
+screenshots `~/jamm-night/submarine-v2/jamm_submarine_depth_2.png` and `jamm_submarine_peek.png`:
+1. **Vanilla HUD is misplaced while zoomed**: the "Lvl. 30" XP bar is drawn in the middle of the screen over the
+   submarine instead of at the bottom; the "Sell" button floats middle-left; "New Quest"/"Wait" are cut off at the
+   right edge. Everything drawn in GUI/view space must stay exactly where vanilla draws it at 800x480 (or scale
+   consistently with the window), independent of the underwater zoom. Find how vanilla positions these (view-relative
+   Draw vs Draw GUI) and fix it without changing vanilla behaviour when the submarine is not used.
+2. Check the other screenshots (`jamm_submarine_*.png`) for any other HUD/menu element affected by the zoom (shops,
+   catch popup, Fishalog, pause/save menu) and fix those too.
+3. Re-run `--scene submarine` solo + personal, update the report and screenshots (before/after crop of the HUD).
+`dotnet build -c Release` zero warnings, `dotnet test -c Release` green. Commit on this branch; do not push.
