@@ -618,7 +618,6 @@ public static partial class FishSleep
         bool hasDeepSonar = data.GameObjects.ByName("SonarPanelAdvanced") is not null;
         bool hasCatchQuest = data.GameObjects.ByName("CatchQuestNewNew") is not null;
         bool hasQuest = data.GameObjects.ByName("Quest") is not null;
-        bool hasPiercer = data.GameObjects.ByName("Piercer") is not null;
 
         var sb = new StringBuilder();
         sb.AppendLine("""
@@ -739,13 +738,6 @@ public static partial class FishSleep
                     if (variable_instance_exists(id, "target_x") && variable_instance_exists(id, "target_y"))
                         jamm_sleep_add_box(target_x - margin, target_y - margin, target_x + margin, target_y + margin);
                 }
-                """);
-        }
-        if (hasPiercer)
-        {
-            sb.AppendLine("""
-                with (Piercer)
-                    jamm_sleep_add_box(x - 400, y - 400, x + 400, y + 400);
                 """);
         }
 

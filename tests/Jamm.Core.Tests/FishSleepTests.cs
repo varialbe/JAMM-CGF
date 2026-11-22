@@ -127,9 +127,6 @@ public sealed class FishSleepTests
         string chawCol = ModObjects.Decompile(data, chawLike.Events[(int)EventType.Collision][0].Actions[0].CodeId!);
         Assert.Contains("jamm_asleep", chawStep0);
         Assert.Contains("jamm_asleep", chawCol);
-
-        string beginStep = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_begin_step")!);
-        Assert.Contains("with (Piercer)", beginStep);
     }
 
     [Fact]
