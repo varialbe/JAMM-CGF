@@ -36,6 +36,8 @@ public static class Program
                   bench   <legacy.win> <out.win> --scene maize
                   bench   <modded.win> <out.win> --scene money
                   bench   <harbor-town.win> <out.win> --scene harbor
+                  bench   <video.win> <out.win> --scene showcase-harbor
+                  bench   <video.win> <out.win> --scene showcase-submarine
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
                   bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
@@ -100,6 +102,8 @@ public static class Program
             case "bench" when SubmarineScene.Requested(args): SubmarineScene.Apply(data); Save(data, output!); return 0;
             case "bench" when MoneyScene.Requested(args): MoneyScene.Apply(data); Save(data, output!); return 0;
             case "bench" when HarborScene.Requested(args): HarborScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when ShowcaseHarborScene.Requested(args): ShowcaseHarborScene.Apply(data); Save(data, output!); return 0;
+            case "bench" when ShowcaseSubmarineScene.Requested(args): ShowcaseSubmarineScene.Apply(data); Save(data, output!); return 0;
             case "bench" when AutoplayScene.Requested(args): AutoplayScene.Apply(data); Save(data, output!); return 0;
             case "bench" when WeatherScene.Requested(args): WeatherScene.Apply(data); Save(data, output!); return 0;
             case "bench" when OptionValue(args, "--scene") == "maize": MaizeScene.Apply(data); Save(data, output!); return 0;
