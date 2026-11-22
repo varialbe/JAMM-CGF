@@ -80,6 +80,14 @@ public sealed class WeatherRuntimeTests
         Assert.Contains("weather_rule[0, 1] = 2;", text);
         Assert.Contains("weather_rule[1, 1] = 8;", text);
 
+        string population = PatchBuilder.ReadCode(merged, "gml_Script_jamm_weather_population").Text;
+        Assert.Contains("jamm_fish_sonar_init(fish)", population);
+        Assert.Contains("if (instance_exists(fish))", population);
+        Assert.True(population.IndexOf("jamm_fish_sonar_init(fish)", StringComparison.Ordinal)
+            < population.IndexOf("fish.base_lunge_mod = 1", StringComparison.Ordinal));
+        Assert.Contains("s5 = (size + 0.5) / 3.5", PatchBuilder.ReadCode(merged, FishSonarRuntime.Code).Text);
+        Assert.Single(merged.Data.Scripts, s => s.Name.Content == FishSonarRuntime.Script);
+
         BuildInput BuildInput(string id, string displayName, string phase)
         {
             string dir = temp.Package($$"""
@@ -94,6 +102,116 @@ public sealed class WeatherRuntimeTests
             Assert.Empty(patch.Changes["rooms"].Changed);
             return new(patch, path);
         }
+    }
+
+    [Fact]
+    public void WeatherSceneWorksWithoutWeatherPack()
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        string inputPath = temp.PathFor("vanilla.win");
+        string outputPath = temp.PathFor("weather-bench.win");
+        using (var data = CreateWeatherBenchWorld()) Save(data, inputPath);
+
+        int rc = Jamm.ModMaker.Program.Main(["bench", inputPath, outputPath, "--scene", "weather"]);
+        Assert.Equal(0, rc);
+        Assert.True(File.Exists(outputPath));
+
+        using var reloaded = GameFileLoader.Load(outputPath);
+        Assert.NotNull(reloaded.Data.GameObjects.ByName("obj_jamm_bench_weather"));
+        string create = ModObjects.Decompile(reloaded.Data, reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_weather_Create_0")!);
+        string beginStep = ModObjects.Decompile(reloaded.Data, reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_weather_Step_1")!);
+        string endStep = ModObjects.Decompile(reloaded.Data, reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_weather_Step_2")!);
+        string user0 = ModObjects.Decompile(reloaded.Data, reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_weather_Other_10")!);
+
+        Assert.Contains("weather_id,active", create);
+        Assert.Contains("fish_count,sonar_missing", create);
+        Assert.Contains("SonarPanel.active = 1", beginStep);
+        Assert.Contains("SonarPanel.shouldDraw = 1", beginStep);
+        Assert.Contains("view_visible[3] = true", beginStep);
+        Assert.Contains("SonarPanel.active = 1", endStep);
+        Assert.Contains("view_visible[3] = true", endStep);
+        Assert.Contains("variable_instance_exists(id, \"s5\")", user0);
+        Assert.Contains("sonar_missing", user0);
+        Assert.Contains("fish_count", user0);
+        Assert.DoesNotContain("jamm_weather_command", beginStep);
+        Assert.DoesNotContain("obj_jamm_weather", user0);
+    }
+
+    [Fact]
+    public void WeatherSceneEnablesSonarAndChecksWeatherFish()
+    {
+        using var temp = new ModKitAreaTests.AreaTestDirectory();
+        string basePath = temp.PathFor("base.win");
+        using (var data = CreateWeatherBenchWorld()) Save(data, basePath);
+        using var baseline = GameFileLoader.Load(basePath);
+
+        string consolePath = temp.PathFor("console.win");
+        using (var console = GameFileLoader.Load(basePath))
+        {
+            ConsoleMod.Apply(console.Data);
+            Save(console.Data, consolePath);
+        }
+        using var consoleFile = GameFileLoader.Load(consolePath);
+        var consoleInput = new BuildInput(PatchBuilder.Create(baseline, consoleFile, "Console"), consolePath);
+
+        string weatherDir = temp.Package("""
+            {
+              "id": "weather-test",
+              "name": "Weather Test",
+              "weathers": [
+                { "id": "rainy", "name": "Rainy" },
+                { "id": "super-sunny", "name": "Super Sunny" },
+                { "id": "windy", "name": "Windy" },
+                { "id": "fog", "name": "Fog" }
+              ]
+            }
+            """);
+        string weatherPath = temp.PathFor("weather-mod.win");
+        ModKitBuilder.Build(weatherDir, basePath, weatherPath);
+        using var weatherFile = GameFileLoader.Load(weatherPath);
+        var weatherInput = new BuildInput(PatchBuilder.Create(baseline, weatherFile, "Weather"), weatherPath);
+
+        string mergedPath = temp.PathFor("merged.win");
+        ArchiveBuilder.Build(basePath, [weatherInput, consoleInput], mergedPath);
+
+        string benchPath = temp.PathFor("merged-bench.win");
+        int rc = Jamm.ModMaker.Program.Main(["bench", mergedPath, benchPath, "--scene", "weather"]);
+        Assert.Equal(0, rc);
+
+        using var reloaded = GameFileLoader.Load(benchPath);
+        string beginStep = ModObjects.Decompile(reloaded.Data, reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_weather_Step_1")!);
+        string user0 = ModObjects.Decompile(reloaded.Data, reloaded.Data.Code.ByName("gml_Object_obj_jamm_bench_weather_Other_10")!);
+
+        Assert.Contains("SonarPanel.active = 1", beginStep);
+        Assert.Contains("view_visible[3] = true", beginStep);
+        Assert.Contains("\"rainy\"", beginStep);
+        Assert.Contains("\"super-sunny\"", beginStep);
+        Assert.Contains("\"windy\"", beginStep);
+        Assert.Contains("\"fog\"", beginStep);
+        Assert.Contains("jamm_weather_command", beginStep);
+        Assert.Contains("jamm_weather_find", beginStep);
+        Assert.Contains("jamm_weather_owner", beginStep);
+        Assert.Contains("weather_species", beginStep);
+        Assert.Contains("variable_instance_exists(id, \"s5\")", user0);
+        Assert.Contains("sonar_missing", user0);
+        Assert.Contains("fish_count", user0);
+        Assert.Contains("jamm_weather_current()", user0);
+    }
+
+    private static UndertaleData CreateWeatherBenchWorld()
+    {
+        var data = CreateWorld();
+        foreach (string name in new[] { "SonarPanel", "Camera", "Boat", "LightingSystem" })
+            data.GameObjects.Add(new() { Name = data.Strings.MakeString(name) });
+
+        var compiler = new CompileGroup(data);
+        var stormCode = UndertaleCode.CreateEmptyEntry(data, "gml_Script_is_it_storming");
+        data.Scripts.Add(new() { Name = data.Strings.MakeString("is_it_storming"), Code = stormCode });
+        compiler.QueueCodeReplace(stormCode, "return false;");
+        var ambianceStep = data.GameObjects.ByName("AmbianceController")!.EventHandlerFor(EventType.Step, 0u, data);
+        compiler.QueueCodeReplace(ambianceStep, "isStorming = is_it_storming();\nminimumOvercast = 0;");
+        ArchiveVerifier.Compile(compiler, "synthetic weather bench world");
+        return data;
     }
 
     private static UndertaleData CreateWorld()

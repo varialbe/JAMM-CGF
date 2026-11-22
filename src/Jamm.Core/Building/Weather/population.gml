@@ -25,6 +25,7 @@ for (var j = 0; j < weather_species[w]; j += 1)
         var fish = instance_create(sx, sy, species);
         if (instance_exists(fish))
         {
+            jamm_fish_sonar_init(fish);
             // Rod normally seeds this on its own Step. A new school can move before that Step runs.
             fish.base_lunge_mod = 1;
             fish.jamm_weather_owner = w;

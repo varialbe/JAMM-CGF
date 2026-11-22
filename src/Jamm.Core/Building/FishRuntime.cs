@@ -166,6 +166,8 @@ internal static class FishRuntime
         if (!recompile.ContainsKey(RegisterCode) && data.Scripts.ByName(RegisterScript) is null)
             return;
 
+        FishSonarRuntime.Ensure(data, recompile, generated);
+
         bool hasCatalogData = data.GameObjects.ByName("CatalogData") is not null;
         if (fishValueCap > 0)
             generated[RegisterCode] = recompile[RegisterCode] = BuildFishRegisterGml(hasCatalogData, fishValueCap);
@@ -277,6 +279,7 @@ internal static class FishRuntime
                 // metadata while the returned instance still exists.
                 if (instance_exists(jamm_inst))
                 {
+                    jamm_fish_sonar_init(jamm_inst);
                     jamm_inst.start_x = jamm_sx;
                     jamm_inst.start_y = jamm_sy;
                     jamm_inst.TRUE_START_X = jamm_sx;

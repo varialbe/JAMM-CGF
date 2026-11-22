@@ -96,10 +96,10 @@ function setup() {
             }) ?? null;
         },
         asset_get_index: () => -1,
-        instance_exists: () => false,
+        instance_exists: instance => live.has(instance),
         variable_instance_exists: () => false,
         power: Math.pow,
-        jmk_endless_ocean_sonar: member => {
+        jamm_fish_sonar_init: member => {
             member.s1 = -1;
             member.s2 = member.display_size - 1;
             member.s3 = 10 + 5 * (member.display_size - 1);
