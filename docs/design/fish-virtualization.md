@@ -202,3 +202,14 @@ The GML transition is benchmark instrumentation only. It does not implement zone
 In this single pair, ON was lower by 2,675 µs (4.9%) for mean `fish_step_us`, 3,274 µs (4.2%) for its p95, 10,095 µs (7.4%) for mean loop time, and 12,350 µs (6.6%) for loop p95. The ON capture only found four eligible Garder instances out of the requested 100; these deltas are not a causal or 100-fish performance claim. The mean fish counts also differed (1,178 vs. 1,147), so repeat measurements with a controlled, stable population are needed before drawing a performance conclusion.
 
 The transition timers reported 38 µs to virtualize, 4 µs to materialize, and 4 µs for the `instance_create`/destroy pass, each over the four-record set. The measured round trip was 42 µs versus 4 µs for that baseline pass. Treat these very small, single-capture timings as directional only; they do not show that record transitions are cheaper.
+
+## Orchestrator review round 2 (2026-11-22 04:25)
+Steps 1–2 delivered (inventory, opt-in prototype, round-trip test, 0 warnings, 785 tests green). The measurement does
+not answer the question yet: only 4 of 100 requested Garder instances were eligible, a single pair, different fish
+counts. Step 2b before Hydrogen continues:
+- choose the pilot by **eligible far-fish count** in the measured scene (or use a scene/region where the pilot is
+  numerous); target ≥ 100 virtualised instances (and a 300 run if possible);
+- control the population (same seed, same fish count OFF/ON, report it), **3 repeated OFF/ON pairs**, report mean/p50/p95
+  of `fish_step_us` and `loop_us` with the spread between same-mode repeats;
+- explain the 42 µs vs 4 µs transition cost and whether it amortises at the planned wake/sleep rate;
+- go/no-go statement for steps 3–8: worth it if ≥ 100 virtualised fish save clearly more than the repeat spread.
