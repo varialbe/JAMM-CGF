@@ -26,6 +26,8 @@ internal static class WeatherRuntime
             .OrderBy(d => d.Definition.Package + ":" + d.Definition.Weather.Id, StringComparer.Ordinal).ToArray();
         if (declarations.Length == 0) return;
 
+        FishSonarRuntime.Ensure(data, recompile, generated);
+
         var controller = ModObjects.Create(data, Controller, persistent: true);
         ModObjects.PlaceInstance(data, "NewWorld", controller, first: true);
         AddEvent(EventType.Create, 0, Gml("create") + "\n" + Registry(declarations, data, ancestor, plan));

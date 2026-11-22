@@ -133,14 +133,14 @@ public sealed class EndlessOceanTests
         foreach (string sprite in new[] { "spr_abyssal_head", "spr_dragon_head", "spr_problem_head", "spr_sonarblip" })
             data.Sprites.Add(new UndertaleSprite { Name = data.Strings.MakeString(sprite) });
 
-        var sonar = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jmk_endless_ocean_sonar");
+        var sonar = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jamm_fish_sonar_init");
         data.Scripts.Add(new UndertaleScript
         {
-            Name = data.Strings.MakeString("jmk_endless_ocean_sonar"),
+            Name = data.Strings.MakeString("jamm_fish_sonar_init"),
             Code = sonar
         });
         var compiler = new CompileGroup(data);
-        compiler.QueueCodeReplace(sonar, EndlessOceanMod.Source("jmk_endless_ocean_sonar"));
+        compiler.QueueCodeReplace(sonar, EndlessOceanMod.Source("jamm_fish_sonar_init"));
         ModObjects.Compile(compiler);
 
         string compiled = ModObjects.Decompile(data, sonar);
@@ -169,7 +169,8 @@ public sealed class EndlessOceanTests
             if (instr.Type1 == UndertaleInstruction.DataType.Int32)
                 Assert.DoesNotContain(instr.ValueInt, bareVanillaIndices);
         }
-        Assert.Contains("jmk_endless_ocean_sonar(swimmer)", EndlessOceanMod.Source("jmk_endless_ocean_load"));
+        Assert.Contains("jamm_fish_sonar_init(swimmer)", EndlessOceanMod.Source("jmk_endless_ocean_load"));
+        Assert.Contains("if (!instance_exists(swimmer)) continue;", EndlessOceanMod.Source("jmk_endless_ocean_load"));
     }
 
     [Fact]
@@ -181,7 +182,7 @@ public sealed class EndlessOceanTests
         foreach (string scriptName in new[]
         {
             "jmk_endless_ocean_layout", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
-            "jmk_endless_ocean_sonar", "fish_object_to_name", "get_index_for_name",
+            "jamm_fish_sonar_init", "fish_object_to_name", "get_index_for_name",
             "jamm_chunk_unit", "jmk_endless_ocean_species"
         })
         {
@@ -216,7 +217,12 @@ public sealed class EndlessOceanTests
         Assert.DoesNotContain("Ancient_Kingfish", EndlessOceanMod.Source("jmk_endless_ocean_species"));
 
         string compiledLoad = ModObjects.Decompile(data, loadCode);
-        Assert.Contains("base_lunge_mod = 1", compiledLoad);
+        int guardPos = compiledLoad.IndexOf("instance_exists(swimmer)", StringComparison.Ordinal);
+        int sonarPos = compiledLoad.IndexOf("jamm_fish_sonar_init(swimmer)", StringComparison.Ordinal);
+        int lungePos = compiledLoad.IndexOf("base_lunge_mod = 1", StringComparison.Ordinal);
+        Assert.True(guardPos >= 0, compiledLoad);
+        Assert.True(sonarPos > guardPos, compiledLoad);
+        Assert.True(lungePos > sonarPos, compiledLoad);
         Assert.Contains("base_lunge_offset = 0", compiledLoad);
         Assert.Contains("gear_attract_scalar", compiledLoad);
         Assert.Contains("gear_repel_scalar", compiledLoad);
@@ -412,7 +418,7 @@ public sealed class EndlessOceanTests
 
             EndlessOceanMod.Apply(data);
 
-            string compiledSonar = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jmk_endless_ocean_sonar")!);
+            string compiledSonar = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_fish_sonar_init")!);
             Assert.DoesNotMatch(@"\b(132|135|225|238|242|334|424|429|430)\b", compiledSonar);
 
             var atlas = data.Sprites.ByName("spr_jmk_ocean_underlay_tex");
