@@ -63,3 +63,14 @@ The option is `PerfSettings.FishMicro`, exposed as `cgfmm profile perf <name> fi
 No automatic optimizer is enabled or shipped. Constant folding requires GM1.4 numeric/string coercion rules; variable hoisting can change dynamic instance lookup or read timing; string existence lookup and `with` removal can change object ancestry/order; and pooling changes creation/destruction lifecycle. Current captures do not establish a win for those transformations. The correct current decision is to keep the proposed all-mod optimizer unimplemented and off by default, and revisit it only with an optimizer mode that can be explicitly enabled for profile builds and a transformation-specific parity corpus.
 
 The disabled dock profile capture recorded 63 ticks, `loop_us_mean=470810`, `Fish_Step_2=256363` µs/tick (54% of loop), `fish_lunge=42682` µs/tick, and `fish_flock=880` µs/tick. This is one measurement in a crowded scene (1,638 mean active fish), so it is not a before/after result. The matched enabled capture did not start: its `run.sh` request remained queued for over an hour behind unrelated shared-runner work. The same-seed off autoplay completed 9 actions and wrote 78 rows, with no hooked-fish or sonar-active samples; the enabled autoplay did not run. Therefore there is no paired tick-time result or catch/sonar parity claim. The autoplay probe appends `lure_fish`, `hooked_fish_size`, `sonar_active`, and `advanced_sonar_active` columns while preserving the original controller columns. No texture-page switch counter is exposed by the benchmark. Re-run the paired captures when the shared lock is available before enabling this experimental setting by default.
+
+## Orchestrator review (2026-11-22 06:45)
+Implementation accepted as code (default OFF, off output byte-identical to the base, zero warnings, tests green, autoplay
+CSV now records hook/sonar fields). Not mergeable yet: the merge gate needs runtime evidence. Next round (validation only,
+no new transformations):
+- 3 OFF/ON pairs of the profile capture on vanilla and one heavy pack (dock), same seed; report mean/p50/p95 of
+  `loop_us` and `Fish_Step_2` with the spread between same-mode repeats;
+- autoplay OFF vs ON, same seeds (2 seeds × 15 min), compare hook/sonar/catch counts within noise, no Code Error;
+- queue on `~/jamm-night/bin/run.sh` and WAIT for the shared lock as long as needed (other agents run too); never stop
+  after a timeout of minutes; on EXITED `~/jamm-night/bin/steam-restart.sh` and retry.
+Go if ON beats the repeat spread and parity holds; otherwise record "no measurable gain" and keep it off.
