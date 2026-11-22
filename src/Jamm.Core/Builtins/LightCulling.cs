@@ -63,7 +63,7 @@ public static class LightCulling
         compiler.QueueCodeReplace(roomEndCode, RestoreAndResetGml());
         compiler.QueueCodeReplace(drawBeginCode, DrawBeginGml());
         compiler.QueueCodeReplace(postDrawCode, RestoreAndResetGml());
-        compiler.QueueCodeReplace(drawGuiBeginCode, RestoreGml());
+        compiler.QueueCodeReplace(drawGuiBeginCode, RestoreAndResetGml());
         ModObjects.Compile(compiler);
 
         if (edits is not null)
@@ -274,7 +274,7 @@ public static class LightCulling
     }
 
     private static string DrawBeginGml() => $$"""
-        if (!global.jamm_lc_enabled || view_current != 0) exit;
+        if (!global.jamm_lc_enabled || view_current != 0 || !view_enabled || !view_visible[0]) exit;
         if (global.jamm_lc_hid_n > 0)
         {
             var _hn = global.jamm_lc_hid_n;
@@ -391,19 +391,6 @@ public static class LightCulling
         global.jamm_lc_kept = jamm_n0;
         global.jamm_lc_culled = jamm_nh;
         global.jamm_lc_ready = 1;
-        """;
-
-    private static string RestoreGml() => """
-        if (global.jamm_lc_hid_n > 0)
-        {
-            var _hn = global.jamm_lc_hid_n;
-            var _ha = global.jamm_lc_hid;
-            for (var _hi = 0; _hi < _hn; _hi += 1)
-            {
-                with (_ha[_hi]) { visible = true; }
-            }
-            global.jamm_lc_hid_n = 0;
-        }
         """;
 
     private static string RestoreAndResetGml() => """

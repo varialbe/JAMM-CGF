@@ -54,7 +54,8 @@ public sealed record BenchmarkOptions(
     bool Screenshot = false,
     BenchmarkFishMode FishMode = BenchmarkFishMode.Full,
     int FishCap = -1,
-    double FishScale = 1.0);
+    double FishScale = 1.0,
+    bool Night = false);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -162,6 +163,7 @@ public static partial class BenchmarkMod
         bench.Depth = -999999;
 
         var compiler = new CompileGroup(data);
+        if (options.Night) WeatherScene.QueueNightOverride(data, compiler);
         AddBenchScript(data, compiler, "jamm_b_stats_line", StatsLineScriptGml());
         if (data.GameObjects.ByName("Fish") is not null)
             AddBenchScript(data, compiler, "jamm_b_apply_fish_cap", ApplyFishCapScriptGml(data));
@@ -272,6 +274,7 @@ public static partial class BenchmarkMod
             jamm_b_deep_sonar = {{(o.DeepSonar ? 1 : 0)}};
             jamm_b_show_hud = {{(o.ShowHud ? 1 : 0)}};
             jamm_b_screenshot = {{(o.Screenshot ? 1 : 0)}};
+            jamm_b_night = {{(o.Night ? 1 : 0)}};
             jamm_b_fish_mode = "{{fishMode}}";
             jamm_b_fish_mode_req = jamm_b_fish_mode;
             jamm_b_fish_cap = {{o.FishCap}};
@@ -300,6 +303,7 @@ public static partial class BenchmarkMod
                 jamm_b_deep_sonar = ini_read_real("Bench", "DeepSonar", jamm_b_deep_sonar) != 0;
                 jamm_b_show_hud = ini_read_real("Bench", "ShowHud", jamm_b_show_hud) != 0;
                 jamm_b_screenshot = ini_read_real("Bench", "Screenshot", jamm_b_screenshot) != 0;
+                jamm_b_night = ini_read_real("Bench", "Night", jamm_b_night) != 0;
                 jamm_b_fish_mode = string_lower(ini_read_string("Bench", "FishMode", jamm_b_fish_mode));
                 jamm_b_fish_mode_req = jamm_b_fish_mode;
                 jamm_b_fish_cap = round(ini_read_real("Bench", "FishCap", jamm_b_fish_cap));
@@ -541,10 +545,22 @@ public static partial class BenchmarkMod
         bool hasDeepSonar = data.GameObjects.ByName("SonarPanelAdvanced") is not null;
         bool hasRadar = data.GameObjects.ByName("RadarButton") is not null;
         bool hasCamera = data.GameObjects.ByName("Camera") is not null;
+        bool hasLighting = data.GameObjects.ByName("LightingSystem") is not null;
         string? deepLight = FindBaseDeepwaterLight(data);
 
         string ambianceDay = hasAmbiance
-            ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 1;"
+            ? $$"""
+                if (jamm_b_night)
+                {
+                    global.jamm_weather_bench_night = true;
+                    if (instance_exists(AmbianceController)) AmbianceController.lockDay = 0;
+                    {{(hasLighting ? "if (instance_exists(LightingSystem)) { LightingSystem.day_coefficient = 0; LightingSystem.overcast_coefficient = 0; }" : "")}}
+                }
+                else
+                {
+                    if (instance_exists(AmbianceController)) AmbianceController.lockDay = 1;
+                }
+                """
             : "";
 
         string sonarOff = string.Join("\n    ", new[]
@@ -709,6 +725,7 @@ public static partial class BenchmarkMod
         bool hasDeepSonar = data.GameObjects.ByName("SonarPanelAdvanced") is not null;
         bool hasDeepLight = FindBaseDeepwaterLight(data) is not null;
         bool hasFish = data.GameObjects.ByName("Fish") is not null;
+        bool hasLighting = data.GameObjects.ByName("LightingSystem") is not null;
 
         string deepPin = string.Join("\n        ", new[]
         {
@@ -753,7 +770,18 @@ public static partial class BenchmarkMod
             {
                 {{DismissMenusGml(data)}}
             }
-            {{(hasAmbiance ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 1;" : "")}}
+            {{(hasAmbiance ? $$"""
+                if (jamm_b_night)
+                {
+                    global.jamm_weather_bench_night = true;
+                    if (instance_exists(AmbianceController)) AmbianceController.lockDay = 0;
+                    {{(hasLighting ? "if (instance_exists(LightingSystem)) { LightingSystem.day_coefficient = 0; LightingSystem.overcast_coefficient = 0; }" : "")}}
+                }
+                else
+                {
+                    if (instance_exists(AmbianceController)) AmbianceController.lockDay = 1;
+                }
+                """ : "")}}
             if (jamm_b_scene_applied)
             {
                 if (jamm_b_scene == "deepwater")

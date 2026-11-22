@@ -192,6 +192,20 @@ public sealed class LightCullingTests
                 Assert.NotNull(loaded.Data.GameObjects.ByName(LightCulling.Controller));
                 Assert.Null(loaded.Data.GameObjects.ByName(DecorSleep.Controller));
             }
+
+            // 3. Default PerfSettings (DecorSleep + LightCulling): installs both controllers and patches LightingSystem_Draw_0.
+            string outBoth = Path.Combine(tempDir, "out-both.win");
+            var resBoth = ArchiveBuilder.Build(basePath, [input], outBoth, noRepack: true, perfSettings: new PerfSettings());
+            Assert.Contains(resBoth.Plan.Decisions, d => d.Contains("LightCulling enabled", StringComparison.Ordinal));
+            using (var loadedBoth = GameFileLoader.Load(outBoth))
+            {
+                Assert.NotNull(loadedBoth.Data.GameObjects.ByName(LightCulling.Controller));
+                string patched = ModObjects.Decompile(loadedBoth.Data, loadedBoth.Data.Code.ByName("gml_Object_LightingSystem_Draw_0")!);
+                Assert.Contains("global.jamm_lc_v0", patched, StringComparison.Ordinal);
+                string drawBegin = ModObjects.Decompile(loadedBoth.Data, loadedBoth.Data.Code.ByName($"gml_Object_{LightCulling.Controller}_Draw_72")!);
+                Assert.Contains("view_enabled", drawBegin, StringComparison.Ordinal);
+                Assert.Contains("view_visible[0]", drawBegin, StringComparison.Ordinal);
+            }
         }
         finally
         {
