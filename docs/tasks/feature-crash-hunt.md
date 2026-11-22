@@ -18,3 +18,9 @@ The game runner holds a shared lock (other agents test too – it may wait). On 
 `dotnet build -c Release` zero warnings, `dotnet test -c Release` green. Report `docs/reports/feature-crash-hunt.md`
 (table profile × seed × result, every crash with error text, cause, fix) with screenshots from the runs.
 AGENTS.md applies. Commit on this branch; do not push or merge into main.
+
+## Note from the orchestrator (2026-11-22 10:00)
+`tools/vps/autoplay.sh` calls `ffmpeg` without `-nostdin`. Started from an agent's tmux pane, ffmpeg can receive SIGTTIN
+and stop the whole job while it holds `~/jamm-night/game-run.lock` (happened today: a run blocked all agents for 80 min).
+Add `-nostdin` to every ffmpeg call in `tools/vps/autoplay.sh` as part of this branch (`~/jamm-night/bin/run.sh` is
+already fixed).

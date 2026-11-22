@@ -25,7 +25,7 @@ internal static class AutoplayScene
             throw new InvalidDataException("The autoplay scene needs the legacy NewWorld room and Girl object.");
         var probe = ModObjects.Create(data, Probe, persistent: true);
         var compiler = new CompileGroup(data);
-        string dismiss = string.Join('\n', new[] { "GameModeMenu", "GM_Classic", "GM_Realism", "Message_Start" }
+        string dismiss = string.Join('\n', new[] { "GameModeMenu", "GM_Classic", "GM_Realism", "Message_Start", "Handler", "Message" }
             .Where(name => data.GameObjects.ByName(name) is not null)
             .Select(name => $"with ({name}) instance_destroy();"));
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Create, 0u, data), """
@@ -33,7 +33,7 @@ internal static class AutoplayScene
             jamm_ap_next = 0;
             jamm_ap_dismissed = 0;
             var f = file_text_open_write("jamm_autoplay.csv");
-            file_text_write_string(f, "ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub,has_weather,has_ocean,has_silo,has_console,boat_icon_xy,boat7_card_xy,sub_card_xy,boat_menu,cancel_icon_xy,silo_x,ocean_start");
+            file_text_write_string(f, "ms,room,fps,x,y,depth,dollars,level,lure_state,lure_y,instances,boat,chunks,weather,has_sub,has_weather,has_ocean,has_silo,has_console,boat_icon_xy,boat7_card_xy,sub_card_xy,boat_menu,cancel_icon_xy,silo_x,ocean_start,has_harbor,harbor_x,harbor_y,harbor_ready,harbor_near,harbor_menu");
             file_text_writeln(f);
             file_text_close(f);
             """);
@@ -56,6 +56,11 @@ internal static class AutoplayScene
                 {{dismiss}}
                 if (instance_exists(Girl) && variable_instance_exists(Girl, "startMessageShown")) Girl.startMessageShown = 1;
                 jamm_ap_dismissed = 1;
+            }
+            if (keyboard_check_pressed(vk_f11))
+            {
+                with (Handler) instance_destroy();
+                with (icon_Boats) event_user(0);
             }
             var jamm_ap_bmenu_obj = asset_get_index("BoatMenu");
             if (jamm_ap_bmenu_obj < 0 || asset_get_type("BoatMenu") != asset_object || !object_exists(jamm_ap_bmenu_obj))
@@ -162,6 +167,25 @@ internal static class AutoplayScene
                 if (instance_exists(jamm_ap_hatch)) jamm_ap_silo_x = round(jamm_ap_hatch.x);
             }
 
+            var jamm_ap_harbor_obj = asset_get_index("jmk_harbor_town_object_harbor");
+            if (jamm_ap_harbor_obj < 0 || asset_get_type("jmk_harbor_town_object_harbor") != asset_object || !object_exists(jamm_ap_harbor_obj))
+                jamm_ap_harbor_obj = -1;
+            var jamm_ap_has_harbor = (jamm_ap_harbor_obj >= 0) ? 1 : 0;
+            var jamm_ap_harbor_x = -1, jamm_ap_harbor_y = -1, jamm_ap_harbor_ready = 0;
+            var jamm_ap_harbor_near = 0, jamm_ap_harbor_menu = 0;
+            if (jamm_ap_harbor_obj >= 0 && instance_exists(jamm_ap_harbor_obj))
+            {
+                var jamm_ap_harbor = instance_find(jamm_ap_harbor_obj, 0);
+                if (instance_exists(jamm_ap_harbor))
+                {
+                    jamm_ap_harbor_x = round(jamm_ap_harbor.x);
+                    jamm_ap_harbor_y = round(jamm_ap_harbor.y);
+                    if (variable_instance_exists(jamm_ap_harbor, "harbor_ready")) jamm_ap_harbor_ready = jamm_ap_harbor.harbor_ready;
+                    if (variable_instance_exists(jamm_ap_harbor, "harbor_near")) jamm_ap_harbor_near = jamm_ap_harbor.harbor_near;
+                    if (variable_instance_exists(jamm_ap_harbor, "harbor_menu")) jamm_ap_harbor_menu = jamm_ap_harbor.harbor_menu;
+                }
+            }
+
             var jamm_ap_con_obj = asset_get_index("obj_jamm_console");
             var jamm_ap_has_console = (jamm_ap_con_obj > -1 && asset_get_type("obj_jamm_console") == asset_object && object_exists(jamm_ap_con_obj)) ? 1 : 0;
 
@@ -259,7 +283,9 @@ internal static class AutoplayScene
                 + string(jamm_ap_chunks) + "," + jamm_ap_weather + "," + string(jamm_ap_has_sub) + ","
                 + string(jamm_ap_has_weather) + "," + string(jamm_ap_has_ocean) + "," + string(jamm_ap_has_silo) + ","
                 + string(jamm_ap_has_console) + "," + jamm_ap_bicon_xy + "," + jamm_ap_b7_xy + ","
-                + jamm_ap_sub_xy + "," + jamm_ap_bmenu + "," + jamm_ap_cicon_xy + "," + string(jamm_ap_silo_x) + "," + string(jamm_ap_ocean_start));
+                + jamm_ap_sub_xy + "," + jamm_ap_bmenu + "," + jamm_ap_cicon_xy + "," + string(jamm_ap_silo_x) + "," + string(jamm_ap_ocean_start)
+                + "," + string(jamm_ap_has_harbor) + "," + string(jamm_ap_harbor_x) + "," + string(jamm_ap_harbor_y)
+                + "," + string(jamm_ap_harbor_ready) + "," + string(jamm_ap_harbor_near) + "," + string(jamm_ap_harbor_menu));
             file_text_writeln(f);
             file_text_close(f);
             """);

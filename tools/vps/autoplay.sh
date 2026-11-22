@@ -16,13 +16,36 @@ save="$WINEPREFIX/drive_c/users/varialbe/AppData/Local/Cat_Goes_Fishing"
 csv_file="$save/jamm_autoplay.csv"
 exec 9>"$N/game-run.lock"
 flock -w 3600 9 || { echo "$label game runner busy"; exit 18; }
-for _ in $(seq 1 1200); do pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' >/dev/null || break; sleep 1; done
-pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' >/dev/null && { echo "$label GAME ALREADY RUNNING"; exit 18; }
+game_running(){
+  local pid state
+  while read -r pid; do
+    state=$(ps -o stat= -p "$pid" 2>/dev/null | awk '{print $1}')
+    [[ -n $state && $state != Z* ]] && return 0
+  done < <(pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' || true)
+  return 1
+}
+for _ in $(seq 1 1200); do game_running || break; sleep 1; done
+game_running && { echo "$label GAME ALREADY RUNNING"; exit 18; }
 find "$L" -mindepth 1 -maxdepth 1 ! -name data.win -exec cp -r -t "$out/game" {} +
 dotnet "$MAKER" bench "$src" "$out/game/data.win" --scene autoplay > "$out/instrument.log" 2>&1 || { echo "$label INSTRUMENTATION FAILED"; exit 2; }
 [[ -d "$save.orig" ]] || mkdir -p "$save.orig"
 rm -rf "$save"; cp -r "$save.orig" "$save"
 [[ -e "$N/.steam-dirty" ]] && { "$N/bin/steam-restart.sh"; rm -f "$N/.steam-dirty"; }
+steam_ready(){
+  local last
+  local log="$WINEPREFIX/drive_c/Program Files (x86)/Steam/logs/connection_log.txt"
+  last=$(grep -aoE '\[(Logged On|Logged Off|Logging On|Logging Off|Connecting|Connected)[^]]*\]' "$log" 2>/dev/null | tail -1)
+  [[ $last == "[Logged On"* ]]
+}
+steam_ok=0
+for _ in $(seq 1 90); do
+  if steam_ready; then steam_ok=1; break; fi
+  sleep 2
+done
+if (( steam_ok == 0 )); then
+  printf '%s\t%s\t%s\tSTEAM\t0\tSteam did not reconnect after restart\n' "$label" "$seed" "$minutes" | tee -a "$N/autoplay/status.tsv"
+  exit 0
+fi
 ( cd "$out/game" && exec "$HOME/opt/wine/bin/wine" "Cat Goes Fishing.exe" ) > "$out/game.log" 2>&1 &
 job=$!
 RNG=$seed
@@ -33,8 +56,20 @@ act(){ printf '%s\t%s\t%s\n' "$(date +%s)" "$step" "$*" >> "$out/actions.tsv"; }
 win(){ wmctrl -l | awk '/Cat Goes Fishing$/{print $1; exit}'; }
 key(){ xdotool key --delay 60 "$@"; }
 hold(){ xdotool keydown "$1"; sleep "$2"; xdotool keyup "$1"; }
+dismiss_wine_popup(){
+  local id
+  id=$(wmctrl -l | awk '/Program Error/{print $1; exit}')
+  if [[ -n $id ]]; then
+    act "dismiss-wine-helper-popup"
+    wmctrl -ic "$id" 2>/dev/null || true
+    sleep 0.5
+  fi
+}
 check_alive(){
   if wmctrl -l | grep -q 'Code Error'; then outcome=CRASH; return 1; fi
+  local state
+  state=$(ps -o stat= -p "$job" 2>/dev/null | awk '{print $1}')
+  [[ $state == Z* ]] && { outcome=EXITED; return 1; }
   if ! kill -0 "$job" 2>/dev/null; then outcome=EXITED; return 1; fi
   return 0
 }
@@ -70,18 +105,29 @@ click_norm(){
   xdotool mouseup 1
   sleep 0.3
 }
-type_console(){ key F12; sleep 1.5; xdotool type --delay 90 "$1"; sleep 0.3; key Return; sleep 1.5; key F12; }
+type_console(){
+  hold F12 1
+  sleep 1.5
+  xdotool type --delay 90 "$1"
+  sleep 0.3
+  hold Return 0.5
+  sleep 1.5
+  hold F12 1
+  sleep 1
+}
 read_probe(){
-  p_x=0; p_depth=0; p_lure_state=-1; p_boat="none"; p_chunks=-1; p_weather="none"
+  p_x=0; p_y=0; p_depth=0; p_lure_state=-1; p_boat="none"; p_chunks=-1; p_weather="none"
   p_has_sub=0; p_has_weather=0; p_has_ocean=0; p_has_silo=0; p_has_console=0
+  p_has_harbor=0; p_harbor_x=-1; p_harbor_y=-1; p_harbor_ready=0; p_harbor_near=0; p_harbor_menu=0
   p_boat_icon="-"; p_boat7_card="-"; p_sub_card="-"; p_boat_menu="-"; p_cancel_icon="-"; p_silo_x=-1; p_ocean_start=-1
   [[ -s $csv_file ]] || return 1
   local line
-  line=$(awk -F',' '{gsub(/\r/,"")} NR>1 && NF>=26 {last=$0} END{print last}' "$csv_file" 2>/dev/null)
+  line=$(awk -F',' '{gsub(/\r/,"")} NR>1 && NF>=32 {last=$0} END{print last}' "$csv_file" 2>/dev/null)
   [[ -n $line ]] || return 1
   local -a f
   IFS=',' read -r -a f <<< "$line"
   p_x=${f[3]:-0}; [[ $p_x =~ ^-?[0-9]+$ ]] || p_x=0
+  p_y=${f[4]:-0}; [[ $p_y =~ ^-?[0-9]+$ ]] || p_y=0
   p_depth=${f[5]:-0}; [[ $p_depth =~ ^-?[0-9]+$ ]] || p_depth=0
   p_lure_state=${f[8]:--1}; [[ $p_lure_state =~ ^-?[0-9]+$ ]] || p_lure_state=0
   p_boat=${f[11]:-none}; p_boat=${p_boat:-none}
@@ -99,6 +145,12 @@ read_probe(){
   p_cancel_icon=${f[23]:--}; p_cancel_icon=${p_cancel_icon:-"-"}
   p_silo_x=${f[24]:--1}; [[ $p_silo_x =~ ^-?[0-9]+$ ]] || p_silo_x=0
   p_ocean_start=${f[25]:--1}; [[ $p_ocean_start =~ ^-?[0-9]+$ ]] || p_ocean_start=0
+  p_has_harbor=${f[26]:-0}; [[ $p_has_harbor =~ ^[0-9]+$ ]] || p_has_harbor=0
+  p_harbor_x=${f[27]:--1}; [[ $p_harbor_x =~ ^-?[0-9]+$ ]] || p_harbor_x=-1
+  p_harbor_y=${f[28]:--1}; [[ $p_harbor_y =~ ^-?[0-9]+$ ]] || p_harbor_y=-1
+  p_harbor_ready=${f[29]:-0}; [[ $p_harbor_ready =~ ^[0-9]+$ ]] || p_harbor_ready=0
+  p_harbor_near=${f[30]:-0}; [[ $p_harbor_near =~ ^[0-9]+$ ]] || p_harbor_near=0
+  p_harbor_menu=${f[31]:-0}; [[ $p_harbor_menu =~ ^[0-9]+$ ]] || p_harbor_menu=0
   return 0
 }
 dismiss_menu(){
@@ -111,14 +163,20 @@ dismiss_menu(){
   fi
 }
 gear_unlocked=0
+money_loaded=0
 ensure_unlocked(){
   read_probe >/dev/null || true
   (( p_has_console == 1 )) || return 0
-  (( gear_unlocked == 1 )) && return 0
-  act "console-setup money+unlockgear"
-  type_console "money 200000000"
-  type_console "unlockgear"
-  gear_unlocked=1
+  if (( money_loaded == 0 )); then
+    act "console-setup money"
+    type_console "money 200000000"
+    money_loaded=1
+  fi
+  if (( gear_unlocked == 0 )); then
+    act "console-setup unlockgear"
+    type_console "unlockgear"
+    gear_unlocked=1
+  fi
   sleep 2
   read_probe >/dev/null || true
 }
@@ -143,18 +201,22 @@ equip_boat(){
   key s
   sleep 0.4
   read_probe >/dev/null || true
-  if [[ $p_boat_icon == "-" ]]; then
-    act "equip-$target skip (boat icon unavailable)"
-    return 1
-  fi
-  click_norm "$p_boat_icon" || return 1
   local opened=0
-  for _ in $(seq 1 12); do
-    check_alive || return 2
-    sleep 1
-    read_probe >/dev/null || true
-    if [[ $p_boat_menu == 1:* ]]; then opened=1; break; fi
-  done
+  [[ $p_boat_menu == 1:* ]] && opened=1
+  if (( opened == 0 )); then
+    if [[ $p_boat_icon == "-" ]]; then
+      act "equip-$target request-boat-menu"
+      hold F11 1
+    else
+      click_norm "$p_boat_icon" || return 1
+    fi
+    for _ in $(seq 1 12); do
+      check_alive || return 2
+      sleep 1
+      read_probe >/dev/null || true
+      if [[ $p_boat_menu == 1:* ]]; then opened=1; break; fi
+    done
+  fi
   if (( opened == 0 )); then
     if [[ $p_cancel_icon != "-" ]]; then click_norm "$p_cancel_icon" || true; fi
     act "equip-$target skip (boat menu timeout)"
@@ -206,16 +268,92 @@ equip_boat(){
   act "equip-$target skip (card not found)"
   return 1
 }
+exercise_submarine(){
+  read_probe >/dev/null || true
+  (( p_has_sub == 1 )) || return 0
+  act "submarine-coverage begin"
+  local equip_rc=1
+  for attempt in 1 2 3; do
+    equip_boat jmk_submarine_submarine
+    equip_rc=$?
+    (( equip_rc == 2 )) && return 2
+    (( equip_rc == 0 )) && break
+    key Escape
+    sleep 2
+  done
+  (( equip_rc == 0 )) || { act "submarine-coverage equip-failed"; return 0; }
+  read_probe >/dev/null || true
+  if (( p_x < 1800 )); then hold d 4; fi
+  act "submarine-coverage dive"
+  key v; sleep 1; hold Down 2; hold Left 2; hold Right 2
+  act "submarine-coverage light-and-cast"
+  key l; hold space 0.4; sleep 3; hold space 5
+  act "submarine-coverage surface"
+  key v; sleep 3
+}
+exercise_harbor(){
+  read_probe >/dev/null || true
+  (( p_has_harbor == 1 )) || return 0
+  act "harbor-coverage approach x=$p_harbor_x y=$p_harbor_y ready=$p_harbor_ready"
+  (( p_harbor_ready == 1 && p_harbor_x >= 0 )) || { act "harbor-coverage unavailable"; return 0; }
+  if (( p_lure_state != 0 && p_lure_state != -1 )); then hold space 3; fi
+  for _ in $(seq 1 30); do
+    check_alive || return 2
+    read_probe >/dev/null || true
+    (( p_harbor_near == 1 )) && break
+    local target=$((p_harbor_x + 53)) delta=$((p_harbor_x + 53 - p_x))
+    if (( delta > 0 )); then hold d 1; else hold a 1; fi
+    read_probe >/dev/null || true
+    (( p_harbor_y < 0 || p_y < 0 )) && break
+    if (( p_y < p_harbor_y - 90 || p_y > p_harbor_y + 90 )); then
+      act "harbor-coverage vertical-range-miss player_y=$p_y"
+      break
+    fi
+    (( target >= 0 )) || break
+  done
+  read_probe >/dev/null || true
+  if (( p_harbor_near != 1 )); then
+    act "harbor-coverage proximity-failed x=$p_x y=$p_y harbor=$p_harbor_x,$p_harbor_y"
+    return 0
+  fi
+  act "harbor-coverage press-E"
+  key e
+  for _ in $(seq 1 12); do
+    check_alive || return 2
+    sleep 1; read_probe >/dev/null || true
+    (( p_harbor_menu == 1 )) && break
+  done
+  if (( p_harbor_menu == 1 )); then
+    act "harbor-coverage menu-open"
+    ffmpeg -nostdin -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/harbor-menu.png"
+    sleep 5; key Escape; sleep 1
+  else
+    act "harbor-coverage menu-open-failed"
+  fi
+}
 outcome=PLAYED; step=0
 # wait for the window and the probe's first state line
 for _ in $(seq 1 240); do [[ -n $(win) ]] && break; kill -0 "$job" 2>/dev/null || break; sleep 1; done
 sleep 25
 end=$(( $(date +%s) + minutes * 60 ))
+startup_setup_done=0
 while [[ $(date +%s) -lt $end ]]; do
   step=$((step+1))
   check_alive || break
+  dismiss_wine_popup
   w=$(win); [[ -n $w ]] && xdotool windowactivate --sync "$w" 2>/dev/null
   dismiss_menu
+  if (( startup_setup_done == 0 )); then
+    startup_setup_done=1
+    ensure_unlocked
+  fi
+  if [[ ${feature_targets_done:-0} == 0 ]] && (( step >= 2 )); then
+    feature_targets_done=1
+    exercise_submarine
+    rc=$?; (( rc == 2 )) && break
+    exercise_harbor
+    rc=$?; (( rc == 2 )) && break
+  fi
   rnd 100; r=$R
   if (( r < 20 )); then
     rnd 7; h=0.$((3+R)); rnd 15; t=$((3+R)); rnd 18; rl=$((4+R))
@@ -243,7 +381,7 @@ while [[ $(date +%s) -lt $end ]]; do
     done
   elif (( r < 59 )); then
     rnd 900; m=$((1+R)); rnd 90; g=$((1+R)); rnd 40; lv=$((10+R))
-    pick "money ${m}000000" "money +${g}000000000" "unlockgear" "unlockall" "level $lv" "catalog all" "help"; c=$P
+    pick "money ${m}000000" "money +${g}000000000" "unlockgear" "unlockall" "level $lv" "help"; c=$P
     read_probe >/dev/null || true
     if (( p_has_console == 1 )); then
       act "console $c"; type_console "$c"
@@ -349,16 +487,16 @@ while [[ $(date +%s) -lt $end ]]; do
   else
     rnd 6; t=$((2+R)); act "idle $t"; sleep "$t"
   fi
-  (( step % 10 == 0 )) && ffmpeg -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/shots/step$(printf %04d "$step").png"
+  (( step % 10 == 0 )) && ffmpeg -nostdin -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/shots/step$(printf %04d "$step").png"
 done
 first=""
 if [[ $outcome == CRASH ]]; then
-  sleep 1; ffmpeg -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/error.png"
+  sleep 1; ffmpeg -nostdin -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/error.png"
   id=$(wmctrl -l | awk '/Code Error/{print $1; exit}'); eval "$(xdotool getwindowgeometry --shell "$id")"; xdotool mousemove $((X+474)) $((Y+497)) click 1; sleep 0.7
   xclip -o -selection clipboard > "$out/error.txt" 2>/dev/null
   first=$(grep -m1 -E "Unable|not set|Variable|index|FATAL" "$out/error.txt" | tr '\t' ' ' | cut -c1-200)
 fi
-ffmpeg -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/final.png"
+ffmpeg -nostdin -loglevel error -f x11grab -video_size 1280x800 -i :99 -frames:v 1 -y "$out/final.png"
 for id in $(wmctrl -l | awk '/Cat Goes Fishing$|Code Error$/{print $1}'); do wmctrl -ic "$id"; done
 for _ in $(seq 1 15); do pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' >/dev/null || break; sleep 1; done
 if pgrep -f '^[A-Z]:.*Cat Goes Fishing.exe' >/dev/null; then pkill -f '^[A-Z]:.*Cat Goes Fishing.exe'; sleep 2; touch "$N/.steam-dirty"; fi
