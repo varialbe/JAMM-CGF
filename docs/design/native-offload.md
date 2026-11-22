@@ -86,3 +86,16 @@ Ship `jamm_native.dll` from a JAMM builtin/ModKit package beside the selected Wi
 | 6 | Package the optional DLL through the builtin/ModKit path with source, MIT license, and reproducible 32-bit build. | Fresh install/remove, DLL missing, antivirus/quarantine recovery, Linux Wine and Windows/Proton smoke runs, no changes to original game files. |
 
 Phase 2 must approve the scope and measured first hotspot before any player-facing Phase 3 implementation starts.
+
+## Orchestrator review (Phase 2, round 1, 2026-11-22 02:40)
+Not yet approved. Toolchain (PE32, i686 mingw-w64) and the offline archive generation are fine, and the Amdahl table is
+honest (avoidance only ~4–5 % of the loop → ≤ 1.05×; Fish End Step 40–75 % but mostly not pure math). The decision for
+Phase 3 depends on the live numbers, so Phase 1b runs first:
+- run the prepared probes in-game: DLL load under Wine, `buffer_get_address` round trip, accepted argument count,
+  and the 1 / 100 / 10,000 calls-per-tick overhead (µs per call). Queue on `~/jamm-night/bin/run.sh` and WAIT for the
+  lock (it can take up to an hour; do not cancel after minutes; do not kill other runs). On EXITED run
+  `~/jamm-night/bin/steam-restart.sh` and retry.
+- also measure one worker-thread round trip (fill buffer → worker computes N=2,000 distances → join/read) per tick.
+Then update this document with the measured numbers and a go/no-go for Phase 3 by the criteria: per-call overhead
+small enough that one batched call per tick costs < 0.5 ms, and a first hotspot with a measured share large enough to
+win ≥ 5 % tick time. If the numbers say no, write that clearly – a negative result is acceptable.
