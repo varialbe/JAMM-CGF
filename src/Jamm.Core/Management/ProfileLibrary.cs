@@ -195,14 +195,14 @@ public sealed class ProfileLibrary(ManagerStore store)
         store.Write(FilePath(name), Get(name) with { FishValueCap = value });
     }
 
-    /// <summary>Changes a profile's mode, interval, grid and decor sleep defaults without editing the game's INI.</summary>
-    public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null, bool? decorSleep = null)
+    /// <summary>Changes a profile's mode, interval, grid, decor sleep and light culling defaults without editing the game's INI.</summary>
+    public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null, bool? decorSleep = null, bool? lightCulling = null)
     {
         var profile = Get(name);
         if (interval is < 1 or > 60)
             throw new ArgumentException("Choose a distant fish interval from 1 to 60 ticks.");
         PerfSettings Update(PerfSettings settings) => new(
-            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval, decorSleep ?? settings.DecorSleep);
+            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval, decorSleep ?? settings.DecorSleep, lightCulling ?? settings.LightCulling);
         var before = profile.BeforeWeakPc;
         if (before is not null) before = before with { Perf = Update(before.Perf) };
         var result = profile with { Perf = Update(profile.Perf), BeforeWeakPc = before };

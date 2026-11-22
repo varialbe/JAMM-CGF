@@ -142,7 +142,7 @@ internal static class ManagementCommand
                             Console.WriteLine($"  Big money (above $999,999,999, compact display): {(profile.NoBigMoney ? "off" : "on for modded builds")}");
                             Console.WriteLine($"  Fair-Play: {(profile.FairPlay ? "on" : "off")}");
                             Console.WriteLine($"  Fish sale cap: {(profile.FishValueCap == 0 ? "off" : profile.FishValueCap.ToString("N0"))}");
-                            Console.WriteLine($"  Perf defaults: fish scheduler/F8 {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid hooks {(profile.Perf.FishGrid ? "on" : "off")}, decor sleep {(profile.Perf.DecorSleep ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence when installed).");
+                            Console.WriteLine($"  Perf defaults: fish scheduler/F8 {(profile.Perf.StartEnabled ? "on" : "off")}, fish grid hooks {(profile.Perf.FishGrid ? "on" : "off")}, decor sleep {(profile.Perf.DecorSleep ? "on" : "off")}, light culling {(profile.Perf.LightCulling ? "on" : "off")}, distant fish every {profile.Perf.Interval} ticks (existing INI settings take precedence when installed).");
                             foreach (string id in profile.UnlockFixMods ?? [])
                                 Console.WriteLine($"  Repair legacy shop unlocks: {library.Find(id).Name}");
                         }
@@ -186,8 +186,9 @@ internal static class ManagementCommand
                             "mode" => profiles.SetPerf(positional[1], startEnabled: OnOff(positional[3])),
                             "grid" => profiles.SetPerf(positional[1], fishGrid: OnOff(positional[3])),
                             "decor" => profiles.SetPerf(positional[1], decorSleep: OnOff(positional[3])),
+                            "light" => profiles.SetPerf(positional[1], lightCulling: OnOff(positional[3])),
                             "interval" when int.TryParse(positional[3], out int interval) => profiles.SetPerf(positional[1], interval: interval),
-                            _ => throw new ArgumentException("Use profile perf <name> mode|grid|decor on|off or profile perf <name> interval <ticks>.")
+                            _ => throw new ArgumentException("Use profile perf <name> mode|grid|decor|light on|off or profile perf <name> interval <ticks>.")
                         };
                         Console.WriteLine($"Set Perf {positional[2]} for '{positional[1]}' to {positional[3]}.");
                         break;

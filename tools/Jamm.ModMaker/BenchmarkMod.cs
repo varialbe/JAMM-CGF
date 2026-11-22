@@ -50,6 +50,7 @@ public sealed record BenchmarkOptions(
     int TraceFish = 0,
     bool FishGrid = false,
     bool DecorSleep = false,
+    bool LightCulling = false,
     bool Screenshot = false,
     BenchmarkFishMode FishMode = BenchmarkFishMode.Full,
     int FishCap = -1,
@@ -143,6 +144,11 @@ public static partial class BenchmarkMod
         if (options.DecorSleep)
         {
             foreach (string line in DecorSleep.Apply(data))
+                decision?.Invoke(line);
+        }
+        if (options.LightCulling)
+        {
+            foreach (string line in LightCulling.Apply(data))
                 decision?.Invoke(line);
         }
 
@@ -1090,6 +1096,17 @@ public static partial class BenchmarkMod
                         var ds_n = 0;
                         if (variable_global_exists("jamm_ds_count")) ds_n = global.jamm_ds_count;
                         file_text_write_string(jamm_b_f, "# decor_sleep=" + string(global.jamm_ds_enabled) + " tracked=" + string(ds_n) + " sleeping_deact=" + string(ds_deact_n));
+                        file_text_writeln(jamm_b_f);
+                    }
+                    if (variable_global_exists("jamm_lc_enabled"))
+                    {
+                        var lc_tot = 0;
+                        if (variable_global_exists("jamm_lc_total")) lc_tot = global.jamm_lc_total;
+                        var lc_kept = 0;
+                        if (variable_global_exists("jamm_lc_kept")) lc_kept = global.jamm_lc_kept;
+                        var lc_culled = 0;
+                        if (variable_global_exists("jamm_lc_culled")) lc_culled = global.jamm_lc_culled;
+                        file_text_write_string(jamm_b_f, "# light_culling=" + string(global.jamm_lc_enabled) + " total=" + string(lc_tot) + " kept=" + string(lc_kept) + " culled=" + string(lc_culled));
                         file_text_writeln(jamm_b_f);
                     }
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));

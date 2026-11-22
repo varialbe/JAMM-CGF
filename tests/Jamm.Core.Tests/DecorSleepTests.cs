@@ -411,7 +411,7 @@ public sealed class DecorSleepTests
             Assert.Equal(Jamm.Core.Building.BuildFiles.Hash(basePath), Jamm.Core.Building.BuildFiles.Hash(outPlain));
 
             string outOff = Path.Combine(temp, "off.win");
-            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outOff, noRepack: true, perfSettings: new PerfSettings(DecorSleep: false));
+            Jamm.Core.Building.ArchiveBuilder.Build(basePath, [input], outOff, noRepack: true, perfSettings: new PerfSettings(DecorSleep: false, LightCulling: false));
             Assert.Equal(Jamm.Core.Building.BuildFiles.Hash(basePath), Jamm.Core.Building.BuildFiles.Hash(outOff));
 
             // 2. Profile default PerfSettings (DecorSleep: true, StartEnabled: false, FishGrid: false): installs DecorSleep only.

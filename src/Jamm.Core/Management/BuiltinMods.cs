@@ -79,7 +79,7 @@ public sealed class BuiltinMods(ManagerStore store)
                 cancellationToken.ThrowIfCancellationRequested();
                 switch (id)
                 {
-                    case "perf": PerfMod.Apply(data, applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false, applyDecorSleep: false); break;
+                    case "perf": PerfMod.Apply(data, applyFishGrid: false, applyScheduler: false, applyCoreOptimizations: false, applyDecorSleep: false, applyLightCulling: false); break;
                     case "smooth": SmoothMod.Apply(data); break;
                     case "hd-lite": HdMod.Apply(data, null); break;
                     case "console": ConsoleMod.Apply(data); break;

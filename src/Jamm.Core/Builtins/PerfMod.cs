@@ -8,7 +8,8 @@ public static class PerfMod
 {
     /// <summary>Applies guarded source edits to an original legacy game.</summary>
     public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = false,
-        bool applyScheduler = true, bool applyCoreOptimizations = true, bool applyDecorSleep = false)
+        bool applyScheduler = true, bool applyCoreOptimizations = true, bool applyDecorSleep = false,
+        bool applyLightCulling = false)
     {
         if (data.GeneralInfo.Major != 1 || data.GeneralInfo.BytecodeVersion != 16
             || data.Code.ByName("gml_Object_Fish_Step_2") is null
@@ -67,6 +68,7 @@ public static class PerfMod
         ModObjects.Compile(compiler);
         if (applyFishGrid) FishGrid.Apply(data);
         if (applyDecorSleep) DecorSleep.Apply(data);
+        if (applyLightCulling) LightCulling.Apply(data);
 
         void Patch(string name, string before, string after, string? secondBefore = null, string? secondAfter = null)
         {
