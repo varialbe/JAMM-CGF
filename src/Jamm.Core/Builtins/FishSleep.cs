@@ -74,6 +74,9 @@ public static partial class FishSleep
     [GeneratedRegex(@"if\s*\(\s*(?:variable_instance_exists\s*\(\s*id\s*,\s*""jamm_asleep""\s*\)\s*&&\s*)?jamm_asleep\s*\)\s*(?:\{\s*exit\s*;\s*\}|exit\s*;)", RegexOptions.Compiled)]
     private static partial Regex GuardPrefixPattern();
 
+    [GeneratedRegex(@"else\s*\{\s*cull_trigger\s*=\s*0\s*;\s*\}", RegexOptions.Compiled)]
+    private static partial Regex FishThinnerResetBranch();
+
     [GeneratedRegex(@"^(?:(?:action_inherited|event_inherited)\s*\(\s*\)\s*;\s*)?if\s*\(\s*alarm\s*\[\s*\d+\s*\]\s*>\s*\d+\s*\)\s*\{\s*alarm\s*\[\s*\d+\s*\]\s*=\s*\d+\s*;\s*\}$", RegexOptions.Compiled)]
     private static partial Regex AlarmClampOnlyStep();
 
@@ -413,6 +416,8 @@ public static partial class FishSleep
             EnsurePrefix(lureStep, "if (variable_instance_exists(id, \"fish\")) { if (instance_exists(fish)) { if (variable_instance_exists(fish, \"jamm_asleep\") && fish.jamm_asleep) fish.jamm_sleep_next = global.jamm_sleep_tick; } }\n", "fish.jamm_sleep_next = global.jamm_sleep_tick");
         }
 
+        ApplyPopulationHooks(data, compiler, edits, fishRoot, decisions);
+
         // Ensure FishLarge Step_0 and Fish Draw_0 guard asleep instances.
         if (data.GameObjects.ByName("FishLarge")?.Events[(int)EventType.Step]
             .FirstOrDefault(e => e.EventSubtype == (uint)EventSubtypeStep.Step)?.Actions.FirstOrDefault()?.CodeId is { } largeStep)
@@ -500,6 +505,69 @@ public static partial class FishSleep
             compiler.QueueCodeReplace(code, updated);
             edits.Add(code);
         }
+    }
+
+    private static void ApplyPopulationHooks(UndertaleData data, CompileGroup compiler,
+        List<UndertaleCode> edits, UndertaleGameObject fishRoot, List<string> decisions)
+    {
+        // FishThinner is adaptive: once sleeping fish raise FPS above 60, vanilla resets its
+        // cull timer and ordinary fish accumulate indefinitely. Preserve its mild-cull cadence
+        // while Fish Sleep is active, but leave the vanilla branch byte-for-byte alone when off.
+        var thinner = data.GameObjects.ByName("FishThinner");
+        var thinnerStep = thinner?.Events[(int)EventType.Step]
+            .FirstOrDefault(e => e.EventSubtype == (uint)EventSubtypeStep.Step)?.Actions.FirstOrDefault()?.CodeId
+            ?? data.Code.ByName("gml_Object_FishThinner_Step_0");
+        bool thinnerPopulationHooked = false;
+        if (thinnerStep is not null && TryDecompile(data, thinnerStep, out string thinnerText))
+        {
+            const string replacement = "else if (global.jamm_perf_sleep && global.jamm_sleep_asleep_count > 0)\n{\n    cull_trigger += 0.5;\n}\nelse\n{\n    cull_trigger = 0;\n}";
+            string updated = FishThinnerResetBranch().Replace(thinnerText, replacement, 1);
+            if (updated != thinnerText)
+            {
+                compiler.QueueCodeReplace(thinnerStep, updated);
+                edits.Add(thinnerStep);
+                thinnerPopulationHooked = true;
+            }
+        }
+
+        // FishThinner deactivates fish rather than destroying them, so their Destroy event does
+        // not run. Release their counter slot immediately before that deactivation.
+        var thinnerCull = thinner?.Events[(int)EventType.Other]
+            .FirstOrDefault(e => e.EventSubtype == 10u)?.Actions.FirstOrDefault()?.CodeId
+            ?? data.Code.ByName("gml_Object_FishThinner_Other_10");
+        bool cullCounterHooked = false;
+        if (thinnerCull is not null && TryDecompile(data, thinnerCull, out string cullText)
+            && !(cullText.Contains("if (jamm_asleep)", StringComparison.Ordinal)
+                && cullText.Contains("global.jamm_sleep_asleep_count -= 1", StringComparison.Ordinal)))
+        {
+            const string deactivate = "instance_deactivate_object(id);";
+            const string releaseAndDeactivate = "if (jamm_asleep)\n{\n    jamm_asleep = false;\n    if (global.jamm_sleep_asleep_count > 0) global.jamm_sleep_asleep_count -= 1;\n}\ninstance_deactivate_object(id);";
+            string updated = cullText.Replace(deactivate, releaseAndDeactivate, StringComparison.Ordinal);
+            if (updated != cullText)
+            {
+                compiler.QueueCodeReplace(thinnerCull, updated);
+                edits.Add(thinnerCull);
+                cullCounterHooked = true;
+            }
+        }
+
+        var fishDestroy = fishRoot.Events[(int)EventType.Destroy]
+            .FirstOrDefault(e => e.EventSubtype == 0u)?.Actions.FirstOrDefault()?.CodeId
+            ?? fishRoot.EventHandlerFor(EventType.Destroy, 0u, data);
+        if (TryDecompile(data, fishDestroy, out string destroyText)
+            && !(destroyText.Contains("variable_instance_exists(id, \"jamm_asleep\")", StringComparison.Ordinal)
+                && destroyText.Contains("global.jamm_sleep_asleep_count -= 1", StringComparison.Ordinal)))
+        {
+            const string release = "if (variable_instance_exists(id, \"jamm_asleep\") && jamm_asleep)\n{\n    jamm_asleep = false;\n    if (global.jamm_sleep_asleep_count > 0) global.jamm_sleep_asleep_count -= 1;\n}\n";
+            compiler.QueueCodeReplace(fishDestroy, release + destroyText);
+            edits.Add(fishDestroy);
+        }
+
+        decisions.Add(thinnerPopulationHooked
+            ? "[CGF-PERF-SLEEP] FishThinner keeps its mild cull cadence while eligible fish sleep."
+            : "[CGF-PERF-SLEEP] FishThinner population cadence unchanged (known reset branch not found).");
+        if (thinner is not null && !cullCounterHooked)
+            decisions.Add("[CGF-PERF-SLEEP] FishThinner deactivation counter hook not applied (known cull call not found).");
     }
 
     private static string CreateControllerGml(bool enabledByDefault, int margin, bool debug) => $$"""

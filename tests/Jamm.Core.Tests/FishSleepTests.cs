@@ -231,6 +231,32 @@ public sealed class FishSleepTests
     }
 
     [Fact]
+    public void FishSleepPreservesFishThinnerPopulationCadenceAndReleasesAsleepCounterOnCullOrDestroy()
+    {
+        using var data = CreateSyntheticPerfArchive(out _);
+        var fishThinner = ModObjects.Create(data, "FishThinner", false);
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(fishThinner.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data),
+            "if (fps < 60) { cull_trigger += 0.5; } else { cull_trigger = 0; }");
+        compiler.QueueCodeReplace(fishThinner.EventHandlerFor(EventType.Other, 10u, data),
+            "instance_deactivate_object(id);");
+        ModObjects.Compile(compiler);
+
+        FishSleep.Apply(data);
+
+        string thinnerStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_FishThinner_Step_0")!);
+        string thinnerCull = ModObjects.Decompile(data, data.Code.ByName("gml_Object_FishThinner_Other_10")!);
+        string fishDestroy = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Destroy_0")!);
+
+        Assert.Contains("global.jamm_perf_sleep && global.jamm_sleep_asleep_count > 0", thinnerStep);
+        Assert.Contains("cull_trigger += 0.5", thinnerStep);
+        Assert.Contains("jamm_asleep = 0", thinnerCull);
+        Assert.Contains("instance_deactivate_object(id)", thinnerCull);
+        Assert.Contains("variable_instance_exists(id, \"jamm_asleep\")", fishDestroy);
+        Assert.Contains("global.jamm_sleep_asleep_count -= 1", fishDestroy);
+    }
+
+    [Fact]
     public void ArchiveBuilderInstallsFishSleepOnlyWhenEnabledAndKeepsPlainPerfByteIdentical()
     {
         string temp = Path.Combine(Path.GetTempPath(), $"jamm-fs-build-{Guid.NewGuid():N}");
