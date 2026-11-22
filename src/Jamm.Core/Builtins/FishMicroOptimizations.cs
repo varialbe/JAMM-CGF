@@ -43,7 +43,7 @@ public static class FishMicroOptimizations
         foreach (var candidate in data.Code)
         {
             if (candidate == lunge || candidate == check) continue;
-            if (ModObjects.Decompile(data, candidate).Contains("check_lunge", StringComparison.Ordinal))
+            if (ContainsScriptCall(ModObjects.Decompile(data, candidate), "check_lunge"))
                 return $"[CGF-PERF-MICRO] fish_lunge/check_lunge: skipped (another merged caller: {candidate.Name.Content})";
         }
 
@@ -55,6 +55,25 @@ public static class FishMicroOptimizations
         edits?.Add(check);
         return "[CGF-PERF-MICRO] fish_lunge/check_lunge: reused the per-fish lure distance";
     }
+
+    private static bool ContainsScriptCall(string source, string scriptName)
+    {
+        int index = 0;
+        while ((index = source.IndexOf(scriptName, index, StringComparison.Ordinal)) >= 0)
+        {
+            int end = index + scriptName.Length;
+            bool leftBoundary = index == 0 || !IsIdentifierCharacter(source[index - 1]);
+            bool rightBoundary = end == source.Length || !IsIdentifierCharacter(source[end]);
+            int afterWhitespace = end;
+            while (afterWhitespace < source.Length && char.IsWhiteSpace(source[afterWhitespace])) afterWhitespace++;
+            if (leftBoundary && rightBoundary && afterWhitespace < source.Length && source[afterWhitespace] == '(')
+                return true;
+            index = end;
+        }
+        return false;
+    }
+
+    private static bool IsIdentifierCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
 
     private static string QueueFlockDirection(UndertaleData data, CompileGroup compiler, List<UndertaleCode>? edits)
     {

@@ -144,6 +144,29 @@ public sealed class BuiltinModTests : IDisposable
         Assert.Contains(data.Code.ByName("gml_Script_fish_flock")!, edits);
     }
 
+    [Fact]
+    public void FishMicroDoesNotTreatCheckLungeCatswimAsAnotherCheckLungeCaller()
+    {
+        WriteBase(original);
+        using var stream = File.OpenRead(original);
+        using var data = UndertaleIO.Read(stream, (_, _) => { }, _ => { });
+        var catswim = UndertaleCode.CreateEmptyEntry(data, "gml_Script_check_lunge_catswim");
+        var follow = UndertaleCode.CreateEmptyEntry(data, "gml_Script_fish_default_follow");
+        var callerCompiler = new CompileGroup(data);
+        callerCompiler.QueueCodeReplace(catswim, "return 1;");
+        callerCompiler.QueueCodeReplace(follow, "if (!check_lunge_catswim()) return 0;");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("check_lunge_catswim"), Code = catswim });
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("fish_default_follow"), Code = follow });
+        ModObjects.Compile(callerCompiler);
+
+        var microCompiler = new CompileGroup(data);
+        string decision = FishMicroOptimizations.Queue(data, microCompiler);
+        ModObjects.Compile(microCompiler);
+
+        Assert.Contains("fish_lunge/check_lunge: reused", decision);
+        Assert.Equal(0, CountCalls(data.Code.ByName("gml_Script_check_lunge")!, "point_distance"));
+    }
+
     private static int CountCalls(UndertaleCode code, string name) => code.Instructions.Count(instruction =>
         instruction.Kind == UndertaleInstruction.Opcode.Call
         && instruction.ValueFunction?.Name.Content == name);
