@@ -195,6 +195,8 @@ public sealed class FishSleepTests
     public void PerfModeAndFishSleepSerializeDefaultsAndInjectGuardsOnCoveredEvents()
     {
         using var data = CreateSyntheticPerfArchive(out var visualDrawFish);
+        var lure = data.GameObjects.ByName("Lure")!;
+        _ = lure.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data);
         var decisions = new List<string>();
         var edits = new List<UndertaleCode>();
 
@@ -205,6 +207,7 @@ public sealed class FishSleepTests
         string sleepBegin = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Step_1")!);
         string sleepDestroy = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Destroy_0")!);
         string fishStep2 = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Step_2")!);
+        string lureStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Lure_Step_0")!);
         string customDraw = ModObjects.Decompile(data, visualDrawFish.Events[(int)EventType.Draw].First().Actions.First().CodeId!);
         string initTypes = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_init_types")!);
 
@@ -214,9 +217,15 @@ public sealed class FishSleepTests
         Assert.Contains("jamm_sleep_begin_step()", sleepBegin);
         Assert.Contains("ds_map_destroy(global.jamm_sleep_types)", sleepDestroy);
         Assert.Contains("ds_map_destroy(global.jamm_sleep_quest_objs)", sleepDestroy);
+        Assert.StartsWith("if (jamm_asleep)", fishStep2.TrimStart(), StringComparison.Ordinal);
         Assert.Contains("jamm_sleep_wake()", fishStep2);
+        Assert.Contains("global.jamm_sleep_tick < jamm_sleep_next", fishStep2);
+        Assert.Contains("jamm_sleep_next = global.jamm_sleep_tick + 8", fishStep2);
+        Assert.Contains("fish.jamm_sleep_next = global.jamm_sleep_tick", lureStep);
+        Assert.Contains("jamm_sleep_next", ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Create_0")!));
         Assert.Contains("global.jamm_perf_mode", fishStep2);
         Assert.Contains("jamm_asleep", customDraw);
+        Assert.DoesNotContain("variable_instance_exists(id, \"jamm_asleep\")", customDraw);
         Assert.Contains("ModVisual", initTypes);
         Assert.Contains(decisions, d => d.Contains("[CGF-PERF-SLEEP] ModVisual: covered", StringComparison.Ordinal));
     }

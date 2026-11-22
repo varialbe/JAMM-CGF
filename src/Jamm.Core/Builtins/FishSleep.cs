@@ -46,7 +46,7 @@ public static partial class FishSleep
     /// <summary>Maximum allowed Fish Sleep margin in pixels.</summary>
     public const int MaxMargin = 20000;
 
-    private const string GuardLine = "if (variable_instance_exists(id, \"jamm_asleep\") && jamm_asleep) exit;";
+    private const string GuardLine = "if (jamm_asleep) exit;";
 
     private static readonly HashSet<string> AbstractTiers = new(StringComparer.Ordinal)
     {
@@ -71,7 +71,7 @@ public static partial class FishSleep
     [GeneratedRegex(@"//[^\n]*|/\*[\s\S]*?\*/", RegexOptions.Compiled)]
     private static partial Regex Comments();
 
-    [GeneratedRegex(@"if\s*\(\s*variable_instance_exists\s*\(\s*id\s*,\s*""jamm_asleep""\s*\)\s*&&\s*jamm_asleep\s*\)\s*(?:\{\s*exit\s*;\s*\}|exit\s*;)", RegexOptions.Compiled)]
+    [GeneratedRegex(@"if\s*\(\s*(?:variable_instance_exists\s*\(\s*id\s*,\s*""jamm_asleep""\s*\)\s*&&\s*)?jamm_asleep\s*\)\s*(?:\{\s*exit\s*;\s*\}|exit\s*;)", RegexOptions.Compiled)]
     private static partial Regex GuardPrefixPattern();
 
     [GeneratedRegex(@"^(?:(?:action_inherited|event_inherited)\s*\(\s*\)\s*;\s*)?if\s*\(\s*alarm\s*\[\s*\d+\s*\]\s*>\s*\d+\s*\)\s*\{\s*alarm\s*\[\s*\d+\s*\]\s*=\s*\d+\s*;\s*\}$", RegexOptions.Compiled)]
@@ -396,8 +396,8 @@ public static partial class FishSleep
             ?? data.Code.ByName("gml_Object_Fish_Create_0")
             ?? fishRoot.EventHandlerFor(EventType.Create, 0u, data);
         EnsurePrefix(fishCreate,
-            "jamm_asleep = false;\njamm_sleep_tick = 0;\njamm_sleep_state = 0;\n",
-            "jamm_asleep =");
+            "jamm_asleep = false;\njamm_sleep_tick = 0;\njamm_sleep_next = id mod 8;\njamm_sleep_state = 0;\n",
+            "jamm_sleep_next =");
 
         // Ensure Fish Step_2 has the FishSleep prefix (even if a mod replaced Fish_Step_2 during merge).
         var fishStep2 = fishRoot.Events[(int)EventType.Step]
@@ -405,6 +405,13 @@ public static partial class FishSleep
             ?? data.Code.ByName("gml_Object_Fish_Step_2")
             ?? fishRoot.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data);
         EnsurePrefix(fishStep2, Step2Prefix(), "jamm_sleep_wake");
+
+        // Lure targeting is a direct wake signal, so targeted fish bypass their stagger slot.
+        if (data.GameObjects.ByName("Lure") is { } lure
+            && lure.Events[(int)EventType.Step].FirstOrDefault(e => e.EventSubtype == (uint)EventSubtypeStep.Step)?.Actions.FirstOrDefault()?.CodeId is { } lureStep)
+        {
+            EnsurePrefix(lureStep, "if (variable_instance_exists(id, \"fish\")) { if (instance_exists(fish)) { if (variable_instance_exists(fish, \"jamm_asleep\") && fish.jamm_asleep) fish.jamm_sleep_next = global.jamm_sleep_tick; } }\n", "fish.jamm_sleep_next = global.jamm_sleep_tick");
+        }
 
         // Ensure FishLarge Step_0 and Fish Draw_0 guard asleep instances.
         if (data.GameObjects.ByName("FishLarge")?.Events[(int)EventType.Step]
@@ -538,6 +545,8 @@ public static partial class FishSleep
     internal static string Step2Prefix() => """
         if (jamm_asleep)
         {
+            if (global.jamm_sleep_tick < jamm_sleep_next) exit;
+            jamm_sleep_next = global.jamm_sleep_tick + 8;
             if (!global.jamm_perf_sleep || state != jamm_sleep_state || life <= 0 || deactivated)
             {
                 jamm_sleep_wake();
@@ -556,12 +565,16 @@ public static partial class FishSleep
         }
         else if (global.jamm_perf_sleep)
         {
-            if (!(x >= global.jamm_sleep_view_x1 && x <= global.jamm_sleep_view_x2 && y >= global.jamm_sleep_view_y1 && y <= global.jamm_sleep_view_y2))
+            if (global.jamm_sleep_tick >= jamm_sleep_next)
             {
-                if (jamm_sleep_should_sleep())
+                jamm_sleep_next = global.jamm_sleep_tick + 8;
+                if (!(x >= global.jamm_sleep_view_x1 && x <= global.jamm_sleep_view_x2 && y >= global.jamm_sleep_view_y1 && y <= global.jamm_sleep_view_y2))
                 {
-                    jamm_sleep_enter();
-                    exit;
+                    if (jamm_sleep_should_sleep())
+                    {
+                        jamm_sleep_enter();
+                        exit;
+                    }
                 }
             }
         }
@@ -807,6 +820,7 @@ public static partial class FishSleep
     private static string EnterGml() => """
         jamm_asleep = true;
         jamm_sleep_tick = global.jamm_sleep_tick;
+        jamm_sleep_next = global.jamm_sleep_tick + 8;
         jamm_sleep_state = state;
         jamm_sleep_x = x;
         jamm_sleep_y = y;
