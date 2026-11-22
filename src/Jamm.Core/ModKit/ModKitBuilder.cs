@@ -363,6 +363,12 @@ public static partial class ModKitBuilder
             scriptsAdded++;
         }
 
+        if (package.Capabilities.Contains(ModKitPackage.ViewZoomCapability, StringComparer.Ordinal))
+        {
+            AddScript(data, compiler, $"{ZoomUiRuntime.CapabilityScriptPrefix}{modIdent}", "return 1;\n");
+            scriptsAdded++;
+        }
+
         if (initBody.Length > 0)
         {
             initBody.AppendLine("return 0;");

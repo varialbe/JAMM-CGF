@@ -4,6 +4,9 @@
   "version": "0.2.0",
   "author": "JAMM",
   "description": "Pilot a yellow submersible with rotating headlights, camera peek, and an unlockable Bow Winch.",
+  "capabilities": [
+    "view-zoom"
+  ],
   "sprites": [
     {
       "key": "hull",

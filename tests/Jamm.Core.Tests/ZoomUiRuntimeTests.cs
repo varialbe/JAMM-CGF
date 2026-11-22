@@ -1,4 +1,5 @@
 using Jamm.Core.Building;
+using Jamm.Core.ModKit;
 using Jamm.Core.Patching;
 using UndertaleModLib;
 using UndertaleModLib.Compiler;
@@ -6,9 +7,19 @@ using UndertaleModLib.Models;
 
 namespace Jamm.Core.Tests;
 
-/// <summary>Verifies zoom-aware HUD, icon, popup, and modal menu adaptations.</summary>
+/// <summary>Verifies zoom-aware HUD, icon, popup, and modal menu adaptations and capability gating.</summary>
 public sealed class ZoomUiRuntimeTests
 {
+    private static readonly string[] ZoomHelperScripts =
+    [
+        "jamm_ui_zx",
+        "jamm_ui_zy",
+        "jamm_ui_cx",
+        "jamm_ui_cy",
+        "jamm_draw_text_shadowed_scaled",
+        "jamm_draw_text_shadowed2_scaled"
+    ];
+
     [Fact]
     public void SyntheticArchiveWithViewRelativeHudAndMenusCompilesAndPreservesUnzoomedPath()
     {
@@ -17,8 +28,8 @@ public sealed class ZoomUiRuntimeTests
         string modPath = temp.PathFor("mod.win");
         string output = temp.PathFor("merged.win");
 
-        WriteModel(basePath, includeModEdit: false);
-        WriteModel(modPath, includeModEdit: true);
+        WriteModel(basePath, includeModEdit: false, includeViewZoomCapability: false);
+        WriteModel(modPath, includeModEdit: true, includeViewZoomCapability: true);
 
         using var original = GameFileLoader.Load(basePath);
         using var mod = GameFileLoader.Load(modPath);
@@ -29,12 +40,8 @@ public sealed class ZoomUiRuntimeTests
         Assert.Contains(build.Plan.Decisions, d => d.StartsWith("Zoom UI: adapted", StringComparison.Ordinal));
 
         using var merged = GameFileLoader.Load(output);
-        Assert.NotNull(merged.Data.Scripts.ByName("jamm_ui_zx"));
-        Assert.NotNull(merged.Data.Scripts.ByName("jamm_ui_zy"));
-        Assert.NotNull(merged.Data.Scripts.ByName("jamm_ui_cx"));
-        Assert.NotNull(merged.Data.Scripts.ByName("jamm_ui_cy"));
-        Assert.NotNull(merged.Data.Scripts.ByName("jamm_draw_text_shadowed_scaled"));
-        Assert.NotNull(merged.Data.Scripts.ByName("jamm_draw_text_shadowed2_scaled"));
+        foreach (string script in ZoomHelperScripts)
+            Assert.NotNull(merged.Data.Scripts.ByName(script));
 
         string hudBegin = PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_begin").Text;
         Assert.Contains("jamm_vw / 800", hudBegin);
@@ -62,7 +69,215 @@ public sealed class ZoomUiRuntimeTests
         Assert.Contains("draw_text_transformed(", saveCard);
     }
 
-    private static void WriteModel(string path, bool includeModEdit)
+    [Fact]
+    public void VanillaBuild_IsByteIdenticalAndDoesNotInstallZoomUiRuntime()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        string output = temp.PathFor("vanilla.win");
+
+        WriteModel(basePath, includeModEdit: false, includeViewZoomCapability: false);
+
+        var build = ArchiveBuilder.Build(basePath, [], output);
+        Assert.NotNull(build.Verification);
+        Assert.Equal(BuildFiles.Hash(basePath), BuildFiles.Hash(output));
+        Assert.DoesNotContain(build.Plan.Decisions, d => d.StartsWith("Zoom UI:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void NonZoomModKitBuild_WeatherStyle_KeepsAllZoomTargetsAndHudScriptsIdenticalToPreBranch()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        WriteModel(basePath, includeModEdit: false, includeViewZoomCapability: false);
+
+        // Build a ModKit package without the "view-zoom" capability.
+        string pkgDir = temp.PathFor("non-zoom-mod");
+        Directory.CreateDirectory(Path.Combine(pkgDir, "hooks"));
+        File.WriteAllText(Path.Combine(pkgDir, "hooks", "create.gml"), "active = 1;\n");
+        File.WriteAllText(Path.Combine(pkgDir, "jamm-mod.json"), """
+            {
+              "id": "non-zoom-mod",
+              "name": "Non Zoom Mod",
+              "version": "1.0.0",
+              "objects": [
+                {
+                  "key": "marker",
+                  "hooks": { "create": "hooks/create.gml" }
+                }
+              ]
+            }
+            """);
+
+        string modPath = temp.PathFor("non-zoom-mod.win");
+        ModKitBuilder.Build(pkgDir, basePath, modPath, noRepack: true);
+
+        using var original = GameFileLoader.Load(basePath);
+        using var mod = GameFileLoader.Load(modPath);
+        var patch = PatchBuilder.Create(original, mod, "Non Zoom Mod");
+
+        string mergedPath = temp.PathFor("merged-weather.win");
+        var build = ArchiveBuilder.Build(basePath, [new(patch, modPath)], mergedPath, noRepack: true);
+        Assert.NotNull(build.Verification);
+        Assert.DoesNotContain(build.Plan.Decisions, d => d.StartsWith("Zoom UI:", StringComparison.Ordinal));
+
+        using var merged = GameFileLoader.Load(mergedPath);
+        foreach (string script in ZoomHelperScripts)
+        {
+            Assert.Null(merged.Data.Scripts.ByName(script));
+            Assert.Null(merged.Data.Code.ByName("gml_Script_" + script));
+        }
+        Assert.DoesNotContain(merged.Data.Scripts, s => s.Name.Content.StartsWith(ZoomUiRuntime.CapabilityScriptPrefix, StringComparison.Ordinal));
+
+        // Pre-branch HudRuntime scripts must not emit zoom scaling variables.
+        string hudBegin = PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_begin").Text;
+        string hudReserve = PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_reserve").Text;
+        string hudFlush = PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_flush").Text;
+        Assert.DoesNotContain("jamm_hud_zx", hudBegin);
+        Assert.DoesNotContain("jamm_zy", hudReserve);
+        Assert.DoesNotContain("jamm_hud_zx", hudFlush);
+
+        // Entries untouched by HudRuntime.TrackDrawState remain byte-identical to vanilla base.
+        foreach (string entry in new[] { "gml_Object_Icons_Step_2", "gml_Object_SaveMenu_Create_0" })
+        {
+            Assert.Equal(
+                ContentFingerprints.Code(original.Data.Code.ByName(entry)!),
+                ContentFingerprints.Code(merged.Data.Code.ByName(entry)!));
+        }
+
+        // Entries touched only by HudRuntime.TrackDrawState contain zero ZoomUiRuntime rewrites.
+        foreach (string entry in new[] { "gml_Object_ExperienceBar_Draw_0", "gml_Object_Icons_Draw_0", "gml_Object_Wallet_Draw_0", "gml_Object_SaveCard_Other_11" })
+        {
+            string code = PatchBuilder.ReadCode(merged, entry).Text;
+            Assert.DoesNotContain("jamm_ui_zx", code);
+            Assert.DoesNotContain("jamm_ui_zy", code);
+            Assert.DoesNotContain("jamm_draw_text_shadowed", code);
+        }
+    }
+
+    [Fact]
+    public void ModKitBuildWithViewZoomCapability_AppliesZoomUiRuntimeAndScaledHud()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        WriteModel(basePath, includeModEdit: false, includeViewZoomCapability: false);
+
+        string pkgDir = temp.PathFor("sub-like");
+        Directory.CreateDirectory(pkgDir);
+        File.WriteAllText(Path.Combine(pkgDir, "jamm-mod.json"), """
+            {
+              "id": "sub-like",
+              "name": "Sub Like",
+              "version": "1.0.0",
+              "capabilities": [ "view-zoom" ]
+            }
+            """);
+
+        string modPath = temp.PathFor("sub-like.win");
+        ModKitBuilder.Build(pkgDir, basePath, modPath, noRepack: true);
+
+        using var original = GameFileLoader.Load(basePath);
+        using var mod = GameFileLoader.Load(modPath);
+        Assert.NotNull(mod.Data.Scripts.ByName("jamm_cap_view_zoom_sub_like"));
+        var patch = PatchBuilder.Create(original, mod, "Sub Like");
+
+        string mergedPath = temp.PathFor("merged-sub.win");
+        var build = ArchiveBuilder.Build(basePath, [new(patch, modPath)], mergedPath, noRepack: true);
+        Assert.NotNull(build.Verification);
+        Assert.Contains(build.Plan.Decisions, d => d.StartsWith("Zoom UI: adapted", StringComparison.Ordinal));
+
+        using var merged = GameFileLoader.Load(mergedPath);
+        Assert.NotNull(merged.Data.Scripts.ByName("jamm_cap_view_zoom_sub_like"));
+        foreach (string script in ZoomHelperScripts)
+            Assert.NotNull(merged.Data.Scripts.ByName(script));
+
+        Assert.Contains("jamm_vw / 800", PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_begin").Text);
+        Assert.Contains("jamm_hud_zx", PatchBuilder.ReadCode(merged, "gml_Script_jamm_hud_flush").Text);
+        Assert.Contains("jamm_ui_zx()", PatchBuilder.ReadCode(merged, "gml_Object_ExperienceBar_Draw_0").Text);
+        Assert.Contains("jamm_base_xscale", PatchBuilder.ReadCode(merged, "gml_Object_Icons_Step_2").Text);
+        Assert.Contains("control_icon.OFFSET_Y = -122", PatchBuilder.ReadCode(merged, "gml_Object_SaveMenu_Create_0").Text);
+        Assert.Contains("if (jamm_zx == 1 && jamm_zy == 1)", PatchBuilder.ReadCode(merged, "gml_Object_SaveCard_Other_11").Text);
+    }
+
+    [RealFilesFact]
+    public void RealBase_VanillaAndWeatherPackKeepAllPatchedTargetsUnchanged_SubmarineGetsZoomUiPatches()
+    {
+        string basePath = Environment.GetEnvironmentVariable("JAMM_ORIGINAL")!;
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        string weatherDir = Path.Combine(repoRoot, "examples", "modkit", "weather-pack");
+        string subDir = Path.Combine(repoRoot, "examples", "modkit", "submarine");
+
+        using var temp = new TemporaryDirectory();
+        string vanillaOut = temp.PathFor("vanilla.win");
+        var vanillaBuild = ArchiveBuilder.Build(basePath, [], vanillaOut, noRepack: true);
+        Assert.NotNull(vanillaBuild.Verification);
+        Assert.Equal(BuildFiles.Hash(basePath), BuildFiles.Hash(vanillaOut));
+
+        string weatherMod = temp.PathFor("weather-pack.win");
+        string weatherMerged = temp.PathFor("weather-merged.win");
+        ModKitBuilder.Build(weatherDir, basePath, weatherMod, noRepack: true);
+        using var original = GameFileLoader.Load(basePath);
+        using (var weatherFile = GameFileLoader.Load(weatherMod))
+        {
+            var weatherPatch = PatchBuilder.Create(original, weatherFile, "Weather Pack");
+            var weatherBuild = ArchiveBuilder.Build(basePath, [new(weatherPatch, weatherMod)], weatherMerged, noRepack: true);
+            Assert.NotNull(weatherBuild.Verification);
+            Assert.DoesNotContain(weatherBuild.Plan.Decisions, d => d.StartsWith("Zoom UI:", StringComparison.Ordinal));
+        }
+
+        using (var mergedWeather = GameFileLoader.Load(weatherMerged))
+        {
+            foreach (string script in ZoomHelperScripts)
+                Assert.Null(mergedWeather.Data.Scripts.ByName(script));
+            Assert.DoesNotContain("jamm_hud_zx", PatchBuilder.ReadCode(mergedWeather, "gml_Script_jamm_hud_begin").Text);
+            Assert.DoesNotContain("jamm_hud_zx", PatchBuilder.ReadCode(mergedWeather, "gml_Script_jamm_hud_flush").Text);
+
+            // Every ZoomUiRuntime target entry not touched by MenuRuntime / HudRuntime.TrackDrawState
+            // must be byte-identical (same instruction stream fingerprint) to vanilla base.
+            foreach (string entry in ZoomUiRuntime.TargetCodeEntries)
+            {
+                var origCode = original.Data.Code.ByName(entry);
+                var mergedCode = mergedWeather.Data.Code.ByName(entry);
+                Assert.NotNull(origCode);
+                Assert.NotNull(mergedCode);
+                string mergedText = PatchBuilder.ReadCode(mergedWeather, entry).Text;
+                Assert.DoesNotContain("jamm_ui_", mergedText);
+                Assert.DoesNotContain("jamm_draw_text_shadowed", mergedText);
+
+                string origText = PatchBuilder.ReadCode(original, entry).Text;
+                bool touchedByHudTrack = HudRuntime.TrackDrawState(origText) != origText;
+                bool touchedByMenuRuntime = entry is "gml_Object_CardHandler_Create_0" or "gml_Object_UpgradeMenu_Create_0" or "gml_Object_RodMenu_Draw_0";
+                if (!touchedByHudTrack && !touchedByMenuRuntime)
+                    Assert.Equal(ContentFingerprints.Code(origCode), ContentFingerprints.Code(mergedCode));
+            }
+        }
+
+        string subMod = temp.PathFor("submarine.win");
+        string subMerged = temp.PathFor("submarine-merged.win");
+        ModKitBuilder.Build(subDir, basePath, subMod, noRepack: true);
+        using (var subFile = GameFileLoader.Load(subMod))
+        {
+            Assert.NotNull(subFile.Data.Scripts.ByName("jamm_cap_view_zoom_submarine"));
+            var subPatch = PatchBuilder.Create(original, subFile, "Submarine");
+            var subBuild = ArchiveBuilder.Build(basePath, [new(subPatch, subMod)], subMerged, noRepack: true);
+            Assert.NotNull(subBuild.Verification);
+            Assert.Contains(subBuild.Plan.Decisions, d => d.StartsWith("Zoom UI: adapted", StringComparison.Ordinal));
+        }
+
+        using var mergedSub = GameFileLoader.Load(subMerged);
+        foreach (string script in ZoomHelperScripts)
+            Assert.NotNull(mergedSub.Data.Scripts.ByName(script));
+        Assert.Contains("jamm_vw / 800", PatchBuilder.ReadCode(mergedSub, "gml_Script_jamm_hud_begin").Text);
+        Assert.Contains("jamm_hud_zx", PatchBuilder.ReadCode(mergedSub, "gml_Script_jamm_hud_flush").Text);
+        foreach (string entry in ZoomUiRuntime.TargetCodeEntries)
+        {
+            Assert.NotEqual(
+                ContentFingerprints.Code(original.Data.Code.ByName(entry)!),
+                ContentFingerprints.Code(mergedSub.Data.Code.ByName(entry)!));
+        }
+    }
+
+    private static void WriteModel(string path, bool includeModEdit, bool includeViewZoomCapability)
     {
         using var data = UndertaleData.CreateNew();
         data.GeneralInfo.Major = 1;
@@ -186,6 +401,8 @@ public sealed class ZoomUiRuntimeTests
             """);
         if (includeModEdit)
             AddCode("BoatDataMarker", EventType.Create, 0, "zoom_marker = 1;");
+        if (includeViewZoomCapability)
+            AddScript("jamm_cap_view_zoom_zoommod", "return 1;");
 
         var compiled = compiler.Compile();
         Assert.True(compiled.Successful, compiled.PrintAllErrors(true));

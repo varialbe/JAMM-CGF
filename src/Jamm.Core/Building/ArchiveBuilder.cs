@@ -411,8 +411,9 @@ public static class ArchiveBuilder
             : AreaPlacement.Apply(data, plan, patches, baseCode, recompile, extraDecisions);
         if (!intermediate)
         {
+            bool zoomUi = ZoomUiRuntime.IsRequested(data);
             CatalogRuntime.Inject(data, recompile);
-            HudRuntime.Inject(data, recompile);
+            HudRuntime.Inject(data, recompile, generatedCode, zoomUi);
             MenuRuntime.Inject(data, recompile);
             ItemsRuntime.Inject(data, recompile);
             FishRuntime.Inject(data, recompile, generatedCode, valueGuard.FishValueCap);
@@ -425,7 +426,7 @@ public static class ArchiveBuilder
                 baseMod: vanilla != ancestor ? patches[0].Mod.Name : null);
             ConsoleUpgradeGuard.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
             MoneyRuntime.ConfigureConsole(bigMoney, recompile, generatedCode);
-            ZoomUiRuntime.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
+            if (zoomUi) ZoomUiRuntime.Apply(data, baseCode, recompile, generatedCode, extraDecisions);
             // Last, so the guard also covers code that the runtimes above generated or merged.
             InstanceGuard.Apply(data, ancestor, baseCode, recompile, generatedCode, extraDecisions);
         }

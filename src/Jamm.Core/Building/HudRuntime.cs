@@ -23,6 +23,98 @@ internal static class HudRuntime
             if (!variable_global_exists("jamm_hud_halign")) global.jamm_hud_halign = fa_left;
             if (!variable_global_exists("jamm_hud_valign")) global.jamm_hud_valign = fa_top;
             global.jamm_hud_count = 0;
+            var jamm_vw, jamm_vh, jamm_cancel, jamm_handler, jamm_cy, jamm_ctop, jamm_cright;
+            jamm_vw = view_wview[view_current];
+            if (jamm_vw <= 0) jamm_vw = 800;
+            jamm_vh = view_hview[view_current];
+            if (jamm_vh <= 0) jamm_vh = 480;
+            global.jamm_hud_x = view_xview[view_current] + jamm_vw - 25;
+            global.jamm_hud_cursor = view_yview[view_current] + jamm_vh - 28;
+            if (instance_exists(ExperienceBar) && ExperienceBar.offset_y < jamm_vh) global.jamm_hud_cursor = min(global.jamm_hud_cursor, view_yview[view_current] + ExperienceBar.offset_y - 4);
+            if (view_current == 0) {
+                jamm_cancel = asset_get_index("icon_Cancel");
+                if (jamm_cancel > -1 && instance_exists(jamm_cancel) && jamm_cancel.visible) {
+                    jamm_handler = asset_get_index("Handler");
+                    jamm_cy = jamm_cancel.y;
+                    if (jamm_handler > -1 && instance_exists(jamm_handler) && variable_instance_exists(jamm_cancel, "ORIGIN_Y")) jamm_cy = min(jamm_cy, jamm_cancel.ORIGIN_Y);
+                    jamm_ctop = jamm_cy;
+                    jamm_cright = jamm_cancel.x;
+                    if (sprite_exists(jamm_cancel.sprite_index)) {
+                        jamm_ctop = jamm_cy - (sprite_get_yoffset(jamm_cancel.sprite_index) * abs(jamm_cancel.image_yscale));
+                        jamm_cright = jamm_cancel.x - (sprite_get_xoffset(jamm_cancel.sprite_index) * abs(jamm_cancel.image_xscale)) + (sprite_get_width(jamm_cancel.sprite_index) * abs(jamm_cancel.image_xscale));
+                        if (jamm_cancel.bbox_bottom > jamm_cancel.bbox_top) jamm_ctop = min(jamm_ctop, jamm_cancel.bbox_top);
+                        if (jamm_cancel.bbox_right > jamm_cancel.bbox_left) jamm_cright = max(jamm_cright, jamm_cancel.bbox_right);
+                    }
+                    if (jamm_ctop >= view_yview[view_current] && jamm_ctop < view_yview[view_current] + jamm_vh && jamm_cright >= view_xview[view_current] + jamm_vw - 260) {
+                        global.jamm_hud_cursor = min(global.jamm_hud_cursor, jamm_ctop - 8);
+                    }
+                }
+            }
+            """,
+        ["jamm_hud_reserve"] = """
+            var jamm_h;
+            jamm_h = max(0, argument0);
+            global.jamm_hud_cursor -= jamm_h;
+            global.jamm_hud_y = global.jamm_hud_cursor + jamm_h / 2;
+            global.jamm_hud_cursor -= 4;
+            return global.jamm_hud_y;
+            """,
+        ["jamm_hud_text"] = """
+            if (view_current != 0) return 0;
+            var jamm_n;
+            jamm_n = global.jamm_hud_count;
+            global.jamm_hud_rows[jamm_n,0] = argument0;
+            global.jamm_hud_rows[jamm_n,1] = argument1;
+            global.jamm_hud_rows[jamm_n,2] = string(argument2);
+            global.jamm_hud_rows[jamm_n,3] = argument3;
+            global.jamm_hud_rows[jamm_n,4] = argument4;
+            global.jamm_hud_rows[jamm_n,5] = argument5;
+            global.jamm_hud_rows[jamm_n,6] = global.jamm_hud_font;
+            global.jamm_hud_rows[jamm_n,7] = draw_get_color();
+            global.jamm_hud_rows[jamm_n,8] = draw_get_alpha();
+            global.jamm_hud_count += 1;
+            if (argument1 == 1) draw_set_color(Colors.ui_light);
+            return 0;
+            """,
+        ["jamm_hud_flush"] = """
+            if (view_current != 0) return 0;
+            var jamm_font, jamm_color, jamm_alpha, jamm_ha, jamm_va;
+            var jamm_lane, jamm_n, jamm_text, jamm_sx, jamm_sy, jamm_angle, jamm_h, jamm_y, jamm_shadow;
+            jamm_font = global.jamm_hud_font; jamm_color = draw_get_color(); jamm_alpha = draw_get_alpha();
+            jamm_ha = global.jamm_hud_halign; jamm_va = global.jamm_hud_valign;
+            draw_set_halign(fa_right); draw_set_valign(fa_middle);
+            for (jamm_lane = 0; jamm_lane <= 2; jamm_lane += 1) {
+                for (jamm_n = 0; jamm_n < global.jamm_hud_count; jamm_n += 1) {
+                    if (global.jamm_hud_rows[jamm_n,0] == jamm_lane) {
+                        jamm_text = global.jamm_hud_rows[jamm_n,2];
+                        jamm_sx = global.jamm_hud_rows[jamm_n,3]; jamm_sy = global.jamm_hud_rows[jamm_n,4];
+                        jamm_angle = global.jamm_hud_rows[jamm_n,5];
+                        draw_set_font(global.jamm_hud_rows[jamm_n,6]);
+                        draw_set_color(global.jamm_hud_rows[jamm_n,7]);
+                        draw_set_alpha(global.jamm_hud_rows[jamm_n,8]);
+                        jamm_shadow = 0;
+                        if (global.jamm_hud_rows[jamm_n,1] == 1) jamm_shadow = 2;
+                        jamm_h = max(16, abs(string_height(jamm_text) * jamm_sy * dcos(jamm_angle)) + abs(string_width(jamm_text) * jamm_sx * dsin(jamm_angle)) + jamm_shadow);
+                        jamm_y = jamm_hud_reserve(jamm_h) - jamm_shadow / 2;
+                        if (global.jamm_hud_rows[jamm_n,1] == 1) draw_text_shadowed(global.jamm_hud_x, jamm_y, jamm_text);
+                        else draw_text_transformed(global.jamm_hud_x, jamm_y, jamm_text, jamm_sx, jamm_sy, jamm_angle);
+                    }
+                }
+            }
+            global.jamm_hud_count = 0;
+            draw_set_font(jamm_font); draw_set_color(jamm_color); draw_set_alpha(jamm_alpha);
+            draw_set_halign(jamm_ha); draw_set_valign(jamm_va);
+            return 0;
+            """
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> ZoomScripts = new Dictionary<string, string>
+    {
+        ["jamm_hud_begin"] = """
+            if (!variable_global_exists("jamm_hud_font")) global.jamm_hud_font = -1;
+            if (!variable_global_exists("jamm_hud_halign")) global.jamm_hud_halign = fa_left;
+            if (!variable_global_exists("jamm_hud_valign")) global.jamm_hud_valign = fa_top;
+            global.jamm_hud_count = 0;
             var jamm_vw, jamm_vh, jamm_zx, jamm_zy, jamm_cancel, jamm_handler, jamm_cy, jamm_ctop, jamm_cright;
             jamm_vw = view_wview[view_current];
             if (jamm_vw <= 0) jamm_vw = 800;
@@ -64,23 +156,6 @@ internal static class HudRuntime
             global.jamm_hud_y = global.jamm_hud_cursor + jamm_h / 2;
             global.jamm_hud_cursor -= 4 * jamm_zy;
             return global.jamm_hud_y;
-            """,
-        ["jamm_hud_text"] = """
-            if (view_current != 0) return 0;
-            var jamm_n;
-            jamm_n = global.jamm_hud_count;
-            global.jamm_hud_rows[jamm_n,0] = argument0;
-            global.jamm_hud_rows[jamm_n,1] = argument1;
-            global.jamm_hud_rows[jamm_n,2] = string(argument2);
-            global.jamm_hud_rows[jamm_n,3] = argument3;
-            global.jamm_hud_rows[jamm_n,4] = argument4;
-            global.jamm_hud_rows[jamm_n,5] = argument5;
-            global.jamm_hud_rows[jamm_n,6] = global.jamm_hud_font;
-            global.jamm_hud_rows[jamm_n,7] = draw_get_color();
-            global.jamm_hud_rows[jamm_n,8] = draw_get_alpha();
-            global.jamm_hud_count += 1;
-            if (argument1 == 1) draw_set_color(Colors.ui_light);
-            return 0;
             """,
         ["jamm_hud_flush"] = """
             if (view_current != 0) return 0;
@@ -172,7 +247,7 @@ internal static class HudRuntime
         return result.ToString();
     }
 
-    internal static void Inject(UndertaleData data, Dictionary<string, string> recompile)
+    internal static void Inject(UndertaleData data, Dictionary<string, string> recompile, Dictionary<string, string>? generated = null, bool zoomUi = false)
     {
         if (!recompile.ContainsKey(Begin)) return;
         var engine = data.GameObjects.ByName("QuestEngine");
@@ -188,12 +263,17 @@ internal static class HudRuntime
         }
         foreach (var (script, text) in Scripts)
         {
+            string? zoomed = null;
+            bool useZoom = zoomUi && ZoomScripts.TryGetValue(script, out zoomed);
+            string body = useZoom ? zoomed! : text;
             string name = "gml_Script_" + script;
             var code = data.Code.ByName(name) ?? UndertaleCode.CreateEmptyEntry(data, name);
             var existing = data.Scripts.ByName(script);
             if (existing is null) data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(script), Code = code });
             else existing.Code = code;
-            recompile[name] = text;
+            recompile[name] = body;
+            if (useZoom && generated is not null)
+                generated[name] = body;
         }
     }
 }

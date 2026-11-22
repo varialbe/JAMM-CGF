@@ -51,6 +51,7 @@ my-mod/
 | `author` | string | No | `""` | Author name. |
 | `description` | string | No | `""` | Package summary. |
 | `role` | string | No | — | Use `"base"` to declare an overhaul that other packages can target. |
+| `capabilities` | array | No | `[]` | Optional runtime capabilities requested by the package (supported: `"view-zoom"` for zoom-invariant vanilla HUD and menus). |
 | `base` | string | No | — | Addon target. Use the base mod's package ID or exact JAMM library ID. |
 | `baseVersion` | string | No | — | Optional exact version of the base mod. |
 | `baseSha256` | string | No | — | Optional 64-digit SHA-256 of the base mod's original archive. |

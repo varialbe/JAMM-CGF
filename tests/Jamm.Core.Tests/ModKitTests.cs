@@ -713,6 +713,7 @@ public sealed class ModKitTests
         var manifest = ModKitPackage.Load(submarineDir);
         Assert.Equal("submarine", manifest.Id);
         Assert.Equal("0.2.0", manifest.Version);
+        Assert.Contains(ModKitPackage.ViewZoomCapability, manifest.Capabilities);
         Assert.Equal(4, manifest.Sprites.Count);
         var boat = Assert.Single(manifest.Boats);
         Assert.Equal("submarine", boat.Key);
@@ -721,6 +722,52 @@ public sealed class ModKitTests
         Assert.Equal("bow-winch", tool.Key);
         Assert.True(tool.Cost >= 250_000_000);
         Assert.False(tool.Unlocked);
+    }
+
+    [Fact]
+    public void Capabilities_ValidateKnownFlagsAndEmitCapabilityScriptOnBuild()
+    {
+        using var temp = new TemporaryDirectory();
+        string basePath = temp.PathFor("base.win");
+        WriteSyntheticBase(basePath);
+
+        string badDir = temp.PathFor("bad-cap");
+        Directory.CreateDirectory(badDir);
+        File.WriteAllText(Path.Combine(badDir, "jamm-mod.json"), """
+            {
+              "id": "bad-cap",
+              "name": "Bad Cap",
+              "capabilities": [ "unknown-cap" ]
+            }
+            """);
+        var unknownEx = Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(badDir));
+        Assert.Contains("unknown-cap", unknownEx.Message);
+
+        string dupDir = temp.PathFor("dup-cap");
+        Directory.CreateDirectory(dupDir);
+        File.WriteAllText(Path.Combine(dupDir, "jamm-mod.json"), """
+            {
+              "id": "dup-cap",
+              "name": "Dup Cap",
+              "capabilities": [ "view-zoom", "view-zoom" ]
+            }
+            """);
+        var dupEx = Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(dupDir));
+        Assert.Contains("$.capabilities", dupEx.Message);
+
+        string zoomDir = temp.PathFor("zoom-mod");
+        Directory.CreateDirectory(zoomDir);
+        File.WriteAllText(Path.Combine(zoomDir, "jamm-mod.json"), """
+            {
+              "id": "zoom-mod",
+              "name": "Zoom Mod",
+              "capabilities": [ "view-zoom" ]
+            }
+            """);
+        var res = ModKitBuilder.Build(zoomDir, basePath, temp.PathFor("zoom-mod.win"));
+        Assert.Equal(1, res.ScriptsAdded);
+        using var built = GameFileLoader.Load(res.OutputPath);
+        Assert.NotNull(built.Data.Scripts.ByName("jamm_cap_view_zoom_zoom_mod"));
     }
 
     private sealed class TemporaryDirectory : IDisposable

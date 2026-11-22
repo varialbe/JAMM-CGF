@@ -193,6 +193,9 @@ public sealed record ModKitManifest(
 
     /// <summary>Optional base or addon role declared by the package.</summary>
     public Management.ModRole? Role { get; init; }
+
+    /// <summary>Optional runtime capabilities requested by the package (for example, <c>view-zoom</c>).</summary>
+    public IReadOnlyList<string> Capabilities { get; init; } = [];
 }
 
 /// <summary>Parses, validates, and scaffolds ModKit folder packages (<c>jamm-mod.json</c> + art + GML hooks).</summary>
@@ -200,6 +203,9 @@ public static partial class ModKitPackage
 {
     /// <summary>Manifest filename expected inside every ModKit package directory.</summary>
     public const string ManifestFileName = "jamm-mod.json";
+
+    /// <summary>Capability flag indicating that the mod zooms <c>view[0]</c> and needs zoom-invariant vanilla HUD/menus.</summary>
+    public const string ViewZoomCapability = "view-zoom";
 
     private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
 
@@ -277,12 +283,28 @@ public static partial class ModKitPackage
             EnsureUniqueKeys(scripts.Select(s => ModKitBuilder.SanitizeIdent(s.Key)), "$.scripts");
 
             var (_, _, role) = Management.ModRole.ReadManifest(rootObj, manifestPath, readIdentity: false);
+            var capabilities = ParseCapabilities(rootObj, "$.capabilities");
             var weathers = ParseArray(rootObj, "weathers", "$.weathers", (el, path) => ParseWeather(root, el, path, spritesByKey, fish));
             EnsureUniqueKeys(weathers.Select(w => ModKitBuilder.SanitizeIdent(w.Id)), "$.weathers");
 
             return new ModKitManifest(root, manifestPath, id, name, version, author, description, fish, boats, hats, upgrades)
-                { Areas = areas, Sprites = sprites, Objects = objects, Scripts = scripts, Weathers = weathers, Rods = rods, Tools = tools, Role = role };
+                { Areas = areas, Sprites = sprites, Objects = objects, Scripts = scripts, Weathers = weathers, Rods = rods, Tools = tools, Role = role, Capabilities = capabilities };
         }
+    }
+
+    private static IReadOnlyList<string> ParseCapabilities(JsonElement rootObj, string path)
+    {
+        var capabilities = ParseArray(rootObj, "capabilities", path, (el, itemPath) =>
+        {
+            if (el.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(el.GetString()))
+                throw Error(itemPath, "Expected a non-empty capability string.");
+            string value = el.GetString()!;
+            if (!string.Equals(value, ViewZoomCapability, StringComparison.Ordinal))
+                throw Error(itemPath, $"Unknown capability '{value}'. Supported capabilities: {ViewZoomCapability}.");
+            return value;
+        });
+        EnsureUniqueKeys(capabilities, path);
+        return capabilities;
     }
 
     private static ModKitScript ParseScript(string root, JsonElement element, string path)

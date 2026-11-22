@@ -14,6 +14,9 @@ namespace Jamm.Core.Building;
 /// </summary>
 internal static partial class ZoomUiRuntime
 {
+    /// <summary>Prefix for ModKit capability scripts requesting view-zoom UI adaptation.</summary>
+    internal const string CapabilityScriptPrefix = "jamm_cap_view_zoom_";
+
     private const string ZxScript = "jamm_ui_zx";
     private const string ZyScript = "jamm_ui_zy";
     private const string CxScript = "jamm_ui_cx";
@@ -87,7 +90,69 @@ internal static partial class ZoomUiRuntime
             """
     };
 
-    /// <summary>Applies zoom-aware HUD, icon, popup, and modal menu adaptations when vanilla targets are present.</summary>
+    private static readonly string[] CardDrawEntries =
+    [
+        "gml_Object_BoatCard_Other_11",
+        "gml_Object_ToolCard_Other_11",
+        "gml_Object_RodCard_Other_11",
+        "gml_Object_LureCard_Other_11",
+        "gml_Object_SaveCard_Other_11",
+        "gml_Object_UpgradeCard_Other_11",
+        "gml_Object_UpgradeSlot_Other_11",
+        "gml_Object_GearCard_Other_11",
+        "gml_Object_GearCardBlank_Other_11"
+    ];
+
+    internal static readonly string[] TargetCodeEntries =
+    [
+        "gml_Object_ExperienceBar_Draw_0",
+        "gml_Object_BreathBar_Draw_0",
+        "gml_Object_UpgradeData_Draw_0",
+        "gml_Object_BoatData_Draw_0",
+        "gml_Object_CatalogData_Draw_0",
+        "gml_Object_Message_Other_10",
+        "gml_Object_Message_Draw_0",
+        "gml_Object_MessageTwoSize_Draw_0",
+        "gml_Object_Icons_Step_2",
+        "gml_Object_Icons_Draw_0",
+        "gml_Object_Wallet_Draw_0",
+        "gml_Object_RadarButton_Step_0",
+        "gml_Object_SaveMenu_Create_0",
+        "gml_Object_Catalog_Create_0",
+        "gml_Object_CardHandler_Create_0",
+        "gml_Object_RowHandler_Create_0",
+        "gml_Object_UpgradeMenu_Create_0",
+        "gml_Object_Card_Create_0",
+        "gml_Object_Card_Step_0",
+        "gml_Object_Card_Draw_0",
+        "gml_Object_SaveCard_Create_0",
+        "gml_Object_SaveCard_Step_0",
+        "gml_Object_SCB_Draw_0",
+        "gml_Object_CatalogTab_Draw_0",
+        "gml_Object_Controls_Create_0",
+        "gml_Object_RodMenu_Draw_0",
+        "gml_Object_GearMenu_Create_0",
+        "gml_Object_GearMenu_Alarm_0",
+        "gml_Object_GearMenu_Draw_0",
+        "gml_Object_GameModeMenu_Create_0",
+        "gml_Object_GM_Classic_Draw_0",
+        "gml_Object_GM_Realism_Draw_0",
+        "gml_Object_Fishalog_Create_0",
+        "gml_Object_Fishalog_Step_0",
+        "gml_Object_Fishalog_Draw_0",
+        "gml_Object_Hatalog_Create_0",
+        "gml_Object_Hatalog_Step_0",
+        "gml_Object_Hatalog_Draw_0",
+        "gml_Object_HatalogItem_Draw_0",
+        "gml_Object_Potion_Draw_73",
+        .. CardDrawEntries
+    ];
+
+    /// <summary>Returns whether any mod in the archive declared the <c>view-zoom</c> capability.</summary>
+    internal static bool IsRequested(UndertaleData data) =>
+        data.Scripts.Any(s => s.Name?.Content.StartsWith(CapabilityScriptPrefix, StringComparison.Ordinal) == true);
+
+    /// <summary>Applies zoom-aware HUD, icon, popup, and modal menu adaptations when requested and vanilla targets are present.</summary>
     internal static void Apply(
         UndertaleData data,
         IReadOnlyDictionary<string, CodeText> baseline,
@@ -95,6 +160,8 @@ internal static partial class ZoomUiRuntime
         Dictionary<string, string> generated,
         List<string> decisions)
     {
+        if (!IsRequested(data))
+            return;
         if (data.GameObjects.ByName("Camera") is null || data.GameObjects.ByName("Girl") is null)
             return;
 
@@ -141,18 +208,7 @@ internal static partial class ZoomUiRuntime
         TryPatch("gml_Object_HatalogItem_Draw_0", PatchHoverTooltipDraw);
         TryPatch("gml_Object_Potion_Draw_73", PatchHoverTooltipDraw);
 
-        foreach (string cardDraw in new[]
-        {
-            "gml_Object_BoatCard_Other_11",
-            "gml_Object_ToolCard_Other_11",
-            "gml_Object_RodCard_Other_11",
-            "gml_Object_LureCard_Other_11",
-            "gml_Object_SaveCard_Other_11",
-            "gml_Object_UpgradeCard_Other_11",
-            "gml_Object_UpgradeSlot_Other_11",
-            "gml_Object_GearCard_Other_11",
-            "gml_Object_GearCardBlank_Other_11"
-        })
+        foreach (string cardDraw in CardDrawEntries)
         {
             TryPatch(cardDraw, text => WrapCardDrawWithZoomBranch(cardDraw, text));
         }
