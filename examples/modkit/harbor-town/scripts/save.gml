@@ -1,4 +1,17 @@
 /// save(write) runs inside the active native INI. Missing v0.1 keys default to zero.
+/// SaveManager can call this during an old-save load before the Harbor instance has completed Create.
+if (!variable_instance_exists(id, "harbor_key") || !is_array(harbor_key)
+    || !variable_instance_exists(id, "harbor_level") || !is_array(harbor_level))
+{
+    harbor_key = array_create(4);
+    harbor_key[0] = "lighthouse";
+    harbor_key[1] = "aquarium";
+    harbor_key[2] = "statue";
+    harbor_key[3] = "research";
+    harbor_level = array_create(4, 0);
+    harbor_donated = 0;
+    harbor_ready = false;
+}
 if (argument0 && !harbor_ready) exit;
 for (var i = 0; i < 4; i += 1)
 {

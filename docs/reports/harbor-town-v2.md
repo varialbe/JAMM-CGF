@@ -36,8 +36,8 @@ stayed alive for the run, but the game window rendered black. Its diagnostic sam
 girl=1; harbor=1; loaded=0; harbor_ready=0`, and the CSV remained header-only. `run.sh` reported `RECORDED` because
 a header-only CSV was present; this is not counted as successful verification.
 
-The requested screenshots of Research Station stages, titles, and dock decorations were not captured because neither
-in-game run reached the Harbor scene. Diagnostic captures and the latest personal CSV/probe are in
+The requested screenshots of Research Station stages, titles, and dock decorations were not captured because the
+in-game runs did not reach NewWorld. Diagnostic captures and the latest personal CSV/probe are in
 `~/jamm-night/harbor-town-v2/`; those images show launch failures, not v0.2 feature evidence.
 
 ## Resumed verification
@@ -59,4 +59,17 @@ in-game run reached the Harbor scene. Diagnostic captures and the latest persona
   both unused Harbor staging `game` copies were deleted. A fresh serial sequence is queued after the external
   `PAUSE-GAMES` lock holder: Steam restart, solo, then personal. The pause marker is still active, so these retries
   have not launched.
+- Round 2 found an unguarded Harbor save callback: `SaveManager_Other_14` calls Harbor's INI script, which indexed
+  per-instance arrays without ensuring that the instance had completed initialization. The save script now repairs
+  missing arrays before reading or writing; v0.1 saves default the newer `research` and `donated` keys to zero, and
+  fresh saves follow the same path. A synthetic archive regression compiles and round-trips both SaveManager hooks.
+- The Harbor bench now waits for NewWorld, requests that room transition after the title menu, uses the Harbor
+  instance placed in that room, and emits a Code Error if it cannot reach or finish all 20 stage captures. This
+  prevents a header-only CSV from being reported as a successful capture.
+- `dotnet build -c Release`: passed with 0 warnings and 0 errors. `dotnet test -c Release`: passed (652 passed,
+  17 opt-in skips).
+- Rebuilt and verified the solo and 8-mod personal Harbor packages from the legacy base. The personal package has
+  0 missing acceptance assets; ModMaker instrumentation compiled into a temporary personal archive.
+- Solo, personal, and 20-minute personal autoplay runs remain queued behind `~/jamm-night/PAUSE-GAMES`. Screenshots
+  will be copied to `~/jamm-night/harbor-town-v2/` after the lock releases; no game was launched while paused.
 - Diagnostic captures and CSVs remain under `~/jamm-night/harbor-town-v2/`; none are game files in the repository.

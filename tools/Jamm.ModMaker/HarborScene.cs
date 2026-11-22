@@ -32,6 +32,8 @@ internal static class HarborScene
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Create, 0u, data), """
             harbor_started = -1;
             harbor_bootstrapped = false;
+            harbor_room_requested = false;
+            harbor_feature_deadline = current_time + 45000;
             harbor_diag_next = 0;
             harbor_last_capture = 0;
             harbor_capture_index = 0;
@@ -68,15 +70,29 @@ internal static class HarborScene
                 file_text_close(diag);
                 harbor_diag_next = current_time + 2000;
             }
+            if (current_time >= harbor_feature_deadline)
+            {
+                show_error("Harbor bench did not reach the NewWorld Harbor feature; no rows were recorded.", true);
+                game_end();
+                exit;
+            }
             if (instance_exists(GameModeMenu))
             {
                 with (GameModeMenu) instance_destroy();
                 exit;
             }
+            if (room != NewWorld)
+            {
+                if (!harbor_room_requested)
+                {
+                    harbor_room_requested = true;
+                    room_goto(NewWorld);
+                }
+                exit;
+            }
             if (!instance_exists(Girl)) exit;
             var harbor_instance = instance_find(jmk_harbor_town_object_harbor, 0);
-            if (!instance_exists(harbor_instance))
-                harbor_instance = instance_create(Girl.x - 53, Girl.y, jmk_harbor_town_object_harbor);
+            if (!instance_exists(harbor_instance)) exit;
             if (!harbor_bootstrapped)
             {
                 with (harbor_instance)
@@ -157,6 +173,11 @@ internal static class HarborScene
                 }
                 else if (harbor_balance_phase == 2 && current_time >= harbor_reward_next)
                 {
+                    if (harbor_capture_index < 20)
+                    {
+                        show_error("Harbor bench finished without recording every building stage.", true);
+                        exit;
+                    }
                     game_end();
                 }
                 exit;

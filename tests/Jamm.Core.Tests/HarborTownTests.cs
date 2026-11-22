@@ -1,4 +1,8 @@
 using Jamm.Core.ModKit;
+using Jamm.ModMaker;
+using UndertaleModLib;
+using UndertaleModLib.Compiler;
+using UndertaleModLib.Models;
 
 namespace Jamm.Core.Tests;
 
@@ -98,6 +102,77 @@ public sealed class HarborTownTests
         Assert.Contains("ini_read_real(\"JAMM_Harbor\", harbor_key[i], 0)", source);
         Assert.Contains("if (argument0 && !harbor_ready) exit", source);
         Assert.Contains("harbor_ready = true", source);
+    }
+
+    [Fact]
+    public void HarborSaveHookRoundTripsLegacyAndFreshSaveScenariosInSyntheticArchive()
+    {
+        using var data = UndertaleData.CreateNew();
+        var harbor = new UndertaleGameObject { Name = data.Strings.MakeString("jmk_harbor_town_object_harbor") };
+        var saveManager = new UndertaleGameObject { Name = data.Strings.MakeString("SaveManager") };
+        data.GameObjects.Add(harbor);
+        data.GameObjects.Add(saveManager);
+        var create = harbor.EventHandlerFor(EventType.Create, 0u, data);
+        var load = saveManager.EventHandlerFor(EventType.Other, 13u, data);
+        var save = saveManager.EventHandlerFor(EventType.Other, 14u, data);
+
+        var scriptCode = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jmk_harbor_save");
+        data.Scripts.Add(new UndertaleScript
+        {
+            Name = data.Strings.MakeString("jmk_harbor_save"),
+            Code = scriptCode
+        });
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(create, File.ReadAllText(Path.Combine(Package, "hooks/create.gml")));
+        compiler.QueueCodeReplace(scriptCode, File.ReadAllText(Path.Combine(Package, "scripts/save.gml")));
+        compiler.QueueCodeReplace(load, "with (jmk_harbor_town_object_harbor) jmk_harbor_save(0);");
+        compiler.QueueCodeReplace(save, "with (jmk_harbor_town_object_harbor) jmk_harbor_save(1);");
+        ModObjects.Compile(compiler);
+
+        using var archive = new MemoryStream();
+        UndertaleIO.Write(archive, data);
+        archive.Position = 0;
+        using var roundTripped = UndertaleIO.Read(archive);
+
+        string harborCreate = ModObjects.Decompile(roundTripped,
+            roundTripped.Code.ByName("gml_Object_jmk_harbor_town_object_harbor_Create_0")!);
+        string harborSave = ModObjects.Decompile(roundTripped,
+            roundTripped.Code.ByName("gml_Script_jmk_harbor_save")!);
+        string loadEvent = ModObjects.Decompile(roundTripped,
+            roundTripped.Code.ByName("gml_Object_SaveManager_Other_13")!);
+        string saveEvent = ModObjects.Decompile(roundTripped,
+            roundTripped.Code.ByName("gml_Object_SaveManager_Other_14")!);
+
+        // v0.1 stores only three levels and no donation total; a fresh save has no Harbor section.
+        // Both cases load through the same zero defaults, while all four current keys are initialized
+        // before either event indexes the per-instance arrays.
+        var v01Save = new Dictionary<string, double>
+        {
+            ["lighthouse"] = 2,
+            ["aquarium"] = 3,
+            ["statue"] = 4
+        };
+        var freshSave = new Dictionary<string, double>();
+        foreach ((Dictionary<string, double> values, double[] expected) in new[]
+        {
+            (v01Save, new[] { 2d, 3d, 4d, 0d }),
+            (freshSave, new[] { 0d, 0d, 0d, 0d })
+        })
+        {
+            double[] loaded = new[] { "lighthouse", "aquarium", "statue", "research" }
+                .Select(key => values.TryGetValue(key, out double value) ? value : 0)
+                .ToArray();
+            Assert.Equal(expected, loaded);
+            Assert.Equal(0, values.GetValueOrDefault("donated"));
+        }
+        Assert.Contains("harbor_key = array_create(4)", harborCreate);
+        Assert.Contains("harbor_level = array_create(4, 0)", harborCreate);
+        Assert.Contains("variable_instance_exists(id, \"harbor_key\")", harborSave);
+        Assert.Contains("harbor_level = array_create(4, 0)", harborSave);
+        Assert.Contains("ini_read_real(\"JAMM_Harbor\", harbor_key[i], 0)", harborSave);
+        Assert.Contains("ini_read_real(\"JAMM_Harbor\", \"donated\", 0)", harborSave);
+        Assert.Contains("jmk_harbor_save(0)", loadEvent);
+        Assert.Contains("jmk_harbor_save(1)", saveEvent);
     }
 
     private static long Cost(double baseCost, int level)
