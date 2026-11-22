@@ -39,3 +39,18 @@ The existing "every 8th tick for distant fish" scheduling barely helps on big pa
 * Also fix the bench `--fish-cap` CODE ERROR (pub5 cap 2000/1000/500 and all7 cap 1000/500/200 crash; cap 200 on pub5 works):
   destroying fish leaves dangling references – find them and guard or choose fish to remove safely.
 Private packs (TGE/PWB) are local only: never commit or upload them. Commit on the branch; no merge, no push.
+
+## VPS continuation (orchestrator, 2026-11-22 02:00) – open items, in this order
+1. all7 dock saves only ~2.4 ms fish_step although ~1909 fish sleep. Check whether sleeping fish still run their
+   Step (guard placement, inherited events, other Step subtypes) – compare against the `--fish-mode nostep` baseline.
+2. Crash `Bishop_Other_10` (`escort_target` does not exist) with `--fish-cap`: find the cause, fix without changing
+   vanilla behaviour.
+3. `git merge main` (big conflicts with the Perf rework, main has `PerfSettings`/DecorSleep): install Fish Sleep ONLY
+   when its profile setting is on (pattern: DecorSleep in PerfSettings). Plain Perf + vanilla must stay byte-identical
+   (add a test).
+4. Save/reload verification in-game (no sleeping state leaks into saves).
+Benchmarks strictly serial (shared game lock `~/jamm-night/game-run.lock` via `~/jamm-night/bin/run.sh`; other
+agents test too). On EXITED run `~/jamm-night/bin/steam-restart.sh` and retry. Delete `~/jamm-night/runs/*/game`
+copies after your runs (disk is tight). Before finishing: autoplay 20 min on the personal package with Fish Sleep
+on (`tools/vps/autoplay.sh`), `dotnet build -c Release` zero warnings, `dotnet test -c Release` green, report
+`docs/reports/fish-sleep.md` with numbers (fish_step ms before/after, sleeping count, all7 + personal) and screenshots.
