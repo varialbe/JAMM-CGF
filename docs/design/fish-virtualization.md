@@ -192,4 +192,13 @@ Garder is the pilot candidate: it is a leaf under `FishSmallTropic → FishSmall
 
 The GML transition is benchmark instrumentation only. It does not implement zone streaming, coarse movement, full per-species state capture, population accounting, save/load, or gameplay wake conditions. Do not enable it in a normal game build or treat its round-trip as parity approval.
 
-**Serial vanilla measurement:** pending completion of the shared-lock `run.sh` OFF/ON pair. Results, including the actual virtualized count and `fish_step_us` / `loop_us` deltas, are recorded here after both CSVs are collected.
+**Serial vanilla measurement:** one OFF capture followed by one ON capture through `~/jamm-night/bin/run.sh`, both in the dock scene with the same generated vanilla archive (SHA-256 `1af5621a911438fe34d5672c31dc7863b7327c7b0030a732bebaffb9e661fd7d`), benchmark seed 1337, 6 s warmup, and 30 s capture. Both outcomes were `RECORDED`; the copied `runs/*/game` directories were removed after collecting the CSVs.
+
+| Capture | Requested / virtualized | Samples | Mean fish count | `fish_step_us` mean / p95 | `loop_us` mean / p95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| OFF | 0 / 0 | 212 | 1,178 | 54,193 / 78,523 | 136,174 / 186,321 |
+| ON | 100 / 4 | 229 | 1,147 | 51,518 / 75,249 | 126,079 / 173,971 |
+
+In this single pair, ON was lower by 2,675 µs (4.9%) for mean `fish_step_us`, 3,274 µs (4.2%) for its p95, 10,095 µs (7.4%) for mean loop time, and 12,350 µs (6.6%) for loop p95. The ON capture only found four eligible Garder instances out of the requested 100; these deltas are not a causal or 100-fish performance claim. The mean fish counts also differed (1,178 vs. 1,147), so repeat measurements with a controlled, stable population are needed before drawing a performance conclusion.
+
+The transition timers reported 38 µs to virtualize, 4 µs to materialize, and 4 µs for the `instance_create`/destroy pass, each over the four-record set. The measured round trip was 42 µs versus 4 µs for that baseline pass. Treat these very small, single-capture timings as directional only; they do not show that record transitions are cheaper.
