@@ -89,9 +89,12 @@ public static class Program
                     "gml_Script_fish_avoid_fish", "gml_Object_SceneItem_Step_2",
                     "gml_Object_Magmer_Draw_0", "gml_Object_Volteen_Other_13", "gml_Object_Volteen_Other_10"];
                 var before = changed.ToDictionary(n => n, n => data.Code.ByName(n)?.Instructions.Count ?? 0);
-                PerfMod.Apply(data, args.Contains("--debug"));
+                List<string> perfDecisions = [];
+                PerfMod.Apply(data, args.Contains("--debug"), applyFishGrid: true, perfDecisions);
                 foreach (string name in changed)
                     Console.WriteLine($"{name}: {before[name]} -> {data.Code.ByName(name)!.Instructions.Count} instructions (static size, not executed work).");
+                foreach (string decision in perfDecisions)
+                    Console.WriteLine(decision);
                 Save(data, output!); return 0;
             case "smooth": SmoothMod.Apply(data, args.Contains("--debug")); Save(data, output!); return 0;
             case "console": ConsoleMod.Apply(data); Save(data, output!); return 0;

@@ -14,11 +14,11 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 public sealed class BuiltinMods(ManagerStore store)
 {
     /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "6";
+    public const string GeneratorVersion = "7";
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {
-        new BuiltinMod("perf", "JAMM Perf", "Performance optimizations and optional fish scheduling. F8 switches modes."),
+        new BuiltinMod("perf", "JAMM Perf", "Performance optimizations, Fish Sleep for distant standard fish, and optional fish scheduling. F8 switches modes."),
         new BuiltinMod("smooth", "JAMM Smooth", "Smoother rendering. F7 cycles 60/120/off."),
         new BuiltinMod("hd-lite", "JAMM HD Lite", "Fullscreen rendering with original textures. F11 toggles fullscreen."),
         new BuiltinMod("console", "JAMM Console", "F12 or backtick opens the console. Type help for commands; unlockall unlocks everything (equipment, max level, full catalog).")

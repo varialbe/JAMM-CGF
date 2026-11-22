@@ -8,6 +8,10 @@ public static class PerfMod
 {
     /// <summary>Applies guarded source edits to an original legacy game.</summary>
     public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = true)
+        => Apply(data, debug, applyFishGrid, null);
+
+    /// <summary>Applies guarded source edits to an original legacy game and optionally records sleep/grid decisions.</summary>
+    public static void Apply(UndertaleData data, bool debug, bool applyFishGrid, List<string>? decisions)
     {
         var compiler = new CompileGroup(data);
         // FishThinner destroys owned lights before deactivation/death; reactivation and
@@ -61,9 +65,17 @@ public static class PerfMod
         compiler.QueueCodeReplace(scene, "if (!variable_instance_exists(id, \"jamm_perf_depth\")) { jamm_perf_depth = depth + 1; jamm_perf_object = object_index; }\n"
             + "if (jamm_perf_depth != depth || jamm_perf_object != object_index)\n{\n" + source[..end]
             + "jamm_perf_scene_depth = scene_depth;\njamm_perf_depth = depth;\njamm_perf_object = object_index;\n}\nscene_depth = jamm_perf_scene_depth;\n" + source[end..]);
+        FishSleep.Install(data, compiler);
         PerfMode.Queue(data, compiler, debug);
         ModObjects.Compile(compiler);
-        if (applyFishGrid) FishGrid.Apply(data);
+        List<string> sleepDecisions = [];
+        FishSleep.Finalize(data, [], sleepDecisions);
+        decisions?.AddRange(sleepDecisions);
+        if (applyFishGrid)
+        {
+            string gridDecision = FishGrid.Apply(data);
+            decisions?.Add(gridDecision);
+        }
 
         void Patch(string name, string before, string after, string? secondBefore = null, string? secondAfter = null)
         {
@@ -80,7 +92,7 @@ public static class PerfMod
                     throw new InvalidDataException($"'{name}' differs: use the original legacy data.win.");
                 text = text.Replace(secondBefore, secondAfter!, StringComparison.Ordinal);
             }
-            if (name == "gml_Object_Fish_Step_2") text = PerfMode.Prefix(data) + text;
+            if (name == "gml_Object_Fish_Step_2") text = FishSleep.Step2Prefix() + PerfMode.Prefix(data) + text;
             compiler.QueueCodeReplace(code, text);
         }
     }

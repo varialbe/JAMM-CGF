@@ -66,8 +66,8 @@ public sealed partial class MainViewModel
     public Task SetProfileFishValueCapAsync(long value) => UpdatePresetOptionAsync((profiles, name) => profiles.SetFishValueCap(name, value));
 
     /// <summary>Changes the active profile's Perf defaults.</summary>
-    public Task UpdateProfilePerfAsync(bool? startEnabled = null, bool? fishGrid = null, int? interval = null) =>
-        UpdatePresetOptionAsync((profiles, name) => profiles.SetPerf(name, startEnabled, fishGrid, interval));
+    public Task UpdateProfilePerfAsync(bool? startEnabled = null, bool? fishGrid = null, int? interval = null, bool? fishSleep = null, int? fishSleepMargin = null) =>
+        UpdatePresetOptionAsync((profiles, name) => profiles.SetPerf(name, startEnabled, fishGrid, interval, fishSleep, fishSleepMargin));
 
     private Task UpdatePresetOptionAsync(Action<ProfileLibrary, string> update) => RunAsync("Updating profile performance", async (_, _) =>
     {

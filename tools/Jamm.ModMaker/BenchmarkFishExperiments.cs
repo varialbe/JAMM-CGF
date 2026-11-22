@@ -61,17 +61,207 @@ internal static class BenchmarkFishExperiments
 
         InstanceGuard.Apply(data, data, baseline, recompile, generated, decisions);
 
-        // Guard FishSmallSwarm's array-indexed instance_nearest lookups when fish-cap wipes out a tier.
-        const string swarmCode = "gml_Object_FishSmallSwarm_Other_10";
-        if (data.GameObjects.ByName("FishMedium") is not null
-            && data.GameObjects.ByName("FishLargeEarly") is not null
-            && data.GameObjects.ByName("FishHuge") is not null
-            && (recompile.TryGetValue(swarmCode, out string? swarmText)
-                || (baseline.TryGetValue(swarmCode, out var swarmBase) && swarmBase.Format == "gml" && (swarmText = swarmBase.Text) is not null)))
+        // Guard every nearest[i] = instance_nearest(...) block (FishSmallSwarm, Cuddlefish, Bulbfish, Snobfish, etc.)
+        // when --fish-cap or deactivate removes all instances of a referenced tier/object.
+        var objectNames = data.GameObjects.Select(o => o.Name.Content).ToHashSet(StringComparer.Ordinal);
+        foreach (var (codeName, entry) in baseline)
         {
-            string guardedSwarm = GuardFishSmallSwarm(swarmText);
-            if (guardedSwarm != swarmText)
-                recompile[swarmCode] = guardedSwarm;
+            if (entry.Format != "gml") continue;
+            string current = recompile.GetValueOrDefault(codeName) ?? entry.Text;
+            string guarded = GuardSwarmNearestBlocks(data, current, objectNames);
+            if (guarded != current)
+                recompile[codeName] = guarded;
+        }
+
+        // Guard stale instance references after fish-cap destroys instances during gameplay or setup.
+        PatchEntry("gml_Script_fish_flock",
+            "if (jamm_iv_state(pal) != 0",
+            "if (pal > 0 && !instance_exists(pal)) pal = -1;\nif (jamm_iv_state(pal) != 0");
+        PatchEntry("gml_Script_fish_deloop",
+            "if (target > 0 && object_is_ancestor(",
+            "if (target > 0 && !instance_exists(target)) target = -1;\nif (target > 0 && object_is_ancestor(");
+        PatchEntry("gml_Script_fish_deloop",
+            "&& target.target > 0)",
+            "&& target.target > 0 && instance_exists(target.target))");
+        PatchEntry("gml_Script_fish_target_nearest_fish_late",
+            "&& target.target.id != id)",
+            "&& target.target > 0 && instance_exists(target.target) && target.target.id != id)");
+        PatchEntry("gml_Script_fish_target_furthest_fish",
+            "while (instance_number(argument0) > 0 && target.state != 0)",
+            "while (instance_number(argument0) > 0 && target > 0 && instance_exists(target) && target.state != 0)");
+        PatchEntry("gml_Script_fish_die",
+            "if (instance_exists(CatSwim) && CatSwim.holding.id == id)",
+            "if (instance_exists(CatSwim) && CatSwim.holding > 0 && instance_exists(CatSwim.holding) && CatSwim.holding.id == id)");
+        PatchEntry("gml_Object_Bonefish_Other_10",
+            "    if (target > 0)\n    {\n        fish_elast_towards_target",
+            "    if (target > 0 && !instance_exists(target)) target = -1;\n    if (target > 0)\n    {\n        fish_elast_towards_target");
+        PatchEntry("gml_Object_Bonefish_Other_10",
+            "        if (object_is_ancestor(target.target.object_index,",
+            "        if (target.target > 0 && instance_exists(target.target) && object_is_ancestor(target.target.object_index,");
+        PatchEntry("gml_Object_Stalker_Other_10",
+            "    if (point_distance(x, y, target.x, target.y) > 400)",
+            "    if (target > 0 && instance_exists(target) && point_distance(x, y, target.x, target.y) > 400)");
+        PatchEntry("gml_Object_Snobfish_Other_22",
+            "if (bro > 0 && bro.object_index ==",
+            "if (bro > 0 && instance_exists(bro) && bro.object_index ==");
+        PatchEntry("gml_Object_Curby_Other_13",
+            "if (thrall_target_fish > 0 && point_distance(",
+            "if (thrall_target_fish > 0 && instance_exists(thrall_target_fish) && point_distance(");
+        PatchEntry("gml_Object_EvilCouple_Other_10",
+            "if (partner > 0)",
+            "if (partner > 0 && !instance_exists(partner)) partner = -1;\nif (partner > 0)");
+        PatchEntry("gml_Object_FishYinYang_Other_10",
+            "if (partner > 0)",
+            "if (partner > 0 && !instance_exists(partner)) partner = -1;\nif (partner > 0)");
+        PatchEntry("gml_Object_Centy_Other_10",
+            "if (leader > 0)",
+            "if (leader > 0 && !instance_exists(leader)) leader = -1;\nif (leader > 0)");
+        PatchEntry("gml_Object_Chrono_Other_10",
+            "if (leader > 0)",
+            "if (leader > 0 && !instance_exists(leader)) leader = -1;\nif (leader > 0)");
+        PatchEntry("gml_Object_Thermo_Other_10",
+            "if (leader > 0)",
+            "if (leader > 0 && !instance_exists(leader)) leader = -1;\nif (leader > 0)");
+        PatchEntry("gml_Object_Bombig_Other_10",
+            "if (inhale_target > 0 && inhale_timer < 45)",
+            "if (inhale_target > 0 && !instance_exists(inhale_target)) { inhale_target = -1; inhaling = 0; }\nif (inhale_target > 0 && inhale_timer < 45)");
+        PatchEntry("gml_Object_Baby_Sizzer_Other_10",
+            "if (parent.state == 6 || parent.state == 4)",
+            "if (parent <= 0 || !instance_exists(parent)) { start_x = x; start_y = y; } else if (parent.state == 6 || parent.state == 4)");
+        PatchEntry("gml_Object_Carver_Other_13",
+            "target_angle = point_direction(x, y, trail.x, trail.y);",
+            "if (trail <= 0 || !instance_exists(trail)) { isDragging = 0; exit; }\ntarget_angle = point_direction(x, y, trail.x, trail.y);");
+        PatchEntry("gml_Object_Bomb_Step_2",
+            "if (pal > 0)",
+            "if (pal > 0 && instance_exists(pal))");
+        PatchEntry("gml_Object_BombRock_Step_2",
+            "if (pal > 0)",
+            "if (pal > 0 && instance_exists(pal))");
+        PatchEntry("gml_Object_Book_Step_2",
+            "if (pal > 0)",
+            "if (pal > 0 && instance_exists(pal))");
+        PatchEntry("gml_Object_Andlit_Other_10",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("gml_Object_Bramble_Other_10",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("bluo_other",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("gml_Object_Great_Carver_Other_10",
+            "target_x = target.x;",
+            "if (target <= 0 || !instance_exists(target)) { target_x = start_x; target_y = start_y; fish_elast_towards_target(0.02, 0.9); fish_lunge(); exit; }\ntarget_x = target.x;");
+        PatchEntry("gml_Object_Glutton_Other_10",
+            "if (point_distance(x, y, potential.x, potential.y) < 1000)",
+            "if (potential > 0 && instance_exists(potential) && point_distance(x, y, potential.x, potential.y) < 1000)");
+        PatchEntry("gml_Object_Glutton_Other_10",
+            "if (target > 0)",
+            "if (target > 0 && instance_exists(target))");
+        PatchEntry("gml_Object_Rodilav_Other_10",
+            "if (point_distance(x, y, potential.x, potential.y) < 1000)",
+            "if (potential > 0 && instance_exists(potential) && point_distance(x, y, potential.x, potential.y) < 1000)");
+        PatchEntry("gml_Object_Rodilav_Other_10",
+            "if (target > 0)",
+            "if (target > 0 && instance_exists(target))");
+        PatchEntry("gml_Object_Conpas_Other_10",
+            "direction = point_direction(x, y, target.x, target.y);",
+            "if (target > 0 && instance_exists(target)) direction = point_direction(x, y, target.x, target.y);");
+        PatchEntry("gml_Object_Conpas_Other_13",
+            "target_angle = point_direction(x, y, target.x, target.y);",
+            "if (target > 0 && instance_exists(target)) target_angle = point_direction(x, y, target.x, target.y); else target_angle = direction;");
+        PatchEntry("gml_Object_Tik_Tik_Other_10",
+            "if (object_is_ancestor(target.object_index, FishLargeLate) && target.target > 0)",
+            "if (target > 0 && instance_exists(target) && object_is_ancestor(target.object_index, FishLargeLate) && target.target > 0 && instance_exists(target.target))");
+        PatchEntry("gml_Object_Chompy_Other_11",
+            "if (hope > 0 && hope.state != 6)",
+            "if (hope > 0 && instance_exists(hope) && hope.state != 6)");
+        PatchEntry("gml_Object_Egg_Step_2",
+            "if (pal > 0)",
+            "if (pal > 0 && instance_exists(pal))");
+        PatchEntry("gml_Object_SmileyEgg_Step_2",
+            "if (pal > 0)",
+            "if (pal > 0 && instance_exists(pal))");
+        PatchEntry("gml_Object_Edible_Step_2",
+            "if (pal > 0)",
+            "if (pal > 0 && instance_exists(pal))");
+        PatchEntry("gml_Object_Swordfish_Other_10",
+            "if (target > 0)",
+            "if (target > 0 && instance_exists(target))");
+        PatchEntry("AkiOther10Fixed",
+            "if (parent.state == 6 || parent.state == 4)",
+            "if (parent <= 0 || !instance_exists(parent)) { start_x = x; start_y = y; } else if (parent.state == 6 || parent.state == 4)");
+        PatchEntry("gml_Object_Bishop_Other_10",
+            "if (escort_target.state == 3)",
+            "if (escort_target <= 0 || !instance_exists(escort_target)) { target_x = start_x; target_y = start_y; if (point_distance(x, y, target_x, target_y) > 200) fish_elast_towards_target(0.01, 0.985); fish_lunge(); exit; }\nif (escort_target.state == 3)");
+        PatchEntry("gml_Object_Bishop_Other_18",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("MagnapinnaDestroy",
+            "for (var j = 0; j < tentacleLength; j++)",
+            "for (var j = 0; j < arm_lengths[i]; j++)");
+        PatchEntry("MagnapinnaEndstep",
+            "var prev_joint_x = tentacle_body.x",
+            "if (!instance_exists(tentacle_body)) continue;\n    var prev_joint_x = tentacle_body.x");
+        PatchEntry("gml_Object_Lindfin_Other_10",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("gml_Object_DJfin_Other_12",
+            "if (mp3 > 0)",
+            "if (mp3 > 0 && instance_exists(mp3))");
+        PatchEntry("gml_Objct_DJfin_Other_17",
+            "if (mp3 > 0 && mp3.hooked_to_lure)",
+            "if (mp3 > 0 && instance_exists(mp3) && mp3.hooked_to_lure)");
+        PatchEntry("gml_Object_Felish_Step_0",
+            "target.hasFelish = 0;",
+            "if (instance_exists(target)) target.hasFelish = 0;");
+        PatchEntry("gml_Object_Spotter_Step_0",
+            "target.hasFelish = 0;",
+            "if (instance_exists(target)) target.hasFelish = 0;");
+        PatchEntry("gml_Object_Chaw_Other_18",
+            "angle_lock = 0;",
+            "if (piercer <= 0 || !instance_exists(piercer)) exit;\nangle_lock = 0;");
+        PatchEntry("gml_Object_Piercer_Draw_72",
+            "    with (chaw)",
+            "    if (chaw > 0 && instance_exists(chaw)) with (chaw)");
+        PatchEntry("gml_Object_Lav_Other_10",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("gml_Object_Lav_Other_10",
+            "if (instance_exists(Rodi))",
+            "if (instance_exists(Rodi) && Rodi.pather > 0 && instance_exists(Rodi.pather))");
+        PatchEntry("gml_Object_Chawsal_Other_10",
+            "target_x = pather.x;",
+            "if (pather <= 0 || !instance_exists(pather)) exit;\ntarget_x = pather.x;");
+        PatchEntry("gml_Object_Chawk_Other_10",
+            "if (Lure.fish > 0 && Lure.fish.object_index == Chaw)",
+            "if (Lure.fish > 0 && instance_exists(Lure.fish) && Lure.fish.object_index == Chaw)");
+        PatchEntry("gml_Object_Flash_Other_18",
+            "if (hit_fish > 0)",
+            "if (hit_fish > 0 && instance_exists(hit_fish))");
+        PatchEntry("gml_Object_Flechette_Other_18",
+            "if (point_distance(x, y, master.x, master.y) < 50)",
+            "if (master <= 0 || !instance_exists(master)) { state = 2; exit; }\nif (point_distance(x, y, master.x, master.y) < 50)");
+        PatchEntry("gml_Object_Glutton_Other_18",
+            "if (Lure.fish.object_index != Gawll)",
+            "if (Lure.fish <= 0 || !instance_exists(Lure.fish)) { state = 2; exit; }\nif (Lure.fish.object_index != Gawll)");
+        PatchEntry("gml_Object_Rodilav_Other_18",
+            "if (Lure.fish.object_index != Rodi && Lure.fish.object_index != Lav)",
+            "if (Lure.fish <= 0 || !instance_exists(Lure.fish)) { state = 2; exit; }\nif (Lure.fish.object_index != Rodi && Lure.fish.object_index != Lav)");
+        PatchEntry("gml_Object_Torby_Other_18",
+            "if (mate.y > 1594",
+            "if (mate <= 0 || !instance_exists(mate)) { state = 2; exit; }\nif (mate.y > 1594");
+        PatchEntry("gml_Object_Snobfish_Other_10",
+            "if (bro > 0 && ",
+            "if (bro > 0 && !instance_exists(bro)) bro = -1;\nif (bro > 0 && ");
+
+        void PatchEntry(string name, string before, string after)
+        {
+            string? text = recompile.GetValueOrDefault(name)
+                ?? (baseline.TryGetValue(name, out var baseCode) && baseCode.Format == "gml" ? baseCode.Text : null);
+            if (text is null || !text.Contains(before, StringComparison.Ordinal) || text.Contains(after, StringComparison.Ordinal))
+                return;
+            recompile[name] = text.Replace(before, after, StringComparison.Ordinal);
         }
 
         if (recompile.Count == 0) return;
@@ -86,17 +276,27 @@ internal static class BenchmarkFishExperiments
         ModObjects.Compile(compiler);
     }
 
-    private static string GuardFishSmallSwarm(string text)
+    private static string GuardSwarmNearestBlocks(UndertaleData data, string text, HashSet<string> objectNames)
     {
-        if (text.Contains("instance_exists(FishMedium)", StringComparison.Ordinal))
+        if (!text.Contains("nearest[", StringComparison.Ordinal))
             return text;
         var match = Regex.Match(text, @"(?m)^([ \t]*)if \(other\.isVisible\)\s*$");
         if (!match.Success) return text;
-        string med = AssetSymbols.Symbol("objects", "FishMedium");
-        string large = AssetSymbols.Symbol("objects", "FishLargeEarly");
-        string huge = AssetSymbols.Symbol("objects", "FishHuge");
+
+        var needed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in Regex.Matches(text, @"nearest\[\s*\d+\s*\]\s*=\s*instance_nearest\s*\([^,]+,[^,]+,\s*([A-Za-z_]\w*)\s*\)"))
+        {
+            string target = m.Groups[1].Value;
+            if (AssetSymbols.Parse(target, out string family, out string objName) && family == "objects")
+                needed.Add(AssetSymbols.Symbol("objects", objName));
+            else if (objectNames.Contains(target) && data.GameObjects.ByName(target) is not null)
+                needed.Add(AssetSymbols.Symbol("objects", target));
+        }
+        if (needed.Count == 0) return text;
+
+        string checks = string.Join(" && ", needed.OrderBy(s => s, StringComparer.Ordinal).Select(s => $"instance_exists({s})"));
         return text[..match.Index]
-            + $"{match.Groups[1].Value}if (other.isVisible && instance_exists({med}) && instance_exists({large}) && instance_exists({huge}))"
+            + $"{match.Groups[1].Value}if (other.isVisible && {checks})"
             + text[(match.Index + match.Length)..];
     }
 

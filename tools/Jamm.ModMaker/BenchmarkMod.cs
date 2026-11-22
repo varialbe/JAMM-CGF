@@ -800,10 +800,36 @@ public static partial class BenchmarkMod
     {
         bool hasLure = data.GameObjects.ByName("Lure") is not null;
         bool hasCatSwim = data.GameObjects.ByName("CatSwim") is not null;
+        bool hasNet = data.GameObjects.ByName("Net") is not null;
+        bool hasFishSmall = data.GameObjects.ByName("FishSmall") is not null;
+        bool hasFishMedium = data.GameObjects.ByName("FishMedium") is not null;
+        bool hasFishLarge = data.GameObjects.ByName("FishLarge") is not null;
+        bool hasFishLargePather = data.GameObjects.ByName("FishLargePather") is not null;
+        bool hasFishHuge = data.GameObjects.ByName("FishHuge") is not null;
+        bool hasFishPart = data.GameObjects.ByName("FishPart") is not null;
+
         string hookedCheck = string.Join("\n    ", new[]
         {
-            hasLure ? "if (instance_exists(Lure) && Lure.fish > 0 && id == Lure.fish) jamm_hooked = true;" : "",
+            hasLure ? "if (instance_exists(Lure) && ((Lure.fish > 0 && id == Lure.fish) || (variable_instance_exists(Lure.id, \"stolenBy\") && Lure.stolenBy > 0 && id == Lure.stolenBy))) jamm_hooked = true;" : "",
             hasCatSwim ? "if (instance_exists(CatSwim) && CatSwim.holding > 0 && id == CatSwim.holding) jamm_hooked = true;" : ""
+        }.Where(s => s.Length > 0));
+
+        string ordExprParts = string.Join(" || ", new[]
+        {
+            hasFishSmall ? "object_index == FishSmall || object_is_ancestor(object_index, FishSmall)" : "",
+            hasFishMedium ? "object_index == FishMedium || object_is_ancestor(object_index, FishMedium)" : "",
+            hasFishLarge ? "(object_index == FishLarge || object_is_ancestor(object_index, FishLarge))" + (hasFishLargePather ? " && object_index != FishLargePather && !object_is_ancestor(object_index, FishLargePather)" : "") : ""
+        }.Where(s => s.Length > 0));
+        string ordCheck = ordExprParts.Length > 0 ? $"({ordExprParts})" : "true";
+        if (hasFishHuge)
+            ordCheck += " && object_index != FishHuge && !object_is_ancestor(object_index, FishHuge)";
+
+        string unlinkExtra = string.Join("\n        ", new[]
+        {
+            hasLure ? "with (Lure) { if (fish > 0 && ds_map_exists(jamm_dead, fish)) { fish = -1; hookedFishSize = 0; } if (variable_instance_exists(id, \"stolenBy\") && stolenBy > 0 && ds_map_exists(jamm_dead, stolenBy)) stolenBy = -1; }" : "",
+            hasCatSwim ? "with (CatSwim) { if (holding > 0 && ds_map_exists(jamm_dead, holding)) holding = -1; }" : "",
+            hasNet ? "with (Net) { if (variable_instance_exists(id, \"fish\") && fish > 0 && ds_map_exists(jamm_dead, fish)) fish = -1; }" : "",
+            hasFishPart ? "with (FishPart) { if (variable_instance_exists(id, \"parent\") && parent > 0 && ds_map_exists(jamm_dead, parent)) { ds_map_replace(jamm_dead, id, 1); instance_destroy(); } }" : ""
         }.Where(s => s.Length > 0));
 
         return $$"""
@@ -812,11 +838,15 @@ public static partial class BenchmarkMod
             var jamm_cur = instance_number(Fish);
             if (jamm_cur <= jamm_cap) exit;
             var jamm_need = jamm_cur - jamm_cap;
-            var jamm_out_list = ds_list_create();
-            var jamm_view_list = ds_list_create();
+            var jamm_out_ord = ds_list_create();
+            var jamm_out_rem = ds_list_create();
+            var jamm_view_ord = ds_list_create();
+            var jamm_view_rem = ds_list_create();
             with (Fish)
             {
                 var jamm_hooked = false;
+                if (state != 0 && state != 12) jamm_hooked = true;
+                if (isDragging || onBoat) jamm_hooked = true;
                 {{hookedCheck}}
                 if (jamm_hooked) continue;
                 var jamm_in_view = false;
@@ -828,34 +858,102 @@ public static partial class BenchmarkMod
                             jamm_in_view = true;
                     }
                 }
+                var jamm_is_ord = {{ordCheck}};
+                if (jamm_is_ord && (variable_instance_exists(id, "body") || variable_instance_exists(id, "pather") || variable_instance_exists(id, "partner") || variable_instance_exists(id, "piercer") || variable_instance_exists(id, "chaw") || variable_instance_exists(id, "next") || variable_instance_exists(id, "arm_l") || variable_instance_exists(id, "master") || variable_instance_exists(id, "mate")))
+                    jamm_is_ord = false;
                 if (jamm_in_view)
-                    ds_list_add(jamm_view_list, id);
+                {
+                    if (jamm_is_ord) ds_list_add(jamm_view_ord, id);
+                    else ds_list_add(jamm_view_rem, id);
+                }
                 else
-                    ds_list_add(jamm_out_list, id);
-            }
-            var jamm_di;
-            for (jamm_di = 0; jamm_di < ds_list_size(jamm_out_list) && jamm_need > 0; jamm_di += 1)
-            {
-                with (ds_list_find_value(jamm_out_list, jamm_di))
                 {
-                    if (variable_instance_exists(id, "light") && light > 0 && instance_exists(light)) instance_destroy(light);
-                    if (variable_instance_exists(id, "light2") && light2 > 0 && instance_exists(light2)) instance_destroy(light2);
-                    instance_destroy();
+                    if (jamm_is_ord) ds_list_add(jamm_out_ord, id);
+                    else ds_list_add(jamm_out_rem, id);
                 }
-                jamm_need -= 1;
             }
-            for (jamm_di = 0; jamm_di < ds_list_size(jamm_view_list) && jamm_need > 0; jamm_di += 1)
+            var jamm_dead = ds_map_create();
+            var jamm_buckets = 4;
+            var jamm_lists;
+            jamm_lists[0] = jamm_out_ord;
+            jamm_lists[1] = jamm_out_rem;
+            jamm_lists[2] = jamm_view_ord;
+            jamm_lists[3] = jamm_view_rem;
+            for (var jamm_bi = 0; jamm_bi < jamm_buckets && jamm_need > 0; jamm_bi += 1)
             {
-                with (ds_list_find_value(jamm_view_list, jamm_di))
+                var jamm_bl = jamm_lists[jamm_bi];
+                for (var jamm_di = 0; jamm_di < ds_list_size(jamm_bl) && jamm_need > 0; jamm_di += 1)
                 {
-                    if (variable_instance_exists(id, "light") && light > 0 && instance_exists(light)) instance_destroy(light);
-                    if (variable_instance_exists(id, "light2") && light2 > 0 && instance_exists(light2)) instance_destroy(light2);
-                    instance_destroy();
+                    with (ds_list_find_value(jamm_bl, jamm_di))
+                    {
+                        ds_map_replace(jamm_dead, id, 1);
+                        if (variable_instance_exists(id, "light") && is_real(light) && light > 0 && instance_exists(light)) { ds_map_replace(jamm_dead, light, 1); instance_destroy(light); }
+                        if (variable_instance_exists(id, "light2") && is_real(light2) && light2 > 0 && instance_exists(light2)) { ds_map_replace(jamm_dead, light2, 1); instance_destroy(light2); }
+                        if (variable_instance_exists(id, "pather") && is_real(pather) && pather > 0 && instance_exists(pather)) { ds_map_replace(jamm_dead, pather, 1); instance_destroy(pather); }
+                        if (variable_instance_exists(id, "lure_inst") && is_real(lure_inst) && lure_inst > 0 && instance_exists(lure_inst)) { ds_map_replace(jamm_dead, lure_inst, 1); instance_destroy(lure_inst); }
+                        if (variable_instance_exists(id, "body") && is_real(body) && body > 0 && instance_exists(body)) { ds_map_replace(jamm_dead, body, 1); instance_destroy(body); }
+                        if (variable_instance_exists(id, "tail") && is_real(tail) && tail > 0 && instance_exists(tail)) { ds_map_replace(jamm_dead, tail, 1); instance_destroy(tail); }
+                        if (variable_instance_exists(id, "eye") && is_real(eye) && eye > 0 && instance_exists(eye)) { ds_map_replace(jamm_dead, eye, 1); instance_destroy(eye); }
+                        if (variable_instance_exists(id, "jaw") && is_real(jaw) && jaw > 0 && instance_exists(jaw)) { ds_map_replace(jamm_dead, jaw, 1); instance_destroy(jaw); }
+                        if (variable_instance_exists(id, "neck") && is_real(neck) && neck > 0 && instance_exists(neck)) { ds_map_replace(jamm_dead, neck, 1); instance_destroy(neck); }
+                        if (variable_instance_exists(id, "fin1") && is_real(fin1) && fin1 > 0 && instance_exists(fin1)) { ds_map_replace(jamm_dead, fin1, 1); instance_destroy(fin1); }
+                        if (variable_instance_exists(id, "fin2") && is_real(fin2) && fin2 > 0 && instance_exists(fin2)) { ds_map_replace(jamm_dead, fin2, 1); instance_destroy(fin2); }
+                        if (variable_instance_exists(id, "arm_l") && is_real(arm_l) && arm_l > 0 && instance_exists(arm_l)) { ds_map_replace(jamm_dead, arm_l, 1); instance_destroy(arm_l); }
+                        if (variable_instance_exists(id, "arm_r") && is_real(arm_r) && arm_r > 0 && instance_exists(arm_r)) { ds_map_replace(jamm_dead, arm_r, 1); instance_destroy(arm_r); }
+                        if (variable_instance_exists(id, "next") && is_real(next) && next > 0 && instance_exists(next)) { ds_map_replace(jamm_dead, next, 1); instance_destroy(next); }
+                        instance_destroy();
+                    }
+                    jamm_need -= 1;
                 }
-                jamm_need -= 1;
             }
-            ds_list_destroy(jamm_out_list);
-            ds_list_destroy(jamm_view_list);
+            if (ds_map_size(jamm_dead) > 0)
+            {
+                {{unlinkExtra}}
+                with (all)
+                {
+                    if (variable_instance_exists(id, "pal") && is_real(pal) && pal > 0 && ds_map_exists(jamm_dead, pal)) pal = -1;
+                    if (variable_instance_exists(id, "target") && is_real(target) && target > 0 && ds_map_exists(jamm_dead, target)) target = -1;
+                    if (variable_instance_exists(id, "partner") && is_real(partner) && partner > 0 && ds_map_exists(jamm_dead, partner)) partner = -1;
+                    if (variable_instance_exists(id, "parent") && is_real(parent) && parent > 0 && ds_map_exists(jamm_dead, parent)) parent = -1;
+                    if (variable_instance_exists(id, "mate") && is_real(mate) && mate > 0 && ds_map_exists(jamm_dead, mate)) mate = -1;
+                    if (variable_instance_exists(id, "leader") && is_real(leader) && leader > 0 && ds_map_exists(jamm_dead, leader)) leader = -1;
+                    if (variable_instance_exists(id, "follower") && is_real(follower) && follower > 0 && ds_map_exists(jamm_dead, follower)) follower = -1;
+                    if (variable_instance_exists(id, "bro") && is_real(bro) && bro > 0 && ds_map_exists(jamm_dead, bro)) bro = -1;
+                    if (variable_instance_exists(id, "nightbro") && is_real(nightbro) && nightbro > 0 && ds_map_exists(jamm_dead, nightbro)) nightbro = -1;
+                    if (variable_instance_exists(id, "master") && is_real(master) && master > 0 && ds_map_exists(jamm_dead, master)) master = -1;
+                    if (variable_instance_exists(id, "piercer") && is_real(piercer) && piercer > 0 && ds_map_exists(jamm_dead, piercer)) piercer = -1;
+                    if (variable_instance_exists(id, "chaw") && is_real(chaw) && chaw > 0 && ds_map_exists(jamm_dead, chaw)) { chaw = -1; hasChaw = 0; }
+                    if (variable_instance_exists(id, "hit_fish") && is_real(hit_fish) && hit_fish > 0 && ds_map_exists(jamm_dead, hit_fish)) hit_fish = -1;
+                    if (variable_instance_exists(id, "inhale_target") && is_real(inhale_target) && inhale_target > 0 && ds_map_exists(jamm_dead, inhale_target)) inhale_target = -1;
+                    if (variable_instance_exists(id, "nearest_big") && is_real(nearest_big) && nearest_big > 0 && ds_map_exists(jamm_dead, nearest_big)) nearest_big = -1;
+                    if (variable_instance_exists(id, "nearest_glacier") && is_real(nearest_glacier) && nearest_glacier > 0 && ds_map_exists(jamm_dead, nearest_glacier)) nearest_glacier = -1;
+                    if (variable_instance_exists(id, "nearest_piercer") && is_real(nearest_piercer) && nearest_piercer > 0 && ds_map_exists(jamm_dead, nearest_piercer)) nearest_piercer = -1;
+                    if (variable_instance_exists(id, "nearby_magmer") && is_real(nearby_magmer) && nearby_magmer > 0 && ds_map_exists(jamm_dead, nearby_magmer)) nearby_magmer = -1;
+                    if (variable_instance_exists(id, "nearest_swarmer") && is_real(nearest_swarmer) && nearest_swarmer > 0 && ds_map_exists(jamm_dead, nearest_swarmer)) nearest_swarmer = -1;
+                    if (variable_instance_exists(id, "respawn_target") && is_real(respawn_target) && respawn_target > 0 && ds_map_exists(jamm_dead, respawn_target)) respawn_target = -1;
+                    if (variable_instance_exists(id, "flee_target") && is_real(flee_target) && flee_target > 0 && ds_map_exists(jamm_dead, flee_target)) flee_target = -1;
+                    if (variable_instance_exists(id, "large_target") && is_real(large_target) && large_target > 0 && ds_map_exists(jamm_dead, large_target)) large_target = -1;
+                    if (variable_instance_exists(id, "turgeon") && is_real(turgeon) && turgeon > 0 && ds_map_exists(jamm_dead, turgeon)) turgeon = -1;
+                    if (variable_instance_exists(id, "nearest_target") && is_real(nearest_target) && nearest_target > 0 && ds_map_exists(jamm_dead, nearest_target)) nearest_target = -1;
+                    if (variable_instance_exists(id, "thrall_target_fish") && is_real(thrall_target_fish) && thrall_target_fish > 0 && ds_map_exists(jamm_dead, thrall_target_fish)) thrall_target_fish = -1;
+                    if (variable_instance_exists(id, "lure_inst") && is_real(lure_inst) && lure_inst > 0 && ds_map_exists(jamm_dead, lure_inst)) lure_inst = -1;
+                    if (variable_instance_exists(id, "next") && is_real(next) && next > 0 && ds_map_exists(jamm_dead, next)) next = -1;
+                    if (variable_instance_exists(id, "prev") && is_real(prev) && prev > 0 && ds_map_exists(jamm_dead, prev)) prev = -1;
+                    if (variable_instance_exists(id, "arm_l") && is_real(arm_l) && arm_l > 0 && ds_map_exists(jamm_dead, arm_l)) arm_l = -1;
+                    if (variable_instance_exists(id, "arm_r") && is_real(arm_r) && arm_r > 0 && ds_map_exists(jamm_dead, arm_r)) arm_r = -1;
+                    if (variable_instance_exists(id, "hope") && is_real(hope) && hope > 0 && ds_map_exists(jamm_dead, hope)) hope = -1;
+                    if (variable_instance_exists(id, "snob") && is_real(snob) && snob > 0 && ds_map_exists(jamm_dead, snob)) snob = -1;
+                    if (variable_instance_exists(id, "escort_target") && is_real(escort_target) && escort_target > 0 && ds_map_exists(jamm_dead, escort_target)) escort_target = -1;
+                    if (variable_instance_exists(id, "potential") && is_real(potential) && potential > 0 && ds_map_exists(jamm_dead, potential)) potential = -1;
+                    if (variable_instance_exists(id, "potential_target") && is_real(potential_target) && potential_target > 0 && ds_map_exists(jamm_dead, potential_target)) potential_target = -1;
+                    if (variable_instance_exists(id, "mp3") && is_real(mp3) && mp3 > 0 && ds_map_exists(jamm_dead, mp3)) mp3 = -1;
+                }
+            }
+            ds_map_destroy(jamm_dead);
+            ds_list_destroy(jamm_out_ord);
+            ds_list_destroy(jamm_out_rem);
+            ds_list_destroy(jamm_view_ord);
+            ds_list_destroy(jamm_view_rem);
             """;
     }
 

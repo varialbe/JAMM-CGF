@@ -35,10 +35,12 @@ public sealed class ProfileLibrary(ManagerStore store)
         if (profile.FishValueCap < 0)
             throw new InvalidDataException($"Profile '{name}' has an invalid fishValueCap. Set it to a nonnegative whole number in its profile JSON.");
         if (profile.Perf is null || profile.Perf.Interval is < 1 or > 60
+            || profile.Perf.FishSleepMargin is < FishSleep.MinMargin or > FishSleep.MaxMargin
             || profile.Preset switch
             {
                 DefaultPreset => profile.BeforeWeakPc is not null,
-                WeakPcPreset => profile.BeforeWeakPc?.Perf is null || profile.BeforeWeakPc.Perf.Interval is < 1 or > 60,
+                WeakPcPreset => profile.BeforeWeakPc?.Perf is null || profile.BeforeWeakPc.Perf.Interval is < 1 or > 60
+                    || profile.BeforeWeakPc.Perf.FishSleepMargin is < FishSleep.MinMargin or > FishSleep.MaxMargin,
                 _ => true
             })
             throw new InvalidDataException($"Profile '{name}' has invalid performance settings. Repair its profile JSON or recreate it in JAMM.");
@@ -195,14 +197,21 @@ public sealed class ProfileLibrary(ManagerStore store)
         store.Write(FilePath(name), Get(name) with { FishValueCap = value });
     }
 
-    /// <summary>Changes a profile's mode, interval and grid defaults without editing the game's INI.</summary>
-    public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null)
+    /// <summary>Changes a profile's mode, interval, fish sleep and grid defaults without editing the game's INI.</summary>
+    public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null,
+        bool? fishSleep = null, int? fishSleepMargin = null)
     {
         var profile = Get(name);
         if (interval is < 1 or > 60)
             throw new ArgumentException("Choose a distant fish interval from 1 to 60 ticks.");
+        if (fishSleepMargin is < FishSleep.MinMargin or > FishSleep.MaxMargin)
+            throw new ArgumentException($"Choose a Fish Sleep margin between {FishSleep.MinMargin} and {FishSleep.MaxMargin} pixels.");
         PerfSettings Update(PerfSettings settings) => new(
-            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval);
+            startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval)
+        {
+            FishSleep = fishSleep ?? settings.FishSleep,
+            FishSleepMargin = fishSleepMargin ?? settings.FishSleepMargin
+        };
         var before = profile.BeforeWeakPc;
         if (before is not null) before = before with { Perf = Update(before.Perf) };
         var result = profile with { Perf = Update(profile.Perf), BeforeWeakPc = before };

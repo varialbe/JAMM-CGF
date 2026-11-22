@@ -31,6 +31,7 @@
                     <NumericUpDown Minimum="0" Maximum="9223372036854775807" Increment="1000000" FormatString="0"
                                    AutomationProperties.Name="Fish sale cap" Value="{Binding ProfileFishValueCap, Mode=OneWay}" ValueChanged="ProfileFishValueCapChanged"/>
                     <CheckBox Content="Start with F8 mode on" IsChecked="{Binding ProfilePerf.StartEnabled, Mode=OneWay}" Click="ProfilePerfModeClick"/>
+                    <CheckBox Content="Fish sleep (distant standard fish)" IsChecked="{Binding ProfilePerf.FishSleep, Mode=OneWay}" Click="ProfileFishSleepClick"/>
                     <CheckBox Content="Fish grid" IsChecked="{Binding ProfilePerf.FishGrid, Mode=OneWay}" Click="ProfileFishGridClick"/>
                     <TextBlock Text="Distant fish update interval (ticks)"/>
                     <NumericUpDown Minimum="1" Maximum="60" FormatString="0" Value="{Binding ProfilePerf.Interval, Mode=OneWay}" ValueChanged="ProfileFishIntervalChanged"/>

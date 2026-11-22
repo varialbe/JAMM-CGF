@@ -411,8 +411,68 @@ public class BenchmarkTests
         Assert.Contains("frame_index,frame_us,loop_us,present_sleep_us,step_us,draw_us,fish_step_us,fish_count", drawEnd);
 
         Assert.Contains("Lure.fish", capScript);
+        Assert.Contains("Lure.stolenBy", capScript);
+        Assert.Contains("jamm_out_ord", capScript);
+        Assert.Contains("jamm_dead", capScript);
         Assert.Contains("view_xview", capScript);
         Assert.Contains("instance_destroy()", capScript);
+    }
+
+    [Fact]
+    public void FishCapGuardsNearestArraysAndStalePartnerReferencesAcrossFishObjects()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var fish = data.GameObjects.ByName("Fish")!;
+        var fishMedium = ModObjects.Create(data, "FishMedium", persistent: false);
+        fishMedium.ParentId = fish;
+        var felish = ModObjects.Create(data, "Felish", persistent: false);
+        felish.ParentId = fish;
+        var dataObj = ModObjects.Create(data, "dataobject", persistent: false);
+        var bulbfish = ModObjects.Create(data, "Bulbfish", persistent: false);
+        bulbfish.ParentId = fish;
+
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(bulbfish.EventHandlerFor(EventType.Other, 10u, data), """
+            with (dataobject)
+            {
+                if (other.isVisible)
+                {
+                    nearest[0] = instance_nearest(other.x, other.y, FishMedium);
+                    nearest[1] = instance_nearest(other.x, other.y, Felish);
+                }
+            }
+            """);
+        compiler.QueueCodeReplace(felish.EventHandlerFor(EventType.Step, 0u, data), """
+            if (state != 10 && target > 0)
+            {
+                target.hasFelish = 0;
+                target = -1;
+            }
+            """);
+        var ivState = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jamm_iv_state");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("jamm_iv_state"), Code = ivState });
+        compiler.QueueCodeReplace(ivState, "if (argument0 >= 0 && instance_exists(argument0)) return argument0.state; return 0;");
+        var flock = UndertaleCode.CreateEmptyEntry(data, "gml_Script_fish_flock");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("fish_flock"), Code = flock });
+        compiler.QueueCodeReplace(flock, """
+            if (jamm_iv_state(pal) != 0 && jamm_iv_state(pal) != 7)
+                pal = -1;
+            if (pal > 0)
+                return 1;
+            return 0;
+            """);
+        ModObjects.Compile(compiler);
+
+        BenchmarkMod.Apply(data, new BenchmarkOptions(FishCap: 500));
+
+        string bulbOut = ModObjects.Decompile(data, bulbfish.EventHandlerFor(EventType.Other, 10u, data));
+        string felishOut = ModObjects.Decompile(data, felish.EventHandlerFor(EventType.Step, 0u, data));
+        string flockOut = ModObjects.Decompile(data, flock);
+
+        Assert.Contains("instance_exists(FishMedium)", bulbOut);
+        Assert.Contains("instance_exists(Felish)", bulbOut);
+        Assert.Contains("instance_exists(target)", felishOut);
+        Assert.Contains("!instance_exists(pal)", flockOut);
     }
 
     [Fact]

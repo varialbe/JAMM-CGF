@@ -98,6 +98,12 @@ public sealed partial class MainWindow : Window
             await vm.UpdateProfilePerfAsync(fishGrid: !vm.ProfilePerf.FishGrid);
     }
 
+    private async void ProfileFishSleepClick(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { CanEditProfile: true } vm)
+            await vm.UpdateProfilePerfAsync(fishSleep: !vm.ProfilePerf.FishSleep);
+    }
+
     private async void ProfileFishIntervalChanged(object? sender, NumericUpDownValueChangedEventArgs e)
     {
         if (Model is { CanEditProfile: true } vm && e.NewValue is >= 1 and <= 60 and decimal value
