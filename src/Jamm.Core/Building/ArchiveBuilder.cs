@@ -53,8 +53,19 @@ public static class ArchiveBuilder
         {
             if (resolutions is { Count: > 0 })
                 throw new ArgumentException("Conflict resolutions require a build with mods.");
-            var vanilla = new BuildResult(new([], []), original.Inspection, null, original.Inspection.Counts, 0);
+            var optimization = EmptyEventOptimizer.Apply(original.Data);
+            var decisions = OptimizationDecisions(optimization).ToArray();
+            var vanillaPlan = new BuildPlan([], decisions);
+            var vanilla = new BuildResult(vanillaPlan, original.Inspection, null, Counts(original.Data), 0);
             if (dryRun) return vanilla;
+            foreach (string decision in decisions) progress?.Invoke(decision);
+            if (optimization.Removed.Count > 0)
+            {
+                ArchiveVerifier.ValidateReferences(original.Data);
+                var optimized = Publish(output, protectedPaths, vanillaPlan, original.Inspection,
+                    stream => UndertaleIO.Write(stream, original.Data), progress, cancellationToken, options);
+                return vanilla with { Verification = optimized, SizeBytes = optimized.Inspection.FileSize };
+            }
             progress?.Invoke("Copying the original archive byte for byte");
             var verified = Publish(output, protectedPaths, vanilla.Plan, original.Inspection, stream =>
             {
@@ -88,9 +99,20 @@ public static class ArchiveBuilder
                 && perfSettings?.DecorSleep != true;
             if (perfIdentityBuild && noRepack)
             {
-                var emptyPlan = new BuildPlan([], ["JAMM Perf contains no asset changes; preserving the original archive."]);
-                var unchanged = new BuildResult(emptyPlan, original.Inspection, null, original.Inspection.Counts, 0);
+                var optimization = EmptyEventOptimizer.Apply(original.Data);
+                var decisions = OptimizationDecisions(optimization).ToList();
+                decisions.Add("JAMM Perf contains no asset changes; preserving mod assets.");
+                var emptyPlan = new BuildPlan([], decisions);
+                var unchanged = new BuildResult(emptyPlan, original.Inspection, null, Counts(original.Data), 0);
                 if (dryRun) return unchanged;
+                foreach (string decision in decisions) progress?.Invoke(decision);
+                if (optimization.Removed.Count > 0)
+                {
+                    ArchiveVerifier.ValidateReferences(original.Data);
+                    var optimized = Publish(output, protectedPaths, emptyPlan, original.Inspection,
+                        stream => UndertaleIO.Write(stream, original.Data), progress, cancellationToken, options);
+                    return unchanged with { Verification = optimized, SizeBytes = optimized.Inspection.FileSize };
+                }
                 progress?.Invoke("JAMM Perf contains no asset changes; copying the original archive byte for byte");
                 var verifiedCopy = Publish(output, protectedPaths, emptyPlan, original.Inspection, stream =>
                 {
@@ -140,6 +162,15 @@ public static class ArchiveBuilder
             {
                 List<string> extraDecisions = [];
                 generatedCode = Apply(data, workingAncestor.Data, sources.Select(s => s.Data).ToArray(), patches, plan, semantics.Base, progress, extraDecisions, intermediate, bigMoney, valueGuard, vanillaArchive?.Data ?? original.Data, vanillaCode, perfIdentityBuild);
+                if (!intermediate)
+                {
+                    var optimization = EmptyEventOptimizer.Apply(data);
+                    foreach (string decision in OptimizationDecisions(optimization))
+                    {
+                        extraDecisions.Add(decision);
+                        progress?.Invoke(decision);
+                    }
+                }
                 if (extraDecisions.Count > 0)
                     plan = plan with { Decisions = [.. plan.Decisions, .. extraDecisions] };
             }
@@ -207,6 +238,14 @@ public static class ArchiveBuilder
         return identity.Contains("perf", StringComparison.OrdinalIgnoreCase)
             && !patch.Changes.Values.Any(changes =>
                 changes.Added.Count > 0 || changes.Changed.Count > 0 || changes.Removed.Count > 0);
+    }
+
+    private static IEnumerable<string> OptimizationDecisions(EmptyEventOptimizationResult result)
+    {
+        foreach (string name in result.Removed)
+            yield return $"Pruned verified no-op event {name} (merged effective parent chain has no handler).";
+        foreach (string name in result.Skipped)
+            yield return $"Retained no-op event {name} because removing it would expose inherited behavior.";
     }
 
     private static VerificationResult Publish(string output, string[] protectedPaths, BuildPlan plan, GameInspection original,
