@@ -40,7 +40,7 @@ public static class Program
                   bench   <video.win> <out.win> --scene showcase-submarine
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>] [--fish-virtualization-count <n>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -158,6 +158,7 @@ public static class Program
         var fishMode = BenchmarkFishMode.Full;
         int fishCap = -1;
         double fishScale = 1.0;
+        int fishVirtualizationCount = 0;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -198,11 +199,12 @@ public static class Program
                     if (double.IsNaN(fishScale) || double.IsInfinity(fishScale) || fishScale < 1.0)
                         throw new ArgumentException("--fish-scale must be >= 1.");
                     break;
+                case "--fish-virtualization-count": fishVirtualizationCount = ParseInt(RequireValue(args, ref i, arg), arg); break;
                 default: throw new ArgumentException($"Unknown bench option '{arg}'.");
             }
         }
 
-        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot, fishMode, fishCap, fishScale);
+        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, screenshot, fishMode, fishCap, fishScale, fishVirtualizationCount);
         BenchmarkMod.ValidateOptions(options);
         return options;
     }

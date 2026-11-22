@@ -1,6 +1,6 @@
 # Fish virtualisation research and implementation plan
 
-Status: research complete; the production virtualiser is not implemented. The experiment below is a bounded prototype contract, not a claim of gameplay parity. Implement only after review.
+Status: research complete; a bench-only Garder record/materialise prototype is available with its feature default OFF. The prototype is not production-ready and does not claim gameplay parity.
 
 ## Goal and decision
 
@@ -173,3 +173,23 @@ and 2 run now (Codex Luna, this branch) before any Hydrogen implementation:
   fish_step/loop with N pilot fish virtualised vs OFF.
 Answer the open questions on RNG model and population queries with evidence. Steps 3–8 go to Hydrogen after Fish Sleep,
 combined with its relevance zone (one shared zone implementation, not two).
+
+## Phase 2 implementation and measurements (2026-11-22)
+
+### Step 1: generated inventory and pilot
+
+The generated vanilla + seven-pack inventory is in [`docs/reports/fish-virtualization-inventory.md`](../reports/fish-virtualization-inventory.md). The local source revisions are pinned there by patch-manifest SHA-256 prefixes. It reports 261 fish-related vanilla code entries; the fish-code scan found 21 entries with instance/population-query signatures, 4 entries naming Alarm events, 21 calling `instance_create`, and 29 with explicit random calls. These are syntactic counts, not proof of complete data flow.
+
+Garder is the pilot candidate: it is a leaf under `FishSmallTropic → FishSmall → Fish`, and its own vanilla event list contains only `Create`. The vanilla dock profiler reports `Fish_Step_2` at 56,109 µs/tick, or 39% of the profiled loop (270 captured ticks). The event is inherited, so the capture does not establish Garder's per-species share. The runtime prototype limits itself to unmodified vanilla, far-from-view/lure Garder fish, and an explicit primitive record schema.
+
+**RNG evidence:** vanilla has global random calls across 29 fish-related code entries; no per-fish RNG state was found in the inspected hierarchy. `instance_create` reruns Create and can consume that shared stream. The prototype's materialisation path saves `random_get_seed()` and restores it after Create. It does not claim deterministic per-fish simulation; virtual updates do not run in this prototype.
+
+**Population-query evidence:** vanilla and pack patch inventories contain direct instance/population queries; the seven manifests have between 1 and 19 fish-related entries matching the supported query signatures. There is no central logical-population seam in those GML call sites. Virtual records therefore remain invisible to normal gameplay queries, and all packs remain outside this prototype's support claim.
+
+### Step 2: opt-in record/materialise prototype
+
+`jamm-modmaker bench` accepts `--fish-virtualization-count <n>` (default `0`, OFF); the runtime override is `[Bench] FishVirtualization=0|1` with count defaulting to the baked value. The path uses a DS list containing the source object asset and primitive pose/lifecycle values. Materialisation restores those values after `instance_create`, then restores the global RNG seed. The CSV records requested/actual virtual counts, virtualise and materialise time, and a comparable create/destroy pass. A 10,000-cycle unit test checks exact equality for all fields in the declared record schema and uniqueness of record IDs; records contain only integers/doubles, no engine handles.
+
+The GML transition is benchmark instrumentation only. It does not implement zone streaming, coarse movement, full per-species state capture, population accounting, save/load, or gameplay wake conditions. Do not enable it in a normal game build or treat its round-trip as parity approval.
+
+**Serial vanilla measurement:** pending completion of the shared-lock `run.sh` OFF/ON pair. Results, including the actual virtualized count and `fish_step_us` / `loop_us` deltas, are recorded here after both CSVs are collected.

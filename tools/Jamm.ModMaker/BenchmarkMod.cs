@@ -53,7 +53,8 @@ public sealed record BenchmarkOptions(
     bool Screenshot = false,
     BenchmarkFishMode FishMode = BenchmarkFishMode.Full,
     int FishCap = -1,
-    double FishScale = 1.0);
+    double FishScale = 1.0,
+    int FishVirtualizationCount = 0);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -157,6 +158,12 @@ public static partial class BenchmarkMod
 
         var compiler = new CompileGroup(data);
         AddBenchScript(data, compiler, "jamm_b_stats_line", StatsLineScriptGml());
+        if (data.GameObjects.ByName("Garder") is not null)
+        {
+            AddBenchScript(data, compiler, "jamm_b_virtualize_garder", FishVirtualizationPrototype.VirtualizeGarderGml);
+            AddBenchScript(data, compiler, "jamm_b_materialize_garder", FishVirtualizationPrototype.MaterializeGarderGml);
+            AddBenchScript(data, compiler, "jamm_b_garder_create_destroy_cost", FishVirtualizationPrototype.CreateDestroyGarderGml);
+        }
         if (data.GameObjects.ByName("Fish") is not null)
             AddBenchScript(data, compiler, "jamm_b_apply_fish_cap", ApplyFishCapScriptGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Create, 0u, data), CreateGml(options));
@@ -197,6 +204,8 @@ public static partial class BenchmarkMod
             throw new ArgumentOutOfRangeException(nameof(options), "TraceFish must be between 0 (disabled) and 200000.");
         if (options.FishCap is < -1 or > 200000)
             throw new ArgumentOutOfRangeException(nameof(options), "FishCap must be -1 (disabled) or between 0 and 200000.");
+        if (options.FishVirtualizationCount is < 0 or > 5000)
+            throw new ArgumentOutOfRangeException(nameof(options), "FishVirtualizationCount must be between 0 (disabled) and 5000.");
         if (double.IsNaN(options.FishScale) || double.IsInfinity(options.FishScale) || options.FishScale < 1.0 || options.FishScale > 20.0)
             throw new ArgumentOutOfRangeException(nameof(options), "FishScale must be between 1 and 20.");
         if (options.BoatSlot < 1)
@@ -270,6 +279,12 @@ public static partial class BenchmarkMod
             jamm_b_fish_mode_req = jamm_b_fish_mode;
             jamm_b_fish_cap = {{o.FishCap}};
             jamm_b_fish_scale = {{Num(o.FishScale)}};
+            jamm_b_fish_virtualization = {{(o.FishVirtualizationCount > 0 ? 1 : 0)}};
+            jamm_b_fish_virtualization_count = {{o.FishVirtualizationCount}};
+            jamm_b_virtualized_count = 0;
+            jamm_b_virtualize_us = 0;
+            jamm_b_virtual_roundtrip_us = 0;
+            jamm_b_virtual_baseline_us = 0;
             {{(o.Profile ? "jamm_b_profile = 1;" : "")}}
 
             if (file_exists("jamm_bench.ini"))
@@ -302,6 +317,8 @@ public static partial class BenchmarkMod
                 else
                     jamm_b_fish_cap = clamp(jamm_b_fish_cap, 0, 200000);
                 jamm_b_fish_scale = clamp(ini_read_real("Bench", "FishScale", jamm_b_fish_scale), 1, 20);
+                jamm_b_fish_virtualization = ini_read_real("Bench", "FishVirtualization", jamm_b_fish_virtualization) != 0;
+                jamm_b_fish_virtualization_count = clamp(round(ini_read_real("Bench", "FishVirtualizationCount", jamm_b_fish_virtualization_count)), 0, 5000);
                 ini_close();
             }
 
@@ -911,6 +928,9 @@ public static partial class BenchmarkMod
         string applyFishCap = hasFish
             ? "if (jamm_b_fish_cap >= 0) jamm_b_apply_fish_cap(jamm_b_fish_cap);"
             : "";
+        string virtualizeGarder = data.GameObjects.ByName("Garder") is not null
+            ? "if (jamm_b_fish_virtualization) { jamm_b_virtualized_count = jamm_b_virtualize_garder(jamm_b_fish_virtualization_count); jamm_b_virtual_baseline_us = jamm_b_garder_create_destroy_cost(); jamm_b_virtual_roundtrip_us = jamm_b_materialize_garder(); jamm_b_virtualized_count = jamm_b_virtualize_garder(jamm_b_fish_virtualization_count); }"
+            : "";
         string deactivateHookClear = string.Join("\n                    ", new[]
         {
             hasLure ? "if (instance_exists(Lure) && Lure.fish > 0) { Lure.fish = -1; Lure.hookedFishSize = 0; }" : "",
@@ -938,6 +958,7 @@ public static partial class BenchmarkMod
                 if (jamm_b_fish_cap >= 0 || jamm_b_fish_mode == "deactivate")
                     global.jamm_b_freeze_spawners = 1;
                 {{applyFishCap}}
+                {{virtualizeGarder}}
                 if (jamm_b_fish_mode == "nostep")
                 {
                     global.jamm_b_fish_nostep = 1;
@@ -1095,6 +1116,8 @@ public static partial class BenchmarkMod
                     file_text_write_string(jamm_b_f, "# scene=" + jamm_b_scene + " requested=" + jamm_b_scene_req + " room=" + room_get_name(room) + " seed=" + string(jamm_b_seed) + " warmup_s=" + string(jamm_b_warmup_sec) + " capture_s=" + string(jamm_b_capture_sec) + " max_samples=" + string(jamm_b_max_samples));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# fish_mode=" + jamm_b_fish_mode + " fish_mode_requested=" + jamm_b_fish_mode_req + " fish_cap=" + string(jamm_b_fish_cap) + " fish_scale=" + string(jamm_b_fish_scale));
+                    file_text_writeln(jamm_b_f);
+                    file_text_write_string(jamm_b_f, "# fish_virtualization=" + string(jamm_b_fish_virtualization) + " requested=" + string(jamm_b_fish_virtualization_count) + " virtualized=" + string(jamm_b_virtualized_count) + " virtualize_us=" + string(jamm_b_virtualize_us) + " materialize_us=" + string(jamm_b_virtual_roundtrip_us) + " create_destroy_us=" + string(jamm_b_virtual_baseline_us));
                     file_text_writeln(jamm_b_f);
                     file_text_write_string(jamm_b_f, "# samples=" + string(jamm_b_n) + " wall_us=" + string(round(jamm_b_wall_us)) + " avg_fps=" + string(jamm_b_avg_fps) + " room_speed=" + string(room_speed) + " step_samples=" + string(jamm_b_step_samples) + " draw_samples=" + string(jamm_b_n) + " draws_per_step=" + string(jamm_b_n / max(1, jamm_b_step_samples)) + " instances=" + string(instance_count) + " window=" + string(jamm_b_window_w) + "x" + string(jamm_b_window_h) + " application_surface=" + string(jamm_b_app_w) + "x" + string(jamm_b_app_h) + " fullscreen=" + string(jamm_b_fullscreen) + " render_size_normalized=" + string(jamm_b_size_ok));
                     file_text_writeln(jamm_b_f);
