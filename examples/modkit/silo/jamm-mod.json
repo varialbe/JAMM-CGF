@@ -1,7 +1,7 @@
 {
   "id": "jamm-silo",
   "name": "The Silo",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "author": "JAMM",
   "description": "Fish the flooded launch shaft beneath the Missile Silo in NewWorld and discover four deep-water species.",
   "areas": [
@@ -267,113 +267,21 @@
     },
     {
       "key": "ferrex",
-      "width": 338,
-      "height": 203,
+      "width": 352,
+      "height": 188,
       "origin": [
-        47,
-        156
+        44,
+        118
       ],
       "compose": [
         {
-          "from": "spr_noxius",
-          "crop": {
-            "x": 15,
-            "y": 0,
-            "w": 111,
-            "h": 79
-          },
-          "alphaMask": "parts/ferrex-dorsal-mask.svg",
-          "x": 76,
-          "y": 11,
-          "scaleX": 1.19,
-          "scaleY": 1.05,
-          "tones": {
-            "colors": [
-              "#285952",
-              "#438477"
-            ],
-            "cutoffs": [
-              65
-            ]
-          },
-          "edgeSoftness": 0.3
+          "file": "parts/ferrex-fins.svg"
         },
         {
-          "from": "spr_underfin",
-          "crop": {
-            "x": 281,
-            "y": 34,
-            "w": 80,
-            "h": 130
-          },
-          "x": 223,
-          "y": 65,
-          "scaleX": 1.3,
-          "scaleY": 0.94,
-          "tones": {
-            "colors": [
-              "#204944",
-              "#327267",
-              "#4c8778"
-            ],
-            "cutoffs": [
-              15,
-              30
-            ]
-          }
+          "file": "parts/ferrex-body.svg"
         },
         {
-          "from": "spr_fish_l9",
-          "crop": {
-            "x": 0,
-            "y": 0,
-            "w": 276,
-            "h": 167
-          },
-          "alphaMask": "parts/ferrex-body-mask.svg",
-          "x": 10,
-          "y": 28,
-          "scaleX": 0.93,
-          "scaleY": 0.97,
-          "tones": {
-            "colors": [
-              "#6c442f",
-              "#b76e46",
-              "#d29a64"
-            ],
-            "cutoffs": [
-              86,
-              171
-            ]
-          }
-        },
-        {
-          "from": "spr_fish_l9",
-          "crop": {
-            "x": 143,
-            "y": 150,
-            "w": 108,
-            "h": 44
-          },
-          "alphaMask": "parts/ferrex-fin-mask.svg",
-          "x": 141,
-          "y": 157,
-          "scaleX": 0.91,
-          "scaleY": 0.94,
-          "tones": {
-            "colors": [
-              "#285952",
-              "#438477"
-            ],
-            "cutoffs": [
-              155
-            ]
-          }
-        },
-        {
-          "file": "parts/gills.svg",
-          "x": 66,
-          "y": 93
+          "file": "parts/ferrex-details.svg"
         }
       ]
     },
@@ -542,17 +450,6 @@
         47
       ],
       "compose": [
-        {
-          "from": "spr_silo",
-          "crop": {
-            "x": 204,
-            "y": 57,
-            "w": 312,
-            "h": 108
-          },
-          "alphaMask": "parts/door-mask.svg",
-          "tint": "#f5f5ef"
-        },
         {
           "file": "parts/door-detail.svg"
         }

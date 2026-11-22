@@ -4,7 +4,7 @@ travel = silo_progress * silo_progress * (3 - 2 * silo_progress);
 angle = hatch.image_angle;
 
 // The plate slides into the left recess along the hatch's local X axis.
-dx = -300 * travel * hatch.image_xscale;
+dx = -270 * travel * hatch.image_xscale;
 draw_sprite_ext(jmk_jamm_silo_recipe_silo_door, 0,
     hatch.x + lengthdir_x(dx, angle), hatch.y + lengthdir_y(dx, angle),
     hatch.image_xscale, hatch.image_yscale, angle, hatch.image_blend, hatch.image_alpha);
