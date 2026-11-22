@@ -1,0 +1,10 @@
+[Unit]
+Description=Regenerate the JAMM-CGF static site every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Unit=jamm-cgf-site-publish.service
+
+[Install]
+WantedBy=timers.target

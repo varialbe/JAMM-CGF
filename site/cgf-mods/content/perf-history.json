@@ -1,0 +1,31 @@
+{
+  "method": "Measured locally on 2026-11-21/22: Ryzen 7 5700X + RTX 2070 Super, Proton Experimental, legacy August 2023 VM build, 1200×720 window, dock scene, seed 1337, 30-second captures after warm-up. Bars show the mean game-loop time per tick (CPU work for Step + Draw); the GameMaker 1.4 runner is single-threaded, so this number decides the frame rate. Values are means of 2–3 serialized runs; run-to-run noise is about ±5 %.",
+  "series": [
+    {
+      "id": "seven-pack-cli",
+      "title": "Seven-pack modpack + JAMM Perf (direct build)",
+      "stages": [
+        {"label": "Start: Perf generator 6", "date": "2026-11-21", "loop_ms": 117.6, "note": "Fish grid installed unconditionally; up to 2× slower than without Perf"},
+        {"label": "Perf fix (CGF-PERF-REGRESS-001)", "date": "2026-11-21", "loop_ms": 66.8, "note": "Perf adds no per-frame code unless enabled; fish grid opt-in"},
+        {"label": "+ Decor Sleep", "date": "2026-11-22", "loop_ms": 59.7, "note": "3,156 off-screen static decor instances sleep; pixel-identical"}
+      ]
+    },
+    {
+      "id": "seven-pack-profile",
+      "title": "Seven-pack modpack as a JAMM profile (GUI build path)",
+      "stages": [
+        {"label": "Start: sanitizer strips all author perf edits", "date": "2026-11-21", "loop_ms": 196.8, "note": "Author render culls removed together with harmful hacks"},
+        {"label": "Sanitizer split (CGF-PERF-REGRESS-002)", "date": "2026-11-21", "loop_ms": 171.9, "note": "Benign render/decor culls kept; busy-wait, timing, sonar culls and the 6-tick fish gate still stripped"}
+      ]
+    },
+    {
+      "id": "vanilla-perf",
+      "title": "Vanilla + JAMM Perf",
+      "stages": [
+        {"label": "Start: Perf generator 6", "date": "2026-11-21", "loop_ms": 30.2, "note": "Perf scheduler and grid hooks always installed"},
+        {"label": "Perf fix", "date": "2026-11-21", "loop_ms": 22.7, "note": "Byte-identical to vanilla unless a Perf feature is enabled"},
+        {"label": "Reference: plain vanilla", "date": "2026-11-21", "loop_ms": 21.5, "note": "No mods"}
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jamm.Core.Browsing;
 using Jamm.Core.Building;
 using Jamm.Core.Management;
@@ -83,6 +84,28 @@ public sealed class SitePackageTests
 
         foreach (string page in new[] { "how-jamm-builds.html", "compatibility.html" })
             Assert.True(File.Exists(Path.Combine(siteDir, page)), $"Missing generated guide page {page}");
+
+        string progressPath = Path.Combine(siteDir, "progress.html");
+        Assert.True(File.Exists(progressPath), "Missing generated progress page; run site/cgf-mods/make-pages.py");
+        string progressHtml = File.ReadAllText(progressPath);
+        Assert.Contains("progress.html", html);
+        Assert.Contains("Optimisation stages", progressHtml);
+        Assert.Contains("perf-chart", progressHtml);
+        Assert.Contains("perf-mobile", progressHtml);
+        Assert.Contains("Branch tree", progressHtml);
+        Assert.Contains("branch-graph", progressHtml);
+        Assert.Contains("Older merged branches (", progressHtml);
+        Assert.Contains("ahead ", progressHtml);
+        Assert.Contains("behind ", progressHtml);
+        Assert.Contains("lane-badge-bg", progressHtml);
+        Assert.Equal(3, Regex.Matches(progressHtml, "class=\"series-chart\"").Count);
+        Assert.Contains("−43 % time · 1.76× faster", progressHtml);
+        Assert.Contains("class=\"perf-row start\"", progressHtml);
+        Assert.Contains("class=\"perf-row intermediate\"", progressHtml);
+        Assert.Contains("class=\"perf-row latest\"", progressHtml);
+        Assert.Contains("class=\"perf-row reference\"", progressHtml);
+        Assert.DoesNotContain("class=\"scenario-list\"", progressHtml);
+        Assert.DoesNotMatch(new Regex(@"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase), progressHtml);
 
         foreach (string page in new[]
         {
