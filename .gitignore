@@ -25,3 +25,4 @@ TestResults/
 .cgfmm-*.tmp
 .audit/
 .review/
+__pycache__/
