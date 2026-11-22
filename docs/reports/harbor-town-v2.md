@@ -40,3 +40,11 @@ the shared `game-run.lock`.
 The requested screenshots of Research Station stages, titles, and dock decorations were not captured because neither
 in-game run reached the Harbor scene. Diagnostic captures and the latest personal CSV/probe are in
 `~/jamm-night/harbor-town-v2/`; those images show launch failures, not v0.2 feature evidence.
+
+## Resumed verification
+
+- `dotnet build -c Release`: passed, 0 warnings and 0 errors.
+- `dotnet test -c Release`: passed, 651 tests; 17 opt-in real-file tests skipped.
+- A fresh solo retry using `harbor-town-v2-source-postmerge.win` and this worktree's ModMaker DLL is queued in
+  `~/jamm-night/bin/run.sh`. It has not launched because the shared lock is held by a suspended submarine run; no
+  Harbor output or screenshots have been produced by this retry yet.
