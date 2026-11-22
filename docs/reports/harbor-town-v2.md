@@ -54,4 +54,9 @@ in-game run reached the Harbor scene. Diagnostic captures and the latest persona
 - The first solo run with this fixture exited during `SteamAPI_InitSafe`. Its logs were preserved externally, its
   `game` copy was deleted, and a Steam restart plus retry is queued through the shared lock. A personal run using
   the diagnostic fixture is also queued.
+- On 2026-11-22, `dotnet build -c Release` passed with 0 warnings and `dotnet test -c Release` passed (651 passed,
+  17 opt-in skipped). The queued solo retry then reached its one-hour lock limit before starting (`GAME RUNNER BUSY`);
+  both unused Harbor staging `game` copies were deleted. A fresh serial sequence is queued after the external
+  `PAUSE-GAMES` lock holder: Steam restart, solo, then personal. The pause marker is still active, so these retries
+  have not launched.
 - Diagnostic captures and CSVs remain under `~/jamm-night/harbor-town-v2/`; none are game files in the repository.
