@@ -25,7 +25,9 @@ internal static class HarborScene
             || data.Scripts.ByName("jmk_harbor_town_script_title") is null)
             throw new InvalidDataException("The harbor scene needs Harbor Town's command and title scripts. Rebuild the package before running it.");
 
-        var probe = ModObjects.Create(data, Probe, persistent: false);
+        // The game leaves NewWorld after the menu is removed; keep the probe alive so it
+        // can exercise Harbor Town from the loaded fishing room.
+        var probe = ModObjects.Create(data, Probe, persistent: true);
         var compiler = new CompileGroup(data);
         compiler.QueueCodeReplace(probe.EventHandlerFor(EventType.Create, 0u, data), """
             harbor_started = -1;
