@@ -79,3 +79,14 @@ not add dormant proxy events or `instance_change` calls.
 `dotnet build -c Release -m:1` passed with zero warnings and zero errors. The benchmark
 captures were produced only by `run.sh` with `gap-` labels. Temporary archives and profiles
 remain under `/home/varialbe/jamm-bench` or `/tmp`; no game archives were added to the repo.
+
+## Orchestrator confirmation (2026-11-23 evening, 60 s, 2 interleaved reps, main f9bb723+ vs branch)
+| Pack/scene | main | no proxies |
+|---|---:|---:|
+| all7 dock | 21.07 | 30.75 (+46%) |
+| all7 deepwater | 20.59 | 28.96 (+41%) |
+| pub5 dock | 21.93 | 28.75 (+31%) |
+| pub5 deepwater | 21.21 | 27.38 (+29%) |
+| vanilla dock (1 rep) | 87.06 | 103.32 (+19%) |
+Crash scenes sonar/deepwater/deep-sonar 180 s: all RECORDED. The earlier "+2–4% dormant win" was the CaveRock guard gain
+in 9a7f0fa minus the proxy cost; the proxies themselves were a large regression.
