@@ -16,3 +16,17 @@ Implement:
 5. Try it read-only on a COPY of ~/jamm-personal/store (cp -a to /tmp/…; CGFMM_DATA_DIR=<copy>) and report which of the
    user's mods link. NEVER modify ~/jamm-personal/store itself, never touch CGF-Personal or compatdata.
 No game runs needed. Build/test with dotnet -m:1. Commit on branch feat/personal-catalog-origins; do not push.
+
+## Round 2 (orchestrator review, merged c45c563 to main; real-store trial found bugs)
+Ran `cgfmm link --auto --profile personal` on the real personal store (then restored metadata). Problems:
+1. Builtins (builtin-console/perf/smooth/hd-lite) were linked to catalog entries. Builtins are generated locally from the
+   user's base by BuiltinMods (cache key GeneratorVersion); they must NEVER be linked or updated from a catalog.
+2. After linking, `update --check` listed every linked mod as an update with identical versions, e.g.
+   "JAMM Console (builtin-console): 1.0.0 → 1.0.0 · 0.0 MB", "The Silo (jamm-silo): 2.3.0 → 2.3.0", and exit "Updates are available".
+   Same version + different sha must not be an update. Decide properly: if linked by name/base heuristics (not sha), record
+   the local sha as "local build of version X"; report "local build differs from catalog X" separately (info, no apply).
+   Only a strictly newer catalog version (semver) is an update. `--apply` must never replace a mod whose local sha
+   differs at the same version without an explicit `--force-replace-local`.
+3. Linking by name heuristics should say so in mod.json (match kind) and in output.
+Add tests for all three. Re-trial on a metadata-only copy of ~/jamm-personal/store (never modify the real store) and show the
+exact `update --check` output in the report. Commit on this branch; do not push.
