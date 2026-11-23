@@ -34,7 +34,7 @@ internal static class LinkCommand
             var mod = library.Find(positional[0]);
             var entry = snapshot.Mods.FirstOrDefault(m => m.Catalog == "first-party" && m.Id == positional[1])
                 ?? throw new ArgumentException($"Catalog ID '{positional[1]}' was not found in the first-party catalog.");
-            CatalogOriginLinker.Link(library, mod, entry);
+            CatalogOriginLinker.Link(library, mod, entry, "explicit");
             Console.WriteLine($"Linked {mod.Name} to {entry.Name} ({entry.Id}) by explicit selection.");
             return 0;
         }
@@ -48,11 +48,16 @@ internal static class LinkCommand
         int linked = 0;
         foreach (var mod in mods)
         {
+            if (mod.Id.StartsWith("builtin-", StringComparison.Ordinal))
+            {
+                Console.WriteLine($"Skipped {mod.Name} ({mod.Id}); built-in mods are generated locally and cannot be linked.");
+                continue;
+            }
             if (mod.Origins.Any(o => o.Catalog == "first-party")) continue;
             var match = CatalogOriginLinker.Match(mod, snapshot);
             if (match.Mod is { } entry)
             {
-                CatalogOriginLinker.Link(library, mod, entry);
+                CatalogOriginLinker.Link(library, mod, entry, match.Reason);
                 Console.WriteLine($"Linked {mod.Name} to {entry.Name} ({entry.Id}) by {match.Reason}.");
                 linked++;
             }

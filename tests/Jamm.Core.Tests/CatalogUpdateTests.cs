@@ -27,9 +27,24 @@ public sealed class CatalogUpdateTests
     }
 
     [Fact]
-    public void ChangedCatalogPackageHashIsAnUpdateEvenWhenVersionIsUnchanged()
+    public void SameVersionChangedPackageHashIsNotAnUpdate()
     {
-        Assert.Single(CatalogUpdates.Compare(Profile(), [Installed("1.0.0", OldHash)], Snapshot("1.0.0", NewHash)));
+        Assert.Empty(CatalogUpdates.Compare(Profile(), [Installed("1.0.0", OldHash)], Snapshot("1.0.0", NewHash)));
+    }
+
+    [Fact]
+    public void SameVersionLocalBuildIsReportedSeparatelyAndRequiresForceToReplace()
+    {
+        var mod = Installed("1.0.0", OldHash) with
+        {
+            Origins = [new ModOrigin("first-party", "example", "https://example.test", "catalog", "example", null, "1.0.0")
+            { MatchKind = "name-base-version", LocalBuildSha256 = OldHash }]
+        };
+        var snapshot = Snapshot("1.0.0", NewHash);
+        Assert.Empty(CatalogUpdates.Compare(Profile(), [mod], snapshot));
+        Assert.Single(CatalogUpdates.LocalBuilds(Profile(), [mod], snapshot));
+        var replacement = Assert.Single(CatalogUpdates.Compare(Profile(), [mod], snapshot, includeLocalReplacements: true));
+        Assert.True(replacement.IsLocalReplacement);
     }
 
     [Fact]
@@ -66,6 +81,14 @@ public sealed class CatalogUpdateTests
     {
         const string json = "[{\"id\":\"example\",\"name\":\"Example\",\"author\":\"Author\",\"description\":\"\",\"fileUrl\":\"https://example.test/mod.win\",\"isPreview\":false,\"categories\":[],\"version\":\"2.0.0\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"saveBreaking\":true}]";
         Assert.True(Assert.Single(FirstPartyCatalogProvider.Parse(System.Text.Encoding.UTF8.GetBytes(json))).SaveBreaking);
+    }
+
+    [Fact]
+    public void BuiltinsAreNeverCatalogUpdates()
+    {
+        var builtin = Installed("1.0.0", OldHash) with { Id = "builtin-console", Origins = [Installed("1.0.0", OldHash).Origins[0]] };
+        Assert.Empty(CatalogUpdates.Compare(new ModProfile("test", [builtin.Id], []), [builtin], Snapshot("2.0.0", NewHash)));
+        Assert.Empty(CatalogUpdates.LocalBuilds(new ModProfile("test", [builtin.Id], []), [builtin], Snapshot("1.0.0", NewHash)));
     }
 
     [Fact]

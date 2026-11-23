@@ -9,7 +9,7 @@ internal static class UpdateCommand
     public static int Run(string[] args, string? dataDirectory)
     {
         string? profile = null;
-        bool json = false, check = false, apply = false, rollback = false, yes = false;
+        bool json = false, check = false, apply = false, rollback = false, yes = false, forceReplaceLocal = false;
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -18,6 +18,7 @@ internal static class UpdateCommand
                 case "--apply": apply = true; break;
                 case "--rollback": rollback = true; break;
                 case "--yes": yes = true; break;
+                case "--force-replace-local": forceReplaceLocal = true; break;
                 case "--json": json = true; break;
                 case "--profile":
                     if (++i >= args.Length) throw new ArgumentException("Option '--profile' needs a name.");
@@ -25,6 +26,7 @@ internal static class UpdateCommand
                 default: throw new ArgumentException($"Unknown update option '{args[i]}'.");
             }
         }
+        if (forceReplaceLocal && !apply) throw new ArgumentException("Use '--force-replace-local' with 'update --apply'.");
         var store = new ManagerStore(dataDirectory);
         using var http = new ModHttp();
         var catalog = BrowseCatalogs.Create(store, http);
@@ -40,7 +42,7 @@ internal static class UpdateCommand
         if (apply)
         {
             if (!yes && !Environment.UserInteractive) throw new ArgumentException("Use 'cgfmm update --apply --yes' in non-interactive mode.");
-            var prepared = workflow.PrepareAsync(profile).GetAwaiter().GetResult();
+            var prepared = workflow.PrepareAsync(profile, forceReplaceLocal: forceReplaceLocal).GetAwaiter().GetResult();
             var reasons = prepared.Conflicts.Where(c => c.Reasons.Count > 0).ToArray();
             Console.WriteLine(reasons.Length == 0 ? $"No save conflicts detected. Save backup: {(prepared.SaveBackup.Length == 0 ? "unavailable" : prepared.SaveBackup)}" : "Save conflict warning:");
             foreach (var (item, why) in reasons) Console.WriteLine($"  {item.Name}: {string.Join("; ", why)}");
@@ -53,21 +55,27 @@ internal static class UpdateCommand
             return 0;
         }
         if (!check) throw new ArgumentException("Use 'cgfmm update --check [--profile <name>] [--json]', --apply, or --rollback.");
-        var updates = workflow.CheckAsync(profile).GetAwaiter().GetResult();
         var selectedProfile = new ProfileLibrary(store).Get(profile ?? store.Config().ActiveProfile
             ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
         var enabled = selectedProfile.EnabledMods.ToHashSet(StringComparer.Ordinal);
-        var unlinked = new ModLibrary(store).Metadata().Where(m => enabled.Contains(m.Id) && !m.Origins.Any()).ToArray();
+        var installedMods = new ModLibrary(store).Metadata();
+        var unlinked = installedMods.Where(m => enabled.Contains(m.Id) && !m.Id.StartsWith("builtin-", StringComparison.Ordinal)
+            && !m.Origins.Any(o => o.Catalog == "first-party")).ToArray();
+        var currentCatalog = catalog.LoadAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var updates = CatalogUpdates.Compare(selectedProfile, installedMods, currentCatalog);
+        var localBuilds = CatalogUpdates.LocalBuilds(selectedProfile, installedMods, currentCatalog);
         if (json) Console.WriteLine(JsonSerializer.Serialize(new { updates = updates.Select(x => new
         {
             x.Id, x.InstalledVersion, x.AvailableVersion, x.SizeBytes, x.Changelog
-        }), unlinkedMods = unlinked.Select(m => new { m.Id, m.Name }) }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }));
-        else if (updates.Count == 0 && unlinked.Length == 0) Console.WriteLine("All catalog mods in this profile are up to date.");
+        }), localBuilds = localBuilds.Select(m => new { m.Id, m.Name, m.Version }), unlinkedMods = unlinked.Select(m => new { m.Id, m.Name }) }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }));
+        else if (updates.Count == 0 && unlinked.Length == 0 && localBuilds.Count == 0) Console.WriteLine("All catalog mods in this profile are up to date.");
         else
         {
             foreach (var item in updates)
-                Console.WriteLine($"{item.Name} ({item.Id}): {item.InstalledVersion ?? "unknown"} → {item.AvailableVersion} · {(item.SizeBytes is { } size ? $"{size / 1048576d:0.0} MB" : "size unknown")}{(string.IsNullOrWhiteSpace(item.Changelog) ? "" : $"\n  {item.Changelog}")}");
+                Console.WriteLine($"{item.Name} ({item.Id}): {item.InstalledVersion ?? "unknown"} → {item.AvailableVersion} · {(item.SizeBytes is { } size ? $"{size / 1048576d:0.0} MB" : "size unknown")}{(item.IsLocalReplacement ? " · local build replacement (requires --force-replace-local)" : "")}{(string.IsNullOrWhiteSpace(item.Changelog) ? "" : $"\n  {item.Changelog}")}");
             if (updates.Count > 0) Console.WriteLine("Updates are available.");
+            foreach (var item in localBuilds)
+                Console.WriteLine($"{item.Name} ({item.Id}): local build differs from catalog {item.Version ?? "unknown"}; no newer catalog version is available.");
             if (unlinked.Length > 0)
             {
                 Console.WriteLine("Not linked to a catalog: " + string.Join(", ", unlinked.Select(m => m.Name)) + ". Run 'cgfmm link --auto'.");

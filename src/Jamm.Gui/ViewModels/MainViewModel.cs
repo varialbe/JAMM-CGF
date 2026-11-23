@@ -343,7 +343,7 @@ public sealed partial class MainViewModel : ObservableObject
                         var match = CatalogOriginLinker.Match(result.Mod, snapshot);
                         if (match.Mod is { } catalogMod)
                         {
-                            CatalogOriginLinker.Link(new ModLibrary(store), result.Mod, catalogMod);
+                            CatalogOriginLinker.Link(new ModLibrary(store), result.Mod, catalogMod, match.Reason);
                             Message($"Linked {result.Mod.Name} to {catalogMod.Name} by {match.Reason}.");
                         }
                         else if (match.Ambiguous) Message($"Not linked: {result.Mod.Name}; {match.Reason}.");
@@ -382,7 +382,7 @@ public sealed partial class MainViewModel : ObservableObject
             Message(match.Ambiguous ? $"Could not link {mod.Name}: {match.Reason}." : $"No unambiguous catalog match for {mod.Name}.");
             return;
         }
-        CatalogOriginLinker.Link(library, mod, entry);
+        CatalogOriginLinker.Link(library, mod, entry, match.Reason);
         row.HasCatalogOrigin = true;
         row.CatalogId = entry.Id;
         Message($"Linked {mod.Name} to {entry.Name} by {match.Reason}.");

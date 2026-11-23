@@ -10,8 +10,8 @@ public sealed class ModUpdateWorkflow(ManagerStore store, IModCatalogProvider ca
     private sealed record RollbackState(string Profile, string GameDirectory, string GameBackup, string[] ModIds, string SaveBackup);
 
     /// <summary>Checks enabled catalog packages without making local changes.</summary>
-    public Task<IReadOnlyList<CatalogUpdate>> CheckAsync(string? profile = null, CancellationToken token = default)
-        => new CatalogUpdates(store, catalog).CheckAsync(profile, token);
+    public Task<IReadOnlyList<CatalogUpdate>> CheckAsync(string? profile = null, CancellationToken token = default, bool includeLocalReplacements = false)
+        => new CatalogUpdates(store, catalog).CheckAsync(profile, token, includeLocalReplacements);
 
     /// <summary>Checks exact downloaded bytes against a published catalog digest.</summary>
     public static bool PackageHashMatches(string path, string expectedSha256) =>
@@ -20,9 +20,9 @@ public sealed class ModUpdateWorkflow(ManagerStore store, IModCatalogProvider ca
 
     /// <summary>Downloads and stages updates, returning save-risk reasons before any game installation.</summary>
     public async Task<(PreparedProfile Build, IReadOnlyList<(CatalogUpdate Update, IReadOnlyList<string> Reasons)> Conflicts, string SaveBackup)> PrepareAsync(
-        string? profileName = null, Action<string>? progress = null, CancellationToken token = default)
+        string? profileName = null, Action<string>? progress = null, CancellationToken token = default, bool forceReplaceLocal = false)
     {
-        var updates = await CheckAsync(profileName, token);
+        var updates = await CheckAsync(profileName, token, forceReplaceLocal);
         if (updates.Count == 0) throw new InvalidOperationException("All catalog mods in this profile are up to date.");
         var config = store.Config();
         string profile = profileName ?? config.ActiveProfile ?? throw new ArgumentException("No active profile is selected.");
@@ -52,7 +52,8 @@ public sealed class ModUpdateWorkflow(ManagerStore store, IModCatalogProvider ca
                 var file = resolution.Files.FirstOrDefault(f => f.Version == update.AvailableVersion) ?? (resolution.Files.Length == 1 ? resolution.Files[0] : null)
                     ?? throw new IOException($"Could not identify one download for {update.Name}. Open its catalog page and select a release manually.");
                 var origin = new ModOrigin(update.CatalogEntry.Catalog, update.CatalogEntry.Id, update.CatalogEntry.SourcePage,
-                    file.Provider, file.Id, file.ReleaseId, update.AvailableVersion) { PackageSha256 = update.CatalogEntry.Sha256 };
+                    file.Provider, file.Id, file.ReleaseId, update.AvailableVersion)
+                { PackageSha256 = update.CatalogEntry.Sha256, MatchKind = "archive-sha" };
                 string part = await new ModDownloadService(store, http).DownloadResolvedAsync(ct => resolver.GetFileUriAsync(file, ct), null, token);
                 if (!PackageHashMatches(part, update.CatalogEntry.Sha256!))
                     throw new InvalidDataException($"SHA-256 verification failed for {update.Name}. The downloaded package was rejected; retry or contact the catalog maintainer.");

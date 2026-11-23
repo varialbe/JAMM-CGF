@@ -104,7 +104,7 @@ internal static class ManagementCommand
                         var match = CatalogOriginLinker.Match(added.Mod, snapshot);
                         if (match.Mod is { } catalogMod)
                         {
-                            CatalogOriginLinker.Link(library, added.Mod, catalogMod);
+                            CatalogOriginLinker.Link(library, added.Mod, catalogMod, match.Reason);
                             Console.WriteLine($"Linked to {catalogMod.Name} ({catalogMod.Id}) by {match.Reason}.");
                         }
                         else if (match.Ambiguous) Console.WriteLine($"Not linked: {match.Reason}. Use 'cgfmm link <mod> <catalog-id>' to choose explicitly.");

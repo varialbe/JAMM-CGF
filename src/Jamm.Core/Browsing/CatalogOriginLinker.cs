@@ -9,6 +9,7 @@ public static class CatalogOriginLinker
     /// <summary>Checks archive digest first, then requires matching name, base digest, and version.</summary>
     public static (CatalogMod? Mod, string? Reason, bool Ambiguous) Match(ManagedMod installed, CatalogSnapshot snapshot)
     {
+        if (IsBuiltin(installed)) return (null, "built-in mods are generated locally and cannot be linked", false);
         var entries = snapshot.Mods.Where(m => m.Catalog == "first-party").ToArray();
         var hashes = entries.Where(m => ValidHash(m.Sha256) && string.Equals(installed.Sha256, m.Sha256, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (hashes.Length == 1) return (hashes[0], "archive SHA-256", false);
@@ -34,12 +35,23 @@ public static class CatalogOriginLinker
     }
 
     /// <summary>Persists first-party provenance and catalog package identity for a selected mod.</summary>
-    public static ManagedMod Link(ModLibrary library, ManagedMod installed, CatalogMod entry)
+    public static ManagedMod Link(ModLibrary library, ManagedMod installed, CatalogMod entry, string? matchReason = null)
     {
+        if (IsBuiltin(installed)) throw new InvalidOperationException("Built-in mods are generated locally and cannot be linked to a catalog.");
+        string matchKind = matchReason switch
+        {
+            "archive SHA-256" => "archive-sha",
+            "name, base SHA-256, and version" => "name-base-version",
+            "normalized name and base SHA-256 (catalog version recorded)" or "unique name and base SHA-256; catalog version differs" => "name-base",
+            _ => "explicit"
+        };
+        bool exactArchive = matchKind == "archive-sha";
         var origin = new ModOrigin("first-party", entry.Id, entry.SourcePage, "catalog", entry.Id, null, entry.Version)
-        // The local .win may have come from an archive whose bytes are no longer available.
-        // Leave the installed package digest unknown so update checks will offer the published package.
-        { PackageSha256 = null };
+        {
+            PackageSha256 = exactArchive ? entry.Sha256 : null,
+            MatchKind = matchKind,
+            LocalBuildSha256 = exactArchive ? null : installed.Sha256
+        };
         var updated = installed with
         {
             Origins = [.. installed.Origins.Where(o => o.Catalog != "first-party"), origin],
@@ -51,6 +63,8 @@ public static class CatalogOriginLinker
         library.SaveMetadata(updated);
         return updated;
     }
+
+    private static bool IsBuiltin(ManagedMod mod) => mod.Id.StartsWith("builtin-", StringComparison.Ordinal);
 
     private static bool ValidHash(string? hash) => hash is { Length: 64 } && hash.All(Uri.IsHexDigit);
 

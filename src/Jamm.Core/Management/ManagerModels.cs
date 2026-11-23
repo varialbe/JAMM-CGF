@@ -104,6 +104,10 @@ public sealed record ModOrigin(string Catalog, string ModId, string SourcePage, 
 {
     /// <summary>SHA-256 of the downloaded catalog package, when published by the catalog.</summary>
     public string? PackageSha256 { get; init; }
+    /// <summary>How the local archive was associated with this catalog entry (archive-sha, name-base-version, name-base, or explicit).</summary>
+    public string? MatchKind { get; init; }
+    /// <summary>SHA-256 of a local build linked by metadata instead of exact published archive bytes.</summary>
+    public string? LocalBuildSha256 { get; init; }
 }
 
 /// <summary>Ordered library IDs and reusable Phase 3 resolution choices.</summary>
