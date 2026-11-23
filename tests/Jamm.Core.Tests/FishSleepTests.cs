@@ -226,10 +226,10 @@ public sealed class FishSleepTests
         Assert.Contains("fish.jamm_sleep_next = global.jamm_sleep_tick", lureStep);
         Assert.Null(data.GameObjects.ByName("obj_jamm_fish_dormant_ModVisual"));
         Assert.Null(data.Code.ByName($"gml_Object_{FishSleep.Controller}_Step_0"));
-        Assert.Contains("jamm_asleep = true", enter);
+        Assert.Matches(@"jamm_asleep = (true|1)\b", enter);
         Assert.Contains("spd = 0", enter);
         Assert.Contains("visible = false", enter);
-        Assert.Contains("jamm_asleep = false", wake);
+        Assert.Matches(@"jamm_asleep = (false|0)\b", wake);
         Assert.DoesNotContain("instance_change", enter);
         Assert.DoesNotContain("instance_change", wake);
         Assert.DoesNotContain("dormant", initTypes, StringComparison.OrdinalIgnoreCase);
@@ -261,7 +261,7 @@ public sealed class FishSleepTests
 
         Assert.Contains("global.jamm_perf_sleep && global.jamm_sleep_asleep_count > 0", thinnerStep);
         Assert.Contains("cull_trigger += 0.5", thinnerStep);
-        Assert.Contains("jamm_asleep = false", thinnerCull);
+        Assert.Matches(@"jamm_asleep = (false|0)\b", thinnerCull);
         Assert.Contains("global.jamm_sleep_asleep_count -= 1", thinnerCull);
         Assert.Contains("instance_deactivate_object(id)", thinnerCull);
         Assert.Contains("variable_instance_exists(id, \"jamm_asleep\")", fishDestroy);
