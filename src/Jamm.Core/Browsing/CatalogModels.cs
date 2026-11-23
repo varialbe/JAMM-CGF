@@ -5,7 +5,8 @@ public sealed record CatalogMod(string Id, string Name, string Author, string De
     bool IsPreview, string[] Categories, DateTimeOffset? CreatedUtc, double? Rating,
     string? IconUrl = null, string? BannerUrl = null, string[]? Screenshots = null, bool VerifiedCreator = false, string Credits = "",
     string Catalog = "litterbox", string? CatalogPage = null, string? IconPngUrl = null,
-    FirstPartyCompatibility? Compat = null)
+    FirstPartyCompatibility? Compat = null,
+    string? Version = null, string? Sha256 = null, long? SizeBytes = null, string? Changelog = null, bool SaveBreaking = false)
 {
     /// <summary>Stable catalog detail page, distinct from the file host.</summary>
     public string SourcePage => CatalogPage ?? (Catalog == "litterbox" ? "https://litterbox.fyi/mod.html?id=" + Uri.EscapeDataString(Id) : FileUrl ?? "https://varialbe.xyz/cgf-mods/");

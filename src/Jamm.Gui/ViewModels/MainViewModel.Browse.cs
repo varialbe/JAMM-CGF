@@ -8,7 +8,7 @@ public sealed partial class MainViewModel
     public BrowseViewModel Browse { get; }
     internal bool HasOnlineBase { get { try { return !NeedsSetup; } catch { return false; } } }
     internal bool CanInstallOnline => knownGame && SelectedProfile is not null && HasOnlineBase;
-    internal Task ReloadAfterDownloadAsync() => ReloadAsync();
+    internal async Task ReloadAfterDownloadAsync() { await ReloadAsync(); await RefreshUpdateCountAsync(); }
     internal async Task InstallDownloadAsync(Func<string, Task<bool>> confirm, CancellationToken token, IProgress<string> progress)
     {
         var report = await Task.Run(() => new ManagerOperations(store).Check(SelectedProfile!, token, progress.Report), token);

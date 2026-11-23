@@ -79,6 +79,9 @@ int Run(string[] arguments)
             cgfmm profile unlockfix <profile> <mod> on|off
             cgfmm apply [--profile <name>] [--yes]
             cgfmm play [--profile <name>] [--yes]
+            cgfmm update --check [--profile <name>] [--json]
+            cgfmm update --apply [--profile <name>] [--yes]
+            cgfmm update --rollback [--profile <name>]
             cgfmm restore [--game <game dir>] [--verbose]
             Management storage: --data-dir <dir>, then CGFMM_DATA_DIR, then $XDG_DATA_HOME/cgfmm.
             Config keys: base, gameDir, wine.mode (wine|proton|proton-flatpak), wine.prefix, wine.binary, proton.path,
@@ -100,6 +103,7 @@ int Run(string[] arguments)
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory, verbose);
+    if (command == "update") return UpdateCommand.Run(arguments[1..], dataDirectory);
     if (command is "build" or "restore" or "verify") return BuildCommand.Run(command, arguments[1..], verbose, dataDirectory);
     if (command == "check") return CheckCommand.Run(arguments[1..], dataDirectory);
     if (command == "diff") return DiffCommand.Run(arguments[1..]);

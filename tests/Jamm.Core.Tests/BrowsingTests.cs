@@ -39,7 +39,7 @@ public sealed class BrowsingTests
     public async Task FirstPartyCatalogUsesCatalogModArrayAndRetainsPublisherProvenance()
     {
         var mod = Assert.Single(FirstPartyCatalogProvider.Parse(Encoding.UTF8.GetBytes("""
-            [{"id":"abyss","name":"The Abyss","author":"varialbe","description":"Official","fileUrl":"https://gamejolt.com/games/ringdingdingringring/842483","isPreview":false,"categories":["Content"],"iconPngUrl":"https://varialbe.xyz/cgf-mods/assets/abyss.png","compat":{"requiresBase":"dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1","jammMin":"0.9.1","conflicts":["jamm-silo"],"knownIssues":["known"]}}]
+            [{"id":"abyss","name":"The Abyss","author":"varialbe","description":"Official","fileUrl":"https://gamejolt.com/games/ringdingdingringring/842483","isPreview":false,"categories":["Content"],"iconPngUrl":"https://varialbe.xyz/cgf-mods/assets/abyss.png","compat":{"requiresBase":"dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1","jammMin":"0.9.1","conflicts":["jamm-silo"],"knownIssues":["known"]},"version":"2.1.0","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","sizeBytes":123,"changelog":"Fixed fish","saveBreaking":true}]
             """)));
         Assert.Equal("first-party", mod.Catalog);
         Assert.Equal("https://varialbe.xyz/cgf-mods/", mod.SourcePage);
@@ -47,6 +47,7 @@ public sealed class BrowsingTests
         Assert.Equal("0.9.1", metadata.JammMin);
         Assert.Equal("https://varialbe.xyz/cgf-mods/assets/abyss.png", mod.IconPngUrl);
         Assert.Equal("dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1", metadata.RequiresBase);
+        Assert.Equal("2.1.0", mod.Version); Assert.Equal(123, mod.SizeBytes); Assert.Equal("Fixed fish", mod.Changelog); Assert.True(mod.SaveBreaking);
         Assert.True(GameJoltDownloadResolver.SupportsSource(mod));
         var official = new OfficialAbyssCatalogProvider();
         var abyss = Assert.Single((await official.LoadAsync(default)).Mods);

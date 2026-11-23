@@ -397,6 +397,7 @@ public sealed partial class MainWindow : Window
     }
     private async void CheckClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.CheckAsync(); }
     private async void InstallClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.InstallAsync(ConfirmAsync); }
+    private async void PullUpdatesClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.PullAndInstallUpdatesAsync(ConfirmAsync); }
     private async void PlayClick(object? sender, RoutedEventArgs e) { if (Model is { } vm) await vm.PlayAsync(ConfirmAsync); }
     private async void RestoreClick(object? sender, RoutedEventArgs e) { if (Model is { } vm && await ConfirmAsync("Restore the verified original data.win? All backups will be retained.")) await vm.RestoreAsync(); }
     private void CancelClick(object? sender, RoutedEventArgs e) => Model?.Cancel();

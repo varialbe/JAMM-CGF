@@ -84,9 +84,12 @@ public static class GameInstaller
 
     private static void CopyVerified(string source, string destination, string expectedHash, bool overwrite)
     {
-        string temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(destination))!, $".cgfmm-copy-{Guid.NewGuid():N}.tmp");
+        string temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(destination))!, Path.GetFileName(destination) == Archive
+            ? Archive + ".new" : $".cgfmm-copy-{Guid.NewGuid():N}.tmp");
         try
         {
+            BuildFiles.RefuseLink(temporary);
+            if (File.Exists(temporary)) File.Delete(temporary);
             using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None)) input.CopyTo(output);
             if (BuildFiles.Hash(temporary) != expectedHash) throw new IOException($"Copy verification failed for '{Path.GetFileName(destination)}'. Destination was not replaced; check disk space and retry.");

@@ -46,6 +46,11 @@
       <p>A recipe can patch known legacy code only when its expected unique anchors are present. If an anchor is missing or ambiguous, the build stops with the entry to inspect rather than silently patching a different location.</p>
     </section>
 
+    <section class="mod-section">
+      <h2>Catalog updates and saves</h2>
+      <p>Catalog entries may publish a semantic <code>version</code>, exact-package <code>sha256</code>, release notes and <code>saveBreaking</code>. Mark releases with <code>saveBreaking: true</code> when saves may no longer be compatible. JAMM verifies package hashes, flags major-version changes and removed added assets, and backs up the save folder before installation. Keep a backup and use <code>cgfmm update --rollback</code> if an update causes problems. See the <a href="../../docs/catalog-api.md">catalog API notes</a>.</p>
+    </section>
+
 <p class="guide-back"><a href="index.html#packages">← Back to all packages</a></p>
   </main>
 </body>
