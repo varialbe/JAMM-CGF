@@ -1,3 +1,4 @@
+using UndertaleModLib;
 using UndertaleModLib.Models;
 using static UndertaleModLib.Models.UndertaleInstruction;
 
@@ -140,7 +141,10 @@ internal static class LegacyCodeHooks
             else if (source.ValueFunction is not null)
                 copy.ValueFunction = source.ValueFunction;
             else if (source.ValueString is not null)
-                copy.ValueString = source.ValueString;
+                // Each instruction needs its own ResourceById: the writer records written objects by identity,
+                // so a shared one (inline block inserted into many events) throws "same key already added".
+                copy.ValueString = new UndertaleResourceById<UndertaleString, UndertaleChunkSTRG>
+                    { Resource = source.ValueString.Resource, CachedId = source.ValueString.CachedId };
             return copy;
         }
     }
