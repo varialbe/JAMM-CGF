@@ -20,7 +20,35 @@ public static class ConsoleMod
         var compiler = new CompileGroup(data);
         foreach (var (entry, body) in Install(data))
             compiler.QueueCodeReplace(entry, body);
+        var guardTemplate = UndertaleCode.CreateEmptyEntry(data, "gml_Script_jamm_console_input_guard");
+        compiler.QueueCodeReplace(guardTemplate, InputGuard);
         ModObjects.Compile(compiler);
+
+        var guard = guardTemplate.Instructions.ToArray();
+        data.Code.Remove(guardTemplate);
+        if (guard.Length > 0 && guard[^1].Kind == UndertaleModLib.Models.UndertaleInstruction.Opcode.Ret)
+            guard = guard[..^1];
+
+        foreach (var code in GameplayInputCode(data))
+        {
+            if (!LegacyCodeHooks.Supports(code))
+                throw new InvalidDataException($"Cannot safely guard gameplay input event '{code.Name.Content}': unsupported legacy bytecode layout.");
+            LegacyCodeHooks.Insert(code, _ => default, enterInline: guard);
+        }
+    }
+
+    private const string InputGuard = "if ((variable_global_exists(\"jamm_console_open\") && global.jamm_console_open) || keyboard_check_pressed(192) || keyboard_check_pressed(vk_f12)) exit; jamm_console_guard_marker = 0;";
+
+    private static IEnumerable<UndertaleCode> GameplayInputCode(UndertaleData data)
+    {
+        var inputTypes = new[] { EventType.Keyboard, EventType.KeyPress, EventType.KeyRelease };
+        var seen = new HashSet<UndertaleCode>();
+        foreach (var obj in data.GameObjects)
+        foreach (var type in inputTypes)
+        foreach (var ev in obj.Events[(int)type])
+        foreach (var action in ev.Actions)
+            if (action.CodeId is { } code && seen.Add(code))
+                yield return code;
     }
 
     internal static IReadOnlyList<(UndertaleCode Entry, string Body)> Install(UndertaleData data)
@@ -54,7 +82,7 @@ public static class ConsoleMod
         }
         persistent = true;
         jamm_console_owner = true;
-        jamm_console_open = false;
+        global.jamm_console_open = false;
         jamm_console_input = "";
         jamm_console_history = ds_list_create();
         jamm_console_hist_pos = 0;
@@ -93,24 +121,28 @@ public static class ConsoleMod
         {{slotSync}}
         if (keyboard_check_pressed(vk_f12) || keyboard_check_pressed(192))
         {
-            jamm_console_open = !jamm_console_open;
+            global.jamm_console_open = !global.jamm_console_open;
             keyboard_string = "";
             jamm_console_input = "";
             jamm_console_hist_pos = ds_list_size(jamm_console_history);
             keyboard_clear(vk_f12);
             keyboard_clear(192);
-            if (!jamm_console_open)
+            if (!global.jamm_console_open)
             {
                 {{unlockSwing}}
             }
+            else
+            {
+                {{ClearInputKeys}}
+            }
             exit;
         }
-        if (!jamm_console_open) exit;
+        if (!global.jamm_console_open) exit;
 
         {{lockSwing}}
         if (keyboard_check_pressed(vk_escape))
         {
-            jamm_console_open = false;
+            global.jamm_console_open = false;
             keyboard_string = "";
             jamm_console_input = "";
             keyboard_clear(vk_escape);
@@ -182,7 +214,7 @@ public static class ConsoleMod
                 }
                 else if (jamm_cmd == "close" || jamm_cmd == "exit")
                 {
-                    jamm_console_open = false;
+                    global.jamm_console_open = false;
                     {{unlockSwing}}
                 }
                 else if (jamm_cmd == "unlockall")
@@ -244,6 +276,11 @@ public static class ConsoleMod
         }
 
         // Prevent gameplay KeyPress/Keyboard handlers (B/H/L/R lure buys, S sell, Q swim, A/D boat, etc.) from firing while typing in console.
+        {{ClearInputKeys}}
+        """;
+    }
+
+    private const string ClearInputKeys = """
         for (var jamm_k = 48; jamm_k <= 90; jamm_k += 1)
             keyboard_clear(jamm_k);
         keyboard_clear(vk_space);
@@ -252,8 +289,8 @@ public static class ConsoleMod
         keyboard_clear(vk_tab);
         keyboard_clear(vk_left);
         keyboard_clear(vk_right);
+        keyboard_clear(vk_enter);
         """;
-    }
 
     private static string SlotSyncGml(bool hasSaveManager)
     {
@@ -505,7 +542,7 @@ public static class ConsoleMod
             ? "draw_set_font(fnt_babySmall);"
             : "draw_set_font(-1);";
         return $$"""
-        if (!jamm_console_open)
+        if (!global.jamm_console_open)
         {
             if (current_time < jamm_console_toast)
             {

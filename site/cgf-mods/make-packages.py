@@ -16,6 +16,7 @@ SOURCES_DIR = SITE_DIR / "sources"
 PACKAGES_DIR = SITE_DIR / "packages"
 BASE_URL = "https://varialbe.xyz/cgf-mods/"
 FIXED_ZIP_TIME = (2026, 11, 18, 0, 0, 0)
+SUPPORTED_BASE = "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1"
 FORBIDDEN_EXTENSIONS = {".win", ".exe", ".dll", ".so", ".dylib"}
 
 
@@ -205,6 +206,13 @@ def main() -> None:
     for spec in specs:
         zip_path = PACKAGES_DIR / spec["zip_name"]
         sha256, size_bytes = build_zip(spec["source_dir"], zip_path)
+        icon_path = SITE_DIR / spec["icon"]
+        png_path = icon_path.with_suffix(".png")
+        import subprocess
+        subprocess.run(["rsvg-convert", "-w", "128", "-h", "128", "-o", str(png_path), str(icon_path)], check=True)
+        conflicts = ["jamm-silo"] if spec["id"] in {"submarine", "harbor-town"} else []
+        known_issues = (["When combined with The Silo (jamm-silo), silo sprites may be mis-rendered due to a ModKit sprite-index remap bug; avoid this combination until the remap fix is released."]
+                        if conflicts else [])
         catalog.append(
             {
                 "id": spec["id"],
@@ -217,6 +225,7 @@ def main() -> None:
                 "createdUtc": "2026-11-18T00:00:00Z",
                 "rating": None,
                 "iconUrl": f"{BASE_URL}{spec['icon']}",
+                "iconPngUrl": f"{BASE_URL}{png_path.relative_to(SITE_DIR).as_posix()}",
                 "verifiedCreator": True,
                 "credits": "JAMM-CGF first-party pure-source package",
                 "catalogPage": f"{BASE_URL}#{spec['id']}",
@@ -226,6 +235,15 @@ def main() -> None:
                 "version": spec["version"],
                 "sha256": sha256,
                 "sizeBytes": size_bytes,
+                "compat": {
+                    "requiresBase": SUPPORTED_BASE,
+                    "jammMin": "0.9.1",
+                    "conflicts": conflicts,
+                    "requires": [],
+                    "testedWith": [["builtin-perf", "builtin-smooth", "builtin-hd-lite", "builtin-console"]]
+                    if spec["isDefault"] else [],
+                    "knownIssues": known_issues,
+                },
             }
         )
         print(f"{spec['zip_name']:20s} {size_bytes:6d} B  {sha256}")

@@ -100,7 +100,11 @@ public sealed record ManagedMod(string Id, string Name, string SourceFileName, s
 }
 
 /// <summary>Public source identity recorded only after successful local import/hash deduplication.</summary>
-public sealed record ModOrigin(string Catalog, string ModId, string SourcePage, string Provider, string FileId, string? ReleaseId, string? Version);
+public sealed record ModOrigin(string Catalog, string ModId, string SourcePage, string Provider, string FileId, string? ReleaseId, string? Version)
+{
+    /// <summary>SHA-256 of the downloaded catalog package, when published by the catalog.</summary>
+    public string? PackageSha256 { get; init; }
+}
 
 /// <summary>Ordered library IDs and reusable Phase 3 resolution choices.</summary>
 public sealed record ModProfile(string Name, string[] Mods, Dictionary<string, string> Resolutions)

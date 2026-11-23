@@ -148,6 +148,15 @@ public sealed class DecorSleepTests
         cfLight.Sprite = lightSpr;
         compiler.QueueCodeReplace(cfLight.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.Step, data), "visible = instance_exists(Lightbulb);");
 
+        // Bulbfish creates a child light and updates its position/visibility from Draw Begin.
+        var bulbfish = ModObjects.Create(data, "Bulbfish", persistent: false);
+        bulbfish.ParentId = fish;
+        var bulbLight = ModObjects.Create(data, "BulbfishLight", persistent: false);
+        bulbLight.ParentId = abstractLight;
+        bulbLight.Sprite = lightSpr;
+        compiler.QueueCodeReplace(bulbfish.EventHandlerFor(EventType.Create, 0u, data), "light = instance_create(x, y, BulbfishLight);");
+        compiler.QueueCodeReplace(bulbfish.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawBegin, data), "light_anchor();");
+
         // 6. Read-only with (CaveRock) in Batfin & collision_point(..., Collidable)
         var batfin = ModObjects.Create(data, "Batfin", persistent: false);
         batfin.ParentId = fish;
@@ -172,7 +181,7 @@ public sealed class DecorSleepTests
             "if (active && shouldDraw) { with (SceneItem) { if (point_distance(x, y, Camera.x, Camera.y) < 8000) draw_self(); } }");
         var lightAnchor = UndertaleCode.CreateEmptyEntry(data, "gml_Script_light_anchor");
         data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("light_anchor"), Code = lightAnchor });
-        compiler.QueueCodeReplace(lightAnchor, "with (light) { x = other.x; y = other.y; visible = other.visible; }");
+        compiler.QueueCodeReplace(lightAnchor, "with (light) { x = other.x; y = other.y; image_xscale = other.image_xscale; visible = other.visible; }");
         var glowPlant = ModObjects.Create(data, "GlowPlant", persistent: false);
         glowPlant.ParentId = sceneItem;
         glowPlant.Sprite = weedSpr;
@@ -211,8 +220,8 @@ public sealed class DecorSleepTests
         Assert.True(byName["Lush_Tree"].DeactivationSafe);
         Assert.True(byName["AbstractLight"].Covered);
         Assert.False(byName["AbstractLight"].DeactivationSafe);
-        Assert.True(byName["ModdedPulseLight"].Covered);
-        Assert.Contains(byName["ModdedPulseLight"].StepPatches, sp => sp.Kind == DecorStepKind.AngleAccumPulse && Math.Abs(sp.Rate - 0.3) < 1e-9);
+        Assert.False(byName["ModdedPulseLight"].Covered); // assigned to an owner light variable that is position-synchronized
+        Assert.Contains("position or visibility is controlled", byName["ModdedPulseLight"].Reason, StringComparison.Ordinal);
 
         // Exempted gameplay objects
         Assert.False(byName["Fish"].Covered);
@@ -222,6 +231,8 @@ public sealed class DecorSleepTests
         Assert.False(byName["MissileSilo"].Covered);
         Assert.False(byName["Lilypad"].Covered);
         Assert.False(byName["CrystalfishLight"].Covered);
+        Assert.False(byName["BulbfishLight"].Covered);
+        Assert.Contains("position or visibility is controlled", byName["BulbfishLight"].Reason, StringComparison.Ordinal);
         Assert.False(byName["Camera"].Covered);
         Assert.False(byName["SaveManager"].Covered);
         Assert.False(byName["obj_jmk_endless_ocean"].Covered);

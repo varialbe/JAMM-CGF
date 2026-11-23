@@ -223,6 +223,22 @@ public sealed class BrowseViewModelTests
         Assert.Equal(0, thumbnailRequests); // Bundled artwork takes precedence over the optional oversized download.
         vm.Browse.Dispose();
     }
+    [AvaloniaFact]
+    public async Task FirstPartyPngArtworkOverridesTheBundledGenericFallback()
+    {
+        using var files = new TestFiles();
+        string site = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "site", "cgf-mods"));
+        byte[] png = File.ReadAllBytes(Path.Combine(site, "assets", "submarine.png"));
+        var firstParty = new CatalogMod("submarine", "Submarine", "JAMM", "", "https://example.com/mod.zip", false, [], null, null,
+            Catalog: "first-party", IconPngUrl: "https://varialbe.xyz/cgf-mods/assets/submarine.png");
+        var vm = new MainViewModel(files.Store, new ModHttp(new Handler(_ => Task.FromResult(png))), new Catalog(firstParty), new Resolver());
+        await vm.InitializeAsync(); await vm.Browse.RefreshAsync();
+        var row = Assert.Single(vm.Browse.Mods);
+        Assert.IsType<Avalonia.Media.Imaging.Bitmap>(row.Icon);
+        Assert.Equal(Path.Combine(AppContext.BaseDirectory, "Assets", "ModIcons", "default.svg"),
+            ModIconResolver.Resolve(row.Mod.Id, row.Mod.Name));
+        vm.Browse.Dispose();
+    }
     private sealed class OfflineCatalog : IModCatalogProvider
     { public Task<CatalogSnapshot> LoadAsync(CancellationToken token) => throw new HttpRequestException("Offline; check your connection and Retry."); }
     [Fact]

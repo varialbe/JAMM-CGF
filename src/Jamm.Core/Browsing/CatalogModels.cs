@@ -4,7 +4,9 @@ namespace Jamm.Core.Browsing;
 public sealed record CatalogMod(string Id, string Name, string Author, string Description, string? FileUrl,
     bool IsPreview, string[] Categories, DateTimeOffset? CreatedUtc, double? Rating,
     string? IconUrl = null, string? BannerUrl = null, string[]? Screenshots = null, bool VerifiedCreator = false, string Credits = "",
-    string Catalog = "litterbox", string? CatalogPage = null)
+    string Catalog = "litterbox", string? CatalogPage = null, string? IconPngUrl = null,
+    FirstPartyCompatibility? Compat = null,
+    string? Version = null, string? Sha256 = null, long? SizeBytes = null, string? Changelog = null, bool SaveBreaking = false)
 {
     /// <summary>Stable catalog detail page, distinct from the file host.</summary>
     public string SourcePage => CatalogPage ?? (Catalog == "litterbox" ? "https://litterbox.fyi/mod.html?id=" + Uri.EscapeDataString(Id) : FileUrl ?? "https://varialbe.xyz/cgf-mods/");
@@ -13,6 +15,13 @@ public sealed record CatalogMod(string Id, string Name, string Author, string De
     /// <summary>Whether the catalog advertises a released source.</summary>
     public bool HasDownload => !IsPreview && !string.IsNullOrWhiteSpace(FileUrl);
 }
+
+/// <summary>Publisher compatibility claims for a first-party source package.</summary>
+public sealed record FirstPartyCompatibility(string? RequiresBase, string? JammMin, string[]? Conflicts = null,
+    string[]? Requires = null, string[][]? TestedWith = null, string[]? KnownIssues = null);
+
+/// <summary>Compatibility verdict for a first-party package against a configured base and profile.</summary>
+public sealed record FirstPartyCompatibilityResult(string Status, string Reason);
 
 /// <summary>A timestamped successful catalog snapshot, including offline fallback information.</summary>
 public sealed record CatalogSnapshot(CatalogMod[] Mods, DateTimeOffset FetchedUtc, string? OfflineReason = null);

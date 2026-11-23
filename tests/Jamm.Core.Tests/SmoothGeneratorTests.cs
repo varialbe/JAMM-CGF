@@ -149,6 +149,56 @@ public class SmoothGeneratorTests
     }
 
     [Fact]
+    public void ConsoleGuardsGameplayInputEventsAndClearsPollingInputInBeginStep()
+    {
+        var data = UndertaleData.CreateNew();
+        data.GeneralInfo.Major = 1;
+        data.GeneralInfo.BytecodeVersion = 16;
+        data.Fonts.Add(new() { Name = data.Strings.MakeString("fnt_babySmall"), DisplayName = data.Strings.MakeString("Small") });
+        foreach (string name in new[] { "Girl", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons" })
+            ModObjects.Create(data, name, false);
+        foreach (string name in new[] { "NewWorld", "room11" })
+            data.Rooms.Add(new() { Name = data.Strings.MakeString(name) });
+
+        var gameplay = ModObjects.Create(data, "GameplayInputFixture", false);
+        var keyPress = gameplay.EventHandlerFor(EventType.KeyPress, 77u, data);
+        var keyboard = gameplay.EventHandlerFor(EventType.Keyboard, 77u, data);
+        var keyRelease = gameplay.EventHandlerFor(EventType.KeyRelease, 77u, data);
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(keyPress, "gameplay_keypress_hits += 1;");
+        compiler.QueueCodeReplace(keyboard, "gameplay_keyboard_hits += 1;");
+        compiler.QueueCodeReplace(keyRelease, "gameplay_keyrelease_hits += 1;");
+        ModObjects.Compile(compiler);
+
+        ConsoleMod.Apply(data);
+
+        foreach (string entry in new[]
+        {
+            "gml_Object_GameplayInputFixture_KeyPress_77",
+            "gml_Object_GameplayInputFixture_Keyboard_77",
+            "gml_Object_GameplayInputFixture_KeyRelease_77"
+        })
+        {
+            string code = ModObjects.Decompile(data, data.Code.ByName(entry)!);
+            Assert.Contains("variable_global_exists(\"jamm_console_open\")", code);
+            Assert.Contains("global.jamm_console_open", code);
+            Assert.Contains("keyboard_check_pressed(192)", code);
+            Assert.Contains("keyboard_check_pressed(vk_f12)", code);
+        }
+
+        string guardedKeyPress = ModObjects.Decompile(data, data.Code.ByName("gml_Object_GameplayInputFixture_KeyPress_77")!);
+        Assert.Contains("gameplay_keypress_hits += 1", guardedKeyPress);
+        string create = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Create_0")!);
+        string begin = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_1")!);
+        string end = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{ConsoleMod.ObjectName}_Step_2")!);
+        Assert.Matches(@"global\.jamm_console_open = (false|0);", create);
+        Assert.Contains("global.jamm_console_open = !global.jamm_console_open", begin);
+        Assert.Contains("keyboard_string = jamm_clean", begin);
+        Assert.Contains("keyboard_clear(vk_enter)", begin);
+        Assert.DoesNotContain("keyboard_clear(vk_enter)", end);
+    }
+
+    [Fact]
     public void ConsoleGeneratorCompilesWhenOptionalCatalogExperienceAndSaveObjectsAreAbsent()
     {
         var data = UndertaleData.CreateNew();

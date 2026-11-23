@@ -15,10 +15,12 @@ internal sealed class SemanticCode
     private readonly HashSet<string> ambiguous;
     private readonly bool legacy;
     private readonly AnalysisOptions options;
+    private readonly Action<string>? progress;
 
     internal SemanticCode(UndertaleData original, IReadOnlyList<UndertaleData> sources, Action<string>? progress, AnalysisOptions options, string baseHash)
     {
         this.options = options;
+        this.progress = progress;
         legacy = !original.IsVersionAtLeast(2);
         baseNames = SemanticReferences.Names(original);
         modNames = sources.Select(SemanticReferences.Names).ToArray();
@@ -60,7 +62,11 @@ internal sealed class SemanticCode
                 Base.TryGetValue(name, out var before);
                 var asset = existing.GetValueOrDefault(name);
                 var effective = asset?.ModCode is { } patchCode
-                    ? patchCode with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(legacy ? AssetSymbols.QualifyLegacyNames(patchCode.Text, name, modNames[i]) : patchCode.Text, name, modNames[i]), name, modNames[i], ambiguous) } : text;
+                    ? patchCode with { Text = AssetSymbols.Qualify(SemanticReferences.NameAddedAssetLiterals(
+                        SemanticReferences.NameTypedLiterals(legacy ? AssetSymbols.QualifyLegacyNames(patchCode.Text, name, modNames[i]) : patchCode.Text, name, modNames[i]),
+                        name, baseNames, modNames[i], message => progress?.Invoke($"WARNING: {message}")), name, modNames[i], ambiguous) }
+                    : text with { Text = AssetSymbols.Qualify(SemanticReferences.NameAddedAssetLiterals(
+                        SemanticReferences.NameTypedLiterals(text.Text, name, modNames[i]), name, baseNames, modNames[i], message => progress?.Invoke($"WARNING: {message}")), name, modNames[i], ambiguous) };
                 if (asset?.BaseCode is { } patchBase)
                     before = patchBase with { Text = AssetSymbols.Qualify(SemanticReferences.NameTypedLiterals(legacy ? AssetSymbols.QualifyLegacyNames(patchBase.Text, name, baseNames) : patchBase.Text, name, baseNames), name, baseNames, ambiguous) };
                 bool same = before is not null && before.Text == effective.Text && before.LocalsCount == effective.LocalsCount

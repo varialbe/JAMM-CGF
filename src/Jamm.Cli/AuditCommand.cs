@@ -1,15 +1,17 @@
 using System.Text.Json;
+using Jamm.Core;
 using Jamm.Core.Building;
 
 namespace Jamm.Cli;
 
-/// <summary><c>cgfmm audit instances</c>: lists code that dereferences objects which may have no active instance.</summary>
+/// <summary>Code audits for instance references and suspicious untyped asset-index literals.</summary>
 internal static class AuditCommand
 {
     internal static int Run(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--asset-refs") return AssetReferences(args[1..]);
         if (args.Length < 2 || args[0] != "instances")
-            throw new ArgumentException("Use: cgfmm audit instances <data.win> [--base <original.win>] [--json <file>] [--all]");
+            throw new ArgumentException("Use: cgfmm audit instances <data.win> [--base <original.win>] [--json <file>] [--all], or cgfmm audit --asset-refs <mod-or-build.win> --base <original.win> [--json <file>]");
         string archive = Path.GetFullPath(args[1]);
         string? json = null;
         string? original = null;
@@ -37,6 +39,32 @@ internal static class AuditCommand
             foreach (var r in all ? group : group.Take(5))
                 Console.WriteLine($"    {r.Code}:{r.Line}  {r.Snippet}");
         }
+        return 0;
+    }
+
+    private static int AssetReferences(string[] args)
+    {
+        if (args.Length == 0) throw new ArgumentException("Use: cgfmm audit --asset-refs <mod-or-build.win> --base <original.win> [--json <file>]");
+        string archive = Path.GetFullPath(args[0]);
+        string? original = null, json = null;
+        for (int i = 1; i < args.Length; i++)
+        {
+            if (args[i] == "--base" && i + 1 < args.Length && original is null) original = Path.GetFullPath(args[++i]);
+            else if (args[i] == "--json" && i + 1 < args.Length && json is null) json = Path.GetFullPath(args[++i]);
+            else throw new ArgumentException($"Unknown or repeated option '{args[i]}'. Use --base <original.win> and --json <file>.");
+        }
+        if (original is null) throw new ArgumentException("Asset-reference audit needs --base <original.win> so it can identify mod-added asset indices.");
+        if (!File.Exists(archive)) throw new FileNotFoundException($"'{archive}' was not found. Pass a mod or merged data.win to audit.");
+        if (!File.Exists(original)) throw new FileNotFoundException($"Base archive '{original}' was not found. Pass the exact archive used to build the mod.");
+        if (json is not null) OutputFile.Validate(json, [archive, original]);
+        using var baseFile = GameFileLoader.Load(original);
+        using var modFile = GameFileLoader.Load(archive);
+        var findings = AssetLiteralAudit.Analyze(baseFile, modFile);
+        if (json is not null)
+            OutputFile.Write(json, JsonSerializer.Serialize(findings, new JsonSerializerOptions { WriteIndented = true }) + "\n", [archive, original]);
+        foreach (var finding in findings)
+            Console.WriteLine($"WARNING: {finding.Mod} / {finding.Code}:{finding.Line} container {finding.Container}, integer {finding.Value}; candidate families: {string.Join(", ", finding.CandidateFamilies)}");
+        Console.WriteLine($"Asset-reference audit: {findings.Count} integer literal(s) match added or shifted asset indices. Review asset-like contexts; unrelated numeric constants are reported as candidates.");
         return 0;
     }
 }

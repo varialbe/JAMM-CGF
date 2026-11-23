@@ -87,6 +87,24 @@ def checksum(mod: dict) -> str:
             f'<div><dt>SHA-256</dt><dd><code>{escape(mod["sha256"])}</code></dd></div></dl>')
 
 
+def compatibility_details(mod: dict) -> str:
+    compat = mod.get("compat") or {}
+    conflicts = ", ".join(compat.get("conflicts", [])) or "None listed"
+    requires = ", ".join(compat.get("requires", [])) or "None"
+    tested = "; ".join(" + ".join(combo) for combo in compat.get("testedWith", [])) or "No combinations recorded"
+    issues = compat.get("knownIssues", [])
+    body = f'''<dl class="download-meta">
+      <div><dt>Required base SHA-256</dt><dd><code>{escape(compat.get("requiresBase", "Not specified"))}</code></dd></div>
+      <div><dt>Minimum JAMM</dt><dd>{escape(compat.get("jammMin", "Not specified"))}</dd></div>
+      <div><dt>Conflicts</dt><dd>{escape(conflicts)}</dd></div>
+      <div><dt>Requirements</dt><dd>{escape(requires)}</dd></div>
+      <div><dt>Tested with</dt><dd>{escape(tested)}</dd></div>
+    </dl>'''
+    if issues:
+        body += items(issues, "guide-list")
+    return section("Compatibility", body)
+
+
 def card(mod: dict, content: dict) -> str:
     mod_id = escape(mod["id"])
     icon = escape(local_url(mod["iconUrl"]))
@@ -211,6 +229,7 @@ def detail(mod: dict, content: dict) -> str:
         sections.append(section(example.get("title", "Manifest example"),
             f'<p>{inline(example["description"])}</p><pre><code>{escape(example["code"])}</code></pre>'))
     sections.append(datasheet(mod, content, manifest))
+    sections.append(compatibility_details(mod))
     sections.append(section("Version history", items(content.get("changelog", [f'{mod["version"]}: Current source package.']), "changelog")))
     sections.append(benchmark_section(mod))
     sections.append(faq(content.get("faq", [])))
@@ -261,9 +280,18 @@ def main() -> None:
     (SITE_DIR / "compatibility.html").write_text(guide_page(
         "Compatibility", "Tested profiles",
         "These combinations are supported by recorded archive builds or runtime checks in the repository reports. A reported build does not guarantee every third-party mod revision behaves the same way.",
-        [{"heading":"Public five-pack", "text":["The public five-pack used in the reports is Antiquity, PWB, The Abyss, Colour Expansion and Verdant. Silo and Weather Pack were built with that pack at zero pack-specific conflicts. Endless Ocean completed a route across the five-pack's extended east boundary using its seeded chunk stream."], "list":["The Silo: five-pack and all-seven archive builds passed; the Area follow anchor tracks Cave Expansion's moved and rotated MissileSilo.","Weather Pack: five-pack and all-seven builds passed with zero Weather Pack conflicts and all 53 Weather assets accepted.","Endless Ocean: the five-pack route crossed the generated boundary, streamed terrain and returned west with generated instances released."]},
+        [{"heading":"First-party package compatibility", "text":["Compatibility claims below are generated from catalog.json. JAMM checks the required base and active profile conflicts locally; tested combinations are evidence, not a guarantee for changed package versions."], "list":[]},
+         {"heading":"Public five-pack", "text":["The public five-pack used in the reports is Antiquity, PWB, The Abyss, Colour Expansion and Verdant. Silo and Weather Pack were built with that pack at zero pack-specific conflicts. Endless Ocean completed a route across the five-pack's extended east boundary using its seeded chunk stream."], "list":["The Silo: five-pack and all-seven archive builds passed; the Area follow anchor tracks Cave Expansion's moved and rotated MissileSilo.","Weather Pack: five-pack and all-seven builds passed with zero Weather Pack conflicts and all 53 Weather assets accepted.","Endless Ocean: the five-pack route crossed the generated boundary, streamed terrain and returned west with generated instances released."]},
          {"heading":"First-party defaults", "text":["JAMM Perf, Smooth, HD Lite and Console are documented together as a verified first-party combination. The site recipes are source packages that still build locally against the configured legacy base."], "list":["Example Fish was verified alongside Harbor Pack and Showcase Upgrades.","Example Rod uses the shared Items runtime and stable item keys, so its save ownership is independent of its current numeric slot."]},
          {"heading":"Know the limits", "text":["Compatibility is tied to the August 2023 legacy VM archive and the tested package versions. The current Steam YYC build is not a supported base. Legacy whole-archive mods can edit the same code or room entries; JAMM reports those overlaps and profile choices determine the retained changes.","The reports contain some broader all-seven runs. One Silo all-seven save run hit an existing Maize patrol crash after the four catches had been deposited; the save was independently reloaded and checked. This is recorded as a limitation of that pack combination, not a Silo package failure.","Keep boat contents and live lure interactions clear when changing profiles because some legacy save sections still use numeric object IDs. Back up saves before profile changes."]}]))
+    catalog_table = "<div class=\"table-wrap\"><table><thead><tr><th>Package</th><th>Status rules</th><th>Conflicts</th><th>Requirements</th><th>Tested with</th><th>Known issues</th></tr></thead><tbody>" + "".join(
+        f'<tr><th><a href="mods/{escape(m["id"])}.html">{escape(m["name"])}</a></th><td>Base {escape((m.get("compat") or {}).get("requiresBase", "not specified"))}; JAMM {escape((m.get("compat") or {}).get("jammMin", "not specified"))}+</td><td>{escape(", ".join((m.get("compat") or {}).get("conflicts", [])) or "None")}</td><td>{escape(", ".join((m.get("compat") or {}).get("requires", [])) or "None")}</td><td>{escape("; ".join(" + ".join(c) for c in (m.get("compat") or {}).get("testedWith", [])) or "None recorded")}</td><td>{escape(" ".join((m.get("compat") or {}).get("knownIssues", [])) or "None reported")}</td></tr>'
+        for m in catalog)
+    catalog_table += "</tbody></table></div>"
+    compatibility_page = (SITE_DIR / "compatibility.html").read_text(encoding="utf-8")
+    insertion = '<section class="mod-section"><h2>First-party catalog checks</h2>' + catalog_table + '</section>'
+    compatibility_page = compatibility_page.replace('<section class="mod-section">\n      <h2>Public five-pack</h2>', insertion + '\n<section class="mod-section">\n      <h2>Public five-pack</h2>')
+    (SITE_DIR / "compatibility.html").write_text(compatibility_page, encoding="utf-8")
     (SITE_DIR / "progress.html").write_text(progress_page(SITE_DIR), encoding="utf-8")
 
 

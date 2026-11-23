@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Jamm.Core;
 using Jamm.Core.Building;
+using Jamm.Core.Browsing;
 using Jamm.Core.Management;
 using Jamm.Core.Merging;
 using Jamm.Core.Patching;
@@ -126,12 +127,37 @@ internal static class CheckCommand
         if (store.Config().Base is { } vanilla) protectedPaths = [.. protectedPaths, vanilla];
         if (output is not null) OutputFile.Validate(output, protectedPaths);
         var report = new ManagerOperations(store).Check(name, progress: Console.Error.WriteLine, strict: strict);
+        PrintFirstPartyCompatibility(store, name);
         if (output is not null)
             OutputFile.Write(output, JsonSerializer.Serialize(new { elapsedSeconds = timer.Elapsed.TotalSeconds, group, report }, JsonOptions) + "\n", protectedPaths);
         ManagementCommand.PrintGroup(group);
         Print(report, timer.Elapsed.TotalSeconds, grouped: true);
         if (details is not null) Details(report, [], details);
         return report.ExitCode;
+    }
+
+    private static void PrintFirstPartyCompatibility(ManagerStore store, string profileName)
+    {
+        var profile = new ProfileLibrary(store).Get(profileName);
+        var enabled = profile.EnabledMods.ToHashSet(StringComparer.Ordinal);
+        var metadata = new ModLibrary(store).Metadata().Where(m => enabled.Contains(m.Id)).ToArray();
+        string[] activeIds = metadata.SelectMany(m => m.Origins).Where(o => o.Catalog == "first-party")
+            .Select(o => o.ModId).Distinct(StringComparer.Ordinal).ToArray();
+        string? baseHash = store.Config().Base is { } basePath && File.Exists(basePath) ? BuildFiles.Hash(basePath) : null;
+        CatalogSnapshot snapshot;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+        try { snapshot = new FirstPartyCatalogProvider(store, new ModHttp()).LoadAsync(timeout.Token).GetAwaiter().GetResult(); }
+        catch (Exception ex) when (ex is IOException or HttpRequestException or System.Text.Json.JsonException or OperationCanceledException)
+        { Console.WriteLine("First-party compatibility: catalog unavailable; refresh the catalog in Browse and retry."); return; }
+        Console.WriteLine("First-party compatibility (configured base and active profile):");
+        foreach (var managed in metadata.Where(m => m.Origins.Any(o => o.Catalog == "first-party")))
+        {
+            var origin = managed.Origins.First(o => o.Catalog == "first-party");
+            var mod = snapshot.Mods.FirstOrDefault(m => m.Catalog == "first-party" && m.Id == origin.ModId);
+            if (mod is null) { Console.WriteLine($"  Warning: {managed.Name}: no compatibility data in the current catalog."); continue; }
+            var result = FirstPartyCompatibilityEvaluator.Evaluate(mod, baseHash, activeIds);
+            Console.WriteLine($"  {result.Status}: {managed.Name}: {result.Reason}");
+        }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };

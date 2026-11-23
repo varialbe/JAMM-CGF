@@ -76,7 +76,7 @@ internal static class SubmarineScene
                 keyboard_key_press(vk_f12);
                 break;
             case 1:
-                if (!{{ConsoleMod.ObjectName}}.jamm_console_open) exit;
+                if (!(variable_global_exists("jamm_console_open") && global.jamm_console_open)) exit;
                 keyboard_key_release(vk_f12);
                 keyboard_string = "money 150000000";
                 keyboard_key_press(vk_enter);
@@ -91,7 +91,7 @@ internal static class SubmarineScene
                 keyboard_key_press(vk_f12);
                 break;
             case 4:
-                if ({{ConsoleMod.ObjectName}}.jamm_console_open) exit;
+                if ((variable_global_exists("jamm_console_open") && global.jamm_console_open)) exit;
                 keyboard_key_release(vk_f12);
                 with (icon_Boats) event_user(0);
                 break;

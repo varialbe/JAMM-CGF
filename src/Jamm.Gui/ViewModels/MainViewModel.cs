@@ -18,6 +18,7 @@ public sealed partial class MainViewModel : ObservableObject
     private string status = "Ready", log = "", gameStatus = "Choose a legacy game folder in Settings.", validation = "Choose a legacy base data.win.";
     private string? selectedProfile;
     private bool knownGame, canRestore;
+    private int availableUpdates;
     private bool updatingConflictChoices;
     private IReadOnlyDictionary<string, string> conflictResolutions = new Dictionary<string, string>();
     private IReadOnlyDictionary<string, string> upgradeGroupChildChoices = new Dictionary<string, string>();
@@ -47,6 +48,12 @@ public sealed partial class MainViewModel : ObservableObject
     public bool CanCheck => !IsBusy && PendingCount == 0 && SelectedProfile is not null && Order.Any(m => m.Enabled);
     /// <summary>Installation requires a known game and an enabled selection.</summary>
     public bool CanInstall => CanCheck && knownGame;
+    /// <summary>Updater requires a selected profile and known target game directory.</summary>
+    public bool CanUpdate => !IsBusy && SelectedProfile is not null && knownGame;
+    /// <summary>Badge text shown when catalog updates are available.</summary>
+    public string UpdateBadge => availableUpdates > 0 ? availableUpdates.ToString() : "";
+    /// <summary>Whether the update badge should be shown.</summary>
+    public bool HasUpdates => availableUpdates > 0;
     /// <summary>Play uses the same checked installation workflow.</summary>
     public bool CanPlay => !IsBusy && (SelectedProfile is not null || PendingCount > 0) && knownGame;
     /// <summary>Restore is available only for a recognized game with a backup.</summary>
@@ -75,7 +82,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void NotifyButtons()
     {
-        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy), nameof(PendingCount), nameof(CanUndo), nameof(StatusTitle), nameof(StatusExplanation), nameof(HasMods) }) OnPropertyChanged(property);
+        foreach (string property in new[] { nameof(CanEdit), nameof(CanEditProfile), nameof(CanCheck), nameof(CanInstall), nameof(CanUpdate), nameof(UpdateBadge), nameof(CanPlay), nameof(CanRestore), nameof(CanCancel), nameof(HasDetectedLegacy), nameof(PendingCount), nameof(CanUndo), nameof(StatusTitle), nameof(StatusExplanation), nameof(HasMods) }) OnPropertyChanged(property);
     }
     private double operationProgress;
     private bool operationIndeterminate = true;
@@ -132,7 +139,43 @@ public sealed partial class MainViewModel : ObservableObject
     public Task InitializeAsync() => RunAsync("Loading library", async (token, _) =>
     {
         await ReloadAsync();
+        await RefreshUpdateCountAsync(token);
         if (NeedsSetup) await SearchGamesInternalAsync(token, new Progress<string>(m => SetupMessage = m));
+    });
+
+    /// <summary>Refreshes the main-window update badge from enabled catalog mods.</summary>
+    public async Task RefreshUpdateCountAsync(CancellationToken token = default)
+    {
+        if (SelectedProfile is null) { availableUpdates = 0; OnPropertyChanged(nameof(UpdateBadge)); OnPropertyChanged(nameof(HasUpdates)); return; }
+        try { availableUpdates = (await Browse.CreateUpdateWorkflow().CheckAsync(SelectedProfile, token)).Count; }
+        catch (Exception ex) when (ex is IOException or HttpRequestException or InvalidDataException or TimeoutException)
+        { availableUpdates = 0; }
+        OnPropertyChanged(nameof(UpdateBadge)); OnPropertyChanged(nameof(HasUpdates));
+    }
+
+    /// <summary>Downloads updates, explains save risks and installs only after explicit confirmation.</summary>
+    public Task PullAndInstallUpdatesAsync(Func<string, Task<bool>> confirm) => RunAsync("Preparing mod updates", async (token, progress) =>
+    {
+        var workflow = Browse.CreateUpdateWorkflow();
+        var prepared = await Task.Run(() => workflow.PrepareAsync(SelectedProfile, progress.Report, token), token);
+        string warning = prepared.Conflicts.Where(c => c.Reasons.Count > 0).Any()
+            ? "Save compatibility warning:\n\n" + string.Join("\n", prepared.Conflicts.Where(c => c.Reasons.Count > 0).Select(c => $"• {c.Update.Name}: {string.Join("; ", c.Reasons)}"))
+            : "No save conflicts were detected for these updates.";
+        warning += "\n\nSave backup: " + (prepared.SaveBackup.Length == 0 ? "could not be made; check the configured Wine/Proton prefix" : prepared.SaveBackup);
+        warning += "\n\nInstall the verified updates into " + prepared.Build.Config.GameDir + "?";
+        if (!await confirm(warning))
+        {
+            new ProfileInstaller(store).Discard(prepared.Build);
+            workflow.Rollback();
+            Message("Update declined. The game was not replaced.");
+            return;
+        }
+        token.ThrowIfCancellationRequested();
+        cancellable = false; NotifyButtons();
+        workflow.Install(prepared.Build);
+        await ReloadAsync();
+        await RefreshUpdateCountAsync(token);
+        Message("Updates installed and verified. Use update --rollback to undo.");
     });
     /// <summary>Persisted expert-mode preference.</summary>
     public bool AdvancedMode { get => Config.AdvancedMode; set { if (IsBusy) return; store.Set("advancedMode", value.ToString()); OnPropertyChanged(); OnPropertyChanged(nameof(ShowBuiltinHeader)); } }
@@ -264,11 +307,15 @@ public sealed partial class MainViewModel : ObservableObject
         }
         finally { loading = false; }
         await Browse.UpdateMembershipAsync();
+        await Browse.LoadLocalIconsAsync(cancellation?.Token ?? CancellationToken.None);
         await Browse.ApplyAutomaticFactsAsync(cancellation?.Token ?? CancellationToken.None);
     }
     internal void RefreshLocalIcons()
     {
-        foreach (var row in Mods) row.Icon = ModIconResolver.Load(row.CatalogId, row.Name) ?? Browse.CatalogIcon(row.CatalogId);
+        foreach (var row in Mods)
+            row.Icon = Browse.IsFirstParty(row.CatalogId)
+                ? Browse.CatalogIcon(row.CatalogId) ?? ModIconResolver.Load(row.CatalogId, row.Name)
+                : ModIconResolver.Load(row.CatalogId, row.Name) ?? Browse.CatalogIcon(row.CatalogId);
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
     public Task AddAsync(IEnumerable<string> paths)
@@ -359,7 +406,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Deletes a confirmed profile without altering installed files.</summary>
     public Task DeleteProfileAsync() => RunAsync("Deleting profile", async (_, _) => { await Task.Run(() => new ProfileLibrary(store).Delete(SelectedProfile!)); await ReloadAsync(); }, false);
     /// <summary>Switches profiles and reloads their order and enablement.</summary>
-    public Task SelectProfileAsync(string name) => RunAsync("Selecting profile", async (_, _) => { await Task.Run(() => new ProfileLibrary(store).Use(name)); await ReloadAsync(); }, false);
+    public Task SelectProfileAsync(string name) => RunAsync("Selecting profile", async (token, _) => { await Task.Run(() => new ProfileLibrary(store).Use(name)); await ReloadAsync(); await RefreshUpdateCountAsync(token); }, false);
     /// <summary>Persists checkbox state and ordering while retaining saved conflict choices.</summary>
     public Task SaveOrderAsync() => RunAsync("Saving load order", async (_, progress) =>
     {

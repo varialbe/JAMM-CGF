@@ -11,10 +11,13 @@ public sealed class CatalogRow(CatalogMod mod) : ObservableObject
 {
     private Avalonia.Media.IImage? icon;
     private string adds = "Content summary unavailable. Select to check.", compatibility = "?", reason = "Unsure: select this mod to check its content.", color = "#D6A500";
+    private string compatibilityLabel = "Unknown";
     /// <summary>Proven resource counts.</summary>
     public string Adds { get => adds; internal set => SetProperty(ref adds, value); }
     /// <summary>Accessible compatibility symbol.</summary>
     public string CompatibilityIcon { get => compatibility; internal set { if (SetProperty(ref compatibility, value)) OnPropertyChanged(nameof(HasCompatibilityInfo)); } }
+    /// <summary>Visible compatibility badge text.</summary>
+    public string CompatibilityLabel { get => compatibilityLabel; internal set => SetProperty(ref compatibilityLabel, value); }
     /// <summary>Compatibility reason for tooltip and assistive technology.</summary>
     public string CompatibilityReason { get => reason; internal set { if (SetProperty(ref reason, value)) OnPropertyChanged(nameof(HasCompatibilityInfo)); } }
     /// <summary>Explains negative or uncertain compatibility through an accessible info control.</summary>
@@ -61,6 +64,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
     private readonly IModDownloadResolver resolver;
     private CancellationTokenSource? reading;
     private CatalogRow[] all = [];
+    private CatalogMod[] firstPartyCatalog = [];
     private readonly Dictionary<string, Bitmap> localArtwork = [];
     private ManagedMod[] localMods = [];
     private string[] enabledIds = [], installedIds = [];
@@ -90,6 +94,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
     public ObservableCollection<Bitmap> Images { get; } = [];
     /// <summary>Searches name, author and description.</summary>
     public string Search { get => search; set { if (SetProperty(ref search, value)) Filter(); } }
+    internal ModUpdateWorkflow CreateUpdateWorkflow() => new(store, catalog, resolver, http);
     /// <summary>Category filter.</summary>
     public string Category { get => category; set { if (SetProperty(ref category, value)) Filter(); } }
     /// <summary>Released/preview filter.</summary>
@@ -123,6 +128,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
 
     internal Avalonia.Media.IImage? CatalogIcon(string? id) => all.FirstOrDefault(r => r.Mod.Id == id)?.Icon
         ?? (id is not null ? localArtwork.GetValueOrDefault(id) : null);
+    internal bool IsFirstParty(string? id) => id is not null && firstPartyCatalog.Any(mod => mod.Id == id);
     internal async Task LoadLocalIconsAsync(CancellationToken token)
     {
         var ids = owner.Mods.Select(r => r.CatalogId).OfType<string>().Distinct().Where(id => CatalogIcon(id) is null).ToArray();
@@ -130,13 +136,34 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         try
         {
             var snapshot = await catalog.LoadAsync(token);
-            foreach (var mod in snapshot.Mods.Where(m => ids.Contains(m.Id) && m.IconUrl is not null).Take(60))
+            firstPartyCatalog = snapshot.Mods.Where(m => m.Catalog == "first-party").ToArray();
+            foreach (var mod in snapshot.Mods.Where(m => ids.Contains(m.Id) && (m.IconPngUrl ?? m.IconUrl) is not null).Take(60))
             {
                 try
                 {
-                    var bytes = await http.ReadAsync(mod.IconUrl!, 256 * 1024, token);
+                    string? sha = localMods.FirstOrDefault(m => m.Origins.Any(o => o.Catalog == mod.Catalog && o.ModId == mod.Id))?.Sha256;
+                    string cachePath = sha is null ? "" : store.ArtworkPath(mod.Id, sha);
+                    if (sha is not null && File.Exists(cachePath))
+                    {
+                        try
+                        {
+                            using var cached = File.OpenRead(cachePath);
+                            localArtwork[mod.Id] = Bitmap.DecodeToWidth(cached, 72);
+                            owner.RefreshLocalIcons();
+                            continue;
+                        }
+                        catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or NotSupportedException) { }
+                    }
+                    var bytes = await http.ReadAsync(mod.IconPngUrl ?? mod.IconUrl!, 256 * 1024, token);
                     using var stream = new MemoryStream(bytes);
                     localArtwork[mod.Id] = Bitmap.DecodeToWidth(stream, 72);
+                    if (sha is not null)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
+                        string temporary = cachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                        try { File.WriteAllBytes(temporary, bytes); File.Move(temporary, cachePath, true); }
+                        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+                    }
                     owner.RefreshLocalIcons();
                 }
                 catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or ArgumentException or NotSupportedException or TimeoutException) { }
@@ -192,8 +219,10 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         {
             var snapshot = await catalog.LoadAsync(current.Token);
             if (reading != current) return;
+            firstPartyCatalog = snapshot.Mods.Where(m => m.Catalog == "first-party").ToArray();
             foreach (var row in all) (row.Icon as IDisposable)?.Dispose();
-            all = snapshot.Mods.Select(m => new CatalogRow(m) { Icon = ModIconResolver.Load(m.Id, m.Name) }).ToArray();
+            all = snapshot.Mods.Select(m => new CatalogRow(m)
+            { Icon = m.IconPngUrl is null ? ModIconResolver.Load(m.Id, m.Name) : null }).ToArray();
             await ApplyAutomaticFactsAsync(current.Token); owner.RefreshLocalIcons();
             Categories.Clear(); Categories.Add("All categories");
             foreach (string name in all.SelectMany(r => r.Mod.Categories).Distinct().Order()) Categories.Add(name);
@@ -205,7 +234,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
             foreach (var row in all.Take(60))
             {
                 current.Token.ThrowIfCancellationRequested(); if (budget <= 0) break;
-                if (row.Icon is not null || row.Mod.IconUrl is not { } url) continue;
+                if (row.Icon is not null || (row.Mod.IconPngUrl ?? row.Mod.IconUrl) is not { } url) continue;
                 try
                 {
                     var bytes = await http.ReadAsync(url, Math.Min(256 * 1024, budget), current.Token); budget -= bytes.Length;
@@ -226,6 +255,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
         foreach (var image in Images) image.Dispose(); Images.Clear();
         if (row is null) { IsLoading = false; reading = null; current.Dispose(); return; }
         row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
+        row.CompatibilityLabel = "Unknown";
         row.CompatibilityReason = "Unsure: resolving selected source."; row.Adds = "Checking content…";
         DetailStatus = "Finding the download…";
         try
@@ -280,6 +310,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
     {
         row.Adds = facts.Adds.Length == 0 ? "No proven additions." : "Adds\n" + string.Join("\n", facts.Adds);
         row.CompatibilityIcon = facts.Compatibility == "Compatible" ? "✓" : facts.Compatibility == "Incompatible" ? "✕" : "?";
+        row.CompatibilityLabel = facts.Compatibility switch { "Compatible" => "Compatible", "Incompatible" => "Incompatible", _ => "Warning" };
         row.CompatibilityColor = facts.Compatibility == "Compatible" ? "#259D50" : facts.Compatibility == "Incompatible" ? "#D74040" : "#D6A500";
         row.CompatibilityReason = facts.Compatibility + ": " + facts.Reason + " · " + source;
         var removed = facts.RemovedPerformanceChanges ?? [];
@@ -370,7 +401,8 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
                 ShowFacts(Selected!, verifiedFacts, shared is null ? "checked on this PC" : $"checked by JAMM server on {shared.CheckedUtc:yyyy-MM-dd HH:mm} UTC");
                 lock (transferGate) transferring = 0;
                 transferState = "Importing"; RefreshMembership(); IsIndeterminate = true;
-                var origin = new ModOrigin(mod.Catalog, mod.Id, file.SourceUrl, file.Provider, file.Id, file.ReleaseId, file.Version);
+                var origin = new ModOrigin(mod.Catalog, mod.Id, file.SourceUrl, file.Provider, file.Id, file.ReleaseId, mod.Version ?? file.Version)
+                { PackageSha256 = mod.Sha256 };
                 var result = await Task.Run(() =>
                 {
                     var library = new ModLibrary(store);
