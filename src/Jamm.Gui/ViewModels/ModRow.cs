@@ -24,6 +24,11 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     private string? author;
     private string? description;
     private string catalogCompatibility = "";
+    private bool hasCatalogOrigin;
+    /// <summary>Whether this library entry has an origin used by a public catalog.</summary>
+    public bool HasCatalogOrigin { get => hasCatalogOrigin; internal set { if (SetProperty(ref hasCatalogOrigin, value)) OnPropertyChanged(nameof(NeedsCatalogLink)); } }
+    /// <summary>Whether the row should offer catalog linking.</summary>
+    public bool NeedsCatalogLink => !HasCatalogOrigin;
     /// <summary>Whether enablement differs from the saved selection.</summary>
     public bool IsPending => Enabled != baseline;
     /// <summary>Accessible switch label.</summary>

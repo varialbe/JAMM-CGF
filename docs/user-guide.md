@@ -30,6 +30,12 @@ Before replacement, SHA-256-verified originals are retained at `data.win.cgfmm-o
 
 No game files are distributed. Patches, details and logs can contain local game code or strings: do not redistribute them. Static verification checks archives, references and compilation; gameplay still needs testing with the legacy executable.
 
+## Catalog links and updates
+
+Mods added from local `.win` files are checked against the first-party catalog. A unique archive SHA-256 match is linked automatically; otherwise JAMM uses the normalized name and base SHA-256, using the installed version to disambiguate when available. If the local archive has no version metadata, the linked catalog version is recorded while the installed package hash remains unknown, so update checks offer the published package. The Library marks mods without a catalog origin and offers **Link to catalog** when a unique match can be established. To choose an entry yourself, run `cgfmm link <mod> <catalog-id>`; to check all local mods, run `cgfmm link --auto` (or add `--profile <name>` to limit it to that profile). The command prints the match and evidence, and leaves ambiguous matches unlinked.
+
+`cgfmm update --check` lists enabled mods without any catalog origin separately. Run `cgfmm link --auto` to check them. Linked mods can then be checked and updated through the normal updater.
+
 ## Author performance changes
 
 Profile builds remove harmful performance hacks by default, including timing overrides, busy-wait frame limiters, FPS-driven fish thinning, fish step throttles that can delay gameplay updates, and cuts to fish sonar visibility. JAMM keeps recognized off-screen draw culls and scene-object throttles that do not change gameplay. In **Advanced mode**, enable **Keep all the author's performance changes** to keep every author performance edit, including changes normally removed as harmful. The choice is per mod and takes effect on the next build.

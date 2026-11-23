@@ -61,6 +61,7 @@ int Run(string[] arguments)
             cgfmm config show [--json] | config set <key> <value>
             cgfmm builtin list | builtin add <perf|smooth|hd-lite|console>
             cgfmm add <file.win|file.zip|modkit dir> [--name <name>]
+            cgfmm link --auto [--profile <name>] | cgfmm link <mod> <catalog-id>
             cgfmm modkit new <dir> [--template fish|upgrade|boat|hat]
             cgfmm modkit check <dir>
             cgfmm modkit build <dir> [--base <data.win>] [--out <file.win>] [--no-repack]
@@ -101,6 +102,7 @@ int Run(string[] arguments)
     if (command == "modkit") return ModKitCommand.Run(arguments[1..], dataDirectory);
     if (command == "compat-scan") return CompatScanCommand.Run(arguments[1..], dataDirectory);
     if (command == "audit") return AuditCommand.Run(arguments[1..]);
+    if (command == "link") return LinkCommand.Run(arguments[1..], dataDirectory);
     if (command is "builtin" or "config" or "add" or "list" or "remove" or "profile" or "apply" or "play"
         || command == "restore" && !arguments.Contains("--game", StringComparer.Ordinal))
         return ManagementCommand.Run(command, arguments[1..], dataDirectory, verbose);

@@ -13,6 +13,9 @@
                 <Border Background="#1E3A8A" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" IsVisible="{Binding IsModKit}">
                   <TextBlock Text="ModKit" FontSize="10" FontWeight="Bold" Foreground="#93C5FD"/>
                 </Border>
+                <Border Background="#704214" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" IsVisible="{Binding NeedsCatalogLink}">
+                  <TextBlock Text="Not linked" FontSize="10" FontWeight="Bold" Foreground="#FCD34D"/>
+                </Border>
               </WrapPanel>
               <TextBlock Text="{Binding RoleLine}" IsVisible="{Binding ShowRole}" Classes="muted" FontSize="12" TextWrapping="Wrap"/>
               <TextBlock Text="● pending" Foreground="#D6A500" FontSize="12" IsVisible="{Binding IsPending}"/>
@@ -50,6 +53,7 @@
         <CheckBox Content="Repair legacy shop unlocks in this profile" IsChecked="{Binding UnlockFix, Mode=TwoWay}" IsVisible="{Binding InProfile}" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}"
                   ToolTip.Tip="Makes legacy boats and rods with no detected unlock path buyable."/>
         <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
+        <Button Content="Link to catalog" Click="LinkCatalogClick" IsVisible="{Binding NeedsCatalogLink}" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" HorizontalAlignment="Left"/>
         <TextBlock Text="{Binding SourceFolderLine}" Classes="muted" FontSize="11" IsVisible="{Binding IsModKit}" TextWrapping="Wrap"/>
         <WrapPanel Orientation="Horizontal" Margin="0,4,0,0" IsVisible="{Binding IsModKit}">
           <Button x:Name="RebuildButton" Content="Rebuild" Click="RebuildClick" IsEnabled="{Binding $parent[Window].DataContext.CanEdit}" ToolTip.Tip="Rebuild this mod from its ModKit folder"/>

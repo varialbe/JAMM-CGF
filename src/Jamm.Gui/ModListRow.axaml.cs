@@ -32,4 +32,11 @@ public sealed partial class ModListRow : UserControl
         if (DataContext is ViewModels.ModRow row && this.FindAncestorOfType<MainWindow>() is { } window)
             await window.RebuildModAsync(row);
     }
+
+    private async void LinkCatalogClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.ModRow row && this.FindAncestorOfType<MainWindow>() is { } window
+            && window.DataContext is ViewModels.MainViewModel vm)
+            await vm.LinkCatalogAsync(row);
+    }
 }

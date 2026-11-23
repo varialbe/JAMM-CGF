@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Jamm.Core.Browsing;
 using Jamm.Core.Management;
 
 namespace Jamm.Cli;
@@ -94,6 +95,23 @@ internal static class ManagementCommand
             case "add":
                 Count(1);
                 var added = library.Add(positional[0], options.GetValueOrDefault("--name"), Progress);
+                if (added.Mod.Origins.Length == 0)
+                {
+                    try
+                    {
+                        using var http = new ModHttp();
+                        var snapshot = new FirstPartyCatalogProvider(store, http).LoadAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        var match = CatalogOriginLinker.Match(added.Mod, snapshot);
+                        if (match.Mod is { } catalogMod)
+                        {
+                            CatalogOriginLinker.Link(library, added.Mod, catalogMod);
+                            Console.WriteLine($"Linked to {catalogMod.Name} ({catalogMod.Id}) by {match.Reason}.");
+                        }
+                        else if (match.Ambiguous) Console.WriteLine($"Not linked: {match.Reason}. Use 'cgfmm link <mod> <catalog-id>' to choose explicitly.");
+                    }
+                    catch (Exception ex) when (ex is IOException or HttpRequestException or System.Text.Json.JsonException or TimeoutException)
+                    { Console.Error.WriteLine($"Catalog matching unavailable: {ex.Message}"); }
+                }
                 Console.WriteLine($"{(added.AlreadyAdded ? "Already added" : "Added")} {added.Mod.Name} ({added.Mod.Id})."
                     + (added.Mod.Role is { Role: "addon" } ? $" {added.Mod.Role.Label}." : " Patch cached."));
                 foreach (string warning in added.Warnings) Console.Error.WriteLine($"WARNING: {warning}");
