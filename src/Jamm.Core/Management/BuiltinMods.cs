@@ -13,8 +13,13 @@ public sealed record BuiltinHotkey(string Key, string Description, bool IsComman
 /// <summary>Generates bundled mods from the configured read-only base and imports them normally.</summary>
 public sealed class BuiltinMods(ManagerStore store)
 {
-    /// <summary>Increment whenever bundled generator behavior changes.</summary>
-    public const string GeneratorVersion = "8";
+    /// <summary>
+    /// Cache key for generated bundled mods. The manual number is kept for intentional bumps; the Jamm.Core module
+    /// version id (deterministic per compiled content) makes every code change regenerate stale caches automatically,
+    /// so a forgotten bump can no longer leave users on an old Console/Perf/Smooth/HD build.
+    /// </summary>
+    public static readonly string GeneratorVersion =
+        "9." + typeof(BuiltinMods).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
     /// <summary>Bundled mods available without downloads or an SDK.</summary>
     public static IReadOnlyList<BuiltinMod> Catalog { get; } = Array.AsReadOnly(new[]
     {

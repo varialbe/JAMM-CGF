@@ -82,7 +82,13 @@ internal static class SubmarineScene
                 keyboard_key_press(vk_enter);
                 break;
             case 2:
-                if (Girl.dollars != 150000000) exit;
+                if (Girl.dollars != 150000000)
+                {
+                    // A simulated press can land after the console's Step in the same frame and be lost; retry.
+                    if (keyboard_check(vk_enter)) keyboard_key_release(vk_enter);
+                    else if (current_time - stage_at > 300) { keyboard_string = "money 150000000"; keyboard_key_press(vk_enter); }
+                    exit;
+                }
                 keyboard_key_release(vk_enter);
                 capture = "console";
                 break;
