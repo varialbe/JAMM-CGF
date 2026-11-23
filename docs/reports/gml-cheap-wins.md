@@ -131,3 +131,16 @@ The candidate audit still rules out turning these ideas on by default without fu
 Accordingly, this report does not claim that the requested transform implementation or old/new
 benchmark matrix is complete. Implementing experimental transformations behind gates and measuring
 them is still required before this task can close.
+
+## Orchestrator confirmation (2026-11-23, 60 s interleaved, all7, 2 reps, null control)
+
+Base vs. base2 (identical archives) differed by ~1% (one base deepwater outlier at 28.1 FPS excluded).
+
+| Flag | Dock | Deepwater |
+|---|---:|---:|
+| fish-lod | +4.3% | +8.6% |
+| masks-rect | +0.4% | +2.0% |
+| cache-hot | +0.9% | −0.7% |
+
+Only `fish-lod` is a clear win; it changes far-fish behaviour, so it stays default-off (player opt-in via
+`cgfmm profile perf <name> fish-lod on`). masks-rect and cache-hot show no meaningful gain at 60 s captures.
