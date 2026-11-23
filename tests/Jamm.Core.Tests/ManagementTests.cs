@@ -86,7 +86,7 @@ public sealed class ManagementTests : IDisposable
         Assert.False(new PerfSettings().MasksRect);
         Assert.False(new PerfSettings().FishLod);
         Assert.False(new PerfSettings().DecorAnimNative);
-        Assert.True(new PerfSettings().CacheHot);
+        Assert.False(new PerfSettings().CacheHot);
         Assert.False(new PerfSettings().ParticlesFx);
     }
 

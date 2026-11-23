@@ -16,7 +16,7 @@ public sealed record PerfSettings(bool StartEnabled = false, bool FishGrid = fal
     public bool DecorAnimNative { get; init; }
 
     /// <summary>Enables experimental per-event hot-value caching.</summary>
-    public bool CacheHot { get; init; } = true;
+    public bool CacheHot { get; init; } = false; // no measurable win (docs/reports/next-hotspots.md); keep opt-in
 
     /// <summary>Enables eligible visual-effect object conversion to particle effects.</summary>
     public bool ParticlesFx { get; init; }

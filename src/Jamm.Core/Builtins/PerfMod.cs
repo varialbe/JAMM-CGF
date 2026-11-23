@@ -13,7 +13,7 @@ public static class PerfMod
         bool masksRect = false, bool fishLod = false, bool decorAnimNative = false,
         bool? cacheHot = null, bool particlesFx = false, bool applyCaveRockVisibility = false)
     {
-        bool applyCacheHot = cacheHot ?? applyCoreOptimizations;
+        bool applyCacheHot = cacheHot ?? false;
         if (data.GeneralInfo.Major != 1 || data.GeneralInfo.BytecodeVersion != 16
             || data.Code.ByName("gml_Object_Fish_Step_2") is null
             || data.Code.ByName("gml_Script_fish_check_trawler") is null

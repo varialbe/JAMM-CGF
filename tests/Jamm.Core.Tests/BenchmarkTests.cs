@@ -519,13 +519,13 @@ public class BenchmarkTests
     }
 
     [Fact]
-    public void ExperimentalCheapWinPerfSettingsDefaultOffExceptForBehaviorPreservingCache()
+    public void ExperimentalCheapWinPerfSettingsDefaultOff()
     {
         var settings = new PerfSettings();
         Assert.False(settings.MasksRect);
         Assert.False(settings.FishLod);
         Assert.False(settings.DecorAnimNative);
-        Assert.True(settings.CacheHot);
+        Assert.False(settings.CacheHot);
         Assert.False(settings.ParticlesFx);
     }
 
