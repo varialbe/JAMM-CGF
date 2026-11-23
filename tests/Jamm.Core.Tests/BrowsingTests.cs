@@ -39,10 +39,11 @@ public sealed class BrowsingTests
     public async Task FirstPartyCatalogUsesCatalogModArrayAndRetainsPublisherProvenance()
     {
         var mod = Assert.Single(FirstPartyCatalogProvider.Parse(Encoding.UTF8.GetBytes("""
-            [{"id":"abyss","name":"The Abyss","author":"varialbe","description":"Official","fileUrl":"https://gamejolt.com/games/ringdingdingringring/842483","isPreview":false,"categories":["Content"]}]
+            [{"id":"abyss","name":"The Abyss","author":"varialbe","description":"Official","fileUrl":"https://gamejolt.com/games/ringdingdingringring/842483","isPreview":false,"categories":["Content"],"version":"2.1.0","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","sizeBytes":123,"changelog":"Fixed fish","saveBreaking":true}]
             """)));
         Assert.Equal("first-party", mod.Catalog);
         Assert.Equal("https://varialbe.xyz/cgf-mods/", mod.SourcePage);
+        Assert.Equal("2.1.0", mod.Version); Assert.Equal(123, mod.SizeBytes); Assert.Equal("Fixed fish", mod.Changelog); Assert.True(mod.SaveBreaking);
         Assert.True(GameJoltDownloadResolver.SupportsSource(mod));
         var official = new OfficialAbyssCatalogProvider();
         var abyss = Assert.Single((await official.LoadAsync(default)).Mods);

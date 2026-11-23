@@ -1,5 +1,10 @@
 # Catalog API (JAMM phase 16)
 
+The public catalog is an array validated by [`site/cgf-mods/catalog.schema.json`](../site/cgf-mods/catalog.schema.json).
+The optional update fields are `version`, `sha256` (of exact package bytes), `sizeBytes`, `changelog`, and
+`saveBreaking`. Set `saveBreaking` to `true` when a release can invalidate existing save progress; JAMM surfaces
+that declaration before installing an update. Package hashes are required for catalog update eligibility.
+
 JAMM injects these GM1.4 scripts when building an archive with CatalogData changes.
 `area` means the game's **size tab**: 0 small, 1 medium, 2 large, 3 huge.
 

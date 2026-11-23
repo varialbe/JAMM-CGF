@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://varialbe.xyz/cgf-mods/catalog.schema.json",
+  "title": "JAMM-CGF public mod catalog",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "name", "author", "description", "fileUrl", "isPreview", "categories"],
+    "properties": {
+      "id": { "type": "string", "minLength": 1 },
+      "name": { "type": "string", "minLength": 1 },
+      "author": { "type": "string" },
+      "description": { "type": "string" },
+      "fileUrl": { "type": ["string", "null"], "format": "uri" },
+      "isPreview": { "type": "boolean" },
+      "categories": { "type": "array", "items": { "type": "string" } },
+      "version": { "type": "string", "description": "Published package version; use semantic versioning for save-breaking major-version checks." },
+      "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$", "description": "SHA-256 of the exact downloaded package bytes." },
+      "sizeBytes": { "type": "integer", "minimum": 0 },
+      "changelog": { "type": "string" },
+      "saveBreaking": { "type": "boolean", "default": false, "description": "True when this release may invalidate existing saves." },
+      "catalogPage": { "type": "string", "format": "uri" },
+      "iconUrl": { "type": "string", "format": "uri" },
+      "bannerUrl": { "type": "string", "format": "uri" },
+      "screenshots": { "type": "array", "items": { "type": "string", "format": "uri" } },
+      "verifiedCreator": { "type": "boolean" },
+      "credits": { "type": "string" }
+    },
+    "additionalProperties": true
+  }
+}
