@@ -255,6 +255,7 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     Summary = info.Summary,
                     CatalogId = m.Mod.Origins.FirstOrDefault()?.ModId,
+                    HasCatalogOrigin = m.Mod.Origins.Length > 0,
                     IsJammMod = info.Report?.IsJammMod ?? false,
                     RemovedPerformanceCount = info.Report?.RemovedPerformanceCount ?? 0,
                     RemovedHudCount = info.Report?.RemovedHudCount ?? 0,
@@ -333,6 +334,23 @@ public sealed partial class MainViewModel : ObservableObject
                 var result = await Task.Run(() => new ModLibrary(store).Add(path, progress: progress.Report, cancellationToken: token), token);
                 Message($"Added {result.Mod.Name}");
                 foreach (string warning in result.Warnings) Message(warning);
+                if (result.Mod.Origins.Length == 0)
+                {
+                    try
+                    {
+                        using var http = new ModHttp();
+                        var snapshot = await new FirstPartyCatalogProvider(store, http).LoadAsync(token);
+                        var match = CatalogOriginLinker.Match(result.Mod, snapshot);
+                        if (match.Mod is { } catalogMod)
+                        {
+                            CatalogOriginLinker.Link(new ModLibrary(store), result.Mod, catalogMod);
+                            Message($"Linked {result.Mod.Name} to {catalogMod.Name} by {match.Reason}.");
+                        }
+                        else if (match.Ambiguous) Message($"Not linked: {result.Mod.Name}; {match.Reason}.");
+                    }
+                    catch (Exception ex) when (ex is IOException or HttpRequestException or InvalidDataException)
+                    { Message($"Could not check the catalog for {result.Mod.Name}: {ex.Message}"); }
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -350,6 +368,25 @@ public sealed partial class MainViewModel : ObservableObject
         }
         await ReloadAsync();
     });
+
+    /// <summary>Links a library mod when first-party catalog evidence gives one unambiguous match.</summary>
+    public Task LinkCatalogAsync(ModRow row) => RunAsync("Linking mod to catalog", async (token, _) =>
+    {
+        using var http = new ModHttp();
+        var snapshot = await new FirstPartyCatalogProvider(store, http).LoadAsync(token);
+        var library = new ModLibrary(store);
+        var mod = library.Find(row.Id);
+        var match = CatalogOriginLinker.Match(mod, snapshot);
+        if (match.Mod is not { } entry)
+        {
+            Message(match.Ambiguous ? $"Could not link {mod.Name}: {match.Reason}." : $"No unambiguous catalog match for {mod.Name}.");
+            return;
+        }
+        CatalogOriginLinker.Link(library, mod, entry);
+        row.HasCatalogOrigin = true;
+        row.CatalogId = entry.Id;
+        Message($"Linked {mod.Name} to {entry.Name} by {match.Reason}.");
+    }, false);
 
     /// <summary>Rebuilds a ModKit folder mod from its source folder, updating its library copy and cached patch.</summary>
     public Task RebuildModAsync(string modId, Func<Task<string?>>? promptFolder = null) => RunAsync("Rebuilding mod", async (token, progress) =>

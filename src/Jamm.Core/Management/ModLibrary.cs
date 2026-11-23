@@ -10,6 +10,14 @@ namespace Jamm.Core.Management;
 /// <summary>Imports immutable local mod copies, computes patches and reports exact-base compatibility.</summary>
 public sealed class ModLibrary(ManagerStore store)
 {
+    /// <summary>Persists metadata for an existing library entry without touching its archive or patch.</summary>
+    public void SaveMetadata(ManagedMod mod)
+    {
+        var current = Find(mod.Id);
+        if (current.Sha256 != mod.Sha256) throw new InvalidOperationException("Catalog metadata cannot be saved for an archive that changed. Refresh the library and retry.");
+        store.Write(store.Path("mods", mod.Id, "mod.json"), mod);
+    }
+
     /// <summary>Returns the path of the read-only library copy of the mod archive.</summary>
     public string Archive(ManagedMod mod) => store.Path("mods", ManagerStore.Name(mod.Id), "data.win");
     /// <summary>Returns the path to the raw unsanitized patch file for a library mod.</summary>

@@ -54,16 +54,24 @@ internal static class UpdateCommand
         }
         if (!check) throw new ArgumentException("Use 'cgfmm update --check [--profile <name>] [--json]', --apply, or --rollback.");
         var updates = workflow.CheckAsync(profile).GetAwaiter().GetResult();
-        if (json) Console.WriteLine(JsonSerializer.Serialize(updates.Select(x => new
+        var selectedProfile = new ProfileLibrary(store).Get(profile ?? store.Config().ActiveProfile
+            ?? throw new ArgumentException("No active profile. Use 'profile use <name>' or pass --profile <name>."));
+        var enabled = selectedProfile.EnabledMods.ToHashSet(StringComparer.Ordinal);
+        var unlinked = new ModLibrary(store).Metadata().Where(m => enabled.Contains(m.Id) && !m.Origins.Any()).ToArray();
+        if (json) Console.WriteLine(JsonSerializer.Serialize(new { updates = updates.Select(x => new
         {
             x.Id, x.InstalledVersion, x.AvailableVersion, x.SizeBytes, x.Changelog
-        }), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }));
-        else if (updates.Count == 0) Console.WriteLine("All catalog mods in this profile are up to date.");
+        }), unlinkedMods = unlinked.Select(m => new { m.Id, m.Name }) }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }));
+        else if (updates.Count == 0 && unlinked.Length == 0) Console.WriteLine("All catalog mods in this profile are up to date.");
         else
         {
             foreach (var item in updates)
                 Console.WriteLine($"{item.Name} ({item.Id}): {item.InstalledVersion ?? "unknown"} → {item.AvailableVersion} · {(item.SizeBytes is { } size ? $"{size / 1048576d:0.0} MB" : "size unknown")}{(string.IsNullOrWhiteSpace(item.Changelog) ? "" : $"\n  {item.Changelog}")}");
-            Console.WriteLine("Updates are available.");
+            if (updates.Count > 0) Console.WriteLine("Updates are available.");
+            if (unlinked.Length > 0)
+            {
+                Console.WriteLine("Not linked to a catalog: " + string.Join(", ", unlinked.Select(m => m.Name)) + ". Run 'cgfmm link --auto'.");
+            }
         }
         return updates.Count == 0 ? 0 : 10;
     }
