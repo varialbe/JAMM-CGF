@@ -136,6 +136,8 @@ public sealed class SitePackageTests
         Assert.Contains("CGF-INSTANCE-007", builderHtml);
         string compatibilityHtml = File.ReadAllText(Path.Combine(siteDir, "compatibility.html"));
         Assert.Contains("Antiquity, PWB, The Abyss, Colour Expansion and Verdant", compatibilityHtml);
+        Assert.Contains("First-party catalog checks", compatibilityHtml);
+        Assert.Contains("Required base SHA-256", File.ReadAllText(Path.Combine(siteDir, "mods", "submarine.html")));
 
         string animatedSilo = Path.Combine(siteDir, "images", "jamm-silo", "opening-v3.webp");
         Assert.True(File.Exists(animatedSilo));
@@ -168,6 +170,19 @@ public sealed class SitePackageTests
             string fileUrl = entry.GetProperty("fileUrl").GetString()!;
             Assert.StartsWith("https://varialbe.xyz/cgf-mods/packages/", fileUrl, StringComparison.Ordinal);
             Assert.False(entry.GetProperty("isPreview").GetBoolean());
+            Assert.True(entry.TryGetProperty("iconPngUrl", out var iconPng));
+            string iconPngPath = Path.Combine(siteDir, new Uri(iconPng.GetString()!).AbsolutePath.TrimStart('/').Replace("cgf-mods/", "", StringComparison.Ordinal));
+            Assert.True(File.Exists(iconPngPath), $"Missing generated icon {iconPngPath}");
+            Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, File.ReadAllBytes(iconPngPath)[..8]);
+            Assert.Equal(BaseGameHash, entry.GetProperty("compat").GetProperty("requiresBase").GetString());
+            string iconPath = new Uri(entry.GetProperty("iconUrl").GetString()!).AbsolutePath.Replace("/cgf-mods/", "", StringComparison.Ordinal);
+            Assert.Contains($"src=\"{iconPath}\"", html);
+            Assert.Contains($"src=\"../{iconPath}\"", File.ReadAllText(Path.Combine(siteDir, "mods", id + ".html")));
+            if (id is "submarine" or "harbor-town")
+            {
+                Assert.Contains("jamm-silo", entry.GetProperty("compat").GetProperty("conflicts").EnumerateArray().Select(e => e.GetString()));
+                Assert.True(entry.GetProperty("compat").GetProperty("knownIssues").GetArrayLength() > 0);
+            }
 
             bool expectedDefault = id.StartsWith("builtin-", StringComparison.Ordinal);
             Assert.Equal(expectedDefault, entry.GetProperty("isDefault").GetBoolean());
@@ -190,6 +205,8 @@ public sealed class SitePackageTests
             }
         }
     }
+
+    private const string BaseGameHash = "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1";
 
     [RealFilesFact]
     public void RealBaseImportsAllStagedSitePackagesAndBuildsCombinedVerifiedArchive()

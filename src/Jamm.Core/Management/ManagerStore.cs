@@ -31,6 +31,15 @@ public sealed partial class ManagerStore
         return path;
     }
 
+    /// <summary>Returns a guarded artwork cache path keyed by a catalog id and verified mod SHA-256.</summary>
+    public string ArtworkPath(string catalogId, string modSha256)
+    {
+        if (string.IsNullOrWhiteSpace(catalogId) || catalogId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-')
+            || modSha256.Length != 64 || modSha256.Any(c => !Uri.IsHexDigit(c)))
+            throw new ArgumentException("Artwork cache identity must use a catalog id and a SHA-256 hash.");
+        return Path("artwork", catalogId + "-" + modSha256.ToLowerInvariant() + ".png");
+    }
+
     internal T Read<T>(string path)
     {
         BuildFiles.RefuseStorageLink(path);

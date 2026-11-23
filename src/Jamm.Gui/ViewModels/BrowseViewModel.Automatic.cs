@@ -39,6 +39,7 @@ public sealed partial class BrowseViewModel
         {
             row.Adds = "Content summary unavailable. Select to check.";
             row.CompatibilityIcon = "?"; row.CompatibilityColor = "#D6A500";
+            row.CompatibilityLabel = "Unknown";
             row.CompatibilityReason = index is null
                 ? "Unsure: no current shared compatibility export is available for this game base. Select this mod to check its download locally."
                 : "Unsure: no analyzer 6 result for this mod in the current shared export. Select this mod to check its download locally.";
@@ -61,12 +62,35 @@ public sealed partial class BrowseViewModel
             if (local.Length == 1 && Cached(local[0]) is { } cached && (facts is null || facts.FileHash != local[0].Sha256))
             { facts = cached; localFacts = true; }
             if (facts is not null) ShowFacts(row, facts, checks.Length == 1 && !localFacts ? "checked by JAMM server" : "checked on this PC");
+            if (row.Mod.Catalog == "first-party" && row.Mod.Compat is not null)
+            {
+                var activeFirstParty = localMods.Where(m => enabledIds.Contains(m.Id, StringComparer.Ordinal))
+                    .SelectMany(m => m.Origins).Where(o => o.Catalog == "first-party").Select(o => o.ModId).Distinct(StringComparer.Ordinal).ToArray();
+                var verdict = FirstPartyCompatibilityEvaluator.Evaluate(row.Mod, hash, activeFirstParty);
+                row.CompatibilityIcon = verdict.Status == "Compatible" ? "✓" : verdict.Status == "Incompatible" ? "✕" : "!";
+                row.CompatibilityLabel = verdict.Status;
+                row.CompatibilityColor = verdict.Status == "Compatible" ? "#259D50" : verdict.Status == "Incompatible" ? "#D74040" : "#D6A500";
+                row.CompatibilityReason = verdict.Status + ": " + verdict.Reason;
+            }
             if (local.Length == 1 && !row.HasSanitizedInfo && owner.Mods.FirstOrDefault(m => m.Id == local[0].Id) is { HasSanitizedInfo: true } localRow)
             {
                 row.RemovedPerformanceCount = localRow.RemovedPerformanceCount;
                 row.RemovedHudCount = localRow.RemovedHudCount;
                 row.RemovedGameplayCount = localRow.RemovedGameplayCount;
                 row.SanitizedDetails = localRow.SanitizedDetails;
+            }
+        }
+        var activeIds = localMods.Where(m => enabledIds.Contains(m.Id, StringComparer.Ordinal))
+            .SelectMany(m => m.Origins).Where(o => o.Catalog == "first-party").Select(o => o.ModId).Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var managed in localMods.Where(m => m.Origins.Any(o => o.Catalog == "first-party")))
+        {
+            var origin = managed.Origins.First(o => o.Catalog == "first-party");
+            var catalogMod = firstPartyCatalog.FirstOrDefault(m => m.Id == origin.ModId);
+            var row = owner.Mods.FirstOrDefault(r => r.Id == managed.Id);
+            if (catalogMod is not null && row is not null)
+            {
+                var verdict = FirstPartyCompatibilityEvaluator.Evaluate(catalogMod, hash, activeIds);
+                row.CatalogCompatibility = verdict.Status + " · " + verdict.Reason;
             }
         }
     }
