@@ -307,7 +307,7 @@ internal static class BenchmarkFishExperiments
     /// Instruments all <c>Fish</c> hierarchy step/draw events with runtime-toggleable early-exit
     /// guards and <c>fish_step_us</c> enter/leave hooks, and adds spawner/thinner freeze guards.
     /// </summary>
-    internal static void InstrumentFishAndSpawners(UndertaleData data)
+    internal static void InstrumentFishAndSpawners(UndertaleData data, bool fishSleep)
     {
         if (data.GameObjects.ByName("Fish") is null) return;
 
@@ -327,8 +327,15 @@ internal static class BenchmarkFishExperiments
         foreach (var code in fishStepCodes)
         {
             if (!LegacyCodeHooks.Supports(code)) continue;
+            // Fish_Step_2 performs its wake/catch-up work every eighth sleep tick. Its cheap
+            // stagger check can run before benchmark hooks, skipping both script calls on the
+            // other seven ticks without bypassing the wake path.
+            var fishSleepPrefix = fishSleep && code.Name.Content == "gml_Object_Fish_Step_2"
+                ? CompileGuardSnippet(data, "if (jamm_asleep && global.jamm_sleep_tick < jamm_sleep_next) exit;")
+                : [];
             LegacyCodeHooks.Insert(code, _ => default, enterFn, leaveFn);
             PrependInstructions(code, nostepPrefix);
+            PrependInstructions(code, fishSleepPrefix);
         }
 
         foreach (var code in fishDrawCodes)

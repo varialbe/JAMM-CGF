@@ -589,7 +589,7 @@ public class BenchmarkTests
         compiler.QueueCodeReplace(weatherPop, "return 1;");
         ModObjects.Compile(compiler);
 
-        BenchmarkMod.Apply(data, new BenchmarkOptions(FishMode: BenchmarkFishMode.NoStep));
+        BenchmarkMod.Apply(data, new BenchmarkOptions(FishMode: BenchmarkFishMode.NoStep, FishSleep: true));
 
         // Round-trip serialize/deserialize to prove bytecode + variable chains are valid.
         using var ms = new MemoryStream();
@@ -612,7 +612,9 @@ public class BenchmarkTests
         string npcStepOut = ModObjects.Decompile(reloaded, reloaded.Code.ByName("gml_Object_SomeNpc_Step_0")!);
 
         Assert.Contains("if (global.jamm_b_fish_nostep)", fishStep2);
-        Assert.Contains("jamm_b_fish_step_enter()", fishStep2);
+        int sleepGuard = fishStep2.IndexOf("global.jamm_sleep_tick < jamm_sleep_next", StringComparison.Ordinal);
+        int enterHook = fishStep2.IndexOf("jamm_b_fish_step_enter()", StringComparison.Ordinal);
+        Assert.True(sleepGuard >= 0 && sleepGuard < enterHook, fishStep2);
         Assert.Contains("jamm_b_fish_step_leave()", fishStep2);
         Assert.Contains("if (global.jamm_b_fish_nostep)", modFishStep0);
         Assert.Contains("if (global.jamm_b_fish_nostep)", modFishStep2);

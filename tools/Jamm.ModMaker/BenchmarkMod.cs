@@ -153,7 +153,7 @@ public static partial class BenchmarkMod
         }
 
         if (options.TraceFish > 0) FishTrace.Instrument(data, options.Seed);
-        BenchmarkFishExperiments.InstrumentFishAndSpawners(data);
+        BenchmarkFishExperiments.InstrumentFishAndSpawners(data, options.FishSleep);
         if (options.Profile)
             GmlCpuProfiler.Instrument(data, options.ProfileScripts);
 

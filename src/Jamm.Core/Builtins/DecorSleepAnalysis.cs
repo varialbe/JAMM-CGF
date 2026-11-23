@@ -457,7 +457,10 @@ internal static partial class DecorSleepAnalysis
 
         bool hasDrawBeginSync = drawEvents.Any(d => d.Subtype == (uint)EventSubtypeDraw.DrawBegin);
         bool deactivationSafe = !deactivationUnsafeRoots.Any(r => Inherits(obj, r))
-            && !InheritsAny(obj, ["AbstractLight", "Collidable", "CaveRock", "Rock"])
+            // Ordinary Rock descendants can be deactivated when the archive-wide reference scan
+            // finds no gameplay queries. Keep CaveRock/Collidable excluded: collision and chunk
+            // systems depend on their instances even while they are outside the camera margin.
+            && !InheritsAny(obj, ["AbstractLight", "Collidable", "CaveRock"])
             && !createsChildren
             && !hasDrawBeginSync
             && !stepPatches.Any(s => s.Kind == DecorStepKind.LightSync);

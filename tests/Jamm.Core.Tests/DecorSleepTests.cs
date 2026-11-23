@@ -42,6 +42,9 @@ public sealed class DecorSleepTests
 
         // Decor roots + children
         var collidable = ModObjects.Create(data, "Collidable", persistent: false);
+        var rock = ModObjects.Create(data, "Rock", persistent: false);
+        rock.Sprite = rockSpr;
+        ModObjects.PlaceInstance(data, "NewWorld", rock, first: false);
         var caveRock = ModObjects.Create(data, "CaveRock", persistent: false);
         caveRock.ParentId = collidable;
         compiler.QueueCodeReplace(caveRock.EventHandlerFor(EventType.Create, 0u, data), "image_speed = 0; checkTimer = 0;");
@@ -193,6 +196,8 @@ public sealed class DecorSleepTests
         Assert.True(byName["CaveRock"].Covered);
         Assert.True(byName["CaveRockBig"].Covered);
         Assert.False(byName["CaveRockBig"].DeactivationSafe); // Collidable + Batfin + jamm_chunk_stream
+        Assert.True(byName["Rock"].Covered);
+        Assert.True(byName["Rock"].DeactivationSafe); // No collisions or external gameplay references
         Assert.True(byName["SceneItem"].Covered);
         Assert.True(byName["Weed"].Covered);
         Assert.True(byName["Weed"].DeactivationSafe);
