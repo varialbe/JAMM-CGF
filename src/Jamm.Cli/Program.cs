@@ -86,6 +86,7 @@ int Run(string[] arguments)
             --verbose works with every command; --yes skips the apply/play install confirmation.
             cgfmm verify <data.win> [--verbose]
             cgfmm audit instances <data.win> [--json <file>] [--all]
+            cgfmm audit --asset-refs <mod-or-build.win> --base <original.win> [--json <file>]
             cgfmm inspect <data.win> [--verbose]
             cgfmm compare <original> <mod> [<mod> ...] [--json <file>] [--verbose]
             cgfmm phase0 --original <data.win> --mods <file or dir> [--out <report.md>] [--verbose]

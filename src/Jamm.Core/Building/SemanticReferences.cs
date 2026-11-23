@@ -86,6 +86,58 @@ public static class SemanticReferences
         }
     }
 
+    /// <summary>Names untyped integer literals in asset-named assignments when they identify an asset added by this mod.</summary>
+    public static string NameAddedAssetLiterals(string text, string entry,
+        IReadOnlyDictionary<string, string[]> baseTables, IReadOnlyDictionary<string, string[]> modTables,
+        Action<string>? warning = null)
+    {
+        var tokens = GmlReferences.Tokens(text);
+        List<(int Start, int Length, string Name)> replacements = [];
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            if (tokens[i].Kind != 'n' || !int.TryParse(tokens[i].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) || value < 0) continue;
+            string? familyHint = null;
+            // Recognize assignments such as harbor_sprite[i] = 488. Only a complete literal is rewritten.
+            int equals = i - 1;
+            if (equals >= 0 && tokens[equals].Value == "=")
+            {
+                int lhs = equals - 1;
+                while (lhs >= 0 && tokens[lhs].Value == "]")
+                {
+                    int depth = 1; lhs--;
+                    while (lhs >= 0 && depth > 0) { if (tokens[lhs].Value == "]") depth++; if (tokens[lhs].Value == "[") depth--; lhs--; }
+                }
+                if (lhs >= 0 && tokens[lhs].Kind == 'i') familyHint = FamilyHint(tokens[lhs].Value);
+            }
+            bool assetLike = familyHint is not null || i >= 2 && tokens[i - 2].Kind == 'i'
+                && tokens[i - 2].Value.Contains("asset", StringComparison.OrdinalIgnoreCase);
+            if (!assetLike) continue;
+            if (i + 1 < tokens.Count && tokens[i + 1].Value is not (";" or ")" or "," or "}")) continue;
+            if (i > 0 && tokens[i - 1].Value == "-") continue;
+            var candidates = modTables.Where(t => t.Value.Length > baseTables.GetValueOrDefault(t.Key, []).Length
+                    && value >= baseTables.GetValueOrDefault(t.Key, []).Length && value < t.Value.Length)
+                .Select(t => (Family: t.Key, Name: t.Value[value])).Where(x => familyHint is null || x.Family == familyHint).ToArray();
+            if (candidates.Length == 1 && familyHint is not null)
+                replacements.Add((tokens[i].Start, tokens[i].Length, AssetSymbols.SafeName(candidates[0].Family, candidates[0].Name)));
+            else if (candidates.Length > 1)
+                warning?.Invoke($"Code '{entry}' has ambiguous asset-like integer {value}; candidates: {string.Join(", ", candidates.Select(c => c.Family + "/" + c.Name))}.");
+        }
+        StringBuilder result = new(text);
+        foreach (var replacement in replacements.Distinct().OrderByDescending(r => r.Start))
+            result.Remove(replacement.Start, replacement.Length).Insert(replacement.Start, replacement.Name);
+        return result.ToString();
+
+        static string? FamilyHint(string identifier)
+        {
+            string value = identifier.ToLowerInvariant();
+            if (value.Contains("sprite", StringComparison.Ordinal) || value.StartsWith("spr", StringComparison.Ordinal)) return "sprites";
+            if (value.Contains("sound", StringComparison.Ordinal) || value.StartsWith("snd", StringComparison.Ordinal)) return "sounds";
+            if (value.Contains("object", StringComparison.Ordinal) || value.StartsWith("obj", StringComparison.Ordinal)) return "objects";
+            if (value.Contains("background", StringComparison.Ordinal) || value.StartsWith("bg", StringComparison.Ordinal)) return "backgrounds";
+            return null;
+        }
+    }
+
     private static List<(int Start, int Length, string Name)> NameTypedLocalLiterals(
         IReadOnlyList<GmlReferences.Token> tokens, string entry, IReadOnlyDictionary<string, string[]> tables)
     {
@@ -229,6 +281,10 @@ public static class SemanticReferences
     public static IReadOnlyList<ResolvedCodeReference> Resolve(string text, string entry, IReadOnlyDictionary<string, string[]> tables)
     {
         text = NameTypedLiterals(text, entry, tables);
+        // After compilation, untyped asset-array literals are numeric again. Resolve them against
+        // the merged table so semantic verification can compare their asset identity.
+        text = NameAddedAssetLiterals(text, entry,
+            new Dictionary<string, string[]>(StringComparer.Ordinal), tables);
         var lookup = tables.SelectMany(t => t.Value.Select(n => (Name: n, Family: t.Key)))
             .GroupBy(x => x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(x => x.Family).Order(StringComparer.Ordinal).ToArray(), StringComparer.Ordinal);
         var tokens = GmlReferences.Tokens(text);
