@@ -24,7 +24,7 @@ public static class Program
             Console.Error.WriteLine("""
                 jamm-modmaker — builds example mods for JAMM-CGF from YOUR original data.win
                   inspect <original.win>
-                  perf    <original.win> <out.win> [--debug]
+                  perf    <original.win> <out.win> [--debug] [--only-cheap-wins] [--masks-rect] [--fish-lod] [--decor-anim-native] [--cache-hot] [--particles-fx]
                   perf-census <original.win>
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
@@ -89,14 +89,19 @@ public static class Program
                 return 0;
             case "export-pages": TexturePages.Export(data, output!, Console.WriteLine); return 0;
             case "perf":
+                bool onlyCheapWins = args.Contains("--only-cheap-wins");
                 string[] changed = ["gml_Object_Fish_Step_2", "gml_Script_fish_check_trawler",
                     "gml_Script_fish_avoid_fish", "gml_Object_Magmer_Draw_0",
                     "gml_Object_Volteen_Other_13", "gml_Object_Volteen_Other_10"];
                 var before = changed.ToDictionary(n => n, n => data.Code.ByName(n)?.Instructions.Count ?? 0);
                 List<string> perfDecisions = [];
-                PerfMod.Apply(data, args.Contains("--debug"), applyFishGrid: args.Contains("--fish-grid"),
+                PerfMod.Apply(data, args.Contains("--debug"), applyFishGrid: !onlyCheapWins && args.Contains("--fish-grid"),
+                    applyScheduler: !onlyCheapWins, applyCoreOptimizations: !onlyCheapWins,
                     applyDecorSleep: !args.Contains("--no-decor-sleep"), applyFishSleep: !args.Contains("--no-fish-sleep"),
-                    decisions: perfDecisions);
+                    decisions: perfDecisions,
+                    masksRect: args.Contains("--masks-rect"), fishLod: args.Contains("--fish-lod"),
+                    decorAnimNative: args.Contains("--decor-anim-native"), cacheHot: args.Contains("--cache-hot"),
+                    particlesFx: args.Contains("--particles-fx"));
                 foreach (string name in changed)
                     Console.WriteLine($"{name}: {before[name]} -> {data.Code.ByName(name)!.Instructions.Count} instructions (static size, not executed work).");
                 foreach (string decision in perfDecisions)

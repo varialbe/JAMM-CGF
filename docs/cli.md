@@ -35,7 +35,8 @@ for schemas, compatibility reporting, backups and all launch settings.
 | `build --profile <name> [--strict] [--out <merged.win>] [--no-repack] [--dry-run]` | Build the profile with saved choices and write a verified archive |
 | `profile preset <name> weak-pc\|default` | Apply Weak PC or restore the previous profile settings |
 | `profile builtin <name> <id> on\|off` | Enable or disable a bundled mod in the profile |
-| `profile perf <name> mode\|grid on\|off` | Set the startup default for F8 scheduling or the fish grid |
+| `profile perf <name> mode\|grid\|sleep\|decor on\|off` | Set the startup default for F8 scheduling, Fish Sleep, fish grid, or Decor Sleep |
+| `profile perf <name> masks-rect\|fish-lod\|decor-anim-native\|cache-hot\|particles-fx on\|off` | Enable one default-off experimental GML cheap-win transform |
 | `profile perf <name> interval <ticks>` | Set the default distant-fish update interval from 1 to 60 ticks |
 | `profile unlockfix <profile> <mod> on\|off` | Opt a mod into legacy boat and rod shop repair for this profile. Defaults to off. |
 | `apply [--profile <name>] [--yes]` | Check/build/verify/install the selected profile, confirming installation unless `--yes` |
