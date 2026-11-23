@@ -28,6 +28,7 @@ public class BenchmarkTests
     [InlineData(BenchmarkScene.Dock, "dock")]
     [InlineData(BenchmarkScene.Sonar, "sonar")]
     [InlineData(BenchmarkScene.Deepwater, "deepwater")]
+    [InlineData(BenchmarkScene.Lightcycle, "lightcycle")]
     public void BenchmarkPassCompilesDeterministicallyAcrossAllScenes(BenchmarkScene scene, string expectedScene)
     {
         using var data = CreateSyntheticGame(includeOptionalObjects: true);

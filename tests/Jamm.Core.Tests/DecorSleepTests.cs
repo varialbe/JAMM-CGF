@@ -154,7 +154,7 @@ public sealed class DecorSleepTests
         var bulbLight = ModObjects.Create(data, "BulbfishLight", persistent: false);
         bulbLight.ParentId = abstractLight;
         bulbLight.Sprite = lightSpr;
-        compiler.QueueCodeReplace(bulbfish.EventHandlerFor(EventType.Create, 0u, data), "light = instance_create(x, y, BulbfishLight);");
+        compiler.QueueCodeReplace(bulbfish.EventHandlerFor(EventType.Create, 0u, data), "light = instance_create(x, y, BulbfishLight); light2 = instance_create(x, y, ModdedPulseLight);");
         compiler.QueueCodeReplace(bulbfish.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawBegin, data), "light_anchor();");
 
         // 6. Read-only with (CaveRock) in Batfin & collision_point(..., Collidable)
@@ -181,7 +181,7 @@ public sealed class DecorSleepTests
             "if (active && shouldDraw) { with (SceneItem) { if (point_distance(x, y, Camera.x, Camera.y) < 8000) draw_self(); } }");
         var lightAnchor = UndertaleCode.CreateEmptyEntry(data, "gml_Script_light_anchor");
         data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("light_anchor"), Code = lightAnchor });
-        compiler.QueueCodeReplace(lightAnchor, "with (light) { x = other.x; y = other.y; image_xscale = other.image_xscale; visible = other.visible; }");
+        compiler.QueueCodeReplace(lightAnchor, "with (light) { x = other.x; y = other.y; image_xscale = other.image_xscale; visible = other.visible; } with (light2) { x = other.x; y = other.y; visible = other.visible; }");
         var glowPlant = ModObjects.Create(data, "GlowPlant", persistent: false);
         glowPlant.ParentId = sceneItem;
         glowPlant.Sprite = weedSpr;
@@ -220,8 +220,9 @@ public sealed class DecorSleepTests
         Assert.True(byName["Lush_Tree"].DeactivationSafe);
         Assert.True(byName["AbstractLight"].Covered);
         Assert.False(byName["AbstractLight"].DeactivationSafe);
-        Assert.False(byName["ModdedPulseLight"].Covered); // assigned to an owner light variable that is position-synchronized
-        Assert.Contains("position or visibility is controlled", byName["ModdedPulseLight"].Reason, StringComparison.Ordinal);
+        Assert.True(byName["ModdedPulseLight"].Covered, byName["ModdedPulseLight"].Reason); // the owning Draw Begin synchronizes its position and visibility
+        Assert.True(byName["ModdedPulseLight"].OwnerAnchored);
+        Assert.False(byName["ModdedPulseLight"].DeactivationSafe);
 
         // Exempted gameplay objects
         Assert.False(byName["Fish"].Covered);
@@ -230,9 +231,13 @@ public sealed class DecorSleepTests
         Assert.False(byName["BreakableRock"].Covered);
         Assert.False(byName["MissileSilo"].Covered);
         Assert.False(byName["Lilypad"].Covered);
-        Assert.False(byName["CrystalfishLight"].Covered);
-        Assert.False(byName["BulbfishLight"].Covered);
-        Assert.Contains("position or visibility is controlled", byName["BulbfishLight"].Reason, StringComparison.Ordinal);
+        Assert.True(byName["CrystalfishLight"].Covered);
+        Assert.True(byName["CrystalfishLight"].OwnerAnchored);
+        Assert.False(byName["CrystalfishLight"].DeactivationSafe);
+        Assert.Contains(byName["CrystalfishLight"].StepPatches, p => p.Kind == DecorStepKind.LightSync);
+        Assert.True(byName["BulbfishLight"].Covered);
+        Assert.True(byName["BulbfishLight"].OwnerAnchored);
+        Assert.False(byName["BulbfishLight"].DeactivationSafe);
         Assert.False(byName["Camera"].Covered);
         Assert.False(byName["SaveManager"].Covered);
         Assert.False(byName["obj_jmk_endless_ocean"].Covered);
@@ -266,6 +271,12 @@ public sealed class DecorSleepTests
         // light_anchor script respects sleeping jamm_ds_vis
         string lightAnchor = ModObjects.Decompile(data, data.Code.ByName("gml_Script_light_anchor")!);
         Assert.Contains("jamm_ds_vis", lightAnchor, StringComparison.Ordinal);
+        Assert.Contains("light2.jamm_ds_vis", lightAnchor, StringComparison.Ordinal);
+
+        string controllerCreate = ModObjects.Decompile(data, data.Code.ByName("gml_Object_obj_jamm_decor_sleep_Create_0")!);
+        Assert.Contains("BulbfishLight", controllerCreate, StringComparison.Ordinal);
+        string sweep = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_ds_sweep")!);
+        Assert.Contains("(fl & 128) == 0", sweep, StringComparison.Ordinal);
 
         // Re-applying is a clean no-op
         var second = DecorSleep.Apply(data, edits);

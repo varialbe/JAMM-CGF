@@ -14,7 +14,9 @@ public enum BenchmarkScene
     /// <summary>Player on the dock with sonar viewport active.</summary>
     Sonar,
     /// <summary>Boat and camera positioned in deep trench water with sonar off.</summary>
-    Deepwater
+    Deepwater,
+    /// <summary>Cycles the camera around Bulbfish, Glowfish, and Crystalfish, then moves away and returns.</summary>
+    Lightcycle
 }
 
 /// <summary>Fish simulation/rendering mode applied after warmup in benchmark mode.</summary>
@@ -72,18 +74,19 @@ public static partial class BenchmarkMod
     [GeneratedRegex("^[A-Za-z0-9._-]+$", RegexOptions.CultureInvariant)]
     private static partial Regex SafeFileNameRegex();
 
-    /// <summary>Parses a scene name (<c>dock</c>, <c>sonar</c>, or <c>deepwater</c>).</summary>
+    /// <summary>Parses a scene name (<c>dock</c>, <c>sonar</c>, <c>deepwater</c>, or <c>lightcycle</c>).</summary>
     public static BenchmarkScene ParseScene(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("Scene must be 'dock', 'sonar', or 'deepwater'.");
+            throw new ArgumentException("Scene must be 'dock', 'sonar', 'deepwater', or 'lightcycle'.");
 
         return value.Trim().ToLowerInvariant() switch
         {
             "dock" => BenchmarkScene.Dock,
             "sonar" => BenchmarkScene.Sonar,
             "deepwater" => BenchmarkScene.Deepwater,
-            _ => throw new ArgumentException($"Unknown benchmark scene '{value}'. Choose 'dock', 'sonar', or 'deepwater'.")
+            "lightcycle" => BenchmarkScene.Lightcycle,
+            _ => throw new ArgumentException($"Unknown benchmark scene '{value}'. Choose 'dock', 'sonar', 'deepwater', or 'lightcycle'.")
         };
     }
 
@@ -93,6 +96,7 @@ public static partial class BenchmarkMod
         BenchmarkScene.Dock => "dock",
         BenchmarkScene.Sonar => "sonar",
         BenchmarkScene.Deepwater => "deepwater",
+        BenchmarkScene.Lightcycle => "lightcycle",
         _ => throw new ArgumentOutOfRangeException(nameof(scene), scene, "Unsupported benchmark scene.")
     };
 
@@ -311,7 +315,7 @@ public static partial class BenchmarkMod
                 ini_close();
             }
 
-            if (jamm_b_scene != "dock" && jamm_b_scene != "sonar" && jamm_b_scene != "deepwater")
+            if (jamm_b_scene != "dock" && jamm_b_scene != "sonar" && jamm_b_scene != "deepwater" && jamm_b_scene != "lightcycle")
             {
                 jamm_b_warn = "unknown_scene_" + jamm_b_scene + "_fallback_dock";
                 jamm_b_scene = "dock";
@@ -611,6 +615,16 @@ public static partial class BenchmarkMod
                 : ""
         }.Where(s => s.Length > 0));
 
+        string lightcycleSetup = string.Join("\n    ", new[]
+        {
+            sonarOff,
+            "jamm_b_light_kind = 0; jamm_b_light_stage = 0; jamm_b_light_tick = 0;",
+            hasGirl ? "if (instance_exists(Girl)) { Girl.x = jamm_b_deep_x; Girl.y = jamm_b_deep_y; }" : "",
+            hasCamera ? "if (instance_exists(Camera)) { Camera.x = jamm_b_deep_x; Camera.y = jamm_b_deep_y; }" : "",
+            "view_xview[0] = clamp(jamm_b_deep_x - (view_wview[0] * 0.5), 0, max(0, room_width - view_wview[0]));",
+            "view_yview[0] = clamp(jamm_b_deep_y - (view_hview[0] * 0.5), 0, max(0, room_height - view_hview[0]));"
+        }.Where(s => s.Length > 0));
+
         return $$"""
             random_set_seed(jamm_b_seed);
             {{ambianceDay}}
@@ -621,6 +635,10 @@ public static partial class BenchmarkMod
             else if (jamm_b_scene == "sonar")
             {
                 {{sonarSetup}}
+            }
+            else if (jamm_b_scene == "lightcycle")
+            {
+                {{lightcycleSetup}}
             }
             else
             {
@@ -734,6 +752,33 @@ public static partial class BenchmarkMod
             hasDeepSonar ? "if (instance_exists(SonarPanelAdvanced)) SonarPanelAdvanced.active = 0;" : ""
         }.Where(s => s.Length > 0));
 
+        string lightcyclePin = hasCamera
+            ? $$"""
+              jamm_b_light_tick += 1;
+              var jamm_b_light_object = asset_get_index(jamm_b_light_kind == 0 ? "Bulbfish" : (jamm_b_light_kind == 1 ? "Glowfish" : "Crystalfish"));
+              var jamm_b_light_target = (jamm_b_light_object >= 0) ? instance_find(jamm_b_light_object, 0) : noone;
+              if (jamm_b_light_tick >= 180) jamm_b_light_stage = 1;
+              if (jamm_b_light_tick >= 240) jamm_b_light_stage = 2;
+              if (jamm_b_light_tick >= 300)
+              {
+                  jamm_b_light_kind = (jamm_b_light_kind + 1) mod 3;
+                  jamm_b_light_stage = 0;
+                  jamm_b_light_tick = 0;
+              }
+              if (jamm_b_light_target != noone && instance_exists(jamm_b_light_target))
+              {
+                  var jamm_b_light_x = jamm_b_light_target.x;
+                  var jamm_b_light_y = jamm_b_light_target.y;
+                  if (jamm_b_light_stage == 1) jamm_b_light_x += 5000;
+                  {{(hasGirl ? "if (instance_exists(Girl)) { Girl.x = clamp(jamm_b_light_x, 0, room_width); Girl.y = clamp(jamm_b_light_y, 0, room_height); }" : "")}}
+                  Camera.x = clamp(jamm_b_light_x, 0, room_width);
+                  Camera.y = clamp(jamm_b_light_y, 0, room_height);
+                  view_xview[0] = clamp(Camera.x - (view_wview[0] * 0.5), 0, max(0, room_width - view_wview[0]));
+                  view_yview[0] = clamp(Camera.y - (view_hview[0] * 0.5), 0, max(0, room_height - view_hview[0]));
+              }
+              """
+            : "";
+
         string captureEnforce = hasFish
             ? """
               if (jamm_b_state == 2)
@@ -756,7 +801,11 @@ public static partial class BenchmarkMod
             {{(hasAmbiance ? "if (instance_exists(AmbianceController)) AmbianceController.lockDay = 1;" : "")}}
             if (jamm_b_scene_applied)
             {
-                if (jamm_b_scene == "deepwater")
+                if (jamm_b_scene == "lightcycle")
+                {
+                    {{lightcyclePin}}
+                }
+                else if (jamm_b_scene == "deepwater")
                 {
                     {{deepPin}}
                 }

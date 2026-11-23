@@ -89,13 +89,13 @@ public static class DecorSleep
         if (report.LightAnchorCode is { } lightAnchor)
         {
             string original = ModObjects.Decompile(data, lightAnchor);
-            string suffix = """
-                if (global.jamm_ds_enabled && instance_exists(light))
+            string suffix = string.Join("\n", report.LightAnchorVariables.Select(variable => $$"""
+                if (global.jamm_ds_enabled && instance_exists({{variable}}))
                 {
-                    if (variable_instance_exists(light, "jamm_ds_vis") && !light.jamm_ds_vis)
-                        light.visible = false;
+                    if (variable_instance_exists({{variable}}, "jamm_ds_vis") && !{{variable}}.jamm_ds_vis)
+                        {{variable}}.visible = false;
                 }
-                """;
+                """));
             Queue(lightAnchor, original + "\n" + suffix);
         }
 
@@ -267,9 +267,10 @@ public static class DecorSleep
             var p = covered[i];
             int flags = 1;
             if (p.ManageVisible) flags |= 2;
-            if (p.Parallax == DecorParallaxKind.SceneItem) flags |= 4;
-            else if (p.Parallax == DecorParallaxKind.GrottoObject) flags |= 8;
-            if (p.DeactivationSafe) flags |= 16;
+            if (!p.OwnerAnchored && p.Parallax == DecorParallaxKind.SceneItem) flags |= 4;
+            else if (!p.OwnerAnchored && p.Parallax == DecorParallaxKind.GrottoObject) flags |= 8;
+            if (p.DeactivationSafe && !p.OwnerAnchored) flags |= 16;
+            if (p.OwnerAnchored) flags |= 128;
 
             var anglePatch = p.StepPatches.FirstOrDefault(s => s.Kind == DecorStepKind.AngleAccumPulse);
             if (anglePatch is not null) flags |= 32;
@@ -590,7 +591,7 @@ public static class DecorSleep
                 {
                     global.jamm_ds_vis[slot] = false;
                     global.jamm_ds_stick[slot] = tick;
-                    global.jamm_ds_bvis[slot] = inst.visible;
+                    if ((fl & 128) == 0) global.jamm_ds_bvis[slot] = inst.visible;
                     global.jamm_ds_sw[slot] = sw;
                     global.jamm_ds_sh[slot] = sh;
                     if ((fl & 2) != 0)
@@ -614,7 +615,7 @@ public static class DecorSleep
                     }
                     global.jamm_ds_vis[slot] = true;
                     inst.jamm_ds_vis = true;
-                    if ((fl & 2) != 0)
+                    if ((fl & 2) != 0 && (fl & 128) == 0)
                         inst.visible = global.jamm_ds_bvis[slot];
                     if ((fl & 12) != 0)
                     {

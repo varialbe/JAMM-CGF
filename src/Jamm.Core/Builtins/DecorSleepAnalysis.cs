@@ -42,7 +42,8 @@ internal sealed record DecorObjectPlan(
     bool ManageVisible,
     DecorParallaxKind Parallax,
     IReadOnlyList<DecorStepPatch> StepPatches,
-    bool NeedsCreateInit);
+    bool NeedsCreateInit,
+    bool OwnerAnchored = false);
 
 /// <summary>Result of analyzing an entire archive for static decoration sleep.</summary>
 internal sealed record DecorSleepReport(
@@ -50,7 +51,8 @@ internal sealed record DecorSleepReport(
     IReadOnlyList<UndertaleCode> SharedStepPatches,
     IReadOnlyList<UndertaleGameObject> RootSweepObjects,
     IReadOnlyList<UndertaleGameObject> DeactivatableObjects,
-    UndertaleCode? LightAnchorCode);
+    UndertaleCode? LightAnchorCode,
+    IReadOnlyList<string> LightAnchorVariables);
 
 /// <summary>
 /// Generic, pattern-based build-time analyzer for static decoration objects.
@@ -192,8 +194,10 @@ internal static partial class DecorSleepAnalysis
         var externalWithGameplayRoots = new HashSet<UndertaleGameObject>();
         var chunkOrAreaObjects = new HashSet<UndertaleGameObject>();
         var externallyPositionedObjects = new HashSet<UndertaleGameObject>();
+        var ownerAnchoredObjects = new HashSet<UndertaleGameObject>();
         var chunkScripts = CollectChunkCallbacks(data, Decompile);
         UndertaleCode? lightAnchorCode = null;
+        var lightAnchorVariables = new HashSet<string>(StringComparer.Ordinal);
         var createdVariableTargets = new Dictionary<string, HashSet<UndertaleGameObject>>(StringComparer.Ordinal);
 
         foreach (var code in data.Code.Where(c => c.ParentEntry is null))
@@ -226,12 +230,17 @@ internal static partial class DecorSleepAnalysis
             if (string.IsNullOrEmpty(text)) continue;
             string masked = InstanceGuard.Mask(text);
 
-            if (lightAnchorCode is null
-                && cname.StartsWith("gml_Script_", StringComparison.Ordinal)
-                && Regex.IsMatch(masked, @"\bwith\s*\(\s*light\s*\)")
-                && Regex.IsMatch(masked, @"\bvisible\s*=\s*other\.visible\s*;"))
+            if (lightAnchorCode is null && cname.StartsWith("gml_Script_", StringComparison.Ordinal))
             {
-                lightAnchorCode = code;
+                foreach (Match withMatch in WithTarget().Matches(masked))
+                {
+                    string withBody = ExtractBracedBlock(masked, withMatch.Index + withMatch.Length);
+                    if (Regex.IsMatch(withBody, @"\b(?:x|y)\s*=\s*other\.(?:x|y)\s*;")
+                        && Regex.IsMatch(withBody, @"\bvisible\s*=\s*other\.visible\s*;"))
+                        lightAnchorVariables.Add(withMatch.Groups[1].Value);
+                }
+                if (lightAnchorVariables.Count > 0)
+                    lightAnchorCode = code;
             }
 
             bool isSonarDraw = cname == "gml_Object_SonarPanel_Draw_0";
@@ -313,6 +322,15 @@ internal static partial class DecorSleepAnalysis
             }
         }
 
+        // light_anchor writes a child light's position and visibility from its owner every Draw Begin.
+        // Keep those lights in the sleep tracker, but let the owner remain authoritative on wake.
+        if (lightAnchorCode is not null)
+        {
+            foreach (string variable in lightAnchorVariables)
+                if (createdVariableTargets.TryGetValue(variable, out var anchoredTargets))
+                    ownerAnchoredObjects.UnionWith(anchoredTargets);
+        }
+
         // Analyze every candidate object.
         var plans = new List<DecorObjectPlan>(data.GameObjects.Count);
         var coveredSet = new HashSet<UndertaleGameObject>();
@@ -320,7 +338,7 @@ internal static partial class DecorSleepAnalysis
         foreach (var obj in data.GameObjects)
         {
             var plan = AnalyzeObject(obj, data, placedCounts, Decompile,
-                deactivationUnsafeRoots, externalWithGameplayRoots, chunkOrAreaObjects, externallyPositionedObjects);
+                deactivationUnsafeRoots, externalWithGameplayRoots, chunkOrAreaObjects, externallyPositionedObjects, ownerAnchoredObjects);
             plans.Add(plan);
             if (plan.Covered) coveredSet.Add(obj);
         }
@@ -339,7 +357,8 @@ internal static partial class DecorSleepAnalysis
         var sweepRoots = ComputeMinimalSweepSet(plans, coveredSet);
         var deactivatable = plans.Where(p => p.Covered && p.DeactivationSafe).Select(p => p.GameObject).ToArray();
 
-        return new DecorSleepReport(plans, stepPatches.Select(s => s.Code).ToArray(), sweepRoots, deactivatable, lightAnchorCode);
+        return new DecorSleepReport(plans, stepPatches.Select(s => s.Code).ToArray(), sweepRoots, deactivatable, lightAnchorCode,
+            lightAnchorVariables.Order(StringComparer.Ordinal).ToArray());
     }
 
     private static DecorObjectPlan AnalyzeObject(
@@ -350,16 +369,18 @@ internal static partial class DecorSleepAnalysis
         HashSet<UndertaleGameObject> deactivationUnsafeRoots,
         HashSet<UndertaleGameObject> externalWithGameplayRoots,
         HashSet<UndertaleGameObject> chunkOrAreaObjects,
-        HashSet<UndertaleGameObject> externallyPositionedObjects)
+        HashSet<UndertaleGameObject> externallyPositionedObjects,
+        HashSet<UndertaleGameObject> ownerAnchoredObjects)
     {
         string name = obj.Name.Content;
+        bool ownerAnchored = ownerAnchoredObjects.Any(r => Inherits(obj, r));
         DecorObjectPlan Skip(string reason) => new(obj, false, reason, false, false, DecorParallaxKind.None, [], false);
 
         if (name.StartsWith("obj_jamm_", StringComparison.Ordinal) || name.StartsWith("obj_jmk_", StringComparison.Ordinal))
             return Skip("JAMM runtime controller");
         if (KnownControllerNames.Contains(name))
             return Skip("gameplay/controller object");
-        if (externallyPositionedObjects.Any(r => Inherits(obj, r)))
+        if (!ownerAnchored && externallyPositionedObjects.Any(r => Inherits(obj, r)))
             return Skip("position or visibility is controlled by another object's code");
         if (obj.Persistent)
             return Skip("persistent object");
@@ -377,7 +398,7 @@ internal static partial class DecorSleepAnalysis
                 return Skip("invisible or no sprite");
         }
 
-        if (externalWithGameplayRoots.Any(r => Inherits(obj, r)))
+        if (!ownerAnchored && externalWithGameplayRoots.Any(r => Inherits(obj, r)))
             return Skip("iterated by gameplay with-loop");
         if (chunkOrAreaObjects.Contains(obj) && name.StartsWith("jmk_", StringComparison.Ordinal))
             return Skip("chunk/area hook object");
@@ -454,6 +475,8 @@ internal static partial class DecorSleepAnalysis
                 return Skip($"Step_{subtype} could not be decompiled");
 
             var classified = ClassifyStep(text, out double rate, out bool hasCameraCheck, out bool nonCameraVisibleWrite, out var stepParallax);
+            if (Regex.IsMatch(InstanceGuard.Mask(text), @"\bvisible\s*=\s*instance_exists\s*\(\s*[A-Za-z_]\w*\s*\)"))
+                ownerAnchored = true;
             if (nonCameraVisibleWrite) writesGameplayVisible = true;
             if (stepParallax != DecorParallaxKind.None) parallax = stepParallax;
             if (parallax == DecorParallaxKind.None && text.Contains("inherited()", StringComparison.Ordinal))
@@ -508,7 +531,9 @@ internal static partial class DecorSleepAnalysis
             ? $"Step({string.Join("+", stepPatches.Select(s => s.Kind).Distinct())})" + (manageVisible ? "+Visible" : "")
             : "Visible";
         string scope = deactivationSafe ? "deactivatable" : "active-guarded";
-        return new(obj, true, $"covered ({mode}, {scope})", deactivationSafe, manageVisible, parallax, stepPatches, needsCreateInit);
+        if (ownerAnchored)
+            mode += "+owner-anchored";
+        return new(obj, true, $"covered ({mode}, {scope})", deactivationSafe, manageVisible, parallax, stepPatches, needsCreateInit, ownerAnchored);
     }
 
     private static DecorStepKind? ClassifyStep(
@@ -535,6 +560,12 @@ internal static partial class DecorSleepAnalysis
 
         if (Regex.IsMatch(masked, @"\bbackground_color\s*="))
             return null;
+
+        // A few light objects derive visibility directly from an owner instance (for example
+        // CrystalfishLight checks Lightbulb). Guard that Step while sleeping, then let it
+        // recompute visibility on wake instead of restoring a cached value.
+        if (Regex.IsMatch(masked, @"\bvisible\s*=\s*instance_exists\s*\(\s*[A-Za-z_]\w*\s*\)"))
+            return DecorStepKind.LightSync;
 
         if (Regex.IsMatch(masked, @"\bvisible\s*="))
         {
