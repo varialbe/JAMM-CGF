@@ -15,3 +15,17 @@ NOTE: exp/perf-dormant (other agent) does dormant fish + decor sleep extension; 
    f. debug option: freeze stack trace (global current-event marker written to a ring, dumped on hang) à la UTMT Profiler.csx.
 3. Measure LOCAL, serialized via ~/jamm-bench/run.sh (flock), vanilla/pub5/all7 × dock/deepwater, 2 runs old vs new, plus crash scenes.
    Never CGF-Personal/cgf-personal/343780, no xdotool. Report docs/reports/gml-cheap-wins.md. Commit on branch, no push.
+
+## Round 3 (orchestrator decision 2026-11-23 04:30) — IMPLEMENT, don't just audit
+Behavior parity is NOT a precondition for building. Build every transform as a separate EXPERIMENTAL builtin flag, default OFF, then
+measure each flag alone vs main (identical other flags: --fish-sleep --decor-sleep) on all7+pub5 dock+deepwater, 2× each, then crash
+scenes for the ones that win. Parity is assessed AFTER measuring (autoplay/crash scenes + short description of gameplay deviation, e.g.
+"collision ellipse vs precise: catches still register in autoplay"). Required flags:
+- `masks-rect`: fish (and lure-interaction-free decor) sprites with precise masks → bbox/ellipse (census list in report).
+- `fish-lod`: awake fish beyond 1.5 screens: AI (Fish_Step_2 body) every 2nd tick with speed/timers compensated; near fish untouched.
+- `decor-anim-native`: for Weed/SceneItem-like Steps, replace the per-tick sway/parallax math with image_speed / cheaper equivalent where the
+  visual result is equivalent; otherwise skip-when-offscreen.
+- `cache-hot`: per-tick cached player/lure/camera values and instance_number counters used in Fish_Step_2/SonarPanel/Buoy hot paths.
+- `particles-fx`: replace purely-visual bubble/effect objects with a part_system where they have no collision/gameplay refs.
+Skip freeze-trace (not feasible in-runner, as you found). Do not touch CaveRock (exp/perf-dormant handles it).
+Report table per flag: FPS/loop/p95 old vs new + verdict. Commit, no push.
