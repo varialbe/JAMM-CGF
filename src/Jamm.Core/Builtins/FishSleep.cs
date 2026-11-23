@@ -37,6 +37,9 @@ public static partial class FishSleep
     /// <summary>Persistent controller object that tracks the player relevance zone and sleep tick counter.</summary>
     public const string Controller = "obj_jamm_fish_sleep";
 
+    /// <summary>Prefix for per-species dormant children that retain fish type membership.</summary>
+    public const string DormantObjectPrefix = "obj_jamm_fish_dormant_";
+
     /// <summary>Default Fish Sleep margin in pixels around views, lure, boat, Girl, sonar, and targets.</summary>
     public const int DefaultMargin = 2000;
 
@@ -379,7 +382,41 @@ public static partial class FishSleep
         var compiler = new CompileGroup(data);
         int clampedMargin = Math.Clamp(margin, MinMargin, MaxMargin);
 
-        AddScript("jamm_sleep_init_types", InitTypesGml(eligibility));
+        // Each dormant proxy inherits from its original species. This preserves instance_number
+        // for species/tier population caps as well as with(Fish), collisions, and FishThinner loops.
+        var dormantObjects = new Dictionary<string, UndertaleGameObject>(StringComparer.Ordinal);
+        foreach (var decision in eligibility.Where(d => d.Covered))
+        {
+            var original = data.GameObjects.ByName(decision.ObjectName)!;
+            string dormantName = DormantName(decision.ObjectName);
+            var dormant = data.GameObjects.ByName(dormantName);
+            if (dormant is null)
+            {
+                dormant = ModObjects.Create(data, dormantName, persistent: false);
+                dormant.ParentId = original;
+            }
+            else if (dormant.ParentId != original)
+            {
+                throw new InvalidDataException($"Fish Sleep could not install its dormant proxy for '{decision.ObjectName}' because '{dormantName}' already exists with a different parent.");
+            }
+            dormantObjects[decision.ObjectName] = dormant;
+
+            foreach (EventType eventType in new[] { EventType.Step, EventType.Draw })
+            {
+                var subtypes = new HashSet<uint>();
+                for (var ancestor = original; ancestor is not null; ancestor = ancestor.ParentId)
+                {
+                    int eventIndex = (int)eventType;
+                    if (eventIndex >= ancestor.Events.Count) continue;
+                    foreach (var fishEvent in ancestor.Events[eventIndex])
+                        subtypes.Add(fishEvent.EventSubtype);
+                }
+                foreach (uint subtype in subtypes)
+                    AddDormantEvent(dormant, eventType, subtype);
+            }
+        }
+
+        AddScript("jamm_sleep_init_types", InitTypesGml(eligibility, dormantObjects));
         AddScript("jamm_sleep_add_box", AddBoxGml());
         AddScript("jamm_sleep_begin_step", BeginStepGml(data));
         AddScript("jamm_sleep_in_zone", InZoneGml());
@@ -392,6 +429,10 @@ public static partial class FishSleep
         AddEvent(EventType.Create, 0u, CreateControllerGml(enabledByDefault, clampedMargin, debug));
         AddEvent(EventType.Destroy, 0u, DestroyControllerGml());
         AddEvent(EventType.Step, (uint)EventSubtypeStep.BeginStep, BeginStepControllerGml(debug));
+
+        // Dormant instances have no Step event of their own. The controller checks a staggered
+        // subset each tick and restores the original object as soon as it enters the active zone.
+        AddEvent(EventType.Step, (uint)EventSubtypeStep.Step, DormantWakeGml());
 
         // Ensure Fish Create_0 initializes jamm_asleep so direct field reads never throw.
         var fishCreate = fishRoot.Events[(int)EventType.Create]
@@ -413,7 +454,7 @@ public static partial class FishSleep
         if (data.GameObjects.ByName("Lure") is { } lure
             && lure.Events[(int)EventType.Step].FirstOrDefault(e => e.EventSubtype == (uint)EventSubtypeStep.Step)?.Actions.FirstOrDefault()?.CodeId is { } lureStep)
         {
-            EnsurePrefix(lureStep, "if (variable_instance_exists(id, \"fish\")) { if (instance_exists(fish)) { if (variable_instance_exists(fish, \"jamm_asleep\") && fish.jamm_asleep) fish.jamm_sleep_next = global.jamm_sleep_tick; } }\n", "fish.jamm_sleep_next = global.jamm_sleep_tick");
+            EnsurePrefix(lureStep, "if (variable_instance_exists(id, \"fish\")) { if (instance_exists(fish)) { if (variable_instance_exists(fish, \"jamm_asleep\") && fish.jamm_asleep) with (fish) jamm_sleep_wake(); } }\n", "with (fish) jamm_sleep_wake()");
         }
 
         ApplyPopulationHooks(data, compiler, edits, fishRoot, decisions);
@@ -487,6 +528,13 @@ public static partial class FishSleep
             edits.Add(code);
         }
 
+        void AddDormantEvent(UndertaleGameObject dormant, EventType type, uint subtype)
+        {
+            var code = dormant.EventHandlerFor(type, subtype, data);
+            compiler.QueueCodeReplace(code, "exit;");
+            edits.Add(code);
+        }
+
         void EnsurePrefix(UndertaleCode code, string prefix, string marker)
         {
             if (!TryDecompile(data, code, out string current)) return;
@@ -537,12 +585,11 @@ public static partial class FishSleep
             ?? data.Code.ByName("gml_Object_FishThinner_Other_10");
         bool cullCounterHooked = false;
         if (thinnerCull is not null && TryDecompile(data, thinnerCull, out string cullText)
-            && !(cullText.Contains("if (jamm_asleep)", StringComparison.Ordinal)
-                && cullText.Contains("global.jamm_sleep_asleep_count -= 1", StringComparison.Ordinal)))
+            && !cullText.Contains("jamm_sleep_wake();", StringComparison.Ordinal))
         {
             const string deactivate = "instance_deactivate_object(id);";
-            const string releaseAndDeactivate = "if (jamm_asleep)\n{\n    jamm_asleep = false;\n    if (global.jamm_sleep_asleep_count > 0) global.jamm_sleep_asleep_count -= 1;\n}\ninstance_deactivate_object(id);";
-            string updated = cullText.Replace(deactivate, releaseAndDeactivate, StringComparison.Ordinal);
+            const string wakeAndDeactivate = "if (jamm_asleep) jamm_sleep_wake();\ninstance_deactivate_object(id);";
+            string updated = cullText.Replace(deactivate, wakeAndDeactivate, StringComparison.Ordinal);
             if (updated != cullText)
             {
                 compiler.QueueCodeReplace(thinnerCull, updated);
@@ -577,6 +624,7 @@ public static partial class FishSleep
         global.jamm_perf_sleep_margin = clamp(round(ini_read_real("Perf", "FishSleepMargin", {{margin}})), {{MinMargin}}, {{MaxMargin}});
         ini_close();
         global.jamm_sleep_types = ds_map_create();
+        global.jamm_sleep_dormant_types = ds_map_create();
         global.jamm_sleep_quest_objs = ds_map_create();
         global.jamm_sleep_zone_n = 0;
         global.jamm_sleep_hyst = 500;
@@ -600,6 +648,7 @@ public static partial class FishSleep
         if (variable_instance_exists(id, "jamm_sleep_owner") && jamm_sleep_owner)
         {
             ds_map_destroy(global.jamm_sleep_types);
+            ds_map_destroy(global.jamm_sleep_dormant_types);
             ds_map_destroy(global.jamm_sleep_quest_objs);
         }
         """;
@@ -608,6 +657,22 @@ public static partial class FishSleep
         global.jamm_sleep_tick += 1;
         jamm_sleep_begin_step();
         {{(debug ? "if (current_time >= jamm_sleep_log) { jamm_sleep_log = current_time + 1000; show_debug_message(\"FishSleep=\" + string(global.jamm_perf_sleep) + \" asleep=\" + string(global.jamm_sleep_asleep_count) + \" wakes=\" + string(global.jamm_sleep_wake_count)); }" : "")}}
+        """;
+
+    private static string DormantWakeGml() => """
+        if (global.jamm_sleep_asleep_count <= 0) exit;
+        if (global.jamm_perf_sleep && (global.jamm_sleep_tick mod 8) != 0) exit;
+        for (var ji = 0; ji < global.jamm_sleep_dormant_count; ji += 1)
+        {
+            with (global.jamm_sleep_dormant_objects[ji])
+            {
+                if (!global.jamm_perf_sleep || state != jamm_sleep_state || life <= 0 || deactivated
+                    || (x >= global.jamm_sleep_min_x && x <= global.jamm_sleep_max_x
+                        && y >= global.jamm_sleep_min_y && y <= global.jamm_sleep_max_y
+                        && jamm_sleep_in_zone(x, y, 0)))
+                    jamm_sleep_wake();
+            }
+        }
         """;
 
     internal static string Step2Prefix() => """
@@ -648,18 +713,29 @@ public static partial class FishSleep
         }
         """;
 
-    private static string InitTypesGml(IReadOnlyList<FishSleepDecision> decisions)
+    private static string InitTypesGml(IReadOnlyList<FishSleepDecision> decisions,
+        IReadOnlyDictionary<string, UndertaleGameObject> dormantObjects)
     {
         var sb = new StringBuilder();
         sb.AppendLine("var m = global.jamm_sleep_types;");
+        sb.AppendLine("var dm = global.jamm_sleep_dormant_types;");
         sb.AppendLine("ds_map_clear(m);");
+        sb.AppendLine("ds_map_clear(dm);");
+        var uniqueDormantObjects = dormantObjects.Values.Distinct().ToArray();
+        sb.AppendLine($"global.jamm_sleep_dormant_count = {uniqueDormantObjects.Length};");
+        for (int i = 0; i < uniqueDormantObjects.Length; i++)
+            sb.AppendLine($"global.jamm_sleep_dormant_objects[{i}] = asset_get_index(\"{uniqueDormantObjects[i].Name.Content}\");");
         foreach (var d in decisions)
         {
             string quoted = "\"" + d.ObjectName.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
             sb.AppendLine(FormattableString.Invariant($"ds_map_add(m, asset_get_index({quoted}), {(d.Covered ? 1 : 0)});"));
+            if (dormantObjects.TryGetValue(d.ObjectName, out var dormant))
+                sb.AppendLine(FormattableString.Invariant($"ds_map_add(dm, asset_get_index({quoted}), asset_get_index(\"{dormant.Name.Content}\"));"));
         }
         return sb.ToString();
     }
+
+    private static string DormantName(string fishName) => DormantObjectPrefix + fishName;
 
     private static string AddBoxGml() => """
         var n = global.jamm_sleep_zone_n;
@@ -886,6 +962,19 @@ public static partial class FishSleep
     }
 
     private static string EnterGml() => """
+        jamm_sleep_original_object = object_index;
+        var jamm_sleep_dormant_type = ds_map_find_value(global.jamm_sleep_dormant_types, object_index);
+        if (is_undefined(jamm_sleep_dormant_type) || jamm_sleep_dormant_type < 0) exit;
+        jamm_sleep_sprite = sprite_index;
+        jamm_sleep_mask = mask_index;
+        jamm_sleep_depth = depth;
+        jamm_sleep_image_index = image_index;
+        jamm_sleep_image_speed = image_speed;
+        jamm_sleep_image_angle = image_angle;
+        jamm_sleep_image_xscale = image_xscale;
+        jamm_sleep_image_yscale = image_yscale;
+        jamm_sleep_image_alpha = image_alpha;
+        jamm_sleep_image_blend = image_blend;
         jamm_asleep = true;
         jamm_sleep_tick = global.jamm_sleep_tick;
         jamm_sleep_next = global.jamm_sleep_tick + 8;
@@ -907,6 +996,17 @@ public static partial class FishSleep
         spd = 0;
         visible = false;
         global.jamm_sleep_asleep_count += 1;
+        instance_change(jamm_sleep_dormant_type, false);
+        sprite_index = jamm_sleep_sprite;
+        mask_index = jamm_sleep_mask;
+        depth = jamm_sleep_depth;
+        image_index = jamm_sleep_image_index;
+        image_speed = jamm_sleep_image_speed;
+        image_angle = jamm_sleep_image_angle;
+        image_xscale = jamm_sleep_image_xscale;
+        image_yscale = jamm_sleep_image_yscale;
+        image_alpha = jamm_sleep_image_alpha;
+        image_blend = jamm_sleep_image_blend;
         """;
 
     private static string WakeGml(UndertaleData data)
@@ -1002,6 +1102,17 @@ public static partial class FishSleep
             if (variable_instance_exists(id, "pal") && is_real(pal) && pal >= 100000 && !instance_exists(pal)) pal = -1;
             if (variable_instance_exists(id, "check_timer")) check_timer = 6;
             if (variable_instance_exists(id, "frames_since_last_flip")) frames_since_last_flip = 0;
+            instance_change(jamm_sleep_original_object, false);
+            sprite_index = jamm_sleep_sprite;
+            mask_index = jamm_sleep_mask;
+            depth = jamm_sleep_depth;
+            image_index = jamm_sleep_image_index;
+            image_speed = jamm_sleep_image_speed;
+            image_angle = jamm_sleep_image_angle;
+            image_xscale = jamm_sleep_image_xscale;
+            image_yscale = jamm_sleep_image_yscale;
+            image_alpha = jamm_sleep_image_alpha;
+            image_blend = jamm_sleep_image_blend;
             """;
     }
 }

@@ -79,7 +79,9 @@ public static class DecorSleep
         {
             string original = ModObjects.Decompile(data, sp.Code);
             string guard = sp.Kind == DecorStepKind.CameraCullOnly
-                ? "if (global.jamm_ds_enabled && (!jamm_ds_vis || jamm_ds_managed)) exit;\n"
+                // The controller owns camera culling for managed instances; skipped descendants
+                // retain the original Camera logic. Avoid the redundant per-instance visibility read.
+                ? "if (global.jamm_ds_enabled && jamm_ds_managed) exit;\n"
                 : "if (global.jamm_ds_enabled && !jamm_ds_vis) exit;\n";
             Queue(sp.Code, guard + original);
         }

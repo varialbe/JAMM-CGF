@@ -243,6 +243,8 @@ public sealed class DecorSleepTests
         // Guard injected into CaveRock_Step_0, SceneItem_Step_2, Weed_Step_0, ModdedPulseLight_Step_0
         string caveStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_CaveRock_Step_0")!);
         Assert.Contains("jamm_ds_enabled", caveStep, StringComparison.Ordinal);
+        Assert.Contains("jamm_ds_managed", caveStep, StringComparison.Ordinal);
+        Assert.DoesNotContain("jamm_ds_vis", caveStep, StringComparison.Ordinal);
         string sceneStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_SceneItem_Step_2")!);
         Assert.Contains("jamm_ds_vis", sceneStep, StringComparison.Ordinal);
 
