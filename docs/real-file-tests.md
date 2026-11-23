@@ -21,3 +21,14 @@ installation tests write only temporary copies and verify source hashes.
 
 Without both environment variables, real-file tests are skipped; synthetic and
 headless tests still run. Missing fixtures fail explicitly when opted in.
+
+## Builtin and ModKit regression tier
+
+Run `tools/run-real-tests.sh` to generate all four builtins from the local legacy
+base, build and compose the first-party `examples/modkit` packages, and check
+asset literals, cross-mod instance-variable assignments, and global variable
+IDs. It uses a temporary manager store and temporary output archives; the base
+archive is opened read-only. The default base path is
+`~/.var/app/com.valvesoftware.Steam/data/JAMM-CGF/CGF-legacy-clean/data.win`.
+Set `JAMM_REAL_BUILTINS_BASE` to override it. The script runs only
+`RealFileBuiltinsTests` with one MSBuild worker and does not need `JAMM_MODS_DIR`.
