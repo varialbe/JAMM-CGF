@@ -29,3 +29,17 @@ Build vanilla, pub5, all7 from your branch the same way ~/jamm-bench/build.sh / 
 run unprofiled 2× per (build, scene ∈ dock, deepwater) old vs new, then crash scenes (fs-local/crash.sh pattern) and one profiled run.
 NEVER use or touch CGF-Personal, compatdata cgf-personal or 343780. No xdotool. Labels prefix `pd-`.
 Report table (FPS, loop ms, p95) in docs/reports/perf-dormant.md; commit on branch; do not push.
+
+## Round 2 (orchestrator review 2026-11-23 03:00) — previous round did NOT meet the goal
+Your Old/New compared "no sleep" vs "--fish-sleep --decor-sleep"; both flags are already on main, so that table measures main, not your
+change. jamm_b_fish_step_enter/leave are BENCHMARK instrumentation only (not in player builds) — optimizing them is irrelevant to players.
+Required now:
+1. Implement the real dormant swap: sleeping fish → `instance_change(obj_jamm_fish_dormant, false)` (object with NO Step/Draw/Alarm
+   events, keeps all variables; stores original object_index in a var) and back on wake. Audit every `object_index` / `with(Fish...)` /
+   instance_number(Fish*) / sonar / save / population / FishThinner / lure-collision site that would miss dormant fish and handle each
+   (e.g. dormant object parented so `with(Fish)` still finds it but has no events? — evaluate parent=Fish with empty overriding events,
+   which keeps counts/with working while removing the inherited Step: GM 1.4 calls an object's own event or inherits parent's; an EMPTY
+   own event stops inheritance cheaply). Measure whether the dispatch saving is real.
+2. Decor: CaveRock_Step_0 is still 12–17% — find why it's not covered (decision said "nothing to draw or step"?!) and fix.
+3. A/B MUST be: main (git stash/build from main worktree "/run/media/varialbe/Festplatte 2/JAMM-CGF") vs this branch, IDENTICAL flags
+   (--fish-sleep --decor-sleep), all7+pub5+vanilla, dock+deepwater, 2× each, unprofiled. Report that table.

@@ -208,6 +208,11 @@ public sealed class FishSleepTests
         string sleepDestroy = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Destroy_0")!);
         string fishStep2 = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Step_2")!);
         string lureStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Lure_Step_0")!);
+        string dormantName = FishSleep.DormantObjectPrefix + "ModVisual";
+        var dormant = data.GameObjects.ByName(dormantName)!;
+        string controllerStep = ModObjects.Decompile(data, data.Code.ByName($"gml_Object_{FishSleep.Controller}_Step_0")!);
+        string enter = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_enter")!);
+        string wake = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_wake")!);
         string customDraw = ModObjects.Decompile(data, visualDrawFish.Events[(int)EventType.Draw].First().Actions.First().CodeId!);
         string initTypes = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_sleep_init_types")!);
 
@@ -221,7 +226,20 @@ public sealed class FishSleepTests
         Assert.Contains("jamm_sleep_wake()", fishStep2);
         Assert.Contains("global.jamm_sleep_tick < jamm_sleep_next", fishStep2);
         Assert.Contains("jamm_sleep_next = global.jamm_sleep_tick + 8", fishStep2);
-        Assert.Contains("fish.jamm_sleep_next = global.jamm_sleep_tick", lureStep);
+        Assert.Contains("jamm_sleep_wake()", lureStep);
+        Assert.NotNull(dormant);
+        Assert.NotNull(dormant.ParentId);
+        Assert.Equal("ModVisual", dormant.ParentId!.Name.Content);
+        Assert.Contains(dormant.Events[(int)EventType.Step], e => e.EventSubtype == (uint)EventSubtypeStep.EndStep);
+        Assert.Contains(dormant.Events[(int)EventType.Draw], e => e.EventSubtype == (uint)EventSubtypeDraw.Draw);
+        Assert.Contains("global.jamm_sleep_dormant_objects[ji]", controllerStep);
+        Assert.Contains("global.jamm_sleep_tick", controllerStep);
+        Assert.Contains("8", controllerStep);
+        Assert.Contains("global.jamm_sleep_asleep_count <= 0", controllerStep);
+        Assert.Contains("jamm_sleep_original_object = object_index", enter);
+        Assert.Contains("ds_map_find_value(global.jamm_sleep_dormant_types, object_index)", enter);
+        Assert.Contains("instance_change(jamm_sleep_dormant_type, false)", enter);
+        Assert.Contains("instance_change(jamm_sleep_original_object, false)", wake);
         Assert.Contains("jamm_sleep_next", ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Create_0")!));
         Assert.Contains("global.jamm_perf_mode", fishStep2);
         Assert.Contains("jamm_asleep", customDraw);
@@ -250,7 +268,7 @@ public sealed class FishSleepTests
 
         Assert.Contains("global.jamm_perf_sleep && global.jamm_sleep_asleep_count > 0", thinnerStep);
         Assert.Contains("cull_trigger += 0.5", thinnerStep);
-        Assert.Contains("jamm_asleep = 0", thinnerCull);
+        Assert.Contains("jamm_sleep_wake()", thinnerCull);
         Assert.Contains("instance_deactivate_object(id)", thinnerCull);
         Assert.Contains("variable_instance_exists(id, \"jamm_asleep\")", fishDestroy);
         Assert.Contains("global.jamm_sleep_asleep_count -= 1", fishDestroy);
