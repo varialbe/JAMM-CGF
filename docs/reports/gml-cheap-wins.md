@@ -2,6 +2,19 @@
 
 Date: 2026-11-23. Branch: `exp/gml-cheap-wins`.
 
+## Continuation after initializing UndertaleModTool
+
+The pinned submodule (including nested Underanalyzer) is now available. Validation on this
+worktree succeeds with constrained parallelism:
+
+| Command | Result |
+|---|---|
+| `dotnet build -c Release -m:1` | Passed; 0 warnings, 0 errors; 17.98 s |
+| `dotnet test -c Release -m:1` | Passed; 797 passed, 19 skipped, 0 failed; 43 s |
+
+The skipped tests are the repository's opt-in real-file tests. These checks prove the toolchain
+works; they do not measure any of the proposed GML transformations.
+
 ## Result
 
 The source audit is committed in [gml-cheap-wins-analysis.md](gml-cheap-wins-analysis.md). No runtime transformations were enabled or shipped in this pass. The proposed transformations cannot be called behavior-identical from the available evidence: collision-mask changes alter collision geometry, fish cadence changes AI/collision/RNG timing, and the high-call-count controller/event bodies mix visual work with gameplay or instance lifecycle. The local clean archive inspection found no wholly animation-only candidate among the inspected high-frequency events (`Fish_Step_2`, `Buoy_Step_0`, `BuoyAbstract_Step_0`, `Weed_Step_0`, `SceneItem_Step_2`, `SonarPanel_Step_1`). A default-on optimization would therefore be unjustified.
@@ -35,3 +48,26 @@ The workspace volume reported 100% usage during this work (availability fluctuat
 - Identify an event whose full Step body is animation-only across the merged builds, or close that candidate with evidence.
 - Implement only independently gated transforms with measured benefit and behavior parity. The LOD and collision-mask proposals remain experimental until traces and interaction tests prove parity.
 - With a buildable toolchain, serialize the requested vanilla/pub5/all7 × dock/deepwater matrix (two old and two new runs) and crash scenes through `~/jamm-bench/run.sh`; report medians and raw run locations.
+
+## Continuation outcome
+
+No candidate transformation was retained in this continuation. This is not a measured rejection:
+the existing dock/deepwater captures compare earlier Perf/Smooth configurations, and there is no
+old/new artifact pair for masks, animation steps, particles, caching, or awake-fish LOD. Running
+those captures again would only measure the existing artifacts. The newly available build and test
+results above do not satisfy the requested local matrix or crash-scene checks.
+
+The candidate audit still rules out turning these ideas on by default without further evidence:
+
+| Candidate | Current decision |
+|---|---|
+| Collision masks | No sprite was proven behavior-neutral across its collision consumers; geometry changes can alter catches and interactions. |
+| Animation-only Step removal | No full Step body among the inspected high-frequency candidates was animation-only. |
+| Particles | No high-frequency effect was proven free of collision, ownership, or timing semantics. |
+| Per-tick caches | Fish Grid already covers its separate neighbor-query experiment. SceneItem transform caching previously measured slower; other cache invalidation was not proven exact. |
+| Awake-fish LOD | Skipping awake AI changes collision, RNG, and targeting timing. Existing Fish Sleep and Decor Sleep remain the relevant dormant policies. |
+| Freeze trace | No zero-allocation event-ring implementation or hang-time dump path was added; runtime GML cannot dump its own ring after the event loop has stopped. |
+
+Accordingly, this report does not claim that the requested transform implementation or old/new
+benchmark matrix is complete. Implementing experimental transformations behind gates and measuring
+them is still required before this task can close.
