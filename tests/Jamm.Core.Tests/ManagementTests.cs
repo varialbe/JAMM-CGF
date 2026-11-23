@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Jamm.Core.Building;
 using Jamm.Core.Management;
+using Jamm.ModMaker;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Compiler;
@@ -61,6 +62,32 @@ public sealed class ManagementTests : IDisposable
         Assert.Equal(before.NoRepack, reverted.NoRepack);
         Assert.Equal(before.Perf, reverted.Perf);
         Assert.Null(reverted.BeforeWeakPc);
+    }
+
+    [Fact]
+    public void ExperimentalPerfFlagsPersistAndCanBeChangedByTheCli()
+    {
+        var mod = new ModLibrary(store).Add(source, "Content").Mod;
+        var profiles = new ProfileLibrary(store);
+        profiles.Create("cheap-wins", [mod.Id]);
+        profiles.SetPerf("cheap-wins", masksRect: true, fishLod: true,
+            decorAnimNative: true, cacheHot: true, particlesFx: true);
+
+        var enabled = profiles.Get("cheap-wins").Perf;
+        Assert.True(enabled.MasksRect);
+        Assert.True(enabled.FishLod);
+        Assert.True(enabled.DecorAnimNative);
+        Assert.True(enabled.CacheHot);
+        Assert.True(enabled.ParticlesFx);
+
+        Assert.Equal(0, Jamm.Cli.ManagementCommand.Run("profile",
+            ["perf", "cheap-wins", "fish-lod", "off"], store.Root));
+        Assert.False(new ProfileLibrary(new ManagerStore(store.Root)).Get("cheap-wins").Perf.FishLod);
+        Assert.False(new PerfSettings().MasksRect);
+        Assert.False(new PerfSettings().FishLod);
+        Assert.False(new PerfSettings().DecorAnimNative);
+        Assert.False(new PerfSettings().CacheHot);
+        Assert.False(new PerfSettings().ParticlesFx);
     }
 
     [Fact]

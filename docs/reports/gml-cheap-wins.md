@@ -2,7 +2,67 @@
 
 Date: 2026-11-23. Branch: `exp/gml-cheap-wins`.
 
-## Continuation after initializing UndertaleModTool
+## Round 3 implementation and measurements
+
+This section supersedes the earlier audit-only result below. Each experiment has its own
+default-off `PerfSettings` flag and `cgfmm profile perf <name> <flag> on|off` switch. The
+archive builder applies only selected transforms. The ModMaker `perf --only-cheap-wins` path
+creates isolated local comparison archives with Fish Sleep and Decor Sleep held on in every
+variant. Generated game archives and captures stay outside the repository.
+
+| Flag | Build transform | Experimental behavior change / eligibility |
+|---|---|---|
+| `masks-rect` | Fish and selected visual-only Bubble decor sprites with precise masks use axis-aligned rectangle masks. | Collision outlines change; fish catches/wall avoidance can differ. All changed sprite names will be listed below. |
+| `fish-lod` | Beyond 1.5 view widths, Fish state-AI dispatch runs every second End Step. Engine motion stays per-frame; alarms receive one extra decrement on dispatched AI steps. | Custom state counters, target selection, collision checks and interactions can be delayed. |
+| `decor-anim-native` | Weed's existing offscreen guard compares squared distance against the same 5,000-pixel radius, avoiding a square root. | Equivalent except for floating-point boundary rounding. |
+| `cache-hot` | Lure coordinates are captured once for the Fish lure-distance expression, camera coordinates only when the Fish 6-tick check runs, and Sonar advanced/cave mode before the `with (Fish)` walk. | Event-local snapshots preserve current event ordering; no instance-count cache is installed where lifecycle invalidation is not proven. |
+| `particles-fx` | Replaces direct standalone Bubble construction with a shared sprite-backed particle when a reusable particle system exists; skips assigned/modified creation calls. | Particle lifespan and ownership differ. PotEffect stays excluded because its Create event changes Witchy state. No eligible direct Bubble call was found in either measured pack. |
+
+Mask census: `masks-rect` changed 243 fish sprite masks in all7 and 242 in pub5. The pub5 set is
+the all7 set without `spr_jade`; no precise Bubble decor mask was eligible. The full changed-name
+list is in [gml-cheap-wins-mask-census.txt](gml-cheap-wins-mask-census.txt).
+
+Measurement setup: `~/jamm-bench/run.sh` (serialized by its `flock`), all7 and pub5, dock and
+deepwater, two 12-second captures per flag and main baseline, seed 1337, same clean runner and
+the same Fish Sleep + Decor Sleep baseline. No `CGF-Personal` install, personal save, or
+`xdotool` was used. Each run directory is under
+`~/.var/app/com.valvesoftware.Steam/data/JAMM-CGF/bench-runs/gml3-*`.
+
+The values below are arithmetic means across the eight paired captures (all7/pub5 × dock/deepwater
+× two repetitions). Loop p95 is the mean of each capture's p95. Times are milliseconds.
+
+| Flag | FPS old → new | Loop mean old → new | Loop p95 old → new | Verdict |
+|---|---:|---:|---:|---|
+| `masks-rect` | 19.51 → 20.30 | 49.28 → 46.99 | 57.93 → 52.54 | Measured win; retain experimental. Rectangle masks change collision outlines and may alter catches/wall avoidance; sonar smoke recorded cleanly. |
+| `fish-lod` | 19.51 → 22.23 | 49.28 → 42.79 | 57.93 → 51.22 | Largest measured win; retain experimental. Far-fish AI/collision/state cadence changes; sonar smoke recorded cleanly. |
+| `decor-anim-native` | 19.51 → 19.70 | 49.28 → 48.89 | 57.93 → 54.64 | Small, inconclusive change; keep default-off and experimental. |
+| `cache-hot` | 19.51 → 20.54 | 49.28 → 46.49 | 57.93 → 52.26 | Measured win; retain experimental. Sonar smoke recorded cleanly. |
+| `particles-fx` | 19.51 → 20.22 | 49.28 → 47.14 | 57.93 → 53.09 | No eligible call in either pack; archives are byte-identical to baseline, so the apparent difference is run noise. |
+
+Each measured win passed a 60-second `sonar` smoke (`gml3-smoke-masks-rect-sonar`,
+`gml3-smoke-fish-lod-sonar`, `gml3-smoke-cache-hot-sonar`) with no Code Error or early exit. These
+checks cover crashes; they do not establish gameplay parity. Fish LOD can delay state dispatch,
+collision checks, target choice, and custom counters for far fish; rectangle masks change collision
+outlines. No autoplay was run because the benchmark task forbids `xdotool`. One initial all7
+cache-hot dock capture failed from a generated local-variable scope error; the transform was
+corrected and that paired sample was re-recorded successfully. The failed capture is excluded from
+the table.
+
+Particle output is a true no-op for these packs: no eligible Bubble creation call was found, and
+SHA-256 is identical to the baseline for both all7 (`a0647861e012045dae624ab08175aa0048f32ec99f4e81ef8e699758ae77967e`)
+and pub5 (`fd4aaca4cbe297c5a43d48df761e055da30351593654ab96df84ccf967b3dd00`).
+
+| Validation | Result |
+|---|---|
+| `dotnet build -m:1` | Passed; 0 warnings, 0 errors. |
+| `dotnet build -c Release -m:1` | Passed; 0 warnings, 0 errors. |
+| `dotnet test -c Release -m:1` | Passed; Core 670 passed/18 skipped, GUI 130 passed/1 skipped, 0 failed. Skips are opt-in real-file tests. |
+
+The benchmark matrix used eight valid captures per flag, excluding the corrected-and-repeated
+cache-hot sample's initial failed attempt. All generated archives, captures, and runner logs stayed
+outside the repository.
+
+## Historical build state before Round 3
 
 The pinned submodule (including nested Underanalyzer) is now available. Validation on this
 worktree succeeds with constrained parallelism:
@@ -15,11 +75,11 @@ worktree succeeds with constrained parallelism:
 The skipped tests are the repository's opt-in real-file tests. These checks prove the toolchain
 works; they do not measure any of the proposed GML transformations.
 
-## Result
+## Historical audit-only result before Round 3
 
 The source audit is committed in [gml-cheap-wins-analysis.md](gml-cheap-wins-analysis.md). No runtime transformations were enabled or shipped in this pass. The proposed transformations cannot be called behavior-identical from the available evidence: collision-mask changes alter collision geometry, fish cadence changes AI/collision/RNG timing, and the high-call-count controller/event bodies mix visual work with gameplay or instance lifecycle. The local clean archive inspection found no wholly animation-only candidate among the inspected high-frequency events (`Fish_Step_2`, `Buoy_Step_0`, `BuoyAbstract_Step_0`, `Weed_Step_0`, `SceneItem_Step_2`, `SonarPanel_Step_1`). A default-on optimization would therefore be unjustified.
 
-## Available baseline numbers
+## Historical profiler baseline numbers
 
 The retained all-7 dock profiler capture is `ds-all7-prof-mA-dock/jamm_profile_dock.csv`: 104 profiled ticks, mean loop 141,355 µs. Its top measured entries were:
 
@@ -35,13 +95,13 @@ The retained all-7 dock profiler capture is `ds-all7-prof-mA-dock/jamm_profile_d
 
 This is historical baseline evidence only, not an old/new comparison. No optimized artifact was produced, so no claim of improvement or parity is made.
 
-## Build and test status
+## Historical build and test status
 
 `dotnet build -c Release` was attempted. It failed before project compilation because `external/UndertaleModTool/UndertaleModLib/UndertaleModLib.csproj` and the nested Underanalyzer project are absent from this checkout. The submodule pointer is `03c7048438347799e0717b6e57a9358d000472e0`; I did not edit or commit the submodule. A temporary link to a local backup at that commit was also tried and removed; its nested checkout/package setup was incomplete and compilation failed. `dotnet test` was not run because the solution cannot build in the current checkout.
 
 The workspace volume reported 100% usage during this work (availability fluctuated from 28 KiB to 218 MiB). No benchmark matrix or crash-scene run was started: without a buildable changed artifact it would only repeat baseline data and would not measure this implementation.
 
-## Open issues before implementation can be completed
+## Historical open issues (resolved or superseded above)
 
 - Initialize the pinned submodule, including its nested Underanalyzer dependency, and restore packages.
 - Complete the exact sprite/mask census for vanilla, pub5, and all7, and trace each mask consumer.

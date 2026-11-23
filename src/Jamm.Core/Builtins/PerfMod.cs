@@ -9,7 +9,9 @@ public static class PerfMod
     /// <summary>Applies guarded source edits to an original legacy game.</summary>
     public static void Apply(UndertaleData data, bool debug = false, bool applyFishGrid = false,
         bool applyScheduler = true, bool applyCoreOptimizations = true, bool applyDecorSleep = false,
-        bool applyFishSleep = false, List<string>? decisions = null)
+        bool applyFishSleep = false, List<string>? decisions = null,
+        bool masksRect = false, bool fishLod = false, bool decorAnimNative = false,
+        bool cacheHot = false, bool particlesFx = false)
     {
         if (data.GeneralInfo.Major != 1 || data.GeneralInfo.BytecodeVersion != 16
             || data.Code.ByName("gml_Object_Fish_Step_2") is null
@@ -80,6 +82,11 @@ public static class PerfMod
         {
             var sleepDecisions = FishSleep.Apply(data, [], debug: debug);
             decisions?.AddRange(sleepDecisions);
+        }
+        if (masksRect || fishLod || decorAnimNative || cacheHot || particlesFx)
+        {
+            var cheapWinDecisions = GmlCheapWins.Apply(data, [], masksRect, fishLod, decorAnimNative, cacheHot, particlesFx);
+            decisions?.AddRange(cheapWinDecisions);
         }
 
         void Patch(string name, string before, string after, string? secondBefore = null, string? secondAfter = null)

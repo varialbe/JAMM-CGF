@@ -445,6 +445,73 @@ public class BenchmarkTests
     }
 
     [Fact]
+    public void CheapWinFlagsAreIndependentAndCompileTheirMatchedTransforms()
+    {
+        using var data = CreateSyntheticGame(includeOptionalObjects: true);
+        var fish = data.GameObjects.ByName("Fish")!;
+        var bubble = ModObjects.Create(data, "Bubble", persistent: false);
+        var particleSystems = ModObjects.Create(data, "ParticleSystems", persistent: false);
+        var effects = ModObjects.Create(data, "Effects", persistent: false);
+        var weed = ModObjects.Create(data, "Weed", persistent: false);
+        var mask = new UndertaleSprite
+        {
+            Name = data.Strings.MakeString("spr_fish_test"),
+            SepMasks = UndertaleSprite.SepMaskType.Precise
+        };
+        data.Sprites.Add(mask);
+        fish.Sprite = mask;
+        bubble.Sprite = mask;
+
+        var compiler = new CompileGroup(data);
+        compiler.QueueCodeReplace(data.Code.ByName("gml_Object_Fish_Step_2")!, """
+            switch (state)
+            {
+                case 0: speed = 1; break;
+            }
+            lure_distance_squared = ((x - Lure.x) * (x - Lure.x)) + ((y - Lure.y) * (y - Lure.y));
+            """);
+        compiler.QueueCodeReplace(weed.EventHandlerFor(EventType.Step, 0u, data), """
+            action_inherited();
+            if (point_distance(x, y, Camera.x, Camera.y) > 5000) exit;
+            image_angle = sin((current_time + jitter + x) / 1000) * 10;
+            """);
+        compiler.QueueCodeReplace(particleSystems.EventHandlerFor(EventType.Create, 0u, data),
+            "background = part_system_create();\nwater_splash = part_type_create();");
+        compiler.QueueCodeReplace(effects.EventHandlerFor(EventType.Step, 0u, data), "instance_create(x, y, Bubble);");
+        compiler.QueueCodeReplace(data.GameObjects.ByName("SonarPanel")!.EventHandlerFor(EventType.Step, 1u, data), """
+            with (Fish)
+            {
+                if (SonarPanelAdvanced.advancedDrawEnabled || other.cave_sonar) s1 = sprite_index;
+            }
+            """);
+        ModObjects.Compile(compiler);
+
+        var decisions = GmlCheapWins.Apply(data, [], masksRect: true, fishLod: true,
+            decorAnimNative: true, cacheHot: true, particlesFx: true);
+
+        Assert.Equal(UndertaleSprite.SepMaskType.AxisAlignedRect, mask.SepMasks);
+        string fishStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Step_2")!);
+        Assert.Contains("jamm_lod_far", fishStep);
+        Assert.Contains("jamm_lure_x", fishStep);
+        Assert.Contains("25000000", ModObjects.Decompile(data, data.Code.ByName("gml_Object_Weed_Step_0")!));
+        Assert.Contains("jamm_sonar_advanced", ModObjects.Decompile(data, data.Code.ByName("gml_Object_SonarPanel_Step_1")!));
+        Assert.Contains(decisions, d => d.StartsWith("[CGF-CHEAP-PARTICLES] converted 1", StringComparison.Ordinal));
+        Assert.Contains("jamm_cw_bubble(x, y)", ModObjects.Decompile(data, data.Code.ByName("gml_Object_Effects_Step_0")!));
+        Assert.Equal(5, decisions.Count);
+    }
+
+    [Fact]
+    public void ExperimentalCheapWinPerfSettingsDefaultOff()
+    {
+        var settings = new PerfSettings();
+        Assert.False(settings.MasksRect);
+        Assert.False(settings.FishLod);
+        Assert.False(settings.DecorAnimNative);
+        Assert.False(settings.CacheHot);
+        Assert.False(settings.ParticlesFx);
+    }
+
+    [Fact]
     public void FishCapGuardsNearestArraysAndStalePartnerReferencesAcrossFishObjects()
     {
         using var data = CreateSyntheticGame(includeOptionalObjects: true);

@@ -199,7 +199,9 @@ public sealed class ProfileLibrary(ManagerStore store)
 
     /// <summary>Changes a profile's mode, interval, grid, decor sleep, and fish sleep defaults without editing the game's INI.</summary>
     public ModProfile SetPerf(string name, bool? startEnabled = null, bool? fishGrid = null, int? interval = null,
-        bool? decorSleep = null, bool? fishSleep = null, int? fishSleepMargin = null)
+        bool? decorSleep = null, bool? fishSleep = null, int? fishSleepMargin = null,
+        bool? masksRect = null, bool? fishLod = null, bool? decorAnimNative = null,
+        bool? cacheHot = null, bool? particlesFx = null)
     {
         var profile = Get(name);
         if (interval is < 1 or > 60)
@@ -210,7 +212,12 @@ public sealed class ProfileLibrary(ManagerStore store)
             startEnabled ?? settings.StartEnabled, fishGrid ?? settings.FishGrid, interval ?? settings.Interval, decorSleep ?? settings.DecorSleep)
         {
             FishSleep = fishSleep ?? settings.FishSleep,
-            FishSleepMargin = fishSleepMargin ?? settings.FishSleepMargin
+            FishSleepMargin = fishSleepMargin ?? settings.FishSleepMargin,
+            MasksRect = masksRect ?? settings.MasksRect,
+            FishLod = fishLod ?? settings.FishLod,
+            DecorAnimNative = decorAnimNative ?? settings.DecorAnimNative,
+            CacheHot = cacheHot ?? settings.CacheHot,
+            ParticlesFx = particlesFx ?? settings.ParticlesFx
         };
         var before = profile.BeforeWeakPc;
         if (before is not null) before = before with { Perf = Update(before.Perf) };
