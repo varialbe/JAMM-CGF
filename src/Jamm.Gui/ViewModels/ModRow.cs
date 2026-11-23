@@ -23,6 +23,7 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     private string? packageVersion;
     private string? author;
     private string? description;
+    private string catalogCompatibility = "";
     /// <summary>Whether enablement differs from the saved selection.</summary>
     public bool IsPending => Enabled != baseline;
     /// <summary>Accessible switch label.</summary>
@@ -38,6 +39,10 @@ public sealed class ModRow(string id, string name, string badge, bool cached, lo
     public string Summary { get => summary; internal set => SetProperty(ref summary, value); }
     /// <summary>Catalog identity used to associate artwork without matching display names.</summary>
     public string? CatalogId { get; internal set; }
+    /// <summary>First-party compatibility verdict against the configured base and active profile.</summary>
+    public string CatalogCompatibility { get => catalogCompatibility; internal set { if (SetProperty(ref catalogCompatibility, value)) OnPropertyChanged(nameof(HasCatalogCompatibility)); } }
+    /// <summary>Whether a first-party compatibility verdict is available.</summary>
+    public bool HasCatalogCompatibility => !string.IsNullOrWhiteSpace(CatalogCompatibility);
     /// <summary>Whether this mod was built by JAMM's own ModMaker (obj_jamm_*).</summary>
     public bool IsJammMod { get => isJammMod; internal set { if (SetProperty(ref isJammMod, value)) { OnPropertyChanged(nameof(CanKeepAuthorPerformanceChanges)); OnPropertyChanged(nameof(CanKeepAuthorHudDesign)); OnPropertyChanged(nameof(CanKeepAuthorGameplayChanges)); } } }
     /// <summary>Number of third-party performance changes removed by JAMM's sanitizer.</summary>

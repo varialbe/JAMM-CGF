@@ -264,11 +264,15 @@ public sealed partial class MainViewModel : ObservableObject
         }
         finally { loading = false; }
         await Browse.UpdateMembershipAsync();
+        await Browse.LoadLocalIconsAsync(cancellation?.Token ?? CancellationToken.None);
         await Browse.ApplyAutomaticFactsAsync(cancellation?.Token ?? CancellationToken.None);
     }
     internal void RefreshLocalIcons()
     {
-        foreach (var row in Mods) row.Icon = ModIconResolver.Load(row.CatalogId, row.Name) ?? Browse.CatalogIcon(row.CatalogId);
+        foreach (var row in Mods)
+            row.Icon = Browse.IsFirstParty(row.CatalogId)
+                ? Browse.CatalogIcon(row.CatalogId) ?? ModIconResolver.Load(row.CatalogId, row.Name)
+                : ModIconResolver.Load(row.CatalogId, row.Name) ?? Browse.CatalogIcon(row.CatalogId);
     }
     /// <summary>Imports .win/.zip files using the exact CLI library rules.</summary>
     public Task AddAsync(IEnumerable<string> paths)

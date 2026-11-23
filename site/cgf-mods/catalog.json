@@ -13,6 +13,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/perf.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/perf.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#builtin-perf",
@@ -21,7 +22,22 @@
     "isDefault": true,
     "version": "1.0.0",
     "sha256": "00c97eed9562b6efd007752654cfdb3cceb62d1b6951b05e1f3611909b777da9",
-    "sizeBytes": 359
+    "sizeBytes": 359,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [
+        [
+          "builtin-perf",
+          "builtin-smooth",
+          "builtin-hd-lite",
+          "builtin-console"
+        ]
+      ],
+      "knownIssues": []
+    }
   },
   {
     "id": "builtin-smooth",
@@ -37,6 +53,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/smooth.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/smooth.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#builtin-smooth",
@@ -45,7 +62,22 @@
     "isDefault": true,
     "version": "1.0.0",
     "sha256": "e0d233f9441638b02f7b3f0304909c73b0daec09f0ec5366ce60a8062608ddf6",
-    "sizeBytes": 367
+    "sizeBytes": 367,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [
+        [
+          "builtin-perf",
+          "builtin-smooth",
+          "builtin-hd-lite",
+          "builtin-console"
+        ]
+      ],
+      "knownIssues": []
+    }
   },
   {
     "id": "builtin-hd-lite",
@@ -61,6 +93,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/hd-lite.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/hd-lite.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#builtin-hd-lite",
@@ -69,7 +102,22 @@
     "isDefault": true,
     "version": "1.0.0",
     "sha256": "6cb930915d8bee92bdf99d18dcf0e951f95a6cc259540637f12f927bec1b1195",
-    "sizeBytes": 374
+    "sizeBytes": 374,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [
+        [
+          "builtin-perf",
+          "builtin-smooth",
+          "builtin-hd-lite",
+          "builtin-console"
+        ]
+      ],
+      "knownIssues": []
+    }
   },
   {
     "id": "builtin-console",
@@ -85,6 +133,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/console.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/console.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#builtin-console",
@@ -93,7 +142,22 @@
     "isDefault": true,
     "version": "1.0.0",
     "sha256": "f8cf13a0bb30a5eda06431c086617277e002d3a504fb7681e99a0799493ccaff",
-    "sizeBytes": 369
+    "sizeBytes": 369,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [
+        [
+          "builtin-perf",
+          "builtin-smooth",
+          "builtin-hd-lite",
+          "builtin-console"
+        ]
+      ],
+      "knownIssues": []
+    }
   },
   {
     "id": "example-fish",
@@ -109,6 +173,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/example-fish.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/example-fish.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#example-fish",
@@ -117,7 +182,15 @@
     "isDefault": false,
     "version": "1.0.0",
     "sha256": "3608467830072fbdd1d3fd1f06bde8308898d576d6c8309e81354df2c7ecd9a9",
-    "sizeBytes": 2671
+    "sizeBytes": 2671,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": []
+    }
   },
   {
     "id": "jamm-silo",
@@ -133,6 +206,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/silo.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/silo.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#jamm-silo",
@@ -141,7 +215,15 @@
     "isDefault": false,
     "version": "2.3.0",
     "sha256": "d4c942dcdeab793a5fa6a254ebf03b394420ad4fca089012bda5f5e3473ad9c9",
-    "sizeBytes": 10596
+    "sizeBytes": 10596,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": []
+    }
   },
   {
     "id": "weather-pack",
@@ -157,6 +239,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/weather.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/weather.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#weather-pack",
@@ -165,7 +248,15 @@
     "isDefault": false,
     "version": "1.0.1",
     "sha256": "d37f49328d697a5af420111c8b496c16e81713c15e7549b72154f9bbc53f64a7",
-    "sizeBytes": 950560
+    "sizeBytes": 950560,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": []
+    }
   },
   {
     "id": "endless-ocean",
@@ -181,6 +272,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/endless-ocean.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/endless-ocean.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#endless-ocean",
@@ -189,7 +281,15 @@
     "isDefault": false,
     "version": "0.2.1",
     "sha256": "36344f758fc77d928c3cdc9fdd75cecd13570299c6d6c86f9c477070258d0c5f",
-    "sizeBytes": 1599
+    "sizeBytes": 1599,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": []
+    }
   },
   {
     "id": "submarine",
@@ -205,6 +305,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/submarine.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/submarine.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#submarine",
@@ -213,7 +314,19 @@
     "isDefault": false,
     "version": "0.1.0",
     "sha256": "d5814f3dbeba4eb86a4c65a3997ad3a9a922ad0f1a9d64cac0a3317ecf67ab1d",
-    "sizeBytes": 6718
+    "sizeBytes": 6718,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [
+        "jamm-silo"
+      ],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": [
+        "When combined with The Silo (jamm-silo), silo sprites may be mis-rendered due to a ModKit sprite-index remap bug; avoid this combination until the remap fix is released."
+      ]
+    }
   },
   {
     "id": "harbor-town",
@@ -229,6 +342,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/harbor-town.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/harbor-town.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#harbor-town",
@@ -237,7 +351,19 @@
     "isDefault": false,
     "version": "0.1.0",
     "sha256": "450b1e7a0308af3e58d9ed5268ca63b508ad221aae4a22285cebeec942ecbcc1",
-    "sizeBytes": 10995
+    "sizeBytes": 10995,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [
+        "jamm-silo"
+      ],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": [
+        "When combined with The Silo (jamm-silo), silo sprites may be mis-rendered due to a ModKit sprite-index remap bug; avoid this combination until the remap fix is released."
+      ]
+    }
   },
   {
     "id": "example-rod",
@@ -253,6 +379,7 @@
     "createdUtc": "2026-11-18T00:00:00Z",
     "rating": null,
     "iconUrl": "https://varialbe.xyz/cgf-mods/assets/example-rod.svg",
+    "iconPngUrl": "https://varialbe.xyz/cgf-mods/assets/example-rod.png",
     "verifiedCreator": true,
     "credits": "JAMM-CGF first-party pure-source package",
     "catalogPage": "https://varialbe.xyz/cgf-mods/#example-rod",
@@ -261,6 +388,14 @@
     "isDefault": false,
     "version": "1.0.0",
     "sha256": "3b24dfb69e05e07e533ef37f42edf7696bad7744b152a02df5b663969fec8a6c",
-    "sizeBytes": 1058
+    "sizeBytes": 1058,
+    "compat": {
+      "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
+      "jammMin": "0.9.1",
+      "conflicts": [],
+      "requires": [],
+      "testedWith": [],
+      "knownIssues": []
+    }
   }
 ]

@@ -7,6 +7,9 @@
             <StackPanel VerticalAlignment="Center">
               <WrapPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding Name}" TextWrapping="Wrap" Margin="0,0,6,0"/>
+                <Border Background="#23415A" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" IsVisible="{Binding HasCatalogCompatibility}">
+                  <TextBlock Text="{Binding CatalogCompatibility}" FontSize="10" FontWeight="Bold" Foreground="#B7DAF2"/>
+                </Border>
                 <Border Background="#1E3A8A" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" IsVisible="{Binding IsModKit}">
                   <TextBlock Text="ModKit" FontSize="10" FontWeight="Bold" Foreground="#93C5FD"/>
                 </Border>
