@@ -100,6 +100,8 @@ public sealed class ModUpdateWorkflow(ManagerStore store, IModCatalogProvider ca
         string current = Path.Combine(state.GameDirectory, "data.win");
         BuildFiles.RefuseLink(current); BuildFiles.RefuseLink(state.GameBackup);
         File.Copy(current, state.GameBackup, false);
+        string installed = store.Path("installed.json");
+        if (File.Exists(installed)) File.Copy(installed, store.Path("updates", "installed.prev.json"), true);
         new ProfileInstaller(store).Install(build);
     }
 
@@ -110,6 +112,7 @@ public sealed class ModUpdateWorkflow(ManagerStore store, IModCatalogProvider ca
         if (profileName is not null && !string.Equals(profileName, state.Profile, StringComparison.Ordinal))
             throw new ArgumentException($"The last updater backup belongs to profile '{state.Profile}', not '{profileName}'. Select that profile or omit --profile.");
         if (!Directory.Exists(state.GameDirectory)) throw new DirectoryNotFoundException("The updater's selected game directory is missing; rollback stopped.");
+        bool gameRestored = false;
         if (File.Exists(state.GameBackup))
         {
             string current = Path.Combine(state.GameDirectory, "data.win");
@@ -117,9 +120,16 @@ public sealed class ModUpdateWorkflow(ManagerStore store, IModCatalogProvider ca
             BuildFiles.RefuseLink(current); BuildFiles.RefuseLink(state.GameBackup); BuildFiles.RefuseLink(pending);
             File.Copy(state.GameBackup, pending, true);
             File.Move(pending, current, true);
+            gameRestored = true;
         }
         RestorePackages(state.ModIds);
-        File.Delete(store.Path("installed.json"));
+        if (gameRestored)
+        {
+            // The previous archive is back in place: restore the matching install record (or drop the now-stale one).
+            string installed = store.Path("installed.json"), previousInstalled = store.Path("updates", "installed.prev.json");
+            if (File.Exists(previousInstalled)) File.Move(previousInstalled, installed, true);
+            else File.Delete(installed);
+        }
         File.Delete(store.Path("updates", "rollback.json"));
         return state.SaveBackup;
     }
