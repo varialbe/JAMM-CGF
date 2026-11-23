@@ -98,6 +98,12 @@ internal static partial class DecorSleepAnalysis
     [GeneratedRegex(@"\bwith\s*\(\s*([A-Za-z_]\w*|\d+)\s*\)")]
     private static partial Regex WithTarget();
 
+    [GeneratedRegex(@"\b(?:var\s+)?([A-Za-z_]\w*)\s*=\s*instance_create(?:_depth|_layer)?\s*\([^,]*,[^,]*,\s*([A-Za-z_]\w*)\s*\)")]
+    private static partial Regex CreatedInstanceAssignment();
+
+    [GeneratedRegex(@"\b([A-Za-z_]\w*)\s*\.\s*(?:x|y|visible)\s*(?:=(?!=)|\+=|-=|\+\+|--)")]
+    private static partial Regex InstancePropertyWrite();
+
     [GeneratedRegex(@"(?<![\w.$])([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)")]
     private static partial Regex MemberAccess();
 
@@ -185,8 +191,29 @@ internal static partial class DecorSleepAnalysis
         var deactivationUnsafeRoots = new HashSet<UndertaleGameObject>();
         var externalWithGameplayRoots = new HashSet<UndertaleGameObject>();
         var chunkOrAreaObjects = new HashSet<UndertaleGameObject>();
+        var externallyPositionedObjects = new HashSet<UndertaleGameObject>();
         var chunkScripts = CollectChunkCallbacks(data, Decompile);
         UndertaleCode? lightAnchorCode = null;
+        var createdVariableTargets = new Dictionary<string, HashSet<UndertaleGameObject>>(StringComparer.Ordinal);
+
+        foreach (var code in data.Code.Where(c => c.ParentEntry is null))
+        {
+            string masked = InstanceGuard.Mask(Decompile(code));
+            foreach (Match m in CreatedInstanceAssignment().Matches(masked))
+                if (nameToObj.TryGetValue(m.Groups[2].Value, out var target))
+                {
+                    if (!createdVariableTargets.TryGetValue(m.Groups[1].Value, out var targets))
+                        createdVariableTargets[m.Groups[1].Value] = targets = [];
+                    targets.Add(target);
+                }
+        }
+        foreach (var code in data.Code.Where(c => c.ParentEntry is null))
+        {
+            string masked = InstanceGuard.Mask(Decompile(code));
+            foreach (Match m in InstancePropertyWrite().Matches(masked))
+                if (createdVariableTargets.TryGetValue(m.Groups[1].Value, out var targets))
+                    externallyPositionedObjects.UnionWith(targets);
+        }
 
         foreach (var code in data.Code.Where(c => c.ParentEntry is null))
         {
@@ -235,8 +262,15 @@ internal static partial class DecorSleepAnalysis
 
             foreach (Match m in WithTarget().Matches(masked))
             {
-                if (ResolveObjectToken(m.Groups[1].Value, nameToObj, idToObj) is { } target)
+                string targetName = m.Groups[1].Value;
+                IEnumerable<UndertaleGameObject> targets = createdVariableTargets.TryGetValue(targetName, out var variableTargets)
+                    ? variableTargets
+                    : ResolveObjectToken(targetName, nameToObj, idToObj) is { } resolved ? [resolved] : [];
+                foreach (var target in targets)
                 {
+                    string withBody = ExtractBracedBlock(masked, m.Index + m.Length);
+                    if (Regex.IsMatch(withBody, @"\b(?:x|y|visible)\s*(?:=(?!=)|\+=|-=|\+\+|--)"))
+                        externallyPositionedObjects.Add(target);
                     bool readsVisibleOrNonDecor = false;
                     if (!isSonarDraw && !isLightingDraw)
                     {
@@ -286,7 +320,7 @@ internal static partial class DecorSleepAnalysis
         foreach (var obj in data.GameObjects)
         {
             var plan = AnalyzeObject(obj, data, placedCounts, Decompile,
-                deactivationUnsafeRoots, externalWithGameplayRoots, chunkOrAreaObjects);
+                deactivationUnsafeRoots, externalWithGameplayRoots, chunkOrAreaObjects, externallyPositionedObjects);
             plans.Add(plan);
             if (plan.Covered) coveredSet.Add(obj);
         }
@@ -315,7 +349,8 @@ internal static partial class DecorSleepAnalysis
         Func<UndertaleCode, string> decompile,
         HashSet<UndertaleGameObject> deactivationUnsafeRoots,
         HashSet<UndertaleGameObject> externalWithGameplayRoots,
-        HashSet<UndertaleGameObject> chunkOrAreaObjects)
+        HashSet<UndertaleGameObject> chunkOrAreaObjects,
+        HashSet<UndertaleGameObject> externallyPositionedObjects)
     {
         string name = obj.Name.Content;
         DecorObjectPlan Skip(string reason) => new(obj, false, reason, false, false, DecorParallaxKind.None, [], false);
@@ -324,6 +359,8 @@ internal static partial class DecorSleepAnalysis
             return Skip("JAMM runtime controller");
         if (KnownControllerNames.Contains(name))
             return Skip("gameplay/controller object");
+        if (externallyPositionedObjects.Any(r => Inherits(obj, r)))
+            return Skip("position or visibility is controlled by another object's code");
         if (obj.Persistent)
             return Skip("persistent object");
         if (InheritsAny(obj, NonDecorRoots))
