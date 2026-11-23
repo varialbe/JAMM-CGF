@@ -1,16 +1,19 @@
 using UndertaleModLib;
 using UndertaleModLib.Compiler;
 using UndertaleModLib.Models;
+using System.Text.RegularExpressions;
 
 namespace Jamm.ModMaker;
 
-/// <summary>Wraps GML code entries so benchmark builds can measure their own CPU time.</summary>
+/// <summary>Samples inclusive event-entry time on every Nth frame, optionally filtering to selected entries.</summary>
 public static class GmlCpuProfiler
 {
     /// <summary>Instruments object event entries and, optionally, scripts in place.</summary>
-    public static int Instrument(UndertaleData data, bool includeScripts = false)
+    public static int Instrument(UndertaleData data, bool includeScripts = false, int sampleRate = 16, string? onlyEntries = null)
     {
         ArgumentNullException.ThrowIfNull(data);
+        if (sampleRate < 1)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Profile sample rate must be at least one.");
         var entries = new Dictionary<UndertaleCode, bool>();
         foreach (var obj in data.GameObjects)
         {
@@ -36,6 +39,13 @@ public static class GmlCpuProfiler
             entries.TryAdd(code, false);
         }
 
+        if (onlyEntries is not null)
+        {
+            var selected = onlyEntries.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.Ordinal);
+            entries = entries.Where(pair => selected.Contains(pair.Key.Name.Content))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+        }
         if (entries.Count == 0) return 0;
 
         var compiler = new CompileGroup(data);
@@ -43,9 +53,17 @@ public static class GmlCpuProfiler
         foreach (var (original, drawAffected) in entries.OrderBy(pair => pair.Key.Name.Content, StringComparer.Ordinal))
         {
             string oldName = original.Name.Content;
+            string label = oldName + (drawAffected ? " [render-affected]" : "");
+            if (!oldName.StartsWith("gml_Script_", StringComparison.Ordinal))
+            {
+                string originalSource = ModObjects.Decompile(data, original);
+                compiler.QueueCodeReplace(original, InlineEventGml(originalSource, label, sampleRate, index));
+                index++;
+                continue;
+            }
+
             string helperName = $"__jamm_prof_original_{index}";
             string helperCodeName = $"gml_Script_{helperName}";
-            string label = oldName + (drawAffected ? " [render-affected]" : "");
 
             // Keep the original body as a callable script. The event/script entry becomes a
             // wrapper, so its timer is accumulated even when the body executes exit or return.
@@ -70,7 +88,7 @@ public static class GmlCpuProfiler
                 foreach (var action in attached) action.CodeId = wrapper;
             }
 
-            compiler.QueueCodeReplace(wrapper, WrapperGml(helperName, label, oldName.StartsWith("gml_Script_", StringComparison.Ordinal)));
+            compiler.QueueCodeReplace(wrapper, WrapperGml(helperName, label, oldName.StartsWith("gml_Script_", StringComparison.Ordinal), sampleRate));
             index++;
         }
 
@@ -78,7 +96,7 @@ public static class GmlCpuProfiler
         return entries.Count;
     }
 
-    private static string WrapperGml(string helperName, string label, bool script)
+    private static string WrapperGml(string helperName, string label, bool script, int sampleRate)
     {
         string call;
         string result;
@@ -101,22 +119,47 @@ public static class GmlCpuProfiler
 
         return $$"""
             var __jamm_prof_key = "{{label}}";
-            var __jamm_prof_active = variable_global_exists("__jamm_prof_on") && global.__jamm_prof_on;
+            var __jamm_prof_sample = global.__jamm_prof_on;
             var __jamm_prof_start = 0;
-            if (__jamm_prof_active) __jamm_prof_start = get_timer();
+            if (__jamm_prof_sample) __jamm_prof_start = get_timer();
             {{(script ? "var __jamm_prof_result;" : "")}}
             {{call}}
-            if (__jamm_prof_active)
+            if (__jamm_prof_sample)
             {
-                var __jamm_prof_elapsed = get_timer() - __jamm_prof_start;
+                var __jamm_prof_elapsed = (get_timer() - __jamm_prof_start) * {{sampleRate}};
                 var __jamm_prof_us_old = ds_map_find_value(global.__jamm_prof_us, __jamm_prof_key);
                 var __jamm_prof_n_old = ds_map_find_value(global.__jamm_prof_n, __jamm_prof_key);
                 if (is_undefined(__jamm_prof_us_old)) __jamm_prof_us_old = 0;
                 if (is_undefined(__jamm_prof_n_old)) __jamm_prof_n_old = 0;
                 ds_map_set(global.__jamm_prof_us, __jamm_prof_key, __jamm_prof_us_old + __jamm_prof_elapsed);
-                ds_map_set(global.__jamm_prof_n, __jamm_prof_key, __jamm_prof_n_old + 1);
+                ds_map_set(global.__jamm_prof_n, __jamm_prof_key, __jamm_prof_n_old + {{sampleRate}});
             }
             {{result}}
+            """;
+    }
+
+    private static string InlineEventGml(string source, string label, int sampleRate, int index)
+    {
+        string prefix = $"__jamm_pf_{index}_";
+        string completion = $$"""
+            if ({{prefix}}sample)
+            {
+                var {{prefix}}elapsed = (get_timer() - {{prefix}}start) * {{sampleRate}};
+                var {{prefix}}us_old = ds_map_find_value(global.__jamm_prof_us, "{{label}}");
+                var {{prefix}}n_old = ds_map_find_value(global.__jamm_prof_n, "{{label}}");
+                if (is_undefined({{prefix}}us_old)) {{prefix}}us_old = 0;
+                if (is_undefined({{prefix}}n_old)) {{prefix}}n_old = 0;
+                ds_map_set(global.__jamm_prof_us, "{{label}}", {{prefix}}us_old + {{prefix}}elapsed);
+                ds_map_set(global.__jamm_prof_n, "{{label}}", {{prefix}}n_old + {{sampleRate}});
+            }
+            """;
+        string withExitTimers = Regex.Replace(source, @"\bexit\s*;", _ => "{\n" + completion + "\nexit;\n}", RegexOptions.CultureInvariant);
+        return $$"""
+            var {{prefix}}sample = global.__jamm_prof_on;
+            var {{prefix}}start = 0;
+            if ({{prefix}}sample) {{prefix}}start = get_timer();
+            {{withExitTimers}}
+            {{completion}}
             """;
     }
 }

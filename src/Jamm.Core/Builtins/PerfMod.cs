@@ -11,8 +11,9 @@ public static class PerfMod
         bool applyScheduler = true, bool applyCoreOptimizations = true, bool applyDecorSleep = false,
         bool applyFishSleep = false, List<string>? decisions = null,
         bool masksRect = false, bool fishLod = false, bool decorAnimNative = false,
-        bool cacheHot = false, bool particlesFx = false)
+        bool? cacheHot = null, bool particlesFx = false, bool applyCaveRockVisibility = false)
     {
+        bool applyCacheHot = cacheHot ?? applyCoreOptimizations;
         if (data.GeneralInfo.Major != 1 || data.GeneralInfo.BytecodeVersion != 16
             || data.Code.ByName("gml_Object_Fish_Step_2") is null
             || data.Code.ByName("gml_Script_fish_check_trawler") is null
@@ -55,7 +56,12 @@ public static class PerfMod
                 "var jamm_perf_radius2 = argument1 * argument1;\nvar jamm_perf_force = 100000 * argument2;\n"
                 + avoidance.Replace("(argument1 * argument1)", "jamm_perf_radius2", StringComparison.Ordinal)
                     .Replace("(100000 * argument2)", "jamm_perf_force", StringComparison.Ordinal));
+
         }
+
+        if ((applyCoreOptimizations || applyCaveRockVisibility)
+            && CaveRockVisibility.Queue(data, compiler) is { } caveDecision)
+            decisions?.Add(caveDecision);
 
         if (applyScheduler)
         {
@@ -83,9 +89,9 @@ public static class PerfMod
             var sleepDecisions = FishSleep.Apply(data, [], debug: debug);
             decisions?.AddRange(sleepDecisions);
         }
-        if (masksRect || fishLod || decorAnimNative || cacheHot || particlesFx)
+        if (masksRect || fishLod || decorAnimNative || applyCacheHot || particlesFx)
         {
-            var cheapWinDecisions = GmlCheapWins.Apply(data, [], masksRect, fishLod, decorAnimNative, cacheHot, particlesFx);
+            var cheapWinDecisions = GmlCheapWins.Apply(data, [], masksRect, fishLod, decorAnimNative, applyCacheHot, particlesFx);
             decisions?.AddRange(cheapWinDecisions);
         }
 

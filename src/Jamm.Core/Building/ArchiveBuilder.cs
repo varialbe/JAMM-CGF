@@ -188,6 +188,8 @@ public static class ArchiveBuilder
                     var decorDecisions = DecorSleep.Apply(data, perfEdits, enabledByDefault: true);
                     plan = plan with { Decisions = [.. plan.Decisions, .. decorDecisions] };
                 }
+                if (perfSettings is not null && CaveRockVisibility.Apply(data, perfEdits) is { } caveDecision)
+                    plan = plan with { Decisions = [.. plan.Decisions, caveDecision] };
                 if (perfSettings?.FishSleep == true)
                 {
                     var areaFishNames = plan.Assets

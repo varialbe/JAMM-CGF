@@ -115,6 +115,26 @@ public static class GmlCheapWins
         void ApplyHotCache()
         {
             int changed = 0;
+            var fishOther = data.Code.ByName("gml_Object_Fish_Other_23");
+            var lungeScript = data.Code.ByName("gml_Script_fish_lunge");
+            const string lungeCall = "fish_lunge();";
+            const string cooldownBranch = "if (lungeCooldown > 0)\n{\n    lungeCooldown -= (1 * Girl.delta_fixed);\n    return -4;\n}";
+            if (fishOther is not null && lungeScript is not null)
+            {
+                string eventSource = GetSource(fishOther);
+                string lungeSource = GetSource(lungeScript);
+                if (eventSource.Split(lungeCall, StringSplitOptions.None).Length == 2
+                    && lungeSource.Split(cooldownBranch, StringSplitOptions.None).Length == 2)
+                {
+                    // The event discards fish_lunge's return value. Inline its cooldown-only
+                    // path to avoid a script dispatch while preserving its per-tick decrement.
+                    Queue(fishOther, eventSource.Replace(lungeCall,
+                        "if (lungeCooldown > 0) lungeCooldown -= (1 * Girl.delta_fixed);\nelse fish_lunge();",
+                        StringComparison.Ordinal));
+                    changed++;
+                }
+            }
+
             var fishStep = data.Code.ByName("gml_Object_Fish_Step_2");
             if (fishStep is not null)
             {
@@ -130,13 +150,9 @@ public static class GmlCheapWins
                         "var jamm_lure_x = Lure.x;\nvar jamm_lure_y = Lure.y;\n" + insertAt,
                         StringComparison.Ordinal);
                     const string cameraDistance = "point_distance(x, y, Camera.x, Camera.y)";
-                    const string timerBlock = "if (check_timer >= 6)\n{";
-                    if (source.Contains(cameraDistance, StringComparison.Ordinal)
-                        && source.Split(timerBlock, StringSplitOptions.None).Length == 2)
+                    if (source.Contains(cameraDistance, StringComparison.Ordinal))
                     {
-                        source = source.Replace(timerBlock,
-                            timerBlock + "\n    var jamm_camera_x = Camera.x;\n    var jamm_camera_y = Camera.y;",
-                            StringComparison.Ordinal)
+                        source = "var jamm_camera_x = Camera.x;\nvar jamm_camera_y = Camera.y;\n" + source
                             .Replace(cameraDistance, "point_distance(x, y, jamm_camera_x, jamm_camera_y)", StringComparison.Ordinal);
                     }
                     Queue(fishStep, source);

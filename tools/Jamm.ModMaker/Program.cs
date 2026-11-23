@@ -24,7 +24,7 @@ public static class Program
             Console.Error.WriteLine("""
                 jamm-modmaker — builds example mods for JAMM-CGF from YOUR original data.win
                   inspect <original.win>
-                  perf    <original.win> <out.win> [--debug] [--only-cheap-wins] [--masks-rect] [--fish-lod] [--decor-anim-native] [--cache-hot] [--particles-fx]
+                  perf    <original.win> <out.win> [--debug] [--only-cheap-wins] [--masks-rect] [--fish-lod] [--decor-anim-native] [--cache-hot] [--particles-fx] [--cave-rock-distance]
                   perf-census <original.win>
                   smooth  <original.win> <out.win> [--debug]
                   hd      <original.win> <out.win> [--upscaled-pages <dir>] [--debug] [--verbose]
@@ -40,7 +40,7 @@ public static class Program
                   bench   <video.win> <out.win> --scene showcase-submarine
                   bench   <endless-ocean.win> <out.win> --scene worldgen [--showcase]
                   bench   <weather-perf.win> <out.win> --scene stress [--duration <sec>, minimum 180]
-                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater|lightcycle] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
+                  bench   <in.win> <out.win> [--scene dock|sonar|deepwater|lightcycle] [--warmup <sec>] [--duration <sec>] [--max-samples <n>] [--out-file <name>] [--auto-exit|--no-exit] [--seed <n>] [--dock-x <x>] [--deep-x <x>] [--deep-y <y>] [--boat-slot <n>] [--deep-sonar] [--show-hud] [--profile [--profile-sample-rate <frames>]] [--profile-only <comma-separated-code-entries>] [--profile-scripts] [--trace-fish <ticks>] [--fish-grid] [--decor-sleep] [--screenshot] [--fish-mode full|nostep|nodraw|deactivate] [--fish-cap <n>] [--fish-scale <k>]
                   export-pages <original.win> <dir>
                 The original is opened read-only; output must be a new path.
                 """);
@@ -100,8 +100,8 @@ public static class Program
                     applyDecorSleep: !args.Contains("--no-decor-sleep"), applyFishSleep: !args.Contains("--no-fish-sleep"),
                     decisions: perfDecisions,
                     masksRect: args.Contains("--masks-rect"), fishLod: args.Contains("--fish-lod"),
-                    decorAnimNative: args.Contains("--decor-anim-native"), cacheHot: args.Contains("--cache-hot"),
-                    particlesFx: args.Contains("--particles-fx"));
+                    decorAnimNative: args.Contains("--decor-anim-native"), cacheHot: !onlyCheapWins || args.Contains("--cache-hot"),
+                    particlesFx: args.Contains("--particles-fx"), applyCaveRockVisibility: args.Contains("--cave-rock-distance"));
                 foreach (string name in changed)
                     Console.WriteLine($"{name}: {before[name]} -> {data.Code.ByName(name)!.Instructions.Count} instructions (static size, not executed work).");
                 foreach (string decision in perfDecisions)
@@ -161,6 +161,7 @@ public static class Program
         bool showHud = false;
         bool profile = false;
         bool profileScripts = false;
+        string? profileOnlyEntries = null;
         int traceFish = 0;
         bool fishGrid = false;
         bool decorSleep = false;
@@ -169,6 +170,7 @@ public static class Program
         var fishMode = BenchmarkFishMode.Full;
         int fishCap = -1;
         double fishScale = 1.0;
+        int profileSampleRate = 16;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -190,6 +192,8 @@ public static class Program
                 case "--fish-sleep": fishSleep = true; break;
                 case "--screenshot": screenshot = true; break;
                 case "--profile-scripts": profile = true; profileScripts = true; break;
+                case "--profile-sample-rate": profileSampleRate = ParseInt(RequireValue(args, ref i, arg), arg); profile = true; break;
+                case "--profile-only": profileOnlyEntries = RequireValue(args, ref i, arg); profile = true; break;
                 case "--scene": scene = BenchmarkMod.ParseScene(RequireValue(args, ref i, arg)); break;
                 case "--warmup": warmup = ParseDouble(RequireValue(args, ref i, arg), arg); break;
                 case "--duration": duration = ParseDouble(RequireValue(args, ref i, arg), arg); break;
@@ -214,7 +218,9 @@ public static class Program
             }
         }
 
-        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, fishSleep, screenshot, fishMode, fishCap, fishScale);
+        if (profileSampleRate < 1)
+            throw new ArgumentException("--profile-sample-rate must be at least one frame.", nameof(args));
+        var options = new BenchmarkOptions(scene, warmup, duration, maxSamples, outFile, autoExit, seed, dockX, deepX, deepY, boatSlot, deepSonar, showHud, profile, profileScripts, traceFish, fishGrid, decorSleep, fishSleep, screenshot, fishMode, fishCap, fishScale, profileSampleRate, profileOnlyEntries);
         BenchmarkMod.ValidateOptions(options);
         return options;
     }

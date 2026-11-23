@@ -56,7 +56,9 @@ public sealed record BenchmarkOptions(
     bool Screenshot = false,
     BenchmarkFishMode FishMode = BenchmarkFishMode.Full,
     int FishCap = -1,
-    double FishScale = 1.0);
+    double FishScale = 1.0,
+    int ProfileSampleRate = 16,
+    string? ProfileOnlyEntries = null);
 
 /// <summary>
 /// Test-only identical instrumentation pass for local frame-time benchmarking.
@@ -159,7 +161,7 @@ public static partial class BenchmarkMod
         if (options.TraceFish > 0) FishTrace.Instrument(data, options.Seed);
         BenchmarkFishExperiments.InstrumentFishAndSpawners(data, options.FishSleep);
         if (options.Profile)
-            GmlCpuProfiler.Instrument(data, options.ProfileScripts);
+            GmlCpuProfiler.Instrument(data, options.ProfileScripts, options.ProfileSampleRate, options.ProfileOnlyEntries);
 
         var bench = ModObjects.Create(data, ObjectName, persistent: true);
         // Run DrawGUIEnd after normal draws/GUI and just before SmoothMod's Depth=-1000000 freeze.
@@ -172,7 +174,7 @@ public static partial class BenchmarkMod
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Create, 0u, data), CreateGml(options));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Destroy, 0u, data), DestroyGml(options.TraceFish > 0));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.RoomStart, data), RoomStartGml(data));
-        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStepGml(data, options.TraceFish > 0));
+        compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.BeginStep, data), BeginStepGml(data, options.TraceFish > 0, options.Profile, options.ProfileSampleRate));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Step, (uint)EventSubtypeStep.EndStep, data), EndStepGml(data));
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.PreDraw, data), PreDrawGml());
         compiler.QueueCodeReplace(bench.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), DrawGuiGml(data));
@@ -356,7 +358,7 @@ public static partial class BenchmarkMod
             jamm_b_step_samples = 0;
             jamm_b_fish_total = 0;
             jamm_b_summary_line = "";
-            {{(o.Profile ? "global.__jamm_prof_us = ds_map_create();\nglobal.__jamm_prof_n = ds_map_create();\nglobal.__jamm_prof_on = 0;" : "")}}
+            {{(o.Profile ? "global.__jamm_prof_us = ds_map_create();\nglobal.__jamm_prof_n = ds_map_create();\nglobal.__jamm_prof_frame = 0;\nglobal.__jamm_prof_sample_rate = " + o.ProfileSampleRate + ";\nglobal.__jamm_prof_on = 0;" : "")}}
             """;
     }
 
@@ -409,7 +411,7 @@ public static partial class BenchmarkMod
         }
         """;
 
-    private static string BeginStepGml(UndertaleData data, bool trace)
+    private static string BeginStepGml(UndertaleData data, bool trace, bool profile, int profileSampleRate)
     {
         bool hasSaveManager = data.GameObjects.ByName("SaveManager") is not null;
         string saveLock = hasSaveManager
@@ -436,6 +438,7 @@ public static partial class BenchmarkMod
             jamm_b_has_draw = 0;
             global.jamm_b_fish_step_us = 0;
             global.jamm_b_fish_depth = 0;
+            {{(profile ? $"if (jamm_b_state == 2) {{ global.__jamm_prof_frame += 1; global.__jamm_prof_on = (global.__jamm_prof_frame mod {profileSampleRate}) == 0; }} else global.__jamm_prof_on = 0;" : "")}}
             if (jamm_b_state == 2) jamm_b_step_samples += 1;
             {{saveLock}}
             if (room != NewWorld)
@@ -1119,7 +1122,7 @@ public static partial class BenchmarkMod
                 jamm_b_prev_gui_t = jamm_b_now;
                 jamm_b_has_step = 0;
                 jamm_b_has_draw = 0;
-                {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_n);\nglobal.__jamm_prof_on = 1;" : "")}}
+                {{(profile ? "ds_map_clear(global.__jamm_prof_us);\nds_map_clear(global.__jamm_prof_n);\nglobal.__jamm_prof_frame = 0;\nglobal.__jamm_prof_on = 0;" : "")}}
                 {{(trace ? FishTrace.Start : "")}}
                 jamm_b_state = 2;
             }
@@ -1323,7 +1326,7 @@ public static partial class BenchmarkMod
                 if (jamm_b_screenshot)
                     screen_save("jamm_bench_shot_" + jamm_b_scene + ".png");
 
-                {{(profile ? ProfileWriterGml() : "")}}
+                {{(profile ? ProfileWriterGml(options) : "")}}
 
                 ds_list_destroy(jamm_b_sorted);
                 ds_list_destroy(jamm_b_loop_sorted);
@@ -1350,12 +1353,12 @@ public static partial class BenchmarkMod
 
     }
 
-    private static string ProfileWriterGml() => """
+    private static string ProfileWriterGml(BenchmarkOptions options) => $$"""
         var jamm_p_name = "jamm_profile_" + jamm_b_scene + ".csv";
         var jamm_p_f = file_text_open_write(jamm_p_name);
         if (jamm_p_f >= 0)
         {
-            file_text_write_string(jamm_p_f, "# ticks=" + string(jamm_b_loop_n) + " loop_us_mean=" + string(round(jamm_b_l_mean)) + " overhead=get_timer_start_and_end_per_invocation; relative_cpu_only; draw_entries_render_affected");
+            file_text_write_string(jamm_p_f, "# ticks=" + string(jamm_b_loop_n) + " loop_us_mean=" + string(round(jamm_b_l_mean)) + " sample_rate={{options.ProfileSampleRate}} overhead=sampled_frame_inclusive; only_selected_entries_instrumented; draw_entries_render_affected");
             file_text_writeln(jamm_p_f);
             file_text_write_string(jamm_p_f, "code_entry,calls,total_us,us_per_tick,share_of_loop");
             file_text_writeln(jamm_p_f);

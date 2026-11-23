@@ -203,9 +203,9 @@ public class BenchmarkTests
 
         var wrappedEvent = fish.Events[(int)EventType.Alarm][0].Actions[0].CodeId;
         string eventStub = ModObjects.Decompile(data, wrappedEvent);
-        Assert.Contains("__jamm_prof_original_", eventStub);
+        Assert.Contains("global.__jamm_prof_on", eventStub);
         Assert.Contains("ds_map_set(global.__jamm_prof_us", eventStub);
-        Assert.Contains("get_timer() - __jamm_prof_start", eventStub);
+        Assert.Contains("get_timer()", eventStub);
 
         var wrappedScript = data.Scripts.Single(s => s.Name.Content == "profile_test").Code;
         string scriptStub = ModObjects.Decompile(data, wrappedScript);
@@ -215,12 +215,14 @@ public class BenchmarkTests
 
         string benchCreate = Code(data, "Create_0");
         string drawEnd = Code(data, "Draw_75");
+        string beginStep = ModObjects.Decompile(data, data.GameObjects.ByName(BenchmarkMod.ObjectName)!
+            .EventHandlerFor(EventType.Step, EventSubtypeStep.BeginStep, data));
         Assert.Contains("jamm_b_profile = 1", benchCreate);
-        Assert.Contains("global.__jamm_prof_on = 1", drawEnd);
+        Assert.Contains("global.__jamm_prof_frame", beginStep);
         Assert.Contains("global.__jamm_prof_on = 0", drawEnd);
         Assert.Contains("jamm_profile_", drawEnd);
         Assert.Contains("code_entry,calls,total_us,us_per_tick,share_of_loop", drawEnd);
-        Assert.Contains("get_timer_start_and_end_per_invocation", drawEnd);
+        Assert.Contains("sampled_frame_inclusive", drawEnd);
     }
 
     [Fact]
@@ -464,11 +466,21 @@ public class BenchmarkTests
         bubble.Sprite = mask;
 
         var compiler = new CompileGroup(data);
+        var fishOther = fish.EventHandlerFor(EventType.Other, (uint)EventSubtypeOther.User13, data);
+        compiler.QueueCodeReplace(fishOther, "fish_lunge();\nspeed = 0;");
+        var lungeCode = UndertaleCode.CreateEmptyEntry(data, "gml_Script_fish_lunge");
+        data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString("fish_lunge"), Code = lungeCode });
+        compiler.QueueCodeReplace(lungeCode, "if (lungeCooldown > 0)\n{\n    lungeCooldown -= (1 * Girl.delta_fixed);\n    return -4;\n}\ndistance_to_lure = point_distance(x, y, Lure.x, Lure.y);");
         compiler.QueueCodeReplace(data.Code.ByName("gml_Object_Fish_Step_2")!, """
+            if (check_timer >= 6)
+            {
+                camera_distance = point_distance(x, y, Camera.x, Camera.y);
+            }
             switch (state)
             {
                 case 0: speed = 1; break;
             }
+            if (point_distance(x, y, Camera.x, Camera.y) > 1000) speed = 0;
             lure_distance_squared = ((x - Lure.x) * (x - Lure.x)) + ((y - Lure.y) * (y - Lure.y));
             """);
         compiler.QueueCodeReplace(weed.EventHandlerFor(EventType.Step, 0u, data), """
@@ -494,6 +506,11 @@ public class BenchmarkTests
         string fishStep = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Step_2")!);
         Assert.Contains("jamm_lod_far", fishStep);
         Assert.Contains("jamm_lure_x", fishStep);
+        Assert.True(fishStep.IndexOf("var jamm_camera_y", StringComparison.Ordinal)
+            < fishStep.IndexOf("if (check_timer >= 6)", StringComparison.Ordinal));
+        Assert.Contains("point_distance(x, y, jamm_camera_x, jamm_camera_y)", fishStep);
+        Assert.Contains("lungeCooldown -= (1 * Girl.delta_fixed)",
+            ModObjects.Decompile(data, data.Code.ByName("gml_Object_Fish_Other_23")!));
         Assert.Contains("25000000", ModObjects.Decompile(data, data.Code.ByName("gml_Object_Weed_Step_0")!));
         Assert.Contains("jamm_sonar_advanced", ModObjects.Decompile(data, data.Code.ByName("gml_Object_SonarPanel_Step_1")!));
         Assert.Contains(decisions, d => d.StartsWith("[CGF-CHEAP-PARTICLES] converted 1", StringComparison.Ordinal));
@@ -502,13 +519,13 @@ public class BenchmarkTests
     }
 
     [Fact]
-    public void ExperimentalCheapWinPerfSettingsDefaultOff()
+    public void ExperimentalCheapWinPerfSettingsDefaultOffExceptForBehaviorPreservingCache()
     {
         var settings = new PerfSettings();
         Assert.False(settings.MasksRect);
         Assert.False(settings.FishLod);
         Assert.False(settings.DecorAnimNative);
-        Assert.False(settings.CacheHot);
+        Assert.True(settings.CacheHot);
         Assert.False(settings.ParticlesFx);
     }
 

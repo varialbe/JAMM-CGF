@@ -5,8 +5,10 @@ Date: 2026-11-23. Branch: `exp/gml-cheap-wins`.
 ## Round 3 implementation and measurements
 
 This section supersedes the earlier audit-only result below. Each experiment has its own
-default-off `PerfSettings` flag and `cgfmm profile perf <name> <flag> on|off` switch. The
-archive builder applies only selected transforms. The ModMaker `perf --only-cheap-wins` path
+`PerfSettings` flag and `cgfmm profile perf <name> <flag> on|off` switch. `cache-hot` is now
+default-on because it keeps event ordering and bypasses the `fish_lunge` script dispatch when
+cooldown is its only work; behavior-changing experiments remain default-off. The archive
+builder applies the selected transforms. The ModMaker `perf --only-cheap-wins` path
 creates isolated local comparison archives with Fish Sleep and Decor Sleep held on in every
 variant. Generated game archives and captures stay outside the repository.
 
@@ -15,7 +17,7 @@ variant. Generated game archives and captures stay outside the repository.
 | `masks-rect` | Fish and selected visual-only Bubble decor sprites with precise masks use axis-aligned rectangle masks. | Collision outlines change; fish catches/wall avoidance can differ. All changed sprite names will be listed below. |
 | `fish-lod` | Beyond 1.5 view widths, Fish state-AI dispatch runs every second End Step. Engine motion stays per-frame; alarms receive one extra decrement on dispatched AI steps. | Custom state counters, target selection, collision checks and interactions can be delayed. |
 | `decor-anim-native` | Weed's existing offscreen guard compares squared distance against the same 5,000-pixel radius, avoiding a square root. | Equivalent except for floating-point boundary rounding. |
-| `cache-hot` | Lure coordinates are captured once for the Fish lure-distance expression, camera coordinates only when the Fish 6-tick check runs, and Sonar advanced/cave mode before the `with (Fish)` walk. | Event-local snapshots preserve current event ordering; no instance-count cache is installed where lifecycle invalidation is not proven. |
+| `cache-hot` | Lure and camera coordinates are captured once per event, Sonar advanced/cave mode is captured before the `with (Fish)` walk, and the Fish End Step inlines the cooldown-only `fish_lunge` path. | The lunge return value is discarded; its cooldown decrement is preserved. The other snapshots remain event-local, so event ordering is unchanged. |
 | `particles-fx` | Replaces direct standalone Bubble construction with a shared sprite-backed particle when a reusable particle system exists; skips assigned/modified creation calls. | Particle lifespan and ownership differ. PotEffect stays excluded because its Create event changes Witchy state. No eligible direct Bubble call was found in either measured pack. |
 
 Mask census: `masks-rect` changed 243 fish sprite masks in all7 and 242 in pub5. The pub5 set is
