@@ -83,6 +83,7 @@ public static class ConsoleMod
         persistent = true;
         jamm_console_owner = true;
         global.jamm_console_open = false;
+        jamm_console_open = false; // legacy instance mirror: published ModKit mods (harbor-town, submarine) read obj_jamm_console.jamm_console_open
         jamm_console_input = "";
         jamm_console_history = ds_list_create();
         jamm_console_hist_pos = 0;
@@ -119,6 +120,7 @@ public static class ConsoleMod
 
         return $$"""
         {{slotSync}}
+        jamm_console_open = global.jamm_console_open;
         if (keyboard_check_pressed(vk_f12) || keyboard_check_pressed(192))
         {
             global.jamm_console_open = !global.jamm_console_open;
@@ -542,6 +544,7 @@ public static class ConsoleMod
             ? "draw_set_font(fnt_babySmall);"
             : "draw_set_font(-1);";
         return $$"""
+        jamm_console_open = global.jamm_console_open;
         if (!global.jamm_console_open)
         {
             if (current_time < jamm_console_toast)
