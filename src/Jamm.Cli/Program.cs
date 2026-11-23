@@ -80,6 +80,8 @@ int Run(string[] arguments)
             cgfmm apply [--profile <name>] [--yes]
             cgfmm play [--profile <name>] [--yes]
             cgfmm update --check [--profile <name>] [--json]
+            cgfmm update --apply [--profile <name>] [--yes]
+            cgfmm update --rollback [--profile <name>]
             cgfmm restore [--game <game dir>] [--verbose]
             Management storage: --data-dir <dir>, then CGFMM_DATA_DIR, then $XDG_DATA_HOME/cgfmm.
             Config keys: base, gameDir, wine.mode (wine|proton|proton-flatpak), wine.prefix, wine.binary, proton.path,

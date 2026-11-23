@@ -1,4 +1,6 @@
 using Jamm.Core.Management;
+using Jamm.Core.Patching;
+using System.Globalization;
 
 namespace Jamm.Core.Browsing;
 
@@ -43,11 +45,55 @@ public sealed class CatalogUpdates(ManagerStore store, IModCatalogProvider catal
         return updates;
     }
 
+    /// <summary>Finds enabled catalog-backed mods whose catalog identity has disappeared.</summary>
+    public static IReadOnlyList<(ManagedMod Mod, ModOrigin Origin)> MissingCatalogEntries(ModProfile profile, IEnumerable<ManagedMod> installedMods, CatalogSnapshot snapshot)
+    {
+        var entries = snapshot.Mods.Select(m => m.Catalog + ":" + m.Id).ToHashSet(StringComparer.Ordinal);
+        var library = installedMods.ToDictionary(m => m.Id, StringComparer.Ordinal);
+        return profile.EnabledMods.Where(library.ContainsKey).SelectMany(id => library[id].Origins
+            .Where(o => !entries.Contains(o.Catalog + ":" + o.ModId)).Select(o => (library[id], o))).ToArray();
+    }
+
     private static bool ValidHash(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
 
-    private static int CompareVersions(string available, string? installed)
+    internal static int CompareVersions(string available, string? installed)
     {
-        if (Version.TryParse(available, out var a) && Version.TryParse(installed, out var b)) return a.CompareTo(b);
+        static (Version? Core, bool Prerelease) Parse(string value)
+        {
+            string[] parts = value.TrimStart('v', 'V').Split('-', 2);
+            return (Version.TryParse(parts[0], out var version) ? version : null, parts.Length > 1);
+        }
+        if (installed is not null)
+        {
+            var a = Parse(available); var b = Parse(installed);
+            if (a.Core is not null && b.Core is not null)
+            {
+                int comparison = a.Core.CompareTo(b.Core);
+                return comparison != 0 ? comparison : a.Prerelease.CompareTo(b.Prerelease) * -1;
+            }
+        }
         return string.Compare(available, installed, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>Returns concrete save compatibility reasons using version metadata and added asset names.</summary>
+    public static IReadOnlyList<string> ConflictReasons(CatalogUpdate update, ModPatch? before, ModPatch? after)
+    {
+        List<string> reasons = [];
+        if (update.CatalogEntry.SaveBreaking) reasons.Add("catalog marks this release as save-breaking");
+        if (Major(update.InstalledVersion) is int oldMajor && Major(update.AvailableVersion) is int newMajor && oldMajor != newMajor)
+            reasons.Add($"major version changed from {oldMajor} to {newMajor}");
+        if (before is not null && after is not null)
+        {
+            var oldNames = AddedNames(before);
+            var newNames = AddedNames(after);
+            string[] removed = oldNames.Except(newNames, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+            if (removed.Length > 0) reasons.Add("removed or renamed added assets: " + string.Join(", ", removed.Take(8)) + (removed.Length > 8 ? $" (+{removed.Length - 8} more)" : ""));
+        }
+        return reasons;
+    }
+
+    private static int? Major(string? value) => int.TryParse(value?.TrimStart('v', 'V').Split('.')[0], NumberStyles.None, CultureInfo.InvariantCulture, out int n) ? n : null;
+    private static HashSet<string> AddedNames(ModPatch patch) => patch.Changes
+        .Where(p => p.Key is "objects" or "code" or "scripts")
+        .SelectMany(p => p.Value.Added.Select(a => p.Key + ":" + a.Name)).ToHashSet(StringComparer.Ordinal);
 }

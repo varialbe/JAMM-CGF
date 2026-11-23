@@ -90,6 +90,7 @@ public sealed partial class BrowseViewModel : ObservableObject, IDisposable
     public ObservableCollection<Bitmap> Images { get; } = [];
     /// <summary>Searches name, author and description.</summary>
     public string Search { get => search; set { if (SetProperty(ref search, value)) Filter(); } }
+    internal ModUpdateWorkflow CreateUpdateWorkflow() => new(store, catalog, resolver, http);
     /// <summary>Category filter.</summary>
     public string Category { get => category; set { if (SetProperty(ref category, value)) Filter(); } }
     /// <summary>Released/preview filter.</summary>

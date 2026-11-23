@@ -96,6 +96,10 @@ The CLI can check catalog-backed mods in the selected profile with `cgfmm update
 (`--json` emits machine-readable results; exit code 10 means updates are available). The catalog
 update contract, including package SHA-256 and the optional `saveBreaking` flag, is documented in
 [`docs/catalog-api.md`](docs/catalog-api.md).
+Use `cgfmm update --apply` to review save compatibility and confirm an install, or `--apply --yes`
+for unattended approval. The desktop **Pull & install updates** button runs the same verified flow.
+`cgfmm update --rollback` restores the previous packages and game archive; it offers the saved-game
+backup path for optional restoration.
 
 ## Built-in mods
 
