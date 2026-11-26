@@ -15,6 +15,28 @@ namespace Jamm.Core.Tests;
 /// <summary>Verifies ModKit package validation, sprite/object/code generation, merging, CLI, and example packages.</summary>
 public sealed class ModKitTests
 {
+    [Fact]
+    public void BoatRevealAfterParsesQualifiedBoatKeysAndRejectsNonStrings()
+    {
+        using var temp = new TemporaryDirectory();
+        string source = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "examples", "modkit", "submarine"));
+        var parsed = ModKitPackage.Load(source);
+        Assert.Equal("base:boat6", Assert.Single(parsed.Boats).RevealAfter);
+
+        string copy = temp.PathFor("submarine-copy");
+        foreach (string file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            string target = Path.Combine(copy, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        string manifestPath = Path.Combine(copy, "jamm-mod.json");
+        File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("\"revealAfter\": \"base:boat6\"", "\"revealAfter\": 6", StringComparison.Ordinal));
+        Assert.Contains("boats[0].revealAfter", Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(copy)).Message);
+        File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("\"revealAfter\": 6", "\"revealAfter\": \"base:rod0\"", StringComparison.Ordinal));
+        Assert.Contains("boats[0].revealAfter", Assert.Throws<InvalidDataException>(() => ModKitPackage.Load(copy)).Message);
+    }
+
     [Theory]
     [InlineData("fish")]
     [InlineData("upgrade")]

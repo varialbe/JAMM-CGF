@@ -1,6 +1,6 @@
-# Submarine 0.1.0
+# Submarine 0.1.1
 
-Enable this optional ModKit package in a JAMM profile built against the August 2023 legacy VM version of Cat Goes Fishing. The Boat shop sells the Submarine for $125M. It holds 12 fish. Scroll the shop if the card is on a later page.
+Enable this optional ModKit package in a JAMM profile built against the August 2023 legacy VM version of Cat Goes Fishing. The Boat shop sells the Submarine for $125M once the Collier boat is revealed. It holds 12 fish. Scroll the shop if the card is on a later page.
 
 | Action | Keyboard or mouse | Gamepad |
 | --- | --- | --- |

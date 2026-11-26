@@ -264,7 +264,7 @@ public static partial class ModKitBuilder
 
             initBody.AppendLine(
                 $"jamm_boat_register({GmlString($"{package.Id}:{boat.Key}")}, {GmlString(boat.Name)}, {Num(boat.Cost)}, " +
-                $"{cardName}, {objName}, {GmlString(boat.Description)}, {(boat.Unlocked ? 1 : 0)});");
+                $"{cardName}, {objName}, {GmlString(boat.Description)}, {(boat.RevealAfter is null ? (boat.Unlocked ? 1 : 0) : -1)}, {GmlString(boat.RevealAfter ?? "")});");
 
             void QueueVehicleEvent(string? path, EventType type, uint subtype, string suffix = "")
             {

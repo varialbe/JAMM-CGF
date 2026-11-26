@@ -358,12 +358,23 @@ internal static class ItemsRuntimePatches
             """);
     }
 
-    private static string PatchBoatCardClick(string text)
+    internal static string PatchBoatCardClick(string text)
     {
-        if (text.Contains(".boat_index = item_id", StringComparison.Ordinal)) return text;
-        return ReplaceOnce(text, "gml_Object_BoatCard_Other_10",
-            "instance_create(0, 0, BoatData.object[item_id]);",
-            "var jamm_boat;\n            jamm_boat = instance_create(0, 0, BoatData.object[item_id]);\n            jamm_boat.boat_index = item_id;");
+        const string entry = "gml_Object_BoatCard_Other_10";
+        if (!text.Contains("BoatData.jamm_base_count", StringComparison.Ordinal))
+        {
+            var bound = new Regex(@"\(\s*item_id\s*\+\s*i\s*\)\s*<\s*\(\s*BoatData\.nItems\s*-\s*1\s*\)");
+            text = bound.Replace(text,
+                "(item_id + i) < ((variable_instance_exists(BoatData.id, \"jamm_base_count\") ? BoatData.jamm_base_count : BoatData.nItems) - 1)", 1);
+        }
+        if (!text.Contains(".boat_index = item_id", StringComparison.Ordinal))
+        {
+            const string create = "instance_create(0, 0, BoatData.object[item_id]);";
+            if (text.Contains(create, StringComparison.Ordinal))
+                text = ReplaceOnce(text, entry, create,
+                    "var jamm_boat;\n            jamm_boat = instance_create(0, 0, BoatData.object[item_id]);\n            jamm_boat.boat_index = item_id;");
+        }
+        return text;
     }
 
     private static string PatchToolCardClick(string text)

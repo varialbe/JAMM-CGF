@@ -1,7 +1,7 @@
 {
   "id": "submarine",
   "name": "Submarine",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "JAMM",
   "description": "Buy a submarine, dive with a headlight, and fish underwater.",
   "sprites": [
@@ -154,6 +154,7 @@
       "card": "card",
       "sprite": "hull",
       "description": "Dive with V or Y.#110 s of oxygen.#Holds 12 fish.",
+      "revealAfter": "base:boat6",
       "stats": {
         "maxSpeed": 10,
         "capacity": 12,
