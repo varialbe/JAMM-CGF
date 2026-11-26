@@ -130,6 +130,7 @@ public static class SmoothMod
         jamm_input_begin = ds_map_create();
         jamm_moving = ds_list_create();
         jamm_restore = ds_list_create();
+        jamm_gshift = ds_list_create();
         jamm_known = ds_map_create();
         jamm_cull = ds_list_create();
         jamm_cull_fish = ds_list_create();
@@ -198,6 +199,7 @@ public static class SmoothMod
         ds_map_clear(jamm_known);
         ds_list_clear(jamm_moving);
         ds_list_clear(jamm_restore);
+        ds_list_clear(jamm_gshift);
         ds_list_clear(jamm_frozen_list);
         ds_map_clear(jamm_input_begin);
         alarm[0] = -1;
@@ -571,6 +573,14 @@ public static class SmoothMod
         {{fishSave}}
         }
         ds_list_clear(jamm_restore);
+        ds_list_clear(jamm_gshift);
+        // The player assembly (Girl, Boat, Rod, Lure, hat, hooked fish) shares one rigid offset:
+        // Girl's own interpolation. Moving it as one piece keeps it smooth against the
+        // interpolated view without tearing rod anchors, cached tether points or the hat apart.
+        jamm_gset = 0;
+        jamm_gdx = 0;
+        jamm_gdy = 0;
+        {{(data.GameObjects.ByName("Girl") is not null ? "if (instance_exists(Girl)) with (Girl) { if (variable_instance_exists(id, \"jamm_cx\") && x == jamm_cx && y == jamm_cy && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600) { other.jamm_gdx = (jamm_px - jamm_cx) * (1 - other.jamm_t); other.jamm_gdy = (jamm_py - jamm_cy) * (1 - other.jamm_t); other.jamm_gset = 1; } }" : "")}}
         jamm_n = ds_list_size(jamm_moving);
         for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
         {
@@ -582,7 +592,24 @@ public static class SmoothMod
                 {{(data.GameObjects.ByName("Lure") is not null ? "if (instance_exists(Lure)) jamm_casting = jamm_casting || id == Lure.fish;" : "")}}
                 // The worn hat follows Girl's tick pose; interpolating it alone makes it trail the cat.
                 {{(data.GameObjects.ByName("Girl") is not null ? "if (instance_exists(Girl)) jamm_casting = jamm_casting || id == Girl.gear;" : "")}}
-                if (!jamm_casting && x == jamm_cx && y == jamm_cy && image_angle == jamm_ca && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600)
+                if (jamm_casting && other.jamm_gset && x == jamm_cx && y == jamm_cy && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600)
+                {
+                    jamm_gax = other.jamm_gdx;
+                    jamm_gay = other.jamm_gdy;
+                    x += jamm_gax;
+                    y += jamm_gay;
+                    xprevious += jamm_gax;
+                    yprevious += jamm_gay;
+                    jamm_gtether = 0;
+                    if (variable_instance_exists(id, "tether_x") && variable_instance_exists(id, "tether_y"))
+                    {
+                        jamm_gtether = 1;
+                        tether_x += jamm_gax;
+                        tether_y += jamm_gay;
+                    }
+                    ds_list_add(other.jamm_gshift, id);
+                }
+                else if (!jamm_casting && x == jamm_cx && y == jamm_cy && image_angle == jamm_ca && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600)
                 {
                     jamm_rx = x;
                     jamm_ry = y;
@@ -637,6 +664,23 @@ public static class SmoothMod
             }
         }
         ds_list_clear(jamm_restore);
+        jamm_n = ds_list_size(jamm_gshift);
+        for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
+        {
+            with (ds_list_find_value(jamm_gshift, jamm_i))
+            {
+                x -= jamm_gax;
+                y -= jamm_gay;
+                xprevious -= jamm_gax;
+                yprevious -= jamm_gay;
+                if (jamm_gtether)
+                {
+                    tether_x -= jamm_gax;
+                    tether_y -= jamm_gay;
+                }
+            }
+        }
+        ds_list_clear(jamm_gshift);
         jamm_n = ds_list_size(jamm_hidden);
         for (jamm_i = 0; jamm_i < jamm_n; jamm_i += 1)
         {
