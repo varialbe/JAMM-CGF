@@ -17,6 +17,8 @@ public sealed class ItemsRuntimeTests
         string patched = ItemsRuntimePatches.PatchBoatCardClick("if ((item_id+i) < (BoatData.nItems - 1)) { BoatData.unlocked[item_id + i] = 0; } instance_create(0, 0, BoatData.object[item_id]);");
         Assert.Contains("BoatData.jamm_base_count", patched);
         Assert.DoesNotContain("BoatData.nItems - 1", patched);
+        // Vanilla excludes the last base slot (Tech Boat, quest reveal) from purchase reveals.
+        Assert.Contains("BoatData.jamm_base_count : BoatData.nItems) - 1)", patched);
     }
 
     [Fact]

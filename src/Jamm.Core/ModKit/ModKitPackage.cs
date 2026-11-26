@@ -551,7 +551,7 @@ public static partial class ModKitPackage
                 throw Error($"{path}.revealAfter", "Expected a non-empty item key string such as 'base:boat6'.");
             revealAfter = revealElement.GetString();
             string[] itemKeyParts = revealAfter!.Split(':');
-            if (itemKeyParts.Length != 2 || !KeyRegex().IsMatch(itemKeyParts[0]) || !KeyRegex().IsMatch(itemKeyParts[1]) || !itemKeyParts[1].StartsWith("boat", StringComparison.Ordinal))
+            if (itemKeyParts.Length != 2 || !KeyRegex().IsMatch(itemKeyParts[0]) || !KeyRegex().IsMatch(itemKeyParts[1]) || (itemKeyParts[0] == "base" && !itemKeyParts[1].StartsWith("boat", StringComparison.Ordinal)))
                 throw Error($"{path}.revealAfter", "Use a qualified boat item key such as 'base:boat6' or '<package-id>:<boat-key>'.");
         }
         int[]? origin = OptionalOrigin(obj, "origin", $"{path}.origin");

@@ -239,7 +239,7 @@ internal static class MenuRuntime
         if (!text.Contains("BoatData.jamm_base_count", StringComparison.Ordinal))
             text = Regex.Replace(text,
                 @"\(\s*item_id\s*\+\s*i\s*\)\s*<\s*\(\s*BoatData\.nItems\s*-\s*1\s*\)",
-                "(item_id + i) < (variable_instance_exists(BoatData.id, \"jamm_base_count\") ? BoatData.jamm_base_count : BoatData.nItems)");
+                "(item_id + i) < ((variable_instance_exists(BoatData.id, \"jamm_base_count\") ? BoatData.jamm_base_count : BoatData.nItems) - 1)");
         Put(assets, baseline, BoatCardClick, text);
     }
 

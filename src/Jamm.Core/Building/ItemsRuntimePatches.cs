@@ -365,7 +365,7 @@ internal static class ItemsRuntimePatches
         {
             var bound = new Regex(@"\(\s*item_id\s*\+\s*i\s*\)\s*<\s*\(\s*BoatData\.nItems\s*-\s*1\s*\)");
             text = bound.Replace(text,
-                "(item_id + i) < (variable_instance_exists(BoatData.id, \"jamm_base_count\") ? BoatData.jamm_base_count : BoatData.nItems)", 1);
+                "(item_id + i) < ((variable_instance_exists(BoatData.id, \"jamm_base_count\") ? BoatData.jamm_base_count : BoatData.nItems) - 1)", 1);
         }
         if (!text.Contains(".boat_index = item_id", StringComparison.Ordinal))
         {
