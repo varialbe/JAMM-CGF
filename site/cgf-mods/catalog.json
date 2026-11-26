@@ -312,9 +312,9 @@
     "packageType": "modkit",
     "manifestFile": "jamm-mod.json",
     "isDefault": false,
-    "version": "0.1.0",
-    "sha256": "d5814f3dbeba4eb86a4c65a3997ad3a9a922ad0f1a9d64cac0a3317ecf67ab1d",
-    "sizeBytes": 6718,
+    "version": "0.1.1",
+    "sha256": "9ff0fa3dd4ce6c9e40e872d1426174d1f700af2ec7c47c4a0b46e63fa37fafc2",
+    "sizeBytes": 6754,
     "compat": {
       "requiresBase": "dbb2e5c4b788358d0c6465d3005b2e9d46c4c540e423b064d7a5a3629286d2c1",
       "jammMin": "0.9.1",

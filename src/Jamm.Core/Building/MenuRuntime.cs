@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Jamm.Core.Patching;
 using UndertaleModLib;
 using UndertaleModLib.Models;
@@ -228,11 +229,18 @@ internal static class MenuRuntime
         if (!HasCode(assets, baseline, BoatCardClick)) return;
         string text = Current(assets, baseline, BoatCardClick);
         const string create = "instance_create(0, 0, BoatData.object[item_id]);";
-        if (text.Contains("boat_index = item_id", StringComparison.Ordinal)) return;
-        if (!text.Contains(create, StringComparison.Ordinal))
-            throw new InvalidDataException($"Cannot patch '{BoatCardClick}': expected the BoatData object spawn call.");
-        Put(assets, baseline, BoatCardClick, ReplaceOnce(BoatCardClick, text, create,
-            "var jamm_menu_boat;\njamm_menu_boat = instance_create(0, 0, BoatData.object[item_id]);\njamm_menu_boat.boat_index = item_id;"));
+        if (!text.Contains("boat_index = item_id", StringComparison.Ordinal))
+        {
+            if (!text.Contains(create, StringComparison.Ordinal))
+                throw new InvalidDataException($"Cannot patch '{BoatCardClick}': expected the BoatData object spawn call.");
+            text = ReplaceOnce(BoatCardClick, text, create,
+                "var jamm_menu_boat;\njamm_menu_boat = instance_create(0, 0, BoatData.object[item_id]);\njamm_menu_boat.boat_index = item_id;");
+        }
+        if (!text.Contains("BoatData.jamm_base_count", StringComparison.Ordinal))
+            text = Regex.Replace(text,
+                @"\(\s*item_id\s*\+\s*i\s*\)\s*<\s*\(\s*BoatData\.nItems\s*-\s*1\s*\)",
+                "(item_id + i) < (variable_instance_exists(BoatData.id, \"jamm_base_count\") ? BoatData.jamm_base_count : BoatData.nItems)");
+        Put(assets, baseline, BoatCardClick, text);
     }
 
     private static void PatchInvalidDarkBoat(List<PlannedAsset> assets, IReadOnlyDictionary<string, CodeText> baseline)
@@ -304,8 +312,24 @@ internal static class MenuRuntime
     }
 
     private static string BuildCardHandlerAlarmGml() => BuildWindowedAlarmGml(
-        extraLocals: "",
+        extraLocals: ", jamm_reveal_slot, jamm_reveal_ref, jamm_reveal_match",
         initPrefix: """
+                if (data_object == BoatData && variable_instance_exists(BoatData.id, "jamm_reveal_after"))
+                {
+                    for (jamm_reveal_slot = 0; jamm_reveal_slot < BoatData.nItems; jamm_reveal_slot += 1)
+                    {
+                        jamm_reveal_ref = BoatData.jamm_reveal_after[jamm_reveal_slot];
+                        if (jamm_reveal_ref != "" && BoatData.unlocked[jamm_reveal_slot] != 1)
+                        {
+                            jamm_reveal_match = -1;
+                            for (jamm_i = 0; jamm_i < BoatData.nItems; jamm_i += 1)
+                                if (BoatData.jamm_key[jamm_i] == jamm_reveal_ref) jamm_reveal_match = jamm_i;
+                            if (jamm_reveal_match >= 0 && BoatData.unlocked[jamm_reveal_match] >= 0)
+                                BoatData.unlocked[jamm_reveal_slot] = 0;
+                            else BoatData.unlocked[jamm_reveal_slot] = -1;
+                        }
+                    }
+                }
                 for (jamm_i = 0; jamm_i < data_object.nItems; jamm_i += 1)
                 {
                     if (data_object.unlocked[jamm_i] >= 0)

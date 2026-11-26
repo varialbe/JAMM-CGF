@@ -1,7 +1,7 @@
 {
   "cardPackageType": "ModKit Boat",
   "cardSummary": "A $125M boat that dives: steer underwater, switch on a headlight and fish from the bow while 110 seconds of oxygen last.",
-  "summary": "Submarine adds an optional boat to the Boat shop for $125M. Take it east of the dock, press V to dive and steer through open water with the arrow keys or WASD. A bow headlight lights the way, a depth readout and an oxygen meter (110 seconds, refilled at the surface) sit in the corner, and you can cast and reel from the bow. Version 0.1.0 is a first playable preview.",
+  "summary": "Submarine adds an optional boat to the Boat shop for $125M. Take it east of the dock, press V to dive and steer through open water with the arrow keys or WASD. A bow headlight lights the way, a depth readout and an oxygen meter (110 seconds, refilled at the surface) sit in the corner, and you can cast and reel from the bow. Version 0.1.1 reveals the shop card after the Collier boat.",
   "controls": [
     "V (gamepad Y / Triangle): dive or surface.",
     "Arrow keys or WASD (D-pad or left stick): steer underwater.",
@@ -21,14 +21,26 @@
   "diagram": {
     "title": "Dive loop",
     "description": "The equipped submarine dives, steers and fishes while oxygen counts down, then surfaces to refill.",
-    "labels": ["Buy + equip", "Dive (V)", "Steer, light, cast", "Surface + refill O2"],
+    "labels": [
+      "Buy + equip",
+      "Dive (V)",
+      "Steer, light, cast",
+      "Surface + refill O2"
+    ],
     "caption": "Upgrades, hull pressure and a shared dive query are planned for later versions."
   },
   "changelog": [
+    "0.1.1: Submarine becomes available after the Collier boat is revealed.",
     "0.1.0: First playable preview: dive, headlight, oxygen, depth readout and bow fishing."
   ],
   "faq": [
-    {"q": "Where is the submarine in the shop?", "a": "In the Boat shop for $125M. Scroll the shop if the card is on a later page."},
-    {"q": "Why can't I dive at the dock?", "a": "Dive in open water east of the dock and steer around rock before casting."}
+    {
+      "q": "Where is the submarine in the shop?",
+      "a": "In the Boat shop for $125M after the Collier boat is revealed. Scroll the shop if the card is on a later page."
+    },
+    {
+      "q": "Why can't I dive at the dock?",
+      "a": "Dive in open water east of the dock and steer around rock before casting."
+    }
   ]
 }

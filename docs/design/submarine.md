@@ -1,6 +1,6 @@
 # Submarine
 
-The Submarine is an optional ModKit package for the August 2023 legacy VM build. Version 0.1.0 adds a late-game boat that carries the cat underwater and can fish from depth. The package builds its art from the player's own archive and original vector details.
+The Submarine is an optional ModKit package for the August 2023 legacy VM build. Version 0.1.1 adds a late-game boat that carries the cat underwater and can fish from depth. The package builds its art from the player's own archive and original vector details.
 
 ## Legacy findings
 
@@ -14,15 +14,16 @@ The Submarine is an optional ModKit package for the August 2023 legacy VM build.
 
 A child of `Boat` keeps a single rider and boat instance, shop integration, fish storage and surface controls. Its own events manage underwater movement and a short line deployment. This avoids coupling the vehicle to `CatSwim`'s grab state, breath progression and cast restrictions. Normal boat, swim, camera and lure code can run without a submarine-specific patch.
 
-## v0.1.0
+## v0.1.1
 
-- Buy the **Submarine** for **$125M** on the Boat shop's additional page. It is available to buy immediately and has 12 fish slots. Equip it and take it east of the dock before diving. Use any normal rod and bait.
+- Buy the **Submarine** for **$125M** on the Boat shop's additional page after the Collier boat is revealed. It has 12 fish slots. Equip it and take it east of the dock before diving. Use any normal rod and bait.
 - Press **V** or **Y / Triangle** to dive or surface. Use arrows or **WASD**, the D-pad or the left stick to steer underwater. Press **L** or **X / Square** for the headlight. Use the normal fishing controls (hold and release **Space**, left mouse or **RB / R1** to cast, then hold to reel). Use Q for vanilla swimming from the surface.
 - The starter hull reaches **4,800 world units below the surface**. It checks the terrain in short increments and stops at solid obstacles. It starts with **110 seconds of oxygen** and refills at the surface. The HUD reports remaining time, depth and lamp status. A light uses the vanilla darkness surface and moves with the bow.
 - An underwater cast starts from the bow. The short deployment pays out enough line for the vanilla fishing and reeling state to take over. Movement pauses while the line is out. Reel in to resume navigation or surface. A held catch can travel with the sub and use the standard boat storage and sell controls.
 - On empty oxygen the sub releases a deployed line and ascends. A blocked ascent returns the sub to the point where it entered the water. Normal surfacing can be requested at any remaining oxygen.
 - The main camera follows the rider when navigating and follows the lure during fishing. Ordinary sonar still follows the lure. Weather continues to use the world clock, with no change to the depth limit or oxygen. The Silo's launch shaft is below the starter depth limit and requires its own package. Endless Ocean terrain stays owned by its package and v0.1 works within the sub's legacy travel limits.
 - The boat key is `submarine:submarine`. Saves keep the purchase and equipped slot through JAMM Items. Diving, oxygen and lamp state reset at load, with the sub at the surface. An equipped sub can be removed and later re-added through the normal item migration path.
+- The shop card uses `revealAfter: "base:boat6"`, so the submarine becomes available after the Collier is revealed.
 
 ## Vehicle API
 

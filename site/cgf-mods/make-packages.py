@@ -162,7 +162,7 @@ def main() -> None:
             "id": "submarine",
             "name": "Submarine",
             "author": "JAMM",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "description": "Buy a submarine, dive with a headlight and fish from the bow.",
             "source_dir": REPO_ROOT / "examples" / "modkit" / "submarine",
             "zip_name": "submarine.zip",

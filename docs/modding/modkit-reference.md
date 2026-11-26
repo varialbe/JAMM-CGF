@@ -172,6 +172,7 @@ Inherits from `Boat` (`depth = -20`). Registered via `jamm_boat_register`. A boa
 | `sprite` | string | Yes | — | Relative `.png` path (1 frame) for the in-world boat (drawn at **`0.5x`** scale by `Boat`). |
 | `description` | string | No | `"<name>."` | Shop description (`#` or newlines become `#` line breaks). |
 | `unlocked` | bool | No | `false` | `false` (`0`, purchasable in shop) or `true` (`1`, already owned). |
+| `revealAfter` | string | No | — | Qualified boat item key (for example `base:boat6`). The card stays hidden until that boat is visible or owned. |
 | `stats` | object | No | See right | `maxSpeed` (`4`, min `0.1`), `capacity` (`4`, int min `1`), `maxDistance` (`4500`, min `500`), `moveBonus` (`0`, min `0`). |
 | `origin` | `[x, y]` | No | center | 2-integer origin for the world `sprite` (the `card` sprite is always centered). |
 | `hooks` | object | No | `{}` | Optional package-relative `.gml` files: `create`, `beginStep`, `step`, `endStep`, `drawGui`, `destroy`. |

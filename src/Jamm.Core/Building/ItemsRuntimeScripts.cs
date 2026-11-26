@@ -135,7 +135,9 @@ internal static class ItemsRuntimeScripts
         StringBuilder sb = new();
         sb.AppendLine("var jamm_i, jamm_ix, jamm_iy, jamm_rlen, jamm_open;");
         if (hasBoatData)
+        {
             sb.AppendLine(DataEnsureBlock("BoatData", "nItems", "boat", "unlocked", setDisp: false, setRodSlots: false));
+        }
         if (hasRodData)
             sb.AppendLine(DataEnsureBlock("RodData", "nItems", "rod", "unlocked", setDisp: true, setRodSlots: true));
         if (hasLureData)
@@ -214,6 +216,7 @@ internal static class ItemsRuntimeScripts
         {
             string dispLine = setDisp ? "\n                disp[jamm_i] = -1;" : "";
             string slotsLine = setRodSlots ? "\n                jamm_slots[jamm_i] = 8;" : "";
+            string revealLine = type == "boat" ? "\n                jamm_reveal_after[jamm_i] = \"\";" : "";
             return $$"""
                 if (instance_exists({{obj}})) {
                     with ({{obj}}) {
@@ -221,7 +224,7 @@ internal static class ItemsRuntimeScripts
                             jamm_base_count = {{countField}};
                             for (jamm_i = 0; jamm_i < {{countField}}; jamm_i += 1) {
                                 jamm_key[jamm_i] = "base:{{type}}" + string(jamm_i);
-                                jamm_default_unlocked[jamm_i] = {{unlockField}}[jamm_i];{{dispLine}}{{slotsLine}}
+                                jamm_default_unlocked[jamm_i] = {{unlockField}}[jamm_i];{{dispLine}}{{slotsLine}}{{revealLine}}
                             }
                         }
                     }
@@ -266,7 +269,7 @@ internal static class ItemsRuntimeScripts
     {
         if (!hasBoatData) return "return -1;";
         return """
-            var jamm_key, jamm_name, jamm_cost, jamm_disp, jamm_obj, jamm_desc, jamm_unl, jamm_existing, jamm_slot;
+            var jamm_key, jamm_name, jamm_cost, jamm_disp, jamm_obj, jamm_desc, jamm_unl, jamm_existing, jamm_slot, jamm_reveal;
             if (argument_count < 6 || !instance_exists(BoatData)) return -1;
             jamm_key = argument0; jamm_name = argument1; jamm_cost = argument2;
             jamm_disp = argument3; jamm_obj = argument4; jamm_desc = argument5;
@@ -279,6 +282,8 @@ internal static class ItemsRuntimeScripts
                 if (!is_real(argument6)) return -1;
                 jamm_unl = argument6;
             }
+            jamm_reveal = "";
+            if (argument_count > 7) { if (!is_string(argument7)) return -1; jamm_reveal = argument7; if (jamm_reveal != "") jamm_unl = -1; }
             jamm_items_ensure_base();
             jamm_existing = jamm_item_find("boat", jamm_key);
             if (jamm_existing > -1) return jamm_existing;
@@ -291,6 +296,7 @@ internal static class ItemsRuntimeScripts
             BoatData.desc[jamm_slot] = jamm_desc;
             BoatData.unlocked[jamm_slot] = jamm_unl;
             BoatData.jamm_default_unlocked[jamm_slot] = jamm_unl;
+            BoatData.jamm_reveal_after[jamm_slot] = jamm_reveal;
             BoatData.nItems = jamm_slot + 1;
             return jamm_slot;
             """;
@@ -723,7 +729,22 @@ internal static class ItemsRuntimeScripts
             if (ini_section_exists("JAMM_Items")) {
             """);
 
-        if (hasBoatData) sb.AppendLine(LoadUnlockBlock("BoatData", "nItems", "boat", "unlocked"));
+        if (hasBoatData)
+        {
+            sb.AppendLine(LoadUnlockBlock("BoatData", "nItems", "boat", "unlocked"));
+            sb.AppendLine("""
+                    if (instance_exists(BoatData) && variable_instance_exists(BoatData.id, "jamm_reveal_after")) {
+                        for (jamm_i = 0; jamm_i < BoatData.nItems; jamm_i += 1) {
+                            jamm_rkey = BoatData.jamm_reveal_after[jamm_i];
+                            if (jamm_rkey != "" && BoatData.unlocked[jamm_i] != 1) {
+                                jamm_ri = jamm_item_find("boat", jamm_rkey);
+                                if (jamm_ri >= 0 && BoatData.unlocked[jamm_ri] >= 0) BoatData.unlocked[jamm_i] = 0;
+                                else BoatData.unlocked[jamm_i] = -1;
+                            }
+                        }
+                    }
+                    """);
+        }
         if (hasRodData) sb.AppendLine(LoadUnlockBlock("RodData", "nItems", "rod", "unlocked"));
         if (hasLureData) sb.AppendLine(LoadUnlockBlock("LureData", "nItems", "lure", "unlocked"));
         if (hasToolData)

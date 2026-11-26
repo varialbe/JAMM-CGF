@@ -12,6 +12,14 @@ namespace Jamm.Core.Tests;
 public sealed class ItemsRuntimeTests
 {
     [Fact]
+    public void BoatCardRevealUsesBaseItemCountAndSupportsDecompiledFormatting()
+    {
+        string patched = ItemsRuntimePatches.PatchBoatCardClick("if ((item_id+i) < (BoatData.nItems - 1)) { BoatData.unlocked[item_id + i] = 0; } instance_create(0, 0, BoatData.object[item_id]);");
+        Assert.Contains("BoatData.jamm_base_count", patched);
+        Assert.DoesNotContain("BoatData.nItems - 1", patched);
+    }
+
+    [Fact]
     public void NonApiModsLeaveArchivesUntouchedWithoutInjectingItemsRuntime()
     {
         using var temp = new TemporaryDirectory();
@@ -284,6 +292,7 @@ public sealed class ItemsRuntimeTests
         Assert.Contains("BoatData.disp[item_id] > -1", PatchBuilder.ReadCode(merged, "gml_Object_BoatCard_Other_11").Text);
         Assert.Contains("LureData.disp[item_id] > -1", PatchBuilder.ReadCode(merged, "gml_Object_LureCard_Other_11").Text);
         Assert.Contains(".boat_index = item_id", PatchBuilder.ReadCode(merged, "gml_Object_BoatCard_Other_10").Text);
+        Assert.Contains("jamm_reveal_after[jamm_slot] = jamm_reveal", PatchBuilder.ReadCode(merged, "gml_Script_jamm_boat_register").Text);
         Assert.Contains("ToolData.message[item_id] > -1", PatchBuilder.ReadCode(merged, "gml_Object_ToolCard_Other_10").Text);
         Assert.Contains("LureData.nItems", PatchBuilder.ReadCode(merged, "gml_Object_Girl_Other_10").Text);
         Assert.Contains("LureData.nItems", PatchBuilder.ReadCode(merged, "gml_Object_Gear_Other_15").Text);
@@ -299,6 +308,7 @@ public sealed class ItemsRuntimeTests
 
         string save13 = PatchBuilder.ReadCode(merged, "gml_Object_SaveManager_Other_13").Text;
         Assert.Contains("jamm_items_load()", save13);
+        Assert.Contains("jamm_rkey = BoatData.jamm_reveal_after[jamm_i]", PatchBuilder.ReadCode(merged, "gml_Script_jamm_items_load").Text);
         Assert.Contains("jamm_items_loaded = 0", save13);
         // A new game has no slot to load; it must still enable saving or progress is never written.
         Assert.Contains("jamm_items_loaded = 1", save13);

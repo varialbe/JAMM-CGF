@@ -83,6 +83,8 @@ public sealed record ModKitBoat(
 
     /// <summary>Optional shop card sprite recipe key.</summary>
     public string? CardKey { get; init; }
+    /// <summary>Optional item key that must be revealed before this boat appears in the shop.</summary>
+    public string? RevealAfter { get; init; }
 
     /// <summary>Optional event hooks on the registered Boat child.</summary>
     public ModKitBoatHooks? Hooks { get; init; }
@@ -542,6 +544,16 @@ public static partial class ModKitPackage
         var (spritePath, spriteKey) = ReadArt("sprite");
         string description = OptionalString(obj, "description", $"{path}.description", $"{name}.");
         bool unlocked = OptionalBool(obj, "unlocked", $"{path}.unlocked", false);
+        string? revealAfter = null;
+        if (obj.TryGetProperty("revealAfter", out var revealElement))
+        {
+            if (revealElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(revealElement.GetString()))
+                throw Error($"{path}.revealAfter", "Expected a non-empty item key string such as 'base:boat6'.");
+            revealAfter = revealElement.GetString();
+            string[] itemKeyParts = revealAfter!.Split(':');
+            if (itemKeyParts.Length != 2 || !KeyRegex().IsMatch(itemKeyParts[0]) || !KeyRegex().IsMatch(itemKeyParts[1]) || !itemKeyParts[1].StartsWith("boat", StringComparison.Ordinal))
+                throw Error($"{path}.revealAfter", "Use a qualified boat item key such as 'base:boat6' or '<package-id>:<boat-key>'.");
+        }
         int[]? origin = OptionalOrigin(obj, "origin", $"{path}.origin");
         if (origin is not null && spriteKey is not null)
             throw Error($"{path}.origin", "Set the origin on the world sprite recipe.");
@@ -570,7 +582,7 @@ public static partial class ModKitPackage
         }
 
         return new ModKitBoat(key, name, cost, cardPath, spritePath, description, unlocked, stats, origin)
-            { CardKey = cardKey, SpriteKey = spriteKey, Hooks = hooks };
+            { CardKey = cardKey, SpriteKey = spriteKey, Hooks = hooks, RevealAfter = revealAfter };
 
         (string Path, string? Key) ReadArt(string field)
         {
