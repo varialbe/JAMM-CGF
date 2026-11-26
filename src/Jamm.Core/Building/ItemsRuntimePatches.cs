@@ -95,7 +95,8 @@ internal static class ItemsRuntimePatches
     {
         if (text.Contains("jamm_items_load(", StringComparison.Ordinal)) return text;
         const string entry = "gml_Object_SaveManager_Other_13";
-        text = ReplaceOnce(text, entry, "if (sf > 0 || lf > 0)\n{", "if (sf > 0 || lf > 0)\n{\n    jamm_items_ensure_base();");
+        text = ReplaceOnce(text, entry, "if (sf > 0 || lf > 0)\n{",
+            "if (sf > 0 || lf > 0)\n{\n    jamm_items_loaded = 0;\n    jamm_items_ensure_base();");
         text = ClampDataLoops(text, entry, hasBoatData, hasRodData, hasLureData, hasToolData, hasGearData, hasUpgradeData);
         if (hasGearData)
         {
@@ -130,7 +131,7 @@ internal static class ItemsRuntimePatches
         }
         text = ReplaceOnce(text, entry,
             "}\nelse\n{\n    with (Analytics)",
-            "    jamm_items_load();\n}\nelse\n{\n    with (Analytics)");
+            "    jamm_items_load();\n}\nelse\n{\n    // New game: there is no slot to load, so the fresh defaults ARE the real state and may be saved.\n    jamm_items_loaded = 1;\n    with (Analytics)");
         return text;
     }
 
@@ -139,7 +140,8 @@ internal static class ItemsRuntimePatches
     {
         if (text.Contains("jamm_items_save(", StringComparison.Ordinal)) return text;
         string entry = writeBoat ? "gml_Object_SaveManager_Other_14" : "gml_Object_SaveManager_Other_15";
-        text = ReplaceOnce(text, entry, "if (!saving_locked)\n{", "if (!saving_locked)\n{\n    jamm_items_ensure_base();");
+        text = ReplaceOnce(text, entry, "if (!saving_locked)\n{",
+            "if (!saving_locked && variable_instance_exists(id, \"jamm_items_loaded\") && jamm_items_loaded)\n{\n    jamm_items_ensure_base();");
         text = ClampDataLoops(text, entry, hasBoatData, hasRodData, hasLureData, hasToolData, hasGearData, hasUpgradeData);
         if (hasRodData)
         {

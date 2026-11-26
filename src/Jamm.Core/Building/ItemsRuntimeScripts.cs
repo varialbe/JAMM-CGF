@@ -607,6 +607,7 @@ internal static class ItemsRuntimeScripts
         StringBuilder sb = new();
         sb.AppendLine("""
             var jamm_i, jamm_eq, jamm_ix, jamm_iy, jamm_rkey, jamm_u, jamm_ukey, jamm_obj, jamm_okey;
+            if (!instance_exists(SaveManager) || !variable_instance_exists(SaveManager.id, "jamm_items_loaded") || !SaveManager.jamm_items_loaded) return 0;
             jamm_items_ensure_base();
             """);
         if (hasBoatData) sb.AppendLine(SaveUnlockBlock("BoatData", "nItems", "boat", "unlocked"));
@@ -775,11 +776,15 @@ internal static class ItemsRuntimeScripts
                                 if (ini_key_exists("JAMM_Items", jamm_skey)) {
                                     jamm_uval = ini_read_string("JAMM_Items", jamm_skey, "");
                                     if (jamm_uval == "#locked") {
-                                        UpgradeData.upg[jamm_ix,jamm_iy] = -2;
-                                        UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                            if (!(jamm_ix < RodData.jamm_base_count && jamm_iy < 10 && UpgradeData.upg[jamm_ix,jamm_iy] >= 0)) {
+                                                UpgradeData.upg[jamm_ix,jamm_iy] = -2;
+                                                UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                            }
                                     } else if (jamm_uval == "") {
-                                        UpgradeData.upg[jamm_ix,jamm_iy] = -1;
-                                        UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                            if (!(jamm_ix < RodData.jamm_base_count && jamm_iy < 10 && UpgradeData.upg[jamm_ix,jamm_iy] >= 0)) {
+                                                UpgradeData.upg[jamm_ix,jamm_iy] = -1;
+                                                UpgradeData.object[jamm_ix,jamm_iy] = -1;
+                                            }
                                     } else {
                                         jamm_uslot = jamm_item_find("upgrade", jamm_uval);
                                         if (jamm_uslot > -1) {
@@ -936,6 +941,7 @@ internal static class ItemsRuntimeScripts
             sb.AppendLine("    with (Rod) { event_perform(ev_other, ev_user0); }");
             sb.AppendLine("}");
         }
+        sb.AppendLine("if (instance_exists(SaveManager)) SaveManager.jamm_items_loaded = 1;");
         sb.Append("return 1;");
         return sb.ToString();
 
@@ -943,11 +949,14 @@ internal static class ItemsRuntimeScripts
                 if (instance_exists({{obj}})) {
                     for (jamm_i = 0; jamm_i < {{obj}}.{{countField}}; jamm_i += 1) {
                         jamm_k = "u:{{type}}:" + {{obj}}.jamm_key[jamm_i];
+                        jamm_uval = {{obj}}.jamm_default_unlocked[jamm_i];
                         if (ini_key_exists("JAMM_Items", jamm_k)) {
-                            {{obj}}.{{unlockField}}[jamm_i] = ini_read_real("JAMM_Items", jamm_k, {{obj}}.jamm_default_unlocked[jamm_i]);
-                        } else {
-                            {{obj}}.{{unlockField}}[jamm_i] = {{obj}}.jamm_default_unlocked[jamm_i];
+                            jamm_uval = ini_read_real("JAMM_Items", jamm_k, {{obj}}.jamm_default_unlocked[jamm_i]);
                         }
+                        if (jamm_i < {{obj}}.jamm_base_count && {{obj}}.{{unlockField}}[jamm_i] > jamm_uval) {
+                            jamm_uval = {{obj}}.{{unlockField}}[jamm_i];
+                        }
+                        {{obj}}.{{unlockField}}[jamm_i] = jamm_uval;
                     }
                 }
             """;
