@@ -648,6 +648,32 @@ public sealed class UpgradesRuntimeTests
     }
 
     [Fact]
+    public void ItemSaveWaitsForLoadAndStaleItemFlagsCannotRelockVanillaProgress()
+    {
+        var scripts = ItemsRuntimeScripts.BuildScripts(null, null);
+        var vm = CreateVanillaVm(scripts, includeTgeNineColRod: false);
+
+        // A save hook can run before SaveManager_Other_13. That must not create default sidecar state.
+        vm.GetObject("SaveManager").Set("jamm_items_loaded", 0.0);
+        vm.Call("jamm_items_save");
+        Assert.False(vm.HasIniKey("JAMM_Items", "u:rod:base:rod5"));
+
+        // Legacy load (Other_13) restores a rod the stale JAMM_Items section says is locked.
+        vm.SetIni("JAMM_Items", "u:rod:base:rod5", 0.0);
+        vm.SetIni("JAMM_Items", "eq:rod", "base:rod0");
+        vm.SetIni("JAMM_Items", "slot:base:rod0:0", "#locked");
+        vm.SetArray1D("RodData", "unlocked", 5, 1.0);
+        vm.SetArray2D("UpgradeData", "upg", 0, 0, 3.0);
+        vm.Call("jamm_items_load");
+        Assert.Equal(1.0, vm.GetArray1D("RodData", "unlocked", 5));
+        Assert.Equal(3.0, vm.GetArray2D("UpgradeData", "upg", 0, 0));
+
+        // Once the load completed, sidecar writes are enabled.
+        vm.Call("jamm_items_save");
+        Assert.Equal(1.0, vm.IniReal("JAMM_Items", "u:rod:base:rod5"));
+    }
+
+    [Fact]
     public void SaveManagerTwelveSlotHighRodAndLegacyNineColumnRoundTripWithoutKeyCollision()
     {
         using var temp = new TemporaryDirectory();
@@ -835,6 +861,7 @@ public sealed class UpgradesRuntimeTests
         var boatData = vm.AddObject("BoatData");
         boatData.Set("nItems", 1.0);
         boatData.Set1D("unlocked", 0, 1.0);
+
         boatData.Set1D("object", 0, -1.0);
 
         var rodData = vm.AddObject("RodData");
@@ -889,6 +916,7 @@ public sealed class UpgradesRuntimeTests
 
         var saveMgr = vm.AddObject("SaveManager");
         saveMgr.Set("saving_locked", 0.0);
+        saveMgr.Set("jamm_items_loaded", 1.0);
         saveMgr.Set("gear_id", -1.0);
         saveMgr.Set("active_rod", 0.0);
 
@@ -1014,6 +1042,7 @@ public sealed class UpgradesRuntimeTests
     private static GmlTestVm CreateVanillaVm(IReadOnlyDictionary<string, string> scripts, bool includeTgeNineColRod)
     {
         var vm = new GmlTestVm(scripts);
+        vm.AddObject("SaveManager").Set("jamm_items_loaded", 1.0);
         vm.RegisterSprite(10, "spr_mod_rod");
         vm.RegisterObjectAsset(42, "Goldfish");
 
@@ -1107,11 +1136,14 @@ public sealed class UpgradesRuntimeTests
             return obj;
         }
 
+        internal GmlObject GetObject(string name) => objects[name];
+
         internal double GetReal(string obj, string field) => AsDouble(objects[obj].Fields[field]);
         internal double Get2DMaxRowCols(string obj, string field) => AsDouble(objects[obj].Fields[field]);
         internal double GetArray1D(string obj, string field, int idx) => AsDouble(((GmlArray1D)objects[obj].Fields[field]!)[idx]);
         internal double GetArray2D(string obj, string field, int r, int c) => AsDouble(((GmlArray2D)objects[obj].Fields[field]!)[r, c]);
         internal void SetArray2D(string obj, string field, int r, int c, double val) => ((GmlArray2D)objects[obj].Fields[field]!)[r, c] = val;
+        internal void SetArray1D(string obj, string field, int idx, double val) => ((GmlArray1D)objects[obj].Fields[field]!)[idx] = val;
         internal int GetRowLength2D(string obj, string field, int r) => ((GmlArray2D)objects[obj].Fields[field]!).RowLength(r);
         internal void ClearIni() => ini.Clear();
         internal void RemoveIniSection(string sec) => ini.Remove(sec);

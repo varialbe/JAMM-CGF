@@ -299,6 +299,9 @@ public sealed class ItemsRuntimeTests
 
         string save13 = PatchBuilder.ReadCode(merged, "gml_Object_SaveManager_Other_13").Text;
         Assert.Contains("jamm_items_load()", save13);
+        Assert.Contains("jamm_items_loaded = 0", save13);
+        // A new game has no slot to load; it must still enable saving or progress is never written.
+        Assert.Contains("jamm_items_loaded = 1", save13);
         Assert.Contains("ini_section_exists(\"JAMM_Items\")", save13);
         Assert.Contains("jamm_base_count", save13);
         Assert.DoesNotContain("for (i = 0; i < nItems; i++)", save13);
@@ -307,6 +310,7 @@ public sealed class ItemsRuntimeTests
         foreach (string saveEntry in new[] { "gml_Object_SaveManager_Other_14", "gml_Object_SaveManager_Other_15" })
         {
             string saveText = PatchBuilder.ReadCode(merged, saveEntry).Text;
+            Assert.Contains("variable_instance_exists(id, \"jamm_items_loaded\")", saveText);
             Assert.Contains("jamm_items_save()", saveText);
             Assert.Contains("jamm_base_count", saveText);
             Assert.DoesNotContain("for (i = 0; i < nItems; i++)", saveText);
