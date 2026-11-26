@@ -580,6 +580,8 @@ public static class SmoothMod
                 // and hooked fish. Keep that assembly at its complete logic-tick pose.
                 jamm_casting = {{string.Join(" || ", new[] { "Girl", "Rod", "Lure", "Boat", "BoatBackground", "CatSwim" }.Where(n => data.GameObjects.ByName(n) is not null).Select(n => $"object_index == {n} || object_is_ancestor(object_index, {n})").DefaultIfEmpty("false"))}};
                 {{(data.GameObjects.ByName("Lure") is not null ? "if (instance_exists(Lure)) jamm_casting = jamm_casting || id == Lure.fish;" : "")}}
+                // The worn hat follows Girl's tick pose; interpolating it alone makes it trail the cat.
+                {{(data.GameObjects.ByName("Girl") is not null ? "if (instance_exists(Girl)) jamm_casting = jamm_casting || id == Girl.gear;" : "")}}
                 if (!jamm_casting && x == jamm_cx && y == jamm_cy && image_angle == jamm_ca && abs(jamm_cx - jamm_px) < 600 && abs(jamm_cy - jamm_py) < 600)
                 {
                     jamm_rx = x;
