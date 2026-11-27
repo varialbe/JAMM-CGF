@@ -17,10 +17,4 @@ if (lure.deep && !cave_sonar)
     view_wview[3] = 2000;
     view_hview[3] = 2000;
 }
-else if (!lure.deep)
-{
-    view_yview[3] = clamp(lure.y - 1850, 0, max(0, room_height - 3700));
-    view_wview[3] = 3700;
-    view_hview[3] = 3700;
-}
 if (active && shouldDraw) view_visible[3] = true;

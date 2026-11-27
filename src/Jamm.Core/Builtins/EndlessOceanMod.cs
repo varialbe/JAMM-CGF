@@ -90,6 +90,9 @@ public static class EndlessOceanMod
             ocean_chunks = -1;
             ocean_inside_initialized = false;
             ocean_was_inside = false;
+            ocean_hint_shown = false;
+            ocean_label_chunk_cached = -1;
+            ocean_label_biome_name = "";
             """);
         Queue(EventType.Other, (uint)EventSubtypeOther.RoomStart, FormattableString.Invariant($$"""
             if (ds_exists(ocean_chunks, ds_type_map)) exit;

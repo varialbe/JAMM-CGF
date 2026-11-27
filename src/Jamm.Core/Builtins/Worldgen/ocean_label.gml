@@ -2,9 +2,18 @@ if (!instance_exists(Girl) || !instance_exists(obj_jmk_endless_ocean)) exit;
 var girl = instance_find(Girl, 0);
 if (!jmk_endless_ocean_inside() || girl.hide_ui) exit;
 var ocean_distance = max(0, (girl.x - ocean_start) / 1000);
-var ocean_biome = jmk_endless_ocean_biome(girl.y, room_height);
-var ocean_biome_name = ocean_biome == 0 ? "Sandy Shelf" : (ocean_biome == 1 ? "Rocky Slope" : "Lit Trench");
-var ocean_label_text = "ENDLESS OCEAN  ·  " + string_format(ocean_distance, 1, 1) + " km  ·  " + ocean_biome_name;
+var ocean_label_chunk = floor((girl.x - ocean_start) / 2048);
+if (ocean_label_chunk != ocean_label_chunk_cached)
+{
+    ocean_label_chunk_cached = ocean_label_chunk;
+    ocean_label_biome_name = "Transition";
+    if (ocean_label_chunk >= ocean_content_chunk)
+    {
+        var ocean_biome = jmk_endless_ocean_biome(jmk_endless_ocean_floor(ocean_seed, ocean_label_chunk * 4 + 2, ocean_anchor_y, room_height, ocean_content_chunk), room_height);
+        ocean_label_biome_name = ocean_biome == 0 ? "Sandy Shelf" : (ocean_biome == 1 ? "Rocky Slope" : "Deep Trench");
+    }
+}
+var ocean_label_text = "ENDLESS OCEAN  ·  " + string_format(ocean_distance, 1, 1) + " km  ·  " + ocean_label_biome_name;
 var ocean_label_x = (display_get_gui_width() - string_width(ocean_label_text)) * 0.5;
 draw_set_halign(fa_left);
 draw_set_valign(fa_top);

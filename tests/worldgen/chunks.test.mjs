@@ -174,7 +174,7 @@ test('ocean sonar hooks are scoped to the region and preserve basic sonar', () =
     assert.match(sonarView, /view_xview\[3\] = lure\.x - 1000;/);
     assert.match(sonarView, /view_yview\[3\] = max\(fixed_y - 1000, 4000\);/);
     assert.doesNotMatch(sonarView, /cave_sonar\s*=/);
-    assert.match(sonarView, /view_yview\[3\] = clamp\(lure\.y - 1850, 0, max\(0, room_height - 3700\)\);/);
+    assert.doesNotMatch(sonarView, /lure\.y - 1850/); // shallow window stays vanilla (1255..4955)
     assert.match(sonarClear, /return jmk_endless_ocean_inside\(\);/);
     assert.match(step, /with \(Boat7\)[\s\S]*MAX_X = max\(MAX_X, other\.ocean_end - 400\);/);
     assert.doesNotMatch(step, /Boat\.boost_radar\s*=/);
