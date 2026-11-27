@@ -18,7 +18,7 @@ internal static class WorldgenScene
     internal static void Apply(UndertaleData data, bool showcase)
     {
         if (data.Scripts.ByName("jmk_endless_ocean_setup") is null)
-            throw new InvalidDataException("The worldgen scene needs Endless Ocean 0.2.0. Build the current recipe before instrumenting the archive.");
+            throw new InvalidDataException("The worldgen scene needs Endless Ocean 0.3.0. Build the current recipe before instrumenting the archive.");
 
         var probe = ModObjects.Create(data, "obj_jamm_bench_worldgen", persistent: false);
         var compiler = new CompileGroup(data);
@@ -82,7 +82,7 @@ internal static class WorldgenScene
             chunk_at_stop = -1;
             lamp = noone;
             var file = file_text_open_write("{{Report}}");
-            file_text_write_string(file, "stage,boat_x,view_x,view_y,chunks,owned,instances,rock_hits,seed,first,last,fish,writes,clear_hits,bottom_hits,seam_hits,sonar_missing");
+            file_text_write_string(file, "stage,boat_x,view_x,view_y,chunks,owned,instances,rock_hits,seed,first,last,fish,writes,clear_hits,bottom_hits,seam_hits,sonar_missing,sonar_visible,noise_alpha,inside,marker_label_shown");
             file_text_writeln(file);
             file_text_close(file);
             """);
@@ -90,6 +90,11 @@ internal static class WorldgenScene
         queue(EventType.Step, (uint)EventSubtypeStep.BeginStep, $$"""
             ticks += 1;
             var ocean = instance_find({{Controller}}, 0);
+            var sonar_advanced_object = asset_get_index("SonarPanelAdvanced");
+            var sonar_advanced = noone;
+            if (sonar_advanced_object >= 0 && instance_exists(sonar_advanced_object))
+                sonar_advanced = instance_find(sonar_advanced_object, 0);
+            if (sonar_advanced != noone) sonar_advanced.active = 0;
             if (stage == 0)
             {
                 if (!instance_exists(SaveManager) || !SaveManager.loaded || ticks < 6) exit;
@@ -258,6 +263,25 @@ internal static class WorldgenScene
                 if (variable_instance_exists(id, "jmk_endless_ocean_fish") &&
                     !variable_instance_exists(id, "s5")) sonar_missing += 1;
             }
+            var sonar_visible = 0;
+            var noise_alpha = -1;
+            var sonar_panel_object = asset_get_index("SonarPanel");
+            var sonar_lure_object = asset_get_index("Lure");
+            var sonar_advanced_object = asset_get_index("SonarPanelAdvanced");
+            var sonar_panel = noone;
+            var sonar_lure = noone;
+            var sonar_advanced = noone;
+            if (sonar_panel_object >= 0 && instance_exists(sonar_panel_object)) sonar_panel = instance_find(sonar_panel_object, 0);
+            if (sonar_lure_object >= 0 && instance_exists(sonar_lure_object)) sonar_lure = instance_find(sonar_lure_object, 0);
+            if (sonar_advanced_object >= 0 && instance_exists(sonar_advanced_object)) sonar_advanced = instance_find(sonar_advanced_object, 0);
+            if (sonar_panel != noone && sonar_lure != noone)
+            {
+                sonar_visible = view_visible[3] && sonar_panel.active && sonar_lure.deep &&
+                    (sonar_advanced == noone || !sonar_advanced.active);
+                if (variable_instance_exists(sonar_panel, "noise_alpha")) noise_alpha = sonar_panel.noise_alpha;
+            }
+            var inside = jmk_endless_ocean_inside();
+            var marker_label_shown = inside && instance_exists(Girl) && !Girl.hide_ui;
             var rock_hits = 0;
             var clear_hits = 0;
             var bottom_hits = 0;
@@ -311,6 +335,7 @@ internal static class WorldgenScene
             row += "," + string(ocean.ocean_seed) + "," + string(ocean.ocean_first) + "," + string(ocean.ocean_last);
             row += "," + string(ds_list_size(generated_fish)) + "," + string(writes);
             row += "," + string(clear_hits) + "," + string(bottom_hits) + "," + string(seam_hits) + "," + string(sonar_missing);
+            row += "," + string(sonar_visible) + "," + string(noise_alpha) + "," + string(inside) + "," + string(marker_label_shown);
             file_text_write_string(file, row);
             file_text_writeln(file);
             file_text_close(file);

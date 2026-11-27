@@ -158,6 +158,28 @@ test('same seed reproduces terrain and fish across visitation orders, with varia
     for (const index of indices.slice(2)) assert.notDeepEqual(layout(seed, index), layout(seed + 1, index));
 });
 
+test('ocean sonar hooks are scoped to the region and preserve basic sonar', () => {
+    const root = new URL('../../src/Jamm.Core/Builtins/Worldgen/', import.meta.url);
+    const inside = readFileSync(new URL('jmk_endless_ocean_inside.gml', root), 'utf8');
+    const sonarView = readFileSync(new URL('jmk_endless_ocean_sonar_view.gml', root), 'utf8');
+    const sonarClear = readFileSync(new URL('jmk_endless_ocean_sonar_clear.gml', root), 'utf8');
+    const step = readFileSync(new URL('step.gml', root), 'utf8');
+
+    assert.match(inside, /asset_get_index\("obj_jmk_endless_ocean"\)/);
+    assert.match(inside, /if \(!instance_exists\(ocean_object\) \|\| !instance_exists\(girl_object\) \|\| !instance_exists\(lure_object\)\) return false;/);
+    assert.match(inside, /if \(lure\.state == 1 \|\| lure\.state == 2\) x_to_check = lure\.x;/);
+    assert.match(inside, /return x_to_check >= ocean\.ocean_start;/);
+    assert.match(sonarView, /if \(lure\.deep && !cave_sonar\)/);
+    assert.match(sonarView, /fixed_y = min\(lure\.y, room_height - 1000\);/);
+    assert.match(sonarView, /view_xview\[3\] = lure\.x - 1000;/);
+    assert.match(sonarView, /view_yview\[3\] = max\(fixed_y - 1000, 4000\);/);
+    assert.doesNotMatch(sonarView, /cave_sonar\s*=/);
+    assert.match(sonarView, /view_yview\[3\] = clamp\(lure\.y - 1850, 0, max\(0, room_height - 3700\)\);/);
+    assert.match(sonarClear, /return jmk_endless_ocean_inside\(\);/);
+    assert.match(step, /with \(Boat7\)[\s\S]*MAX_X = max\(MAX_X, other\.ocean_end - 400\);/);
+    assert.doesNotMatch(step, /Boat\.boost_radar\s*=/);
+});
+
 test('transition begins at the archive mask and eases over three chunks in both room depths', () => {
     const { layout } = setup();
     for (const [seam, height, reserve] of [[12991, 13000, 17], [20588, 26000, 12]]) {

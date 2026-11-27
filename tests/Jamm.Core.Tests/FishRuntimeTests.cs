@@ -391,7 +391,7 @@ public sealed class FishRuntimeTests
             "Fish", "FishSmall", "BaseFish", "CatalogData", "SaveManager",
             "Girl", "Sea", "ParallaxBackground", "AmbianceController", "Collidable",
             "Rod", "Lure", "RodData", "LureData", "BoatData", "ToolData", "UpgradeData", "GearData", "Icons",
-            "Camera", "Boat7", "CaveRock", "Light", "CatSwim",
+            "Camera", "Boat", "Boat7", "CaveRock", "Light", "CatSwim", "SonarPanel", "Message", "BuoyAbstract",
             "CaveRockWide", "CaveRockLeg", "CaveRockSig", "CaveRockTear", "CaveRockTee", "CaveRockWedge",
             "JWeedSmall", "JWeedMedium", "Coral", "Coral2", "CoralDark", "CoralFG3", "GlowPlant", "BulbPlantShort", "ChainPlant",
             "Swooper", "Roundfin", "Garump", "Spinefish", "Yellowjack", "Puff", "Celad", "Inno",
@@ -402,6 +402,7 @@ public sealed class FishRuntimeTests
         ];
         foreach (string name in objects)
             data.GameObjects.Add(new() { Name = data.Strings.MakeString(name), Visible = true });
+        data.GameObjects.ByName("BuoyAbstract")!.Sprite = data.Sprites.ByName("spr");
         data.GameObjects.ByName("FishSmall")!.ParentId = data.GameObjects.ByName("Fish");
         data.GameObjects.ByName("BaseFish")!.ParentId = data.GameObjects.ByName("FishSmall");
         data.GameObjects.Add(new() { Name = data.Strings.MakeString("CaveRockBig"), Sprite = imported["spr_caverock_big"] });
@@ -428,6 +429,8 @@ public sealed class FishRuntimeTests
                 """);
         }
         Event("Girl", EventType.Step, 0, "audio_sound_gain(background_music, gain * power(background_music_volume, 2), 0);");
+        Event("SonarPanel", EventType.Step, 0, "if (Lure.state == 0) { readyToBeginTracking = 1; }");
+        Event("SonarPanel", EventType.Draw, 0, "if (instance_exists(Boat) && Boat.boost_radar) { noise_alpha = 0; }");
         Event("Fish", EventType.Step, 2, "speed = spd;");
         Event("Sea", EventType.Step, 0, "x = origin + (sin(phase) * SCALE);");
         Event("ParallaxBackground", EventType.Draw, 0, """

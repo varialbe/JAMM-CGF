@@ -3,8 +3,8 @@
   "id": "endless-ocean",
   "generator": "endless-ocean",
   "name": "Endless Ocean",
-  "version": "0.2.1",
-  "description": "A seeded seafloor with three biomes, vanilla fish and occasional wrecks east of NewWorld.",
+  "version": "0.3.0",
+  "description": "A seeded seafloor with sonar to any depth, clear sonar, three biomes and an ocean marker east of NewWorld.",
   "seed": 271828,
-  "generatorVersion": "2"
+  "generatorVersion": "3"
 }

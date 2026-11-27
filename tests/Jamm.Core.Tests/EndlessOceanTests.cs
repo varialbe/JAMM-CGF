@@ -12,6 +12,53 @@ namespace Jamm.Core.Tests;
 /// <summary>Verifies the Endless Ocean recipe and its legacy archive integration.</summary>
 public sealed class EndlessOceanTests
 {
+    [Fact]
+    public void SonarHooksAreNarrowIdempotentAndPreserveVanillaText()
+    {
+        const string vanillaStep = """
+            if (Lure.state == 0)
+            {
+                readyToBeginTracking = 1;
+            }
+            """;
+        const string expectedStep = vanillaStep + "\njmk_endless_ocean_sonar_view();\n";
+        string patchedStep = EndlessOceanMod.PatchSonarStep(vanillaStep);
+        Assert.Equal(expectedStep, patchedStep);
+        Assert.Equal(patchedStep, EndlessOceanMod.PatchSonarStep(patchedStep));
+        Assert.Single(Regex.Matches(patchedStep, "jmk_endless_ocean_sonar_view\\(\\);").Cast<Match>());
+        const string moddedStep = vanillaStep + "\n// merged mod tail";
+        Assert.Equal(moddedStep + "\njmk_endless_ocean_sonar_view();\n", EndlessOceanMod.PatchSonarStep(moddedStep));
+
+        const string vanillaDraw = """
+            noise_alpha = (((min(Girl.x, Lure.x) - 10000) / 2.6) + (max(Lure.y, 1294) - 4000) - 4000) / 1000;
+            if (instance_exists(Boat) && Boat.boost_radar)
+            {
+                noise_alpha = 0;
+            }
+            draw_sprite_ext(spr_sonarnoise, irandom(4), view_xview[3] + draw_offset, view_yview[3] + draw_offset, noise_scalar, noise_scalar, 0, c_white, min(1, noise_alpha));
+            """;
+        const string hook = "if (jmk_endless_ocean_sonar_clear()) noise_alpha = 0;";
+        string patchedDraw = EndlessOceanMod.PatchSonarDraw(vanillaDraw);
+        Assert.Equal(vanillaDraw, patchedDraw.Replace("\n" + hook, "", StringComparison.Ordinal));
+        Assert.Equal(patchedDraw, EndlessOceanMod.PatchSonarDraw(patchedDraw));
+        Assert.Single(Regex.Matches(patchedDraw, "jmk_endless_ocean_sonar_clear\\(\\)").Cast<Match>());
+        Assert.Single(Regex.Matches(patchedDraw, "Boat\\.boost_radar").Cast<Match>());
+        const string decompiledHook = "if (jmk_endless_ocean_sonar_clear())\n{\n    noise_alpha = 0;\n}";
+        string decompiledDraw = vanillaDraw + "\n" + decompiledHook;
+        Assert.Equal(decompiledDraw, EndlessOceanMod.PatchSonarDraw(decompiledDraw));
+        Assert.DoesNotContain("Boat.boost_radar =", EndlessOceanMod.Source("step"));
+        Assert.DoesNotContain("MAX_X", EndlessOceanMod.Source("step").Replace("with (Boat7)\n{\n    MAX_X = max(MAX_X, other.ocean_end - 400);\n}", "", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SonarHooksFailClearlyWhenTheVanillaAnchorsAreMissing()
+    {
+        var stepError = Assert.Throws<InvalidDataException>(() => EndlessOceanMod.PatchSonarStep("readyToBeginTracking = 1;"));
+        Assert.Contains("gml_Object_SonarPanel_Step_0", stepError.Message);
+        var drawError = Assert.Throws<InvalidDataException>(() => EndlessOceanMod.PatchSonarDraw("noise_alpha = 1;"));
+        Assert.Contains("gml_Object_SonarPanel_Draw_0", drawError.Message);
+    }
+
     [Theory]
     [InlineData("0", 0)]
     [InlineData("2147483646", 2147483646)]
@@ -90,6 +137,7 @@ public sealed class EndlessOceanTests
         Dictionary<string, string> recompile = new() { [settings] = "ocean_end = 1100000;" };
         Dictionary<string, string> generated = new();
         List<string> decisions = [];
+        AddSonarPatchFixtures(data, recompile);
 
         EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
         string source = generated[settings];
@@ -99,9 +147,12 @@ public sealed class EndlessOceanTests
         Assert.Equal(source, recompile[settings]);
         Assert.Contains("jamm_chunk_stream(ocean_chunks, first, last, jmk_endless_ocean_load, jmk_endless_ocean_release)", generated[step]);
         Assert.Equal(generated[step], recompile[step]);
+        Assert.Contains("jmk_endless_ocean_sonar_view();", recompile["gml_Object_SonarPanel_Step_0"]);
+        Assert.Contains("jmk_endless_ocean_sonar_clear()", recompile["gml_Object_SonarPanel_Draw_0"]);
         Assert.Single(decisions);
         EndlessOceanMod.RefreshMergedLayout(data, recompile, generated, decisions);
         Assert.Equal(width, world.Width);
+        Assert.Single(Regex.Matches(recompile["gml_Object_SonarPanel_Step_0"], "jmk_endless_ocean_sonar_view\\(\\);").Cast<Match>());
 
         // This fallback room has no terrain. In a real room the anchor comes from a mask
         // and is invariant when the recipe's own extension is stripped.
@@ -379,7 +430,7 @@ public sealed class EndlessOceanTests
 
             string[] neededObjects =
             [
-                "Camera", "Boat7", "SaveManager", "Rod", "Lure", "Collidable", "CaveRock", "Light", "CatSwim",
+                "Camera", "Boat", "Boat1", "Boat7", "SaveManager", "Rod", "Lure", "Girl", "Message", "SonarPanel", "BuoyAbstract", "Collidable", "CaveRock", "Light", "CatSwim",
                 "CaveRockWide", "CaveRockLeg", "CaveRockSig", "CaveRockTear", "CaveRockTee", "CaveRockWedge",
                 "JWeedSmall", "JWeedMedium", "Coral", "Coral2", "CoralDark", "CoralFG3", "GlowPlant", "BulbPlantShort", "ChainPlant",
                 "Swooper", "Roundfin", "Garump", "Spinefish", "Yellowjack", "Puff", "Celad", "Inno",
@@ -391,12 +442,25 @@ public sealed class EndlessOceanTests
             foreach (string name in neededObjects)
                 data.GameObjects.Add(new UndertaleGameObject { Name = data.Strings.MakeString(name) });
 
+            var buoySprite = new UndertaleSprite { Name = data.Strings.MakeString("spr_test_buoy"), Width = 32, Height = 64 };
+            data.Sprites.Add(buoySprite);
+            data.GameObjects.ByName("BuoyAbstract")!.Sprite = buoySprite;
+            AddSonarPatchFixtures(data, null);
+            var boatCreateCompiler = new CompileGroup(data);
+            boatCreateCompiler.QueueCodeReplace(data.GameObjects.ByName("Boat7")!.EventHandlerFor(EventType.Create, 0u, data), "boost_radar = 1;\nMAX_X = 65000;");
+            boatCreateCompiler.QueueCodeReplace(data.GameObjects.ByName("Boat1")!.EventHandlerFor(EventType.Create, 0u, data), "MAX_X = 12000;");
+            ModObjects.Compile(boatCreateCompiler);
+            string boat7Create = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Boat7_Create_0")!);
+            string boat1Create = ModObjects.Decompile(data, data.Code.ByName("gml_Object_Boat1_Create_0")!);
+            Assert.Contains("boost_radar = 1", boat7Create);
+            Assert.Contains("MAX_X = 65000", boat7Create);
+
             var rockBig = new UndertaleGameObject { Name = data.Strings.MakeString("CaveRockBig"), Sprite = imported["spr_caverock_big"] };
             var boat3 = new UndertaleGameObject { Name = data.Strings.MakeString("Boat3"), Sprite = imported["spr_boat3"] };
             data.GameObjects.Add(rockBig);
             data.GameObjects.Add(boat3);
 
-            foreach (string scriptName in new[] { "fish_object_to_name", "get_index_for_name", "fish_respawn" })
+            foreach (string scriptName in new[] { "fish_object_to_name", "get_index_for_name", "fish_respawn", "x_pos_to_y_off" })
             {
                 var sc = UndertaleCode.CreateEmptyEntry(data, "gml_Script_" + scriptName);
                 data.Scripts.Add(new UndertaleScript { Name = data.Strings.MakeString(scriptName), Code = sc });
@@ -418,6 +482,9 @@ public sealed class EndlessOceanTests
 
             EndlessOceanMod.Apply(data);
 
+            Assert.Equal(boat7Create, ModObjects.Decompile(data, data.Code.ByName("gml_Object_Boat7_Create_0")!));
+            Assert.Equal(boat1Create, ModObjects.Decompile(data, data.Code.ByName("gml_Object_Boat1_Create_0")!));
+
             string compiledSonar = ModObjects.Decompile(data, data.Code.ByName("gml_Script_jamm_fish_sonar_init")!);
             Assert.DoesNotMatch(@"\b(132|135|225|238|242|334|424|429|430)\b", compiledSonar);
 
@@ -437,6 +504,25 @@ public sealed class EndlessOceanTests
         finally
         {
             tempDir.Delete(recursive: true);
+        }
+    }
+
+    private static void AddSonarPatchFixtures(UndertaleData data, Dictionary<string, string>? recompile)
+    {
+        foreach ((string name, string source) in new[]
+        {
+            ("gml_Object_SonarPanel_Step_0", "if (Lure.state == 0) { readyToBeginTracking = 1; }"),
+            ("gml_Object_SonarPanel_Draw_0", "if (instance_exists(Boat) && Boat.boost_radar) { noise_alpha = 0; }")
+        })
+        {
+            var code = data.Code.ByName(name) ?? UndertaleCode.CreateEmptyEntry(data, name);
+            if (recompile is not null) recompile[name] = source;
+            else
+            {
+                var compiler = new CompileGroup(data);
+                compiler.QueueCodeReplace(code, source);
+                ModObjects.Compile(compiler);
+            }
         }
     }
 }

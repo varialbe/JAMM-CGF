@@ -1,4 +1,4 @@
-# Endless Ocean v1
+# Endless Ocean v0.3.0
 
 Take the final vanilla boat east to find sandy shelves, rocky slopes and lit trenches. The generated seabed follows the last placed rock mask, with solid rock all the way down to the room bottom. Pockets under rock outcrops open back into the main water column. Vanilla fish inhabit three depth bands, and occasional wrecks attract a rarer fish.
 
@@ -13,7 +13,7 @@ cgfmm modkit build examples/modkit/endless-ocean --base /path/to/legacy/data.win
 
 You can also add the recipe ZIP in JAMM and enable it in a profile. The final build checks the merged placements for the seam and keeps generated fish, plants and wrecks east of the combined map. To add the recipe to an existing archive, pass that archive as `--base`. Use a separate game copy to try the output.
 
-Each world has a transition of at least three 2,048 px chunks and 488 chunks beyond the reserved edge. Boat7 stops 400 px short of the new eastern limit. Earlier boats retain their original range.
+Each world has a transition of at least three 2,048 px chunks and 488 chunks beyond the reserved edge. Boat7 stops 400 px short of the new eastern limit. Earlier boats retain their original range. In the generated ocean, sonar stays clear for every boat and follows the lure at any depth without enabling Deep Sonar. An “Endless Ocean” entry/exit message, a surface buoy, and a distance/biome label mark the region.
 
 ## Choose a seed
 

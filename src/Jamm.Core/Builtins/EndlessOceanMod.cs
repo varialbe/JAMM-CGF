@@ -26,7 +26,8 @@ public static class EndlessOceanMod
         "jamm_chunk_unit", "jamm_chunk_stream", Setup, "jmk_endless_ocean_floor", "jmk_endless_ocean_height",
         "jmk_endless_ocean_biome", "jmk_endless_ocean_species", "jmk_endless_ocean_poi",
         "jmk_endless_ocean_layout", "jmk_endless_ocean_underlay_cell", "jmk_endless_ocean_ground", "jmk_endless_ocean_scenery",
-        "jmk_endless_ocean_load", FishSonarRuntime.Script, "jmk_endless_ocean_dispose", "jmk_endless_ocean_release"
+        "jmk_endless_ocean_load", FishSonarRuntime.Script, "jmk_endless_ocean_dispose", "jmk_endless_ocean_release",
+        "jmk_endless_ocean_inside", "jmk_endless_ocean_sonar_view", "jmk_endless_ocean_sonar_clear"
     ];
 
     /// <summary>Applies the recipe to an in-memory vanilla or already merged archive.</summary>
@@ -70,11 +71,25 @@ public static class EndlessOceanMod
             }
             compiler.QueueCodeReplace(code, script == Setup ? Settings(edge, world.Width) : Source(script));
         }
+        PatchSonarEvents(data, compiler, null, null);
         compiler.QueueCodeReplace(ground.EventHandlerFor(EventType.Draw, 0u, data), Source("draw_ground"));
 
         var controller = ModObjects.Create(data, Controller, persistent: false);
+        var markerSprite = data.GameObjects.ByName("Buoy")?.Sprite?.Name.Content
+            ?? data.GameObjects.ByName("BuoyAbstract")?.Sprite?.Name.Content
+            ?? throw new InvalidDataException("Endless Ocean needs the BuoyAbstract marker sprite. Choose a compatible legacy archive.");
+        var message = ModObjects.Create(data, "obj_jmk_endless_ocean_message", persistent: false);
+        message.ParentId = data.GameObjects.ByName("Message")
+            ?? throw new InvalidDataException("Endless Ocean needs the vanilla Message object. Choose a compatible legacy archive.");
+        compiler.QueueCodeReplace(message.EventHandlerFor(EventType.Create, 0u, data), "action_inherited();\ntext = \"Endless Ocean\";\nfont = 1;");
+        compiler.QueueCodeReplace(message.EventHandlerFor(EventType.Draw, 0u, data), "action_inherited();");
+        compiler.QueueCodeReplace(controller.EventHandlerFor(EventType.Step, 0u, data), Source("ocean_transition"));
+        compiler.QueueCodeReplace(controller.EventHandlerFor(EventType.Draw, 0u, data), Marker(markerSprite));
+        compiler.QueueCodeReplace(controller.EventHandlerFor(EventType.Draw, (uint)EventSubtypeDraw.DrawGUI, data), Source("ocean_label"));
         Queue(EventType.Create, 0, """
             ocean_chunks = -1;
+            ocean_inside_initialized = false;
+            ocean_was_inside = false;
             """);
         Queue(EventType.Other, (uint)EventSubtypeOther.RoomStart, FormattableString.Invariant($$"""
             if (ds_exists(ocean_chunks, ds_type_map)) exit;
@@ -163,8 +178,73 @@ public static class EndlessOceanMod
         const string stepCode = "gml_Object_" + Controller + "_Step_1";
         if (data.Code.ByName(stepCode) is not null)
             generated[stepCode] = recompile[stepCode] = Source("step");
+        PatchSonarEvents(data, null, recompile, generated);
         decisions.Add(Describe(edge));
     }
+
+    internal static string PatchSonarStep(string source)
+    {
+        const string call = "jmk_endless_ocean_sonar_view();";
+        if (Count(source, call) > 1)
+            throw new InvalidDataException("Endless Ocean found duplicate sonar-view hooks in 'gml_Object_SonarPanel_Step_0'. Rebuild from an unpatched compatible archive.");
+        if (source.Contains(call, StringComparison.Ordinal)) return source;
+        var anchor = Regex.Match(source, @"if\s*\(\s*Lure\.state\s*==\s*0\s*\)\s*\{\s*readyToBeginTracking\s*=\s*1\s*;\s*\}", RegexOptions.CultureInvariant);
+        if (!anchor.Success)
+            throw new InvalidDataException("Endless Ocean could not recognize the vanilla sonar Step event 'gml_Object_SonarPanel_Step_0'. Choose the August 2023 legacy archive or a compatible JAMM build.");
+        return source + (source.EndsWith('\n') ? "" : "\n") + call + "\n";
+    }
+
+    internal static string PatchSonarDraw(string source)
+    {
+        const string call = "if (jmk_endless_ocean_sonar_clear()) noise_alpha = 0;";
+        int hookCount = Count(source, "jmk_endless_ocean_sonar_clear()");
+        if (hookCount > 1)
+            throw new InvalidDataException("Endless Ocean found duplicate sonar-noise hooks in 'gml_Object_SonarPanel_Draw_0'. Rebuild from an unpatched compatible archive.");
+        if (hookCount == 1) return source;
+        var anchor = Regex.Match(source, @"(?<boost>if\s*\(\s*instance_exists\(Boat\)\s*&&\s*Boat\.boost_radar\s*\)\s*\{\s*noise_alpha\s*=\s*0\s*;\s*\})", RegexOptions.CultureInvariant);
+        if (!anchor.Success || Count(anchor.Value, "Boat.boost_radar") != 1)
+            throw new InvalidDataException("Endless Ocean could not recognize the vanilla radar-noise block in 'gml_Object_SonarPanel_Draw_0'. Choose the August 2023 legacy archive or a compatible JAMM build.");
+        return source.Insert(anchor.Index + anchor.Length, "\n" + call);
+    }
+
+    private static int Count(string source, string value) => Regex.Matches(source, Regex.Escape(value), RegexOptions.CultureInvariant).Count;
+
+    private static void PatchSonarEvents(UndertaleData data, CompileGroup? compiler,
+        Dictionary<string, string>? recompile, Dictionary<string, string>? generated)
+    {
+        Patch("gml_Object_SonarPanel_Step_0", PatchSonarStep);
+        Patch("gml_Object_SonarPanel_Draw_0", PatchSonarDraw);
+
+        void Patch(string name, Func<string, string> transform)
+        {
+            var code = data.Code.ByName(name)
+                ?? throw new InvalidDataException($"Endless Ocean needs '{name}'. Choose the August 2023 legacy archive or a compatible JAMM build.");
+            string original = recompile is not null && recompile.TryGetValue(name, out var queued)
+                ? queued : ModObjects.Decompile(data, code);
+            string patched = transform(original);
+            if (patched == original) return;
+            if (compiler is not null) compiler.QueueCodeReplace(code, patched);
+            else if (recompile is not null && generated is not null) recompile[name] = generated[name] = patched;
+        }
+    }
+
+    private static string Marker(string spriteName) => $$"""
+        if (!instance_exists({{Controller}})) exit;
+        var marker_sprite = asset_get_index("{{spriteName}}");
+        if (marker_sprite < 0) exit;
+        var marker_x = ocean_start;
+        var marker_y = 1234 + (x_pos_to_y_off(marker_x) * 0.5);
+        draw_set_blend_mode(bm_add);
+        draw_set_color(make_color_rgb(92, 214, 255));
+        draw_set_alpha(0.35);
+        draw_line_width(marker_x, marker_y - 420, marker_x, marker_y - 16, 18);
+        draw_set_alpha(0.9);
+        draw_line_width(marker_x, marker_y - 420, marker_x, marker_y - 16, 4);
+        draw_set_blend_mode(bm_normal);
+        draw_set_color(c_white);
+        draw_set_alpha(1);
+        draw_sprite_ext(marker_sprite, 0, marker_x, marker_y, 0.8, 0.8, 0, c_white, 1);
+        """;
 
     private static string Settings(EndlessOceanEdge edge, uint sourceWidth) => FormattableString.Invariant($"""
         ocean_start = {edge.X};

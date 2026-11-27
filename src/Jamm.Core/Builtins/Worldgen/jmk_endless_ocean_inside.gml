@@ -1,0 +1,12 @@
+var ocean_object = asset_get_index("obj_jmk_endless_ocean");
+var girl_object = asset_get_index("Girl");
+var lure_object = asset_get_index("Lure");
+if (ocean_object < 0 || girl_object < 0 || lure_object < 0) return false;
+if (!instance_exists(ocean_object) || !instance_exists(girl_object) || !instance_exists(lure_object)) return false;
+var ocean = instance_find(ocean_object, 0);
+var girl = instance_find(girl_object, 0);
+var lure = instance_find(lure_object, 0);
+if (!variable_instance_exists(ocean, "ocean_start")) return false;
+var x_to_check = girl.x;
+if (lure.state == 1 || lure.state == 2) x_to_check = lure.x;
+return x_to_check >= ocean.ocean_start;

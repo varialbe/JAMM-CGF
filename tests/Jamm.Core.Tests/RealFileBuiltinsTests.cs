@@ -62,10 +62,22 @@ public sealed class RealFileBuiltinsTests
                         && f.Container == "harbor_sprite" && f.CandidateFamilies.Contains("sprites", StringComparer.Ordinal)));
             }
 
+            string oceanArchive = Path.Combine(tempPath, "endless-ocean.win");
+            RecipePackage.Build(Path.Combine(examplesRoot, "endless-ocean"), basePath, oceanArchive);
+            using (var ocean = GameFileLoader.Load(oceanArchive))
+                patches.Add(new(PatchBuilder.Create(original, ocean, "Endless Ocean"), oceanArchive));
+            exampleArchives.Add(oceanArchive);
+
             string composedPath = Path.Combine(tempPath, "profile-composed.win");
             var build = ArchiveBuilder.Build(basePath, patches, composedPath, noRepack: true);
             Assert.NotNull(build.Verification);
             using var composed = GameFileLoader.Load(composedPath);
+            Assert.Contains("jmk_endless_ocean_sonar_view", PatchBuilder.ReadCode(composed, "gml_Object_SonarPanel_Step_0").Text);
+            Assert.Contains("jmk_endless_ocean_sonar_clear", PatchBuilder.ReadCode(composed, "gml_Object_SonarPanel_Draw_0").Text);
+            Assert.Single(Regex.Matches(PatchBuilder.ReadCode(composed, "gml_Object_SonarPanel_Step_0").Text,
+                "jmk_endless_ocean_sonar_view\\(\\);").Cast<Match>());
+            Assert.Single(Regex.Matches(PatchBuilder.ReadCode(composed, "gml_Object_SonarPanel_Draw_0").Text,
+                "jmk_endless_ocean_sonar_clear\\(\\)").Cast<Match>());
             AssertHarborSpriteReferencesResolveByName(composed);
             AssertCrossModInstanceVariableContracts(exampleArchives, composed.Data);
             AssertNoConflictingGlobalVariableIds(composed.Data);
